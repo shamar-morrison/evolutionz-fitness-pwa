@@ -1,6 +1,7 @@
 // Member Types
 export type MemberType = 'General' | 'Civil Servant' | 'Student/BPO'
 export type MemberStatus = 'Active' | 'Expired' | 'Suspended'
+export type DeviceAccessState = 'ready' | 'card_pending'
 
 export type Member = {
   id: string
@@ -8,6 +9,7 @@ export type Member = {
   cardNo: string
   type: MemberType
   status: MemberStatus
+  deviceAccessState: DeviceAccessState
   expiry: string // ISO date string
   balance: number // JMD, amount owed to gym
   createdAt: string

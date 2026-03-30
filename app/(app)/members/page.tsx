@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useMembers } from '@/hooks/use-members'
 import { MembersTable } from '@/components/members-table'
@@ -21,7 +21,32 @@ import type { MemberStatus, MemberType } from '@/types'
 const statusOptions: (MemberStatus | 'All')[] = ['All', 'Active', 'Expired', 'Suspended']
 const typeOptions: (MemberType | 'All')[] = ['All', 'General', 'Civil Servant', 'Student/BPO']
 
-export default function MembersPage() {
+function MembersPageLoading() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-9 w-40" />
+          <Skeleton className="h-5 w-80" />
+        </div>
+        <Skeleton className="h-10 w-32" />
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        <Skeleton className="h-10 min-w-[200px] max-w-sm flex-1" />
+        <Skeleton className="h-10 w-[140px]" />
+        <Skeleton className="h-10 w-[160px]" />
+      </div>
+      <div className="space-y-4">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+      </div>
+    </div>
+  )
+}
+
+function MembersPageContent() {
   const searchParams = useSearchParams()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<MemberStatus | 'All'>('All')
@@ -116,11 +141,15 @@ export default function MembersPage() {
       <AddMemberModal
         open={showAddModal}
         onOpenChange={setShowAddModal}
-        onSuccess={() => {
-          // TODO: Refresh member list
-          console.log('Member added successfully')
-        }}
       />
     </div>
+  )
+}
+
+export default function MembersPage() {
+  return (
+    <Suspense fallback={<MembersPageLoading />}>
+      <MembersPageContent />
+    </Suspense>
   )
 }

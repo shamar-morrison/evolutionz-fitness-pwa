@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,19 +20,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { addMember, type AddMemberData } from '@/lib/member-actions'
-import type { MemberType } from '@/types'
+import {
+  addMember,
+  MemberProvisioningError,
+  type AddMemberData,
+} from '@/lib/member-actions'
+import { toast } from '@/hooks/use-toast'
+import type { Member, MemberType } from '@/types'
 
 type AddMemberModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSuccess?: () => void
+  onSuccess?: (member: Member) => void
 }
 
 const memberTypes: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
 
 export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModalProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const router = useRouter()
+  const [submissionStep, setSubmissionStep] = useState<'idle' | 'creating_member' | 'issuing_card'>('idle')
   const [formData, setFormData] = useState<AddMemberData>({
     name: '',
     cardNo: '',
@@ -39,30 +46,74 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     expiry: '',
   })
 
+  const isSubmitting = submissionStep !== 'idle'
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitting(true)
+    setSubmissionStep('creating_member')
 
     try {
-      await addMember(formData)
+      const member = await addMember(formData, {
+        onStepChange: setSubmissionStep,
+      })
       onOpenChange(false)
       setFormData({ name: '', cardNo: '', type: 'General', expiry: '' })
-      onSuccess?.()
+      onSuccess?.(member)
+      toast({
+        title: 'Member added',
+        description: `${member.name} was created on the device and their card was issued.`,
+      })
     } catch (error) {
-      console.error('Failed to add member:', error)
+      if (error instanceof MemberProvisioningError) {
+        if (error.step === 'issuing_card' && error.member) {
+          onOpenChange(false)
+          setFormData({ name: '', cardNo: '', type: 'General', expiry: '' })
+          toast({
+            title: 'Card issuance failed',
+            description: `${error.member.name} was created on the device, but card issuance failed. Open the member to retry the card step.`,
+            variant: 'destructive',
+          })
+          router.push(`/members/${error.member.id}`)
+        } else {
+          toast({
+            title: 'Member creation failed',
+            description: error.message,
+            variant: 'destructive',
+          })
+        }
+      } else {
+        console.error('Failed to add member:', error)
+        toast({
+          title: 'Member creation failed',
+          description: error instanceof Error ? error.message : 'Failed to add member.',
+          variant: 'destructive',
+        })
+      }
     } finally {
-      setIsSubmitting(false)
+      setSubmissionStep('idle')
     }
   }
+
+  const submitLabel =
+    submissionStep === 'creating_member'
+      ? 'Creating Member...'
+      : submissionStep === 'issuing_card'
+        ? 'Issuing Card...'
+        : 'Save Member'
+
+  const progressDescription =
+    submissionStep === 'creating_member'
+      ? 'Creating the member on the device.'
+      : submissionStep === 'issuing_card'
+        ? 'Member created. Issuing the access card now.'
+        : "Enter the member details below. Click save when you're done."
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Add New Member</DialogTitle>
-          <DialogDescription>
-            Enter the member details below. Click save when you&apos;re done.
-          </DialogDescription>
+          <DialogDescription>{progressDescription}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
@@ -129,7 +180,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
               disabled={isSubmitting}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              {isSubmitting ? 'Saving...' : 'Save Member'}
+              {submitLabel}
             </Button>
           </DialogFooter>
         </form>

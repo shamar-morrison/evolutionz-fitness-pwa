@@ -23,7 +23,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { suspendMember, reactivateMember, revokeCardAccess } from '@/lib/member-actions'
+import { suspendMember, reactivateMember, revokeCardAccess, retryMemberCard } from '@/lib/member-actions'
+import { toast } from '@/hooks/use-toast'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -81,6 +82,28 @@ export default function MemberDetailPage() {
     }
   }
 
+  const handleRetryCard = async () => {
+    if (!member) return
+    setIsActionLoading(true)
+    try {
+      await retryMemberCard(member)
+      toast({
+        title: 'Card issued',
+        description: `${member.name}'s card was issued successfully.`,
+      })
+    } catch (error) {
+      console.error('Failed to retry card issuance:', error)
+      toast({
+        title: 'Card issuance failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to issue the card for this member.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   if (error) {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center gap-4">
@@ -127,13 +150,30 @@ export default function MemberDetailPage() {
             <Badge variant="outline" className="mt-2">
               {member.type}
             </Badge>
-            <div className="mt-2">
+            <div className="mt-2 flex flex-col items-center gap-2">
               <StatusBadge status={member.status} />
+              {member.deviceAccessState === 'card_pending' ? (
+                <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/25">
+                  Card Pending
+                </Badge>
+              ) : null}
             </div>
 
             {/* Action Buttons */}
             <div className="mt-6 w-full space-y-3">
               <RoleGuard role="admin">
+                {member.deviceAccessState === 'card_pending' ? (
+                  <Button
+                    variant="default"
+                    className="w-full"
+                    onClick={handleRetryCard}
+                    disabled={isActionLoading}
+                  >
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Retry Card Issuance
+                  </Button>
+                ) : null}
+
                 <Button
                   variant="outline"
                   className="w-full"
@@ -211,7 +251,14 @@ export default function MemberDetailPage() {
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Status</p>
-                <StatusBadge status={member.status} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge status={member.status} />
+                  {member.deviceAccessState === 'card_pending' ? (
+                    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/25">
+                      Card Pending
+                    </Badge>
+                  ) : null}
+                </div>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Expiry Date</p>
@@ -230,6 +277,13 @@ export default function MemberDetailPage() {
                 <p className="font-medium">{formatDate(member.createdAt)}</p>
               </div>
             </div>
+
+            {member.deviceAccessState === 'card_pending' ? (
+              <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-900">
+                This member was created on the device, but their card was not issued successfully.
+                Retry card issuance to complete access provisioning.
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>

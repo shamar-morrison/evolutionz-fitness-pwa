@@ -76,7 +76,14 @@ export function MembersTable({ members }: MembersTableProps) {
                   <Badge variant="outline">{member.type}</Badge>
                 </TableCell>
                 <TableCell>
-                  <StatusBadge status={member.status} />
+                  <div className="flex flex-col items-start gap-1">
+                    <StatusBadge status={member.status} />
+                    {member.deviceAccessState === 'card_pending' ? (
+                      <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/25">
+                        Card Pending
+                      </Badge>
+                    ) : null}
+                  </div>
                 </TableCell>
                 <TableCell>{formatDate(member.expiry)}</TableCell>
                 <TableCell className="text-right">

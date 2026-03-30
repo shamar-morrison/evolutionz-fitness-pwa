@@ -10,7 +10,11 @@ next.user-config.*
 # Environment variables
 .env*.local
 
+# Excel files
+*.xlsx
+
 # Common ignores
 node_modules
 .next/
+tsconfig.tsbuildinfo
 .DS_Store
