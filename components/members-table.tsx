@@ -71,16 +71,25 @@ export function MembersTable({ members }: MembersTableProps) {
                     <span className="font-medium">{member.name}</span>
                   </div>
                 </TableCell>
-                <TableCell className="font-mono text-sm">{member.cardNo}</TableCell>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="font-mono text-sm">{member.cardNo}</span>
+                    {member.deviceAccessState === 'released' && member.slotPlaceholderName ? (
+                      <span className="text-xs text-muted-foreground">
+                        Released to {member.slotPlaceholderName}
+                      </span>
+                    ) : null}
+                  </div>
+                </TableCell>
                 <TableCell>
                   <Badge variant="outline">{member.type}</Badge>
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col items-start gap-1">
                     <StatusBadge status={member.status} />
-                    {member.deviceAccessState === 'card_pending' ? (
-                      <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/25">
-                        Card Pending
+                    {member.deviceAccessState === 'released' ? (
+                      <Badge className="bg-slate-500/15 text-slate-700 hover:bg-slate-500/25">
+                        Slot Released
                       </Badge>
                     ) : null}
                   </div>

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   addMember,
-  retryMemberCard,
+  releaseMemberSlot,
 } from '@/lib/member-actions'
 import { clearSessionMembers, getSessionMembers, upsertSessionMember } from '@/lib/member-session-store'
 
@@ -21,121 +21,147 @@ describe('member actions', () => {
     vi.unstubAllGlobals()
   })
 
-  it('completes add_user then add_card and stores a ready member', async () => {
+  it('assigns a selected Hik slot and stores a ready member', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-03-30T14:15:16'))
 
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(createJsonResponse({ ok: true, jobId: 'user-job', result: { ok: true } }, 200))
-      .mockResolvedValueOnce(createJsonResponse({ ok: true, jobId: 'card-job', result: { ok: true } }, 200))
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse({ ok: true, jobId: 'assign-job', result: { ok: true } }, 200),
+    )
     const stepSpy = vi.fn()
 
     vi.stubGlobal('fetch', fetchMock)
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
-      'abcdef12-3456-7890-abcd-ef1234567890',
-    )
 
     const member = await addMember(
       {
         name: 'Jane Doe',
-        cardNo: 'EF-009999',
         type: 'General',
         expiry: '2026-07-15',
+        slot: {
+          employeeNo: '00000611',
+          cardNo: '0102857149',
+          placeholderName: 'P42',
+        },
       },
       { onStepChange: stepSpy },
     )
 
-    expect(stepSpy.mock.calls).toEqual([['creating_member'], ['issuing_card']])
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/access/members/user')
+    expect(stepSpy.mock.calls).toEqual([['assigning_slot']])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/access/slots/assign')
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
-      employeeNo: 'EVZ-20260330141516-ABCDEF',
+      employeeNo: '00000611',
+      cardNo: '0102857149',
+      placeholderName: 'P42',
       name: 'Jane Doe',
       expiry: '2026-07-15',
     })
-    expect(fetchMock.mock.calls[1][0]).toBe('/api/access/members/card')
-    expect(JSON.parse(fetchMock.mock.calls[1][1]?.body as string)).toEqual({
-      employeeNo: 'EVZ-20260330141516-ABCDEF',
-      cardNo: 'EF-009999',
+    expect(member).toEqual({
+      id: '00000611',
+      name: 'Jane Doe',
+      cardNo: '0102857149',
+      slotPlaceholderName: 'P42',
+      type: 'General',
+      status: 'Active',
+      deviceAccessState: 'ready',
+      expiry: '2026-07-15',
+      balance: 0,
+      createdAt: new Date('2026-03-30T14:15:16').toISOString(),
     })
-    expect(member.deviceAccessState).toBe('ready')
     expect(getSessionMembers()).toEqual([member])
   })
 
-  it('stores a card_pending member and throws a step-specific error when add_card fails', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-03-30T14:15:16'))
-
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(createJsonResponse({ ok: true, jobId: 'user-job', result: { ok: true } }, 200))
-      .mockResolvedValueOnce(
-        createJsonResponse({ ok: false, jobId: 'card-job', error: 'Card setup failed.' }, 502),
-      )
+  it('throws a step-specific error when slot assignment fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse({ ok: false, jobId: 'assign-job', error: 'Slot update failed.' }, 502),
+    )
 
     vi.stubGlobal('fetch', fetchMock)
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
-      'abcdef12-3456-7890-abcd-ef1234567890',
-    )
 
     await expect(
       addMember({
         name: 'Jane Doe',
-        cardNo: 'EF-009999',
         type: 'General',
         expiry: '2026-07-15',
+        slot: {
+          employeeNo: '00000611',
+          cardNo: '0102857149',
+          placeholderName: 'P42',
+        },
       }),
     ).rejects.toMatchObject({
       name: 'MemberProvisioningError',
-      step: 'issuing_card',
-      member: {
-        id: 'EVZ-20260330141516-ABCDEF',
-        deviceAccessState: 'card_pending',
-      },
+      step: 'assigning_slot',
     })
 
-    expect(getSessionMembers()).toEqual([
-      expect.objectContaining({
-        id: 'EVZ-20260330141516-ABCDEF',
-        deviceAccessState: 'card_pending',
-      }),
-    ])
+    expect(getSessionMembers()).toEqual([])
   })
 
-  it('retries card issuance and transitions the member to ready', async () => {
+  it('releases a member slot and stores the released state', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
-      createJsonResponse({ ok: true, jobId: 'card-job', result: { ok: true } }, 200),
+      createJsonResponse({ ok: true, jobId: 'reset-job', result: { ok: true } }, 200),
     )
 
     vi.stubGlobal('fetch', fetchMock)
 
-    const pendingMember = {
-      id: 'EVZ-20260330141516-ABCDEF',
+    const member = {
+      id: '00000611',
       name: 'Jane Doe',
-      cardNo: 'EF-009999',
+      cardNo: '0102857149',
+      slotPlaceholderName: 'P42',
       type: 'General' as const,
       status: 'Active' as const,
-      deviceAccessState: 'card_pending' as const,
+      deviceAccessState: 'ready' as const,
       expiry: '2026-07-15',
       balance: 0,
       createdAt: '2026-03-30T14:15:16.000Z',
     }
 
-    upsertSessionMember(pendingMember)
+    upsertSessionMember(member)
 
-    const member = await retryMemberCard(pendingMember)
+    const releasedMember = await releaseMemberSlot(member)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/access/members/card')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/access/slots/reset')
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
-      employeeNo: 'EVZ-20260330141516-ABCDEF',
-      cardNo: 'EF-009999',
+      employeeNo: '00000611',
+      placeholderName: 'P42',
     })
-    expect(member.deviceAccessState).toBe('ready')
+    expect(releasedMember.deviceAccessState).toBe('released')
     expect(getSessionMembers()).toEqual([
       expect.objectContaining({
-        id: 'EVZ-20260330141516-ABCDEF',
-        deviceAccessState: 'ready',
+        id: '00000611',
+        deviceAccessState: 'released',
       }),
     ])
+  })
+
+  it('does not update session state when slot release fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse({ ok: false, jobId: 'reset-job', error: 'Reset failed.' }, 502),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const member = {
+      id: '00000611',
+      name: 'Jane Doe',
+      cardNo: '0102857149',
+      slotPlaceholderName: 'P42',
+      type: 'General' as const,
+      status: 'Active' as const,
+      deviceAccessState: 'ready' as const,
+      expiry: '2026-07-15',
+      balance: 0,
+      createdAt: '2026-03-30T14:15:16.000Z',
+    }
+
+    upsertSessionMember(member)
+
+    await expect(releaseMemberSlot(member)).rejects.toThrow(
+      'Failed to release the Hik slot: Reset failed.',
+    )
+
+    expect(getSessionMembers()).toEqual([member])
   })
 })

@@ -1,12 +1,18 @@
 // Member Types
 export type MemberType = 'General' | 'Civil Servant' | 'Student/BPO'
 export type MemberStatus = 'Active' | 'Expired' | 'Suspended'
-export type DeviceAccessState = 'ready' | 'card_pending'
+export type DeviceAccessState = 'ready' | 'released'
+export type AvailableAccessSlot = {
+  employeeNo: string
+  cardNo: string
+  placeholderName: string
+}
 
 export type Member = {
   id: string
   name: string
   cardNo: string
+  slotPlaceholderName?: string
   type: MemberType
   status: MemberStatus
   deviceAccessState: DeviceAccessState

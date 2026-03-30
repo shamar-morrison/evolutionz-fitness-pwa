@@ -23,7 +23,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { suspendMember, reactivateMember, revokeCardAccess, retryMemberCard } from '@/lib/member-actions'
+import { suspendMember, reactivateMember, releaseMemberSlot } from '@/lib/member-actions'
 import { toast } from '@/hooks/use-toast'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -69,34 +69,21 @@ export default function MemberDetailPage() {
     }
   }
 
-  const handleRevokeAccess = async () => {
+  const handleReleaseSlot = async () => {
     if (!member) return
     setIsActionLoading(true)
     try {
-      await revokeCardAccess(member.id)
-      // TODO: Refresh member data
-    } catch (error) {
-      console.error('Failed to revoke card access:', error)
-    } finally {
-      setIsActionLoading(false)
-    }
-  }
-
-  const handleRetryCard = async () => {
-    if (!member) return
-    setIsActionLoading(true)
-    try {
-      await retryMemberCard(member)
+      await releaseMemberSlot(member)
       toast({
-        title: 'Card issued',
-        description: `${member.name}'s card was issued successfully.`,
+        title: 'Slot released',
+        description: `${member.name}'s Hik slot was returned to the available pool.`,
       })
     } catch (error) {
-      console.error('Failed to retry card issuance:', error)
+      console.error('Failed to release Hik slot:', error)
       toast({
-        title: 'Card issuance failed',
+        title: 'Slot release failed',
         description:
-          error instanceof Error ? error.message : 'Failed to issue the card for this member.',
+          error instanceof Error ? error.message : 'Failed to release this member’s Hik slot.',
         variant: 'destructive',
       })
     } finally {
@@ -133,7 +120,6 @@ export default function MemberDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => router.push('/members')}>
           <ArrowLeft className="h-5 w-5" />
@@ -142,7 +128,6 @@ export default function MemberDetailPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Member Profile Card */}
         <Card className="lg:col-span-1">
           <CardContent className="flex flex-col items-center pt-6">
             <MemberAvatar name={member.name} size="lg" />
@@ -152,28 +137,15 @@ export default function MemberDetailPage() {
             </Badge>
             <div className="mt-2 flex flex-col items-center gap-2">
               <StatusBadge status={member.status} />
-              {member.deviceAccessState === 'card_pending' ? (
-                <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/25">
-                  Card Pending
+              {member.deviceAccessState === 'released' ? (
+                <Badge className="bg-slate-500/15 text-slate-700 hover:bg-slate-500/25">
+                  Slot Released
                 </Badge>
               ) : null}
             </div>
 
-            {/* Action Buttons */}
             <div className="mt-6 w-full space-y-3">
               <RoleGuard role="admin">
-                {member.deviceAccessState === 'card_pending' ? (
-                  <Button
-                    variant="default"
-                    className="w-full"
-                    onClick={handleRetryCard}
-                    disabled={isActionLoading}
-                  >
-                    <CreditCard className="mr-2 h-4 w-4" />
-                    Retry Card Issuance
-                  </Button>
-                ) : null}
-
                 <Button
                   variant="outline"
                   className="w-full"
@@ -204,26 +176,30 @@ export default function MemberDetailPage() {
 
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" className="w-full" disabled={isActionLoading}>
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      disabled={isActionLoading || !member.slotPlaceholderName || member.deviceAccessState === 'released'}
+                    >
                       <CreditCard className="mr-2 h-4 w-4" />
-                      Revoke Card Access
+                      Release Slot
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Revoke Card Access?</AlertDialogTitle>
+                      <AlertDialogTitle>Release Hik Slot?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will immediately disable the member&apos;s card access to the gym.
-                        They will not be able to check in until a new card is issued.
+                        This will restore slot {member.slotPlaceholderName ?? member.id} on the Hik
+                        device and make it available for reassignment.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
-                        onClick={handleRevokeAccess}
+                        onClick={handleReleaseSlot}
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       >
-                        Revoke Access
+                        Release Slot
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -233,7 +209,6 @@ export default function MemberDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Member Details */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center gap-2">
             <User className="h-5 w-5 text-muted-foreground" />
@@ -246,6 +221,14 @@ export default function MemberDetailPage() {
                 <p className="font-mono font-medium">{member.cardNo}</p>
               </div>
               <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Hik Person ID</p>
+                <p className="font-mono font-medium">{member.id}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Placeholder Slot</p>
+                <p className="font-medium">{member.slotPlaceholderName ?? 'Not recorded'}</p>
+              </div>
+              <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Membership Type</p>
                 <p className="font-medium">{member.type}</p>
               </div>
@@ -253,9 +236,9 @@ export default function MemberDetailPage() {
                 <p className="text-sm text-muted-foreground">Status</p>
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge status={member.status} />
-                  {member.deviceAccessState === 'card_pending' ? (
-                    <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/25">
-                      Card Pending
+                  {member.deviceAccessState === 'released' ? (
+                    <Badge className="bg-slate-500/15 text-slate-700 hover:bg-slate-500/25">
+                      Slot Released
                     </Badge>
                   ) : null}
                 </div>
@@ -278,26 +261,23 @@ export default function MemberDetailPage() {
               </div>
             </div>
 
-            {member.deviceAccessState === 'card_pending' ? (
-              <div className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-900">
-                This member was created on the device, but their card was not issued successfully.
-                Retry card issuance to complete access provisioning.
+            {member.deviceAccessState === 'released' ? (
+              <div className="mt-6 rounded-lg border border-slate-500/30 bg-slate-500/10 p-4 text-sm text-slate-900">
+                This member&apos;s Hik slot has been released back to the available pool as{' '}
+                {member.slotPlaceholderName ?? member.id}.
               </div>
             ) : null}
           </CardContent>
         </Card>
       </div>
 
-      {/* Check-In History */}
       <CheckInHistory memberId={memberId} />
 
-      {/* Edit Modal */}
       <EditMemberModal
         member={member}
         open={showEditModal}
         onOpenChange={setShowEditModal}
         onSuccess={() => {
-          // TODO: Refresh member data
           console.log('Member updated successfully')
         }}
       />

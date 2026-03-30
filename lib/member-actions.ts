@@ -1,20 +1,18 @@
 import { upsertSessionMember } from '@/lib/member-session-store'
 import {
-  buildAddCardPayload,
-  buildMemberPreview,
-  generateEmployeeNo,
-  type AddMemberCardJobRequest,
-  type AddMemberUserJobRequest,
+  buildSlotBackedMemberPreview,
+  type AssignAccessSlotJobRequest,
+  type ResetAccessSlotJobRequest,
 } from '@/lib/member-job'
-import type { Member, MemberType } from '@/types'
+import type { AvailableAccessSlot, Member, MemberType } from '@/types'
 
 // TODO: Replace with Supabase mutations
 
 export type AddMemberData = {
   name: string
-  cardNo: string
   type: MemberType
   expiry: string
+  slot: AvailableAccessSlot
 }
 
 type AccessControlJobSuccessResponse = {
@@ -29,7 +27,7 @@ type AccessControlJobErrorResponse = {
   error: string
 }
 
-export type MemberProvisioningStep = 'creating_member' | 'issuing_card'
+export type MemberProvisioningStep = 'assigning_slot'
 
 export class MemberProvisioningError extends Error {
   step: MemberProvisioningStep
@@ -55,9 +53,11 @@ type AddMemberOptions = {
   onStepChange?: (step: MemberProvisioningStep) => void
 }
 
-async function queueMemberJob(
-  path: '/api/access/members/user' | '/api/access/members/card',
-  body: AddMemberUserJobRequest | AddMemberCardJobRequest,
+type SlotJobPath = '/api/access/slots/assign' | '/api/access/slots/reset'
+
+async function queueSlotJob(
+  path: SlotJobPath,
+  body: AssignAccessSlotJobRequest | ResetAccessSlotJobRequest,
 ) {
   const response = await fetch(path, {
     method: 'POST',
@@ -90,53 +90,28 @@ async function queueMemberJob(
 
 export async function addMember(data: AddMemberData, options: AddMemberOptions = {}): Promise<Member> {
   const now = new Date()
-  const employeeNo = generateEmployeeNo(now)
-  const readyMember = buildMemberPreview(data, {
+  const readyMember = buildSlotBackedMemberPreview(data, {
     now,
-    employeeNo,
     deviceAccessState: 'ready',
   })
 
-  options.onStepChange?.('creating_member')
+  options.onStepChange?.('assigning_slot')
 
   try {
-    await queueMemberJob('/api/access/members/user', {
-      employeeNo,
+    await queueSlotJob('/api/access/slots/assign', {
+      employeeNo: data.slot.employeeNo,
+      cardNo: data.slot.cardNo,
+      placeholderName: data.slot.placeholderName,
       name: data.name,
       expiry: data.expiry,
     })
   } catch (error) {
     throw new MemberProvisioningError({
-      step: 'creating_member',
+      step: 'assigning_slot',
       message:
         error instanceof Error
-          ? `Failed to create member on the device: ${error.message}`
-          : 'Failed to create member on the device.',
-    })
-  }
-
-  options.onStepChange?.('issuing_card')
-
-  try {
-    await queueMemberJob('/api/access/members/card', buildAddCardPayload({
-      employeeNo,
-      cardNo: data.cardNo,
-    }))
-  } catch (error) {
-    const pendingMember = {
-      ...readyMember,
-      deviceAccessState: 'card_pending' as const,
-    }
-
-    upsertSessionMember(pendingMember)
-
-    throw new MemberProvisioningError({
-      step: 'issuing_card',
-      member: pendingMember,
-      message:
-        error instanceof Error
-          ? `Member was created on the device, but card issuance failed: ${error.message}`
-          : 'Member was created on the device, but card issuance failed.',
+          ? `Failed to assign the selected Hik slot: ${error.message}`
+          : 'Failed to assign the selected Hik slot.',
     })
   }
 
@@ -145,34 +120,40 @@ export async function addMember(data: AddMemberData, options: AddMemberOptions =
   return readyMember
 }
 
-export async function retryMemberCard(member: Member): Promise<Member> {
+export async function releaseMemberSlot(member: Member): Promise<Member> {
+  if (!member.slotPlaceholderName) {
+    throw new Error('This member does not have a reusable Hik slot recorded.')
+  }
+
   try {
-    await queueMemberJob('/api/access/members/card', buildAddCardPayload({
+    await queueSlotJob('/api/access/slots/reset', {
       employeeNo: member.id,
-      cardNo: member.cardNo,
-    }))
-  } catch (error) {
-    throw new MemberProvisioningError({
-      step: 'issuing_card',
-      member,
-      message:
-        error instanceof Error
-          ? `Card issuance retry failed: ${error.message}`
-          : 'Card issuance retry failed.',
+      placeholderName: member.slotPlaceholderName,
     })
+  } catch (error) {
+    throw new Error(
+      error instanceof Error
+        ? `Failed to release the Hik slot: ${error.message}`
+        : 'Failed to release the Hik slot.',
+    )
   }
 
-  const readyMember = {
+  const releasedMember = {
     ...member,
-    deviceAccessState: 'ready' as const,
+    deviceAccessState: 'released' as const,
   }
 
-  upsertSessionMember(readyMember)
+  upsertSessionMember(releasedMember)
 
-  return readyMember
+  return releasedMember
 }
 
-export type UpdateMemberData = Partial<AddMemberData>
+export type UpdateMemberData = Partial<{
+  name: string
+  cardNo: string
+  type: MemberType
+  expiry: string
+}>
 
 export async function updateMember(id: string, data: UpdateMemberData): Promise<Member> {
   // TODO: Replace with Supabase update

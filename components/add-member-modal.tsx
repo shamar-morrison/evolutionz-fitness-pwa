@@ -1,7 +1,6 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -25,8 +24,12 @@ import {
   MemberProvisioningError,
   type AddMemberData,
 } from '@/lib/member-actions'
+import {
+  fetchAvailableAccessSlots,
+  formatAvailableAccessSlotLabel,
+} from '@/lib/available-slots'
 import { toast } from '@/hooks/use-toast'
-import type { Member, MemberType } from '@/types'
+import type { AvailableAccessSlot, Member, MemberType } from '@/types'
 
 type AddMemberModalProps = {
   open: boolean
@@ -34,53 +37,112 @@ type AddMemberModalProps = {
   onSuccess?: (member: Member) => void
 }
 
+type AddMemberFormState = {
+  name: string
+  selectedSlotEmployeeNo: string
+  type: MemberType
+  expiry: string
+}
+
 const memberTypes: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
 
+const initialFormState: AddMemberFormState = {
+  name: '',
+  selectedSlotEmployeeNo: '',
+  type: 'General',
+  expiry: '',
+}
+
 export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModalProps) {
-  const router = useRouter()
-  const [submissionStep, setSubmissionStep] = useState<'idle' | 'creating_member' | 'issuing_card'>('idle')
-  const [formData, setFormData] = useState<AddMemberData>({
-    name: '',
-    cardNo: '',
-    type: 'General',
-    expiry: '',
-  })
+  const [submissionStep, setSubmissionStep] = useState<'idle' | 'assigning_slot'>('idle')
+  const [availableSlots, setAvailableSlots] = useState<AvailableAccessSlot[]>([])
+  const [isSlotsLoading, setIsSlotsLoading] = useState(false)
+  const [slotsError, setSlotsError] = useState<string | null>(null)
+  const [formData, setFormData] = useState<AddMemberFormState>(initialFormState)
 
   const isSubmitting = submissionStep !== 'idle'
+  const hasNoAvailableSlots = !isSlotsLoading && availableSlots.length === 0 && !slotsError
+  const selectedSlot = useMemo(
+    () =>
+      availableSlots.find((slot) => slot.employeeNo === formData.selectedSlotEmployeeNo) ?? null,
+    [availableSlots, formData.selectedSlotEmployeeNo],
+  )
+
+  const loadAvailableSlots = async () => {
+    setIsSlotsLoading(true)
+    setSlotsError(null)
+
+    try {
+      const slots = await fetchAvailableAccessSlots()
+
+      setAvailableSlots(slots)
+      setFormData((currentFormData) => ({
+        ...currentFormData,
+        selectedSlotEmployeeNo: slots.some((slot) => slot.employeeNo === currentFormData.selectedSlotEmployeeNo)
+          ? currentFormData.selectedSlotEmployeeNo
+          : slots[0]?.employeeNo ?? '',
+      }))
+    } catch (error) {
+      setAvailableSlots([])
+      setSlotsError(error instanceof Error ? error.message : 'Failed to load available slots.')
+      setFormData((currentFormData) => ({
+        ...currentFormData,
+        selectedSlotEmployeeNo: '',
+      }))
+    } finally {
+      setIsSlotsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    void loadAvailableSlots()
+  }, [open])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setSubmissionStep('creating_member')
+
+    if (!selectedSlot) {
+      toast({
+        title: 'Select a slot',
+        description: 'Choose an available Hik slot before creating the member.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setSubmissionStep('assigning_slot')
 
     try {
-      const member = await addMember(formData, {
-        onStepChange: setSubmissionStep,
-      })
+      const member = await addMember(
+        {
+          name: formData.name,
+          type: formData.type,
+          expiry: formData.expiry,
+          slot: selectedSlot,
+        },
+        {
+          onStepChange: setSubmissionStep,
+        },
+      )
+
       onOpenChange(false)
-      setFormData({ name: '', cardNo: '', type: 'General', expiry: '' })
+      setFormData(initialFormState)
       onSuccess?.(member)
       toast({
         title: 'Member added',
-        description: `${member.name} was created on the device and their card was issued.`,
+        description: `${member.name} was assigned to Hik slot ${selectedSlot.placeholderName}.`,
       })
     } catch (error) {
       if (error instanceof MemberProvisioningError) {
-        if (error.step === 'issuing_card' && error.member) {
-          onOpenChange(false)
-          setFormData({ name: '', cardNo: '', type: 'General', expiry: '' })
-          toast({
-            title: 'Card issuance failed',
-            description: `${error.member.name} was created on the device, but card issuance failed. Open the member to retry the card step.`,
-            variant: 'destructive',
-          })
-          router.push(`/members/${error.member.id}`)
-        } else {
-          toast({
-            title: 'Member creation failed',
-            description: error.message,
-            variant: 'destructive',
-          })
-        }
+        toast({
+          title: 'Member creation failed',
+          description: error.message,
+          variant: 'destructive',
+        })
       } else {
         console.error('Failed to add member:', error)
         toast({
@@ -95,18 +157,20 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
   }
 
   const submitLabel =
-    submissionStep === 'creating_member'
-      ? 'Creating Member...'
-      : submissionStep === 'issuing_card'
-        ? 'Issuing Card...'
-        : 'Save Member'
+    submissionStep === 'assigning_slot'
+      ? 'Assigning Slot...'
+      : 'Save Member'
 
   const progressDescription =
-    submissionStep === 'creating_member'
-      ? 'Creating the member on the device.'
-      : submissionStep === 'issuing_card'
-        ? 'Member created. Issuing the access card now.'
-        : "Enter the member details below. Click save when you're done."
+    submissionStep === 'assigning_slot'
+      ? 'Assigning the selected Hik slot to this member.'
+      : isSlotsLoading
+        ? 'Loading available Hik slots.'
+        : slotsError
+          ? 'Could not load available Hik slots. Refresh and try again.'
+          : hasNoAvailableSlots
+            ? 'No reusable Hik slots are available right now. Reset a slot in the device, then refresh.'
+            : "Enter the member details below and choose an available Hik slot."
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -128,14 +192,55 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="cardNo">Card Number</Label>
-              <Input
-                id="cardNo"
-                value={formData.cardNo}
-                onChange={(e) => setFormData({ ...formData, cardNo: e.target.value })}
-                placeholder="EF-XXXXXX"
-                required
-              />
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="slot">Available Hik Slot</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void loadAvailableSlots()}
+                  disabled={isSubmitting || isSlotsLoading}
+                >
+                  Refresh
+                </Button>
+              </div>
+              <Select
+                value={formData.selectedSlotEmployeeNo}
+                onValueChange={(value) => setFormData({ ...formData, selectedSlotEmployeeNo: value })}
+                disabled={isSubmitting || isSlotsLoading || availableSlots.length === 0}
+              >
+                <SelectTrigger id="slot">
+                  <SelectValue
+                    placeholder={
+                      isSlotsLoading
+                        ? 'Loading slots...'
+                        : hasNoAvailableSlots
+                          ? 'No slots available'
+                          : 'Select a Hik slot'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableSlots.map((slot) => (
+                    <SelectItem key={slot.employeeNo} value={slot.employeeNo}>
+                      {formatAvailableAccessSlotLabel(slot)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isSlotsLoading ? (
+                <p className="text-xs text-muted-foreground">Fetching reusable slot records from Hik.</p>
+              ) : slotsError ? (
+                <p className="text-xs text-destructive">{slotsError}</p>
+              ) : hasNoAvailableSlots ? (
+                <p className="text-xs text-muted-foreground">
+                  No reusable placeholder slots are currently available on the device.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {availableSlots.length} reusable slot{availableSlots.length === 1 ? '' : 's'} loaded from Hik.
+                </p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="type">Membership Type</Label>
@@ -177,7 +282,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isSlotsLoading || availableSlots.length === 0 || !selectedSlot}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {submitLabel}

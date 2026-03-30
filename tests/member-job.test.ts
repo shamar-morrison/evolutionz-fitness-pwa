@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  DEFAULT_RESET_SLOT_END_TIME,
   buildAddCardPayload,
   buildAddUserPayload,
-  buildMemberPreview,
+  buildAssignSlotPayload,
+  buildResetSlotPayload,
+  buildSlotBackedMemberPreview,
   generateEmployeeNo,
 } from '@/lib/member-job'
 
@@ -11,7 +14,7 @@ describe('member job payload mapping', () => {
     vi.restoreAllMocks()
   })
 
-  it('builds the bridge-native add_user and add_card payloads', () => {
+  it('builds the bridge-native add_user, assign_slot, and add_card payloads', () => {
     const now = new Date('2026-03-30T14:15:16')
 
     expect(
@@ -32,6 +35,25 @@ describe('member job payload mapping', () => {
     })
 
     expect(
+      buildAssignSlotPayload(
+        {
+          employeeNo: '00000611',
+          cardNo: '0102857149',
+          placeholderName: 'P42',
+          name: '  Jane Doe  ',
+          expiry: '2026-07-15',
+        },
+        now,
+      ),
+    ).toEqual({
+      employeeNo: '00000611',
+      name: 'Jane Doe',
+      userType: 'normal',
+      beginTime: '2026-03-30T00:00:00',
+      endTime: '2026-07-15T23:59:59',
+    })
+
+    expect(
       buildAddCardPayload({
         employeeNo: 'EVZ-20260330141516-ABC123',
         cardNo: ' EF-009999 ',
@@ -42,37 +64,61 @@ describe('member job payload mapping', () => {
     })
   })
 
-  it('builds preview members with a separate device access state', () => {
+  it('builds reset slot payloads with the far-future supported expiry', () => {
     const now = new Date('2026-03-30T14:15:16')
 
     expect(
-      buildMemberPreview(
+      buildResetSlotPayload(
+        {
+          employeeNo: '00000611',
+          placeholderName: 'P42',
+        },
+        now,
+      ),
+    ).toEqual({
+      employeeNo: '00000611',
+      name: 'P42',
+      userType: 'normal',
+      beginTime: '2026-03-30T00:00:00',
+      endTime: DEFAULT_RESET_SLOT_END_TIME,
+    })
+  })
+
+  it('builds slot-backed preview members using the existing Hik person and card ids', () => {
+    const now = new Date('2026-03-30T14:15:16')
+
+    expect(
+      buildSlotBackedMemberPreview(
         {
           name: '  Jane Doe  ',
-          cardNo: ' EF-009999 ',
           type: 'Student/BPO',
           expiry: '2026-07-15',
+          slot: {
+            employeeNo: '00000611',
+            cardNo: ' 0102857149 ',
+            placeholderName: 'P42',
+          },
         },
         {
           now,
-          employeeNo: 'EVZ-20260330141516-ABC123',
-          deviceAccessState: 'card_pending',
+          deviceAccessState: 'released',
         },
       ),
     ).toEqual({
-      id: 'EVZ-20260330141516-ABC123',
+      id: '00000611',
       name: 'Jane Doe',
-      cardNo: 'EF-009999',
+      cardNo: '0102857149',
+      slotPlaceholderName: 'P42',
       type: 'Student/BPO',
       status: 'Active',
-      deviceAccessState: 'card_pending',
+      deviceAccessState: 'released',
       expiry: '2026-07-15',
       balance: 0,
       createdAt: now.toISOString(),
     })
   })
 
-  it('generates a stable prefixed employee number', () => {
+  it('still generates a stable prefixed employee number for legacy paths', () => {
     vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
       'abcdef12-3456-7890-abcd-ef1234567890',
     )
