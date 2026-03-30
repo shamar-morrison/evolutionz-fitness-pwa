@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { AvailableAccessSlot, DeviceAccessState, Member, MemberType } from '@/types'
 
 const memberTypeValues = ['General', 'Civil Servant', 'Student/BPO'] as const
-const placeholderSlotNamePattern = /^[A-Z]\d{2}$/
+const placeholderSlotNamePattern = /^[A-Z]\d{1,2}$/
 export const DEFAULT_RESET_SLOT_END_TIME = '2037-12-31T23:59:59'
 
 const expiryDateSchema = z

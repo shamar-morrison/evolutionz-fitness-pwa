@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_RESET_SLOT_END_TIME,
+  assignAccessSlotJobRequestSchema,
+  availableAccessSlotSchema,
   buildAddCardPayload,
   buildAddUserPayload,
   buildAssignSlotPayload,
   buildResetSlotPayload,
   buildSlotBackedMemberPreview,
   generateEmployeeNo,
+  resetAccessSlotJobRequestSchema,
 } from '@/lib/member-job'
 
 describe('member job payload mapping', () => {
@@ -126,5 +129,64 @@ describe('member job payload mapping', () => {
     expect(generateEmployeeNo(new Date('2026-03-30T14:15:16'))).toBe(
       'EVZ-20260330141516-ABCDEF',
     )
+  })
+
+  it('accepts exact one-digit and two-digit Hik slot labels', () => {
+    expect(
+      availableAccessSlotSchema.parse({
+        employeeNo: '00000624',
+        cardNo: '0105451261',
+        placeholderName: 'P4',
+      }),
+    ).toEqual({
+      employeeNo: '00000624',
+      cardNo: '0105451261',
+      placeholderName: 'P4',
+    })
+
+    expect(
+      assignAccessSlotJobRequestSchema.parse({
+        employeeNo: '00000655',
+        cardNo: '0105555555',
+        placeholderName: 'P55',
+        name: 'Jane Doe',
+        expiry: '2026-07-15',
+      }),
+    ).toEqual({
+      employeeNo: '00000655',
+      cardNo: '0105555555',
+      placeholderName: 'P55',
+      name: 'Jane Doe',
+      expiry: '2026-07-15',
+    })
+
+    expect(
+      resetAccessSlotJobRequestSchema.parse({
+        employeeNo: '00000655',
+        placeholderName: 'P55',
+      }),
+    ).toEqual({
+      employeeNo: '00000655',
+      placeholderName: 'P55',
+    })
+  })
+
+  it('rejects member-attached slot names for assign and reset flows', () => {
+    expect(() =>
+      assignAccessSlotJobRequestSchema.parse({
+        employeeNo: '00000624',
+        cardNo: '0105451261',
+        placeholderName: 'P4 Ackeem Planter',
+        name: 'Ackeem Planter',
+        expiry: '2026-07-15',
+      }),
+    ).toThrow(/Placeholder slot name must match the Hik slot pattern\./)
+
+    expect(() =>
+      resetAccessSlotJobRequestSchema.parse({
+        employeeNo: '00000655',
+        placeholderName: 'P55 Waxsley Stewart-Betty',
+      }),
+    ).toThrow(/Placeholder slot name must match the Hik slot pattern\./)
   })
 })
