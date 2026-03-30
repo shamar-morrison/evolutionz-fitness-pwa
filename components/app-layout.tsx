@@ -1,6 +1,7 @@
 'use client'
 
 import { Sidebar } from '@/components/sidebar'
+import { Toaster } from '@/components/ui/toaster'
 import { AuthProvider } from '@/contexts/auth-context'
 import type { ReactNode } from 'react'
 
@@ -17,6 +18,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="container mx-auto p-6">{children}</div>
         </main>
       </div>
+      <Toaster />
     </AuthProvider>
   )
 }

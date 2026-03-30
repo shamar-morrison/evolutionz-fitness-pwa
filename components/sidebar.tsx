@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
+import { RoleGuard } from '@/components/role-guard'
 import {
   LayoutDashboard,
   Users,
@@ -17,11 +18,34 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { toast } from '@/hooks/use-toast'
 
-// TODO: Replace with actual door unlock API call
-async function unlockDoor(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 1000))
-  console.log('Door unlocked!')
+type UnlockDoorResponse =
+  | {
+      ok: true
+      jobId: string
+      result: unknown
+    }
+  | {
+      ok: false
+      jobId?: string
+      error: string
+    }
+
+async function unlockDoor() {
+  const response = await fetch('/api/access/unlock', { method: 'POST' })
+
+  let data: UnlockDoorResponse | null = null
+
+  try {
+    data = (await response.json()) as UnlockDoorResponse
+  } catch {
+    data = null
+  }
+
+  if (!response.ok || !data || data.ok === false) {
+    throw new Error(data && data.ok === false ? data.error : 'Failed to unlock the door.')
+  }
 }
 
 const navItems = [
@@ -39,12 +63,19 @@ export function Sidebar() {
 
   const handleUnlock = async () => {
     setUnlockState('unlocking')
+
     try {
       await unlockDoor()
       setUnlockState('unlocked')
       setTimeout(() => setUnlockState('idle'), 2000)
-    } catch {
+    } catch (error) {
       setUnlockState('idle')
+      toast({
+        title: 'Unlock failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to unlock the door.',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -91,36 +122,38 @@ export function Sidebar() {
 
       {/* Unlock Door Button & User Profile */}
       <div className="border-t border-sidebar-border p-3">
-        <Button
-          onClick={handleUnlock}
-          disabled={unlockState !== 'idle'}
-          className={cn(
-            'mb-3 w-full gap-2 text-base font-semibold',
-            unlockState === 'unlocked'
-              ? 'bg-green-600 hover:bg-green-600'
-              : 'bg-primary text-primary-foreground hover:bg-primary/90'
-          )}
-          size="lg"
-        >
-          {unlockState === 'idle' && (
-            <>
-              <DoorOpen className="h-5 w-5" />
-              Unlock Door
-            </>
-          )}
-          {unlockState === 'unlocking' && (
-            <>
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              Unlocking...
-            </>
-          )}
-          {unlockState === 'unlocked' && (
-            <>
-              <Check className="h-5 w-5" />
-              Unlocked
-            </>
-          )}
-        </Button>
+        <RoleGuard role="admin">
+          <Button
+            onClick={handleUnlock}
+            disabled={unlockState !== 'idle'}
+            className={cn(
+              'mb-3 w-full gap-2 text-base font-semibold',
+              unlockState === 'unlocked'
+                ? 'bg-green-600 hover:bg-green-600'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90'
+            )}
+            size="lg"
+          >
+            {unlockState === 'idle' && (
+              <>
+                <DoorOpen className="h-5 w-5" />
+                Unlock Door
+              </>
+            )}
+            {unlockState === 'unlocking' && (
+              <>
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                Unlocking...
+              </>
+            )}
+            {unlockState === 'unlocked' && (
+              <>
+                <Check className="h-5 w-5" />
+                Unlocked
+              </>
+            )}
+          </Button>
+        </RoleGuard>
 
         {user && (
           <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent p-3">
