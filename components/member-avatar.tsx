@@ -1,3 +1,6 @@
+'use client'
+
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 
 type MemberAvatarProps = {
@@ -15,16 +18,24 @@ export function MemberAvatar({ name, size = 'md', className }: MemberAvatarProps
     .slice(0, 2)
 
   return (
-    <div
+    <Avatar
       className={cn(
-        'flex items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground',
-        size === 'sm' && 'h-8 w-8 text-xs',
-        size === 'md' && 'h-10 w-10 text-sm',
-        size === 'lg' && 'h-14 w-14 text-lg',
+        size === 'sm' && 'h-8 w-8',
+        size === 'md' && 'h-10 w-10',
+        size === 'lg' && 'h-14 w-14',
         className
       )}
     >
-      {initials}
-    </div>
+      <AvatarFallback
+        className={cn(
+          'bg-muted font-semibold text-muted-foreground',
+          size === 'sm' && 'text-xs',
+          size === 'md' && 'text-sm',
+          size === 'lg' && 'text-lg'
+        )}
+      >
+        {initials}
+      </AvatarFallback>
+    </Avatar>
   )
 }
