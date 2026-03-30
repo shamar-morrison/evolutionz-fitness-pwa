@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -28,7 +29,11 @@ type AddMemberModalProps = {
   onSuccess?: () => void
 }
 
-const memberTypes: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
+const memberTypeItems = [
+  { label: 'General', value: 'General' },
+  { label: 'Civil Servant', value: 'Civil Servant' },
+  { label: 'Student/BPO', value: 'Student/BPO' },
+]
 
 export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -90,17 +95,19 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
               <Label htmlFor="type">Membership Type</Label>
               <Select
                 value={formData.type}
-                onValueChange={(value: MemberType) => setFormData({ ...formData, type: value })}
+                onValueChange={(value) => setFormData({ ...formData, type: value as MemberType })}
               >
-                <SelectTrigger id="type">
+                <SelectTrigger id="type" className="w-full">
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {memberTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {memberTypeItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>

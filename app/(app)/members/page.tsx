@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -18,8 +19,19 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Search, UserPlus } from 'lucide-react'
 import type { MemberStatus, MemberType } from '@/types'
 
-const statusOptions: (MemberStatus | 'All')[] = ['All', 'Active', 'Expired', 'Suspended']
-const typeOptions: (MemberType | 'All')[] = ['All', 'General', 'Civil Servant', 'Student/BPO']
+const statusItems = [
+  { label: 'All', value: 'All' },
+  { label: 'Active', value: 'Active' },
+  { label: 'Expired', value: 'Expired' },
+  { label: 'Suspended', value: 'Suspended' },
+]
+
+const typeItems = [
+  { label: 'All', value: 'All' },
+  { label: 'General', value: 'General' },
+  { label: 'Civil Servant', value: 'Civil Servant' },
+  { label: 'Student/BPO', value: 'Student/BPO' },
+]
 
 export default function MembersPage() {
   const searchParams = useSearchParams()
@@ -71,32 +83,36 @@ export default function MembersPage() {
         </div>
         <Select
           value={statusFilter}
-          onValueChange={(value: MemberStatus | 'All') => setStatusFilter(value)}
+          onValueChange={(value) => setStatusFilter(value as MemberStatus | 'All')}
         >
           <SelectTrigger className="w-[140px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            {statusOptions.map((status) => (
-              <SelectItem key={status} value={status}>
-                {status}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              {statusItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
         <Select
           value={typeFilter}
-          onValueChange={(value: MemberType | 'All') => setTypeFilter(value)}
+          onValueChange={(value) => setTypeFilter(value as MemberType | 'All')}
         >
           <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
-            {typeOptions.map((type) => (
-              <SelectItem key={type} value={type}>
-                {type}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              {typeItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
       </div>
