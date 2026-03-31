@@ -1,11 +1,16 @@
 import { z } from 'zod'
-import type { Member, MemberRecord } from '@/types'
+import { getCleanMemberName } from '@/lib/member-name'
+import type { CardRecord, Member, MemberRecord } from '@/types'
+
+export const MEMBER_RECORD_SELECT =
+  'id, employee_no, name, card_no, type, status, expiry, balance, created_at, updated_at'
 
 const memberSchema = z.object({
   id: z.string().trim().min(1, 'Member id is required.'),
   employeeNo: z.string().trim().min(1, 'Employee number is required.'),
   name: z.string().trim().min(1, 'Name is required.'),
   cardNo: z.string(),
+  cardCode: z.string().trim().min(1).nullable(),
   slotPlaceholderName: z.string().trim().min(1).optional(),
   type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
   status: z.enum(['Active', 'Expired', 'Suspended']),
@@ -64,14 +69,45 @@ function normalizeTimestamp(value: string | null | undefined) {
 }
 
 export function mapMemberRecordToMember(record: MemberRecord): Member {
+  return mapMemberRecordToMemberWithCardCode(record)
+}
+
+export function buildCardCodeByCardNo(records: CardRecord[]) {
+  const cardCodeByCardNo = new Map<string, string | null>()
+
+  for (const record of records) {
+    const cardNo = normalizeText(record.card_no)
+
+    if (!cardNo) {
+      continue
+    }
+
+    const cardCode = normalizeText(record.card_code) || null
+    const existingCardCode = cardCodeByCardNo.get(cardNo)
+
+    if (!existingCardCode || cardCode) {
+      cardCodeByCardNo.set(cardNo, cardCode)
+    }
+  }
+
+  return cardCodeByCardNo
+}
+
+export function mapMemberRecordToMemberWithCardCode(
+  record: MemberRecord,
+  cardCodeByCardNo: Map<string, string | null> = new Map(),
+): Member {
   const employeeNo = normalizeText(record.employee_no)
+  const cardNo = normalizeText(record.card_no)
+  const cardCode = cardNo ? cardCodeByCardNo.get(cardNo) ?? null : null
   const createdAt = normalizeTimestamp(record.created_at)
 
   return {
     id: normalizeText(record.id),
     employeeNo,
-    name: normalizeText(record.name) || employeeNo,
-    cardNo: normalizeText(record.card_no),
+    name: getCleanMemberName(normalizeText(record.name) || employeeNo, cardCode) || employeeNo,
+    cardNo,
+    cardCode,
     type: record.type,
     status: record.status,
     deviceAccessState: 'ready',

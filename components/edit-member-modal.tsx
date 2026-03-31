@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { updateMember, type UpdateMemberData } from '@/lib/member-actions'
+import { getCleanMemberName } from '@/lib/member-name'
 import type { Member, MemberType } from '@/types'
 
 type EditMemberModalProps = {
@@ -34,7 +35,7 @@ const memberTypes: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
 export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditMemberModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState<UpdateMemberData>({
-    name: member.name,
+    name: getCleanMemberName(member.name, member.cardCode),
     cardNo: member.cardNo,
     type: member.type,
     expiry: member.expiry ?? '',
@@ -42,7 +43,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
 
   useEffect(() => {
     setFormData({
-      name: member.name,
+      name: getCleanMemberName(member.name, member.cardCode),
       cardNo: member.cardNo,
       type: member.type,
       expiry: member.expiry ?? '',

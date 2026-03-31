@@ -11,7 +11,9 @@ import {
   buildMemberPreview,
   buildResetSlotPayload,
   buildSlotBackedMemberPreview,
+  ensureUniqueShortEmployeeNo,
   generateEmployeeNo,
+  getNextShortEmployeeNo,
   provisionMemberAccessRequestSchema,
   resetAccessSlotJobRequestSchema,
 } from '@/lib/member-job'
@@ -54,7 +56,7 @@ describe('member job payload mapping', () => {
       ),
     ).toEqual({
       employeeNo: '00000611',
-      name: 'Jane Doe',
+      name: 'P42 Jane Doe',
       userType: 'normal',
       beginTime: '2026-03-30T00:00:00',
       endTime: '2026-07-15T23:59:59',
@@ -116,6 +118,7 @@ describe('member job payload mapping', () => {
       employeeNo: '00000611',
       name: 'Jane Doe',
       cardNo: '0102857149',
+      cardCode: 'P42',
       slotPlaceholderName: 'P42',
       type: 'Student/BPO',
       status: 'Active',
@@ -135,8 +138,8 @@ describe('member job payload mapping', () => {
           name: '  Jane Doe  ',
           type: 'General',
           expiry: '2026-07-15',
-          cardSource: 'manual',
           cardNo: ' 0102857149 ',
+          cardCode: ' A18 ',
         },
         {
           now,
@@ -148,6 +151,7 @@ describe('member job payload mapping', () => {
       employeeNo: '20260330141516593046',
       name: 'Jane Doe',
       cardNo: '0102857149',
+      cardCode: 'A18',
       type: 'General',
       status: 'Active',
       deviceAccessState: 'ready',
@@ -157,27 +161,41 @@ describe('member job payload mapping', () => {
     })
   })
 
-  it('generates a stable numeric Hik person id', () => {
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
-      'abcdef12-3456-7890-abcd-ef1234567890',
-    )
-
+  it('generates a stable short numeric Hik person id fallback', () => {
     const employeeNo = generateEmployeeNo(new Date('2026-03-30T14:15:16'))
 
-    expect(employeeNo).toBe('20260330141516593046')
-    expect(employeeNo).toMatch(/^\d+$/)
-    expect(employeeNo.startsWith('20260330141516')).toBe(true)
-    expect(employeeNo.length).toBe(20)
-    expect(employeeNo.length).toBeLessThan(32)
+    expect(employeeNo).toBe('898116000')
+    expect(employeeNo).toMatch(/^\d{1,9}$/)
   })
 
-  it('accepts card-first member requests and manual card provisioning requests', () => {
+  it('derives the next short employee id from existing short numeric members and ignores legacy ids', () => {
+    expect(
+      getNextShortEmployeeNo(
+        ['611', '00000911', '20260330141516593046', 'abc-123'],
+        '898116000',
+      ),
+    ).toBe('912')
+  })
+
+  it('increments fallback collisions and fails when the short numeric range is exhausted', () => {
+    expect(
+      ensureUniqueShortEmployeeNo('898116000', ['898116000', '898116001', '20260330141516593046']),
+    ).toBe('898116002')
+
+    expect(() => ensureUniqueShortEmployeeNo('999999999', ['999999999'])).toThrow(
+      /Failed to derive a unique short numeric employee number\./,
+    )
+  })
+
+  it('accepts card-first member requests with card codes', () => {
     expect(
       availableAccessCardSchema.parse({
         cardNo: '0105451261',
+        cardCode: 'A18',
       }),
     ).toEqual({
       cardNo: '0105451261',
+      cardCode: 'A18',
     })
 
     expect(
@@ -185,51 +203,54 @@ describe('member job payload mapping', () => {
         name: 'Jane Doe',
         type: 'General',
         expiry: '2026-07-15',
-        cardSource: 'inventory',
         cardNo: '0105451261',
+        cardCode: 'A18',
       }),
     ).toEqual({
       name: 'Jane Doe',
       type: 'General',
       expiry: '2026-07-15',
-      cardSource: 'inventory',
       cardNo: '0105451261',
+      cardCode: 'A18',
     })
 
     expect(
       provisionMemberAccessRequestSchema.parse({
         name: 'Jane Doe',
+        type: 'General',
         expiry: '2026-07-15',
-        cardSource: 'manual',
         cardNo: ' 0105451261 ',
+        cardCode: ' A18 ',
       }),
     ).toEqual({
       name: 'Jane Doe',
+      type: 'General',
       expiry: '2026-07-15',
-      cardSource: 'manual',
       cardNo: '0105451261',
+      cardCode: 'A18',
     })
   })
 
-  it('rejects manual card numbers with embedded control characters', () => {
+  it('rejects member provisioning requests without a usable card code', () => {
     expect(() =>
       addMemberRequestSchema.parse({
         name: 'Jane Doe',
         type: 'General',
         expiry: '2026-07-15',
-        cardSource: 'manual',
-        cardNo: '0102\n857149',
+        cardNo: '0102857149',
+        cardCode: '',
       }),
-    ).toThrow(/Manual card numbers cannot contain control characters or line breaks\./)
+    ).toThrow(/Card code is required\./)
 
     expect(() =>
       provisionMemberAccessRequestSchema.parse({
         name: 'Jane Doe',
+        type: 'General',
         expiry: '2026-07-15',
-        cardSource: 'manual',
-        cardNo: '0102\u0000857149',
+        cardNo: '0102857149',
+        cardCode: '  ',
       }),
-    ).toThrow(/Manual card numbers cannot contain control characters or line breaks\./)
+    ).toThrow(/Card code is required\./)
   })
 
   it('accepts exact one-digit and two-digit Hik slot labels', () => {

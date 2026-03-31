@@ -7,15 +7,18 @@ export type AvailableAccessSlot = {
   cardNo: string
   placeholderName: string
 }
-export type AvailableAccessCard = {
+export type Card = {
   cardNo: string
+  cardCode: string | null
 }
+export type AvailableAccessCard = Card
 
 export type Member = {
   id: string
   employeeNo: string
   name: string
   cardNo: string
+  cardCode: string | null
   slotPlaceholderName?: string
   type: MemberType
   status: MemberStatus
@@ -36,6 +39,11 @@ export type MemberRecord = {
   balance: number
   created_at: string
   updated_at: string
+}
+
+export type CardRecord = {
+  card_no: string
+  card_code: string | null
 }
 
 export type MemberSyncSummary = {

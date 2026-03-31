@@ -22,16 +22,12 @@ import {
 import {
   addMember,
   MemberProvisioningError,
-  type AddMemberData,
-  type MemberCardSource,
 } from '@/lib/member-actions'
-import { getManualCardNoValidationError, normalizeCardNo } from '@/lib/card-no'
 import { useAvailableCards } from '@/hooks/use-available-cards'
-import {
-  formatAvailableAccessCardLabel,
-} from '@/lib/available-cards'
+import { formatAvailableAccessCardLabel } from '@/lib/available-cards'
+import { buildMemberDisplayName, hasUsableCardCode } from '@/lib/member-name'
 import { toast } from '@/hooks/use-toast'
-import type { AvailableAccessCard, Member, MemberType } from '@/types'
+import type { Member, MemberType } from '@/types'
 
 type AddMemberModalProps = {
   open: boolean
@@ -41,9 +37,7 @@ type AddMemberModalProps = {
 
 type AddMemberFormState = {
   name: string
-  cardSource: MemberCardSource
   selectedInventoryCardNo: string
-  manualCardNo: string
   type: MemberType
   expiry: string
 }
@@ -52,11 +46,21 @@ const memberTypes: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
 
 const initialFormState: AddMemberFormState = {
   name: '',
-  cardSource: 'inventory',
   selectedInventoryCardNo: '',
-  manualCardNo: '',
   type: 'General',
   expiry: '',
+}
+
+function getDefaultCardNo(cards: Array<{ cardNo: string; cardCode: string | null }>) {
+  return cards.find((card) => hasUsableCardCode(card.cardCode))?.cardNo ?? cards[0]?.cardNo ?? ''
+}
+
+function formatDateInputValue(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
 }
 
 export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModalProps) {
@@ -76,6 +80,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       availableCards.find((card) => card.cardNo === formData.selectedInventoryCardNo) ?? null,
     [availableCards, formData.selectedInventoryCardNo],
   )
+  const minimumExpiryDate = useMemo(() => formatDateInputValue(new Date()), [open])
 
   useEffect(() => {
     if (!open) {
@@ -88,49 +93,37 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
         (card) => card.cardNo === currentFormData.selectedInventoryCardNo,
       )
         ? currentFormData.selectedInventoryCardNo
-        : availableCards[0]?.cardNo ?? '',
+        : getDefaultCardNo(availableCards),
     }))
   }, [availableCards, open])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const normalizedManualCardNo = normalizeCardNo(formData.manualCardNo)
-    const selectedCardNo =
-      formData.cardSource === 'manual'
-        ? normalizedManualCardNo
-        : selectedInventoryCard?.cardNo ?? ''
-
-    if (formData.cardSource === 'manual') {
-      const manualCardValidationError = getManualCardNoValidationError(formData.manualCardNo)
-
-      if (normalizedManualCardNo !== formData.manualCardNo) {
-        setFormData((currentFormData) => ({
-          ...currentFormData,
-          manualCardNo: normalizedManualCardNo,
-        }))
-      }
-
-      if (manualCardValidationError) {
-        toast({
-          title:
-            manualCardValidationError === 'Card number is required.'
-              ? 'Select a card'
-              : 'Invalid card number',
-          description: manualCardValidationError,
-          variant: 'destructive',
-        })
-        return
-      }
-    }
-
-    if (!selectedCardNo) {
+    if (!selectedInventoryCard?.cardNo) {
       toast({
         title: 'Select a card',
-        description:
-          formData.cardSource === 'manual'
-            ? 'Enter a card number before creating the member.'
-            : 'Choose an available access card before creating the member.',
+        description: 'Choose an available access card before creating the member.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const selectedCardCode = selectedInventoryCard.cardCode ?? ''
+
+    if (!hasUsableCardCode(selectedCardCode)) {
+      toast({
+        title: 'Card code required',
+        description: 'This card is missing its synced card code. Re-sync the imported cards and try again.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (formData.expiry && formData.expiry < minimumExpiryDate) {
+      toast({
+        title: 'Invalid expiry date',
+        description: 'Choose today or a future date for the membership expiry.',
         variant: 'destructive',
       })
       return
@@ -144,8 +137,8 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           name: formData.name,
           type: formData.type,
           expiry: formData.expiry,
-          cardSource: formData.cardSource,
-          cardNo: selectedCardNo,
+          cardNo: selectedInventoryCard.cardNo,
+          cardCode: selectedCardCode,
         },
         {
           onStepChange: setSubmissionStep,
@@ -157,7 +150,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       onSuccess?.(member)
       toast({
         title: 'Member added',
-        description: `${member.name} was provisioned with card ${member.cardNo}.`,
+        description: `${buildMemberDisplayName(member.name, member.cardCode)} was provisioned with card ${member.cardNo}.`,
       })
     } catch (error) {
       if (error instanceof MemberProvisioningError) {
@@ -187,15 +180,13 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
   const progressDescription =
     submissionStep === 'provisioning_member'
       ? 'Creating the Hik member record and assigning the selected card.'
-      : formData.cardSource === 'manual'
-        ? 'Enter the member details below and type the card number to assign.'
-        : isCardsLoading
-          ? 'Loading imported unassigned cards.'
-          : cardsError
-            ? 'Could not load imported cards. Refresh or switch to manual card entry.'
-            : hasNoAvailableCards
-              ? 'No imported unassigned cards are available. Enter a card number manually or import more cards into iVMS-4200.'
-              : 'Enter the member details below and choose an imported unassigned card.'
+      : isCardsLoading
+        ? 'Loading imported unassigned cards.'
+        : cardsError
+          ? 'Could not load imported cards. Refresh the inventory and try again.'
+          : hasNoAvailableCards
+            ? 'No imported unassigned cards are available. Import more cards into iVMS-4200 and re-sync.'
+            : 'Enter the member details below and choose an imported unassigned card.'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -208,107 +199,88 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Enter full name"
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="card-source">Card Source</Label>
-              <Select
-                value={formData.cardSource}
-                onValueChange={(value: MemberCardSource) =>
-                  setFormData({ ...formData, cardSource: value })
-                }
-                disabled={isSubmitting}
-              >
-                <SelectTrigger id="card-source">
-                  <SelectValue placeholder="Select card source" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="inventory">Imported card inventory</SelectItem>
-                  <SelectItem value="manual">Enter card number manually</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex overflow-hidden rounded-md border border-input bg-background">
+                {selectedInventoryCard?.cardCode ? (
+                  <span className="flex items-center border-r border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
+                    {selectedInventoryCard.cardCode}
+                  </span>
+                ) : null}
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder={
+                    selectedInventoryCard?.cardCode
+                      ? 'Enter member name'
+                      : 'Select a card with a synced card code'
+                  }
+                  className="border-0 shadow-none focus-visible:ring-0"
+                  disabled={!selectedInventoryCard?.cardCode}
+                  required
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The card code prefix is shown here for staff and sent to Hik automatically.
+              </p>
             </div>
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="card-number">
-                  {formData.cardSource === 'manual' ? 'Card Number' : 'Available Access Card'}
-                </Label>
-                {formData.cardSource === 'inventory' ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={refetchAvailableCards}
-                    disabled={isSubmitting || isCardsLoading}
-                  >
-                    Refresh
-                  </Button>
-                ) : null}
+                <Label htmlFor="card-number">Available Access Card</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={refetchAvailableCards}
+                  disabled={isSubmitting || isCardsLoading}
+                >
+                  Refresh
+                </Button>
               </div>
-              {formData.cardSource === 'manual' ? (
-                <>
-                  <Input
-                    id="card-number"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    value={formData.manualCardNo}
-                    onChange={(e) => setFormData({ ...formData, manualCardNo: e.target.value })}
-                    placeholder="Enter card number"
-                    required
-                  />
+              <>
+                <Select
+                  value={formData.selectedInventoryCardNo}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, selectedInventoryCardNo: value })
+                  }
+                  disabled={isSubmitting || isCardsLoading || availableCards.length === 0}
+                >
+                  <SelectTrigger id="card-number">
+                    <SelectValue
+                      placeholder={
+                        isCardsLoading
+                          ? 'Loading cards...'
+                          : hasNoAvailableCards
+                            ? 'No cards available'
+                            : 'Select an access card'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableCards.map((card) => (
+                      <SelectItem key={card.cardNo} value={card.cardNo}>
+                        {formatAvailableAccessCardLabel(card)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {isCardsLoading ? (
+                  <p className="text-xs text-muted-foreground">Fetching unassigned card records from Hik.</p>
+                ) : cardsError ? (
+                  <p className="text-xs text-destructive">{cardsError}</p>
+                ) : hasNoAvailableCards ? (
                   <p className="text-xs text-muted-foreground">
-                    Use this when the physical card number is already known.
+                    No unassigned cards are currently available from the imported inventory.
                   </p>
-                </>
-              ) : (
-                <>
-                  <Select
-                    value={formData.selectedInventoryCardNo}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, selectedInventoryCardNo: value })
-                    }
-                    disabled={isSubmitting || isCardsLoading || availableCards.length === 0}
-                  >
-                    <SelectTrigger id="card-number">
-                      <SelectValue
-                        placeholder={
-                          isCardsLoading
-                            ? 'Loading cards...'
-                            : hasNoAvailableCards
-                              ? 'No cards available'
-                              : 'Select an access card'
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableCards.map((card) => (
-                        <SelectItem key={card.cardNo} value={card.cardNo}>
-                          {formatAvailableAccessCardLabel(card)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {isCardsLoading ? (
-                    <p className="text-xs text-muted-foreground">Fetching unassigned card records from Hik.</p>
-                  ) : cardsError ? (
-                    <p className="text-xs text-destructive">{cardsError}</p>
-                  ) : hasNoAvailableCards ? (
-                    <p className="text-xs text-muted-foreground">
-                      No unassigned cards are currently available from the imported inventory.
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      {availableCards.length} unassigned card{availableCards.length === 1 ? '' : 's'} loaded from Hik.
-                    </p>
-                  )}
-                </>
-              )}
+                ) : selectedInventoryCard && !selectedInventoryCard.cardCode ? (
+                  <p className="text-xs text-destructive">
+                    This card is missing its synced card code and cannot be assigned until the next successful sync.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {availableCards.length} unassigned card{availableCards.length === 1 ? '' : 's'} loaded from Hik.
+                  </p>
+                )}
+              </>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="type">Membership Type</Label>
@@ -335,6 +307,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
                 type="date"
                 value={formData.expiry}
                 onChange={(e) => setFormData({ ...formData, expiry: e.target.value })}
+                min={minimumExpiryDate}
                 required
               />
             </div>
@@ -350,10 +323,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
             </Button>
             <Button
               type="submit"
-              disabled={
-                isSubmitting ||
-                (formData.cardSource === 'inventory' && (!selectedInventoryCard || isCardsLoading))
-              }
+              disabled={isSubmitting || !selectedInventoryCard || !selectedInventoryCard.cardCode || isCardsLoading}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {submitLabel}

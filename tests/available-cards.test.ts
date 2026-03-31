@@ -24,14 +24,14 @@ describe('available card helpers', () => {
     expect(
       normalizeAvailableAccessCards({
         cards: [
-          { cardNo: '0104620061' },
-          { cardNo: ' 0102857149 ' },
-          { cardNo: '0102857149' },
+          { cardNo: '0104620061', cardCode: null },
+          { cardNo: ' 0102857149 ', cardCode: null },
+          { cardNo: '0102857149', cardCode: ' A18 ' },
         ],
       }),
     ).toEqual([
-      { cardNo: '0102857149' },
-      { cardNo: '0104620061' },
+      { cardNo: '0102857149', cardCode: 'A18' },
+      { cardNo: '0104620061', cardCode: null },
     ])
   })
 
@@ -39,8 +39,9 @@ describe('available card helpers', () => {
     expect(
       formatAvailableAccessCardLabel({
         cardNo: '0102857149',
+        cardCode: 'A18',
       }),
-    ).toBe('0102857149')
+    ).toBe('A18 — 0102857149')
   })
 
   it('fetches available cards from the PWA route', async () => {
@@ -49,8 +50,8 @@ describe('available card helpers', () => {
         {
           ok: true,
           cards: [
-            { cardNo: '0104620061' },
-            { cardNo: '0102857149' },
+            { cardNo: '0104620061', cardCode: null },
+            { cardNo: '0102857149', cardCode: 'A18' },
           ],
         },
         200,
@@ -60,8 +61,8 @@ describe('available card helpers', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(fetchAvailableAccessCards()).resolves.toEqual([
-      { cardNo: '0102857149' },
-      { cardNo: '0104620061' },
+      { cardNo: '0102857149', cardCode: 'A18' },
+      { cardNo: '0104620061', cardCode: null },
     ])
     expect(fetchMock).toHaveBeenCalledWith('/api/access/cards/available', {
       method: 'GET',

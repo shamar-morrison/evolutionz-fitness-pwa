@@ -16,40 +16,64 @@ function createMembersAdminClient({
   listError = null,
   detailRow = null,
   detailError = null,
+  cardRows = [],
+  cardsError = null,
 }: {
   listRows?: Array<Record<string, unknown>>
   listError?: { message: string } | null
   detailRow?: Record<string, unknown> | null
   detailError?: { message: string } | null
+  cardRows?: Array<Record<string, unknown>>
+  cardsError?: { message: string } | null
 } = {}) {
   return {
     from(table: string) {
-      if (table !== 'members') {
-        throw new Error(`Unexpected table: ${table}`)
+      if (table === 'members') {
+        return {
+          select() {
+            return {
+              order() {
+                return Promise.resolve({
+                  data: listRows,
+                  error: listError,
+                })
+              },
+              eq() {
+                return {
+                  maybeSingle() {
+                    return Promise.resolve({
+                      data: detailRow,
+                      error: detailError,
+                    })
+                  },
+                }
+              },
+            }
+          },
+        }
       }
 
-      return {
-        select() {
-          return {
-            order() {
-              return Promise.resolve({
-                data: listRows,
-                error: listError,
-              })
-            },
-            eq() {
-              return {
-                maybeSingle() {
-                  return Promise.resolve({
-                    data: detailRow,
-                    error: detailError,
-                  })
-                },
-              }
-            },
-          }
-        },
+      if (table === 'cards') {
+        return {
+          select(columns: string) {
+            expect(columns).toBe('card_no, card_code')
+
+            return {
+              in(column: string, values: string[]) {
+                expect(column).toBe('card_no')
+                expect(values).toBeDefined()
+
+                return Promise.resolve({
+                  data: cardRows,
+                  error: cardsError,
+                })
+              },
+            }
+          },
+        }
       }
+
+      throw new Error(`Unexpected table: ${table}`)
     },
   }
 }
@@ -67,8 +91,8 @@ describe('members API routes', () => {
           {
             id: 'member-1',
             employee_no: ' 000611 ',
-            name: ' Jane Doe ',
-            card_no: null,
+            name: ' A18 Jane Doe ',
+            card_no: '0102857149',
             type: 'General',
             status: 'Expired',
             expiry: null,
@@ -77,6 +101,7 @@ describe('members API routes', () => {
             updated_at: '2026-03-30T14:15:16Z',
           },
         ],
+        cardRows: [{ card_no: '0102857149', card_code: 'A18' }],
       }),
     )
 
@@ -90,7 +115,8 @@ describe('members API routes', () => {
           id: 'member-1',
           employeeNo: '000611',
           name: 'Jane Doe',
-          cardNo: '',
+          cardNo: '0102857149',
+          cardCode: 'A18',
           type: 'General',
           status: 'Expired',
           deviceAccessState: 'ready',
@@ -108,7 +134,7 @@ describe('members API routes', () => {
         detailRow: {
           id: 'member-2',
           employee_no: '000777',
-          name: 'Marcus Brown',
+          name: 'A1 Marcus Brown',
           card_no: '0102857149',
           type: 'Student/BPO',
           status: 'Active',
@@ -117,6 +143,7 @@ describe('members API routes', () => {
           created_at: '2026-03-01T10:00:00Z',
           updated_at: '2026-03-01T10:00:00Z',
         },
+        cardRows: [{ card_no: '0102857149', card_code: 'A1' }],
       }),
     )
 
@@ -132,6 +159,7 @@ describe('members API routes', () => {
         employeeNo: '000777',
         name: 'Marcus Brown',
         cardNo: '0102857149',
+        cardCode: 'A1',
         type: 'Student/BPO',
         status: 'Active',
         deviceAccessState: 'ready',

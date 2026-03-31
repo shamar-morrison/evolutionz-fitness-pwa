@@ -2,7 +2,13 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { fetchMember as fetchPersistedMember, fetchMembers as fetchPersistedMembers } from '@/lib/members'
-import { getSessionMembers, subscribeToSessionMembers } from '@/lib/member-session-store'
+import { matchesMemberSearch } from '@/lib/member-search'
+import {
+  applySessionMemberOverride,
+  applySessionMemberOverrides,
+  getSessionMemberOverrides,
+  subscribeToSessionMemberOverrides,
+} from '@/lib/member-session-store'
 import type { Member, MemberStatus, MemberType } from '@/types'
 
 type UseMembersOptions = {
@@ -11,41 +17,9 @@ type UseMembersOptions = {
   type?: MemberType | 'All'
 }
 
-function normalizeSearchValue(value: unknown) {
-  return typeof value === 'string' ? value.toLowerCase() : ''
-}
-
-function getMemberIdentity(member: Partial<Member>) {
-  if (typeof member.employeeNo === 'string' && member.employeeNo.trim()) {
-    return member.employeeNo.trim()
-  }
-
-  return typeof member.id === 'string' ? member.id.trim() : ''
-}
-
-function mergeMembers(...memberGroups: Member[][]) {
-  const merged: Member[] = []
-  const seenMemberIds = new Set<string>()
-
-  for (const members of memberGroups) {
-    for (const member of members) {
-      const memberIdentity = getMemberIdentity(member)
-
-      if (!memberIdentity || seenMemberIds.has(memberIdentity)) {
-        continue
-      }
-
-      seenMemberIds.add(memberIdentity)
-      merged.push(member)
-    }
-  }
-
-  return merged
-}
-
 export function useMembers(options: UseMembersOptions = {}) {
   const [members, setMembers] = useState<Member[]>([])
-  const [sessionMembers, setSessionMembers] = useState<Member[]>(() => getSessionMembers())
+  const [sessionMemberOverrides, setSessionMemberOverrides] = useState(() => getSessionMemberOverrides())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
@@ -81,21 +55,18 @@ export function useMembers(options: UseMembersOptions = {}) {
     }
   }, [refreshToken])
 
-  useEffect(() => subscribeToSessionMembers(setSessionMembers), [])
+  useEffect(() => subscribeToSessionMemberOverrides(setSessionMemberOverrides), [])
 
-  const mergedMembers = useMemo(() => mergeMembers(sessionMembers, members), [members, sessionMembers])
+  const mergedMembers = useMemo(
+    () => applySessionMemberOverrides(members, sessionMemberOverrides),
+    [members, sessionMemberOverrides],
+  )
 
   const filteredMembers = useMemo(() => {
     let result = mergedMembers
 
     if (options.search) {
-      const searchLower = options.search.toLowerCase()
-      result = result.filter(
-        (member) =>
-          normalizeSearchValue(member.name).includes(searchLower) ||
-          normalizeSearchValue(member.cardNo).includes(searchLower) ||
-          normalizeSearchValue(member.employeeNo).includes(searchLower)
-      )
+      result = result.filter((member) => matchesMemberSearch(member, options.search ?? ''))
     }
 
     if (options.status && options.status !== 'All') {
@@ -119,28 +90,13 @@ export function useMembers(options: UseMembersOptions = {}) {
 
 export function useMember(id: string) {
   const [member, setMember] = useState<Member | null>(null)
-  const [sessionMembers, setSessionMembers] = useState<Member[]>(() => getSessionMembers())
+  const [sessionMemberOverrides, setSessionMemberOverrides] = useState(() => getSessionMemberOverrides())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
-  useEffect(() => subscribeToSessionMembers(setSessionMembers), [])
-
-  const sessionMember = useMemo(
-    () =>
-      sessionMembers.find(
-        (candidate) => candidate.id === id || candidate.employeeNo === id,
-      ) ?? null,
-    [id, sessionMembers],
-  )
+  useEffect(() => subscribeToSessionMemberOverrides(setSessionMemberOverrides), [])
 
   useEffect(() => {
-    if (sessionMember) {
-      setMember(sessionMember)
-      setError(null)
-      setIsLoading(false)
-      return
-    }
-
     let isCancelled = false
 
     async function loadMember() {
@@ -170,7 +126,15 @@ export function useMember(id: string) {
     return () => {
       isCancelled = true
     }
-  }, [id, sessionMember])
+  }, [id])
 
-  return { member: sessionMember ?? member, isLoading, error }
+  const mergedMember = useMemo(() => {
+    if (!member) {
+      return null
+    }
+
+    return applySessionMemberOverride(member, sessionMemberOverrides)
+  }, [member, sessionMemberOverrides])
+
+  return { member: mergedMember, isLoading, error }
 }

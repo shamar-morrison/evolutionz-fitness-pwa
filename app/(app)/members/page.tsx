@@ -184,6 +184,7 @@ function MembersPageContent() {
       <AddMemberModal
         open={showAddModal}
         onOpenChange={setShowAddModal}
+        onSuccess={() => refetch()}
       />
     </div>
   )

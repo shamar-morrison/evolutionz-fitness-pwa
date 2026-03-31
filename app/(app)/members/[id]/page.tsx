@@ -24,6 +24,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { suspendMember, reactivateMember, releaseMemberSlot } from '@/lib/member-actions'
+import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
 import { toast } from '@/hooks/use-toast'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -86,7 +87,7 @@ export default function MemberDetailPage() {
       await releaseMemberSlot(member)
       toast({
         title: 'Slot released',
-        description: `${member.name}'s Hik slot was returned to the available pool.`,
+        description: `${buildMemberDisplayName(member.name, member.cardCode)}'s Hik slot was returned to the available pool.`,
       })
     } catch (error) {
       console.error('Failed to release Hik slot:', error)
@@ -128,6 +129,8 @@ export default function MemberDetailPage() {
 
   if (!member) return null
 
+  const memberDisplayName = buildMemberDisplayName(member.name, member.cardCode)
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -140,8 +143,8 @@ export default function MemberDetailPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <CardContent className="flex flex-col items-center pt-6">
-            <MemberAvatar name={member.name} size="lg" />
-            <h2 className="mt-4 text-xl font-bold">{member.name}</h2>
+            <MemberAvatar name={getCleanMemberName(member.name, member.cardCode)} size="lg" />
+            <h2 className="mt-4 text-xl font-bold">{memberDisplayName}</h2>
             <Badge variant="outline" className="mt-2">
               {member.type}
             </Badge>

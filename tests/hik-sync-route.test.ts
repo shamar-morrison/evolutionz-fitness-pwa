@@ -106,7 +106,7 @@ describe('POST /api/hik/sync-members', () => {
 
     const responsePromise = POST()
 
-    await vi.advanceTimersByTimeAsync(62_500)
+    await vi.advanceTimersByTimeAsync(182_500)
 
     const response = await responsePromise
 
@@ -114,7 +114,7 @@ describe('POST /api/hik/sync-members', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       jobId: 'job-123',
-      error: 'Sync members request timed out after 60 seconds.',
+      error: 'Sync members request timed out after 180 seconds.',
     })
   })
 })

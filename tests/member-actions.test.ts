@@ -3,7 +3,11 @@ import {
   addMember,
   releaseMemberSlot,
 } from '@/lib/member-actions'
-import { clearSessionMembers, getSessionMembers, upsertSessionMember } from '@/lib/member-session-store'
+import {
+  clearSessionMemberOverrides,
+  getSessionMemberOverrides,
+  upsertSessionMemberOverride,
+} from '@/lib/member-session-store'
 
 function createJsonResponse(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {
@@ -16,21 +20,29 @@ function createJsonResponse(body: unknown, status: number) {
 
 describe('member actions', () => {
   afterEach(() => {
-    clearSessionMembers()
+    clearSessionMemberOverrides()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
-  it('provisions a selected card and stores a ready member', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-03-30T14:15:16'))
-
+  it('provisions a selected card and returns the persisted member', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       createJsonResponse(
         {
           ok: true,
-          employeeNo: '20260330141516593046',
-          cardNo: '0102857149',
+          member: {
+            id: 'member-1',
+            employeeNo: '20260330141516593046',
+            name: 'Jane Doe',
+            cardNo: '0102857149',
+            cardCode: 'A18',
+            type: 'General',
+            status: 'Active',
+            deviceAccessState: 'ready',
+            expiry: '2026-07-15T23:59:59.000Z',
+            balance: 0,
+            createdAt: '2026-03-30T14:15:16.000Z',
+          },
         },
         200,
       ),
@@ -44,8 +56,8 @@ describe('member actions', () => {
         name: 'Jane Doe',
         type: 'General',
         expiry: '2026-07-15',
-        cardSource: 'inventory',
         cardNo: '0102857149',
+        cardCode: 'A18',
       },
       { onStepChange: stepSpy },
     )
@@ -55,23 +67,25 @@ describe('member actions', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/access/members/provision')
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
       cardNo: '0102857149',
-      cardSource: 'inventory',
+      cardCode: 'A18',
       name: 'Jane Doe',
+      type: 'General',
       expiry: '2026-07-15',
     })
     expect(member).toEqual({
-      id: '20260330141516593046',
+      id: 'member-1',
       employeeNo: '20260330141516593046',
       name: 'Jane Doe',
       cardNo: '0102857149',
+      cardCode: 'A18',
       type: 'General',
       status: 'Active',
       deviceAccessState: 'ready',
-      expiry: '2026-07-15',
+      expiry: '2026-07-15T23:59:59.000Z',
       balance: 0,
-      createdAt: new Date('2026-03-30T14:15:16').toISOString(),
+      createdAt: '2026-03-30T14:15:16.000Z',
     })
-    expect(getSessionMembers()).toEqual([member])
+    expect(getSessionMemberOverrides()).toEqual([])
   })
 
   it('throws a step-specific error when member provisioning fails', async () => {
@@ -89,15 +103,15 @@ describe('member actions', () => {
         name: 'Jane Doe',
         type: 'General',
         expiry: '2026-07-15',
-        cardSource: 'manual',
         cardNo: '0102857149',
+        cardCode: 'A18',
       }),
     ).rejects.toMatchObject({
       name: 'MemberProvisioningError',
       step: 'provisioning_member',
     })
 
-    expect(getSessionMembers()).toEqual([])
+    expect(getSessionMemberOverrides()).toEqual([])
   })
 
   it('releases a member slot and stores the released state', async () => {
@@ -112,6 +126,7 @@ describe('member actions', () => {
       employeeNo: '00000611',
       name: 'Jane Doe',
       cardNo: '0102857149',
+      cardCode: 'P42',
       slotPlaceholderName: 'P42',
       type: 'General' as const,
       status: 'Active' as const,
@@ -121,7 +136,7 @@ describe('member actions', () => {
       createdAt: '2026-03-30T14:15:16.000Z',
     }
 
-    upsertSessionMember(member)
+    upsertSessionMemberOverride(member)
 
     const releasedMember = await releaseMemberSlot(member)
 
@@ -132,12 +147,13 @@ describe('member actions', () => {
       placeholderName: 'P42',
     })
     expect(releasedMember.deviceAccessState).toBe('released')
-    expect(getSessionMembers()).toEqual([
-      expect.objectContaining({
+    expect(getSessionMemberOverrides()).toEqual([
+      {
         id: '00000611',
         employeeNo: '00000611',
+        slotPlaceholderName: 'P42',
         deviceAccessState: 'released',
-      }),
+      },
     ])
   })
 
@@ -153,6 +169,7 @@ describe('member actions', () => {
       employeeNo: '00000611',
       name: 'Jane Doe',
       cardNo: '0102857149',
+      cardCode: 'P42',
       slotPlaceholderName: 'P42',
       type: 'General' as const,
       status: 'Active' as const,
@@ -162,12 +179,19 @@ describe('member actions', () => {
       createdAt: '2026-03-30T14:15:16.000Z',
     }
 
-    upsertSessionMember(member)
+    upsertSessionMemberOverride(member)
 
     await expect(releaseMemberSlot(member)).rejects.toThrow(
       'Failed to release the Hik slot: Reset failed.',
     )
 
-    expect(getSessionMembers()).toEqual([member])
+    expect(getSessionMemberOverrides()).toEqual([
+      {
+        id: '00000611',
+        employeeNo: '00000611',
+        slotPlaceholderName: 'P42',
+        deviceAccessState: 'ready',
+      },
+    ])
   })
 })

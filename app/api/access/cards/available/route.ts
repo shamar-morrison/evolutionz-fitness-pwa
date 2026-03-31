@@ -7,7 +7,7 @@ export async function GET() {
     const supabase = getSupabaseAdminClient()
     const { data, error } = await supabase
       .from('cards')
-      .select('card_no')
+      .select('card_no, card_code')
       .eq('status', 'available')
       .order('card_no', { ascending: true })
 
@@ -20,6 +20,7 @@ export async function GET() {
       cards: normalizeAvailableAccessCards({
         cards: (data ?? []).map((row) => ({
           cardNo: typeof row.card_no === 'string' ? row.card_no : '',
+          cardCode: typeof row.card_code === 'string' ? row.card_code : null,
         })),
       }),
     })

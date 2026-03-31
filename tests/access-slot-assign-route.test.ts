@@ -47,7 +47,7 @@ describe('POST /api/access/slots/assign', () => {
         type: 'add_user',
         payload: {
           employeeNo: '00000611',
-          name: 'Jane Doe',
+          name: 'P42 Jane Doe',
           userType: 'normal',
           beginTime: '2026-03-30T00:00:00',
           endTime: '2026-07-15T23:59:59',

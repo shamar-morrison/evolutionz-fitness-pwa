@@ -12,6 +12,7 @@ import {
 import { MemberAvatar } from '@/components/member-avatar'
 import { StatusBadge } from '@/components/status-badge'
 import { Badge } from '@/components/ui/badge'
+import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
 import type { Member } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -77,8 +78,10 @@ export function MembersTable({ members }: MembersTableProps) {
               >
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <MemberAvatar name={member.name} size="sm" />
-                    <span className="font-medium">{member.name}</span>
+                    <MemberAvatar name={getCleanMemberName(member.name, member.cardCode)} size="sm" />
+                    <span className="font-medium">
+                      {buildMemberDisplayName(member.name, member.cardCode)}
+                    </span>
                   </div>
                 </TableCell>
                 <TableCell>

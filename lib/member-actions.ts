@@ -1,6 +1,6 @@
-import { upsertSessionMember } from '@/lib/member-session-store'
+import { normalizeMember } from '@/lib/members'
+import { upsertSessionMemberOverride } from '@/lib/member-session-store'
 import {
-  buildMemberPreview,
   type AssignAccessSlotJobRequest,
   type ResetAccessSlotJobRequest,
 } from '@/lib/member-job'
@@ -9,14 +9,12 @@ import type { Member, MemberType } from '@/types'
 
 // TODO: Replace with Supabase mutations
 
-export type MemberCardSource = 'inventory' | 'manual'
-
 export type AddMemberData = {
   name: string
   type: MemberType
   expiry: string
-  cardSource: MemberCardSource
   cardNo: string
+  cardCode: string
 }
 
 type AccessControlJobSuccessResponse = {
@@ -33,8 +31,7 @@ type AccessControlJobErrorResponse = {
 
 type ProvisionMemberSuccessResponse = {
   ok: true
-  employeeNo: string
-  cardNo: string
+  member: Member
 }
 
 export type MemberProvisioningStep = 'provisioning_member'
@@ -99,7 +96,6 @@ async function queueSlotJob(
 }
 
 export async function addMember(data: AddMemberData, options: AddMemberOptions = {}): Promise<Member> {
-  const now = new Date()
   const normalizedCardNo = normalizeCardNo(data.cardNo)
   options.onStepChange?.('provisioning_member')
 
@@ -111,9 +107,10 @@ export async function addMember(data: AddMemberData, options: AddMemberOptions =
       },
       body: JSON.stringify({
         name: data.name,
+        type: data.type,
         expiry: data.expiry,
-        cardSource: data.cardSource,
         cardNo: normalizedCardNo,
+        cardCode: data.cardCode,
       }),
     })
 
@@ -135,15 +132,13 @@ export async function addMember(data: AddMemberData, options: AddMemberOptions =
       )
     }
 
-    const readyMember = buildMemberPreview(data, {
-      now,
-      employeeNo: responseBody.employeeNo,
-      deviceAccessState: 'ready',
-    })
+    const member = normalizeMember({ member: responseBody.member })
 
-    upsertSessionMember(readyMember)
+    if (!member) {
+      throw new Error('Failed to read the provisioned member response.')
+    }
 
-    return readyMember
+    return member
   } catch (error) {
     throw new MemberProvisioningError({
       step: 'provisioning_member',
@@ -178,7 +173,7 @@ export async function releaseMemberSlot(member: Member): Promise<Member> {
     deviceAccessState: 'released' as const,
   }
 
-  upsertSessionMember(releasedMember)
+  upsertSessionMemberOverride(releasedMember)
 
   return releasedMember
 }
@@ -201,6 +196,7 @@ export async function updateMember(id: string, data: UpdateMemberData): Promise<
     employeeNo: id,
     name: data.name ?? 'Unknown',
     cardNo: data.cardNo ?? 'EF-000000',
+    cardCode: null,
     type: data.type ?? 'General',
     expiry: data.expiry ?? new Date().toISOString(),
     status: 'Active',

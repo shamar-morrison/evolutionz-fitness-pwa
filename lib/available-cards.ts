@@ -3,6 +3,7 @@ import type { AvailableAccessCard } from '@/types'
 
 const availableAccessCardSchema = z.object({
   cardNo: z.string().trim().min(1, 'Card number is required.'),
+  cardCode: z.string().trim().min(1).nullable(),
 })
 
 const availableCardsResponseSchema = z.object({
@@ -34,19 +35,27 @@ export function normalizeAvailableAccessCards(input: unknown): AvailableAccessCa
 
   for (const card of parsed.data.cards) {
     const cardNo = card.cardNo.trim()
+    const cardCode = typeof card.cardCode === 'string' ? card.cardCode.trim() : null
 
     if (!cardNo) {
       continue
     }
 
-    cardsByNumber.set(cardNo, { cardNo })
+    const existingCard = cardsByNumber.get(cardNo)
+
+    if (!existingCard || (!existingCard.cardCode && cardCode)) {
+      cardsByNumber.set(cardNo, {
+        cardNo,
+        cardCode,
+      })
+    }
   }
 
   return Array.from(cardsByNumber.values()).sort(compareCards)
 }
 
 export function formatAvailableAccessCardLabel(card: AvailableAccessCard) {
-  return card.cardNo
+  return card.cardCode ? `${card.cardCode} — ${card.cardNo}` : card.cardNo
 }
 
 export async function fetchAvailableAccessCards(): Promise<AvailableAccessCard[]> {

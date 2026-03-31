@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
-import { mapMemberRecordToMember } from '@/lib/members'
+import {
+  buildCardCodeByCardNo,
+  mapMemberRecordToMemberWithCardCode,
+  MEMBER_RECORD_SELECT,
+} from '@/lib/members'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import type { MemberRecord } from '@/types'
-
-const MEMBERS_SELECT =
-  'id, employee_no, name, card_no, type, status, expiry, balance, created_at, updated_at'
+import type { CardRecord, MemberRecord } from '@/types'
 
 export async function GET(
   _request: Request,
@@ -15,7 +16,7 @@ export async function GET(
     const supabase = getSupabaseAdminClient()
     const { data, error } = await supabase
       .from('members')
-      .select(MEMBERS_SELECT)
+      .select(MEMBER_RECORD_SELECT)
       .eq('id', id)
       .maybeSingle()
 
@@ -33,9 +34,26 @@ export async function GET(
       )
     }
 
+    const memberRecord = data as MemberRecord
+    const cardNo = typeof memberRecord.card_no === 'string' ? memberRecord.card_no.trim() : ''
+    let cardCodeByCardNo = new Map<string, string | null>()
+
+    if (cardNo) {
+      const { data: cards, error: cardsError } = await supabase
+        .from('cards')
+        .select('card_no, card_code')
+        .in('card_no', [cardNo])
+
+      if (cardsError) {
+        throw new Error(`Failed to read member card code for ${id}: ${cardsError.message}`)
+      }
+
+      cardCodeByCardNo = buildCardCodeByCardNo((cards ?? []) as CardRecord[])
+    }
+
     return NextResponse.json({
       ok: true,
-      member: mapMemberRecordToMember(data as MemberRecord),
+      member: mapMemberRecordToMemberWithCardCode(memberRecord, cardCodeByCardNo),
     })
   } catch (error) {
     return NextResponse.json(

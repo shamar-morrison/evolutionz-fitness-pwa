@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { getManualCardNoValidationError } from '@/lib/card-no'
+import { buildHikMemberName } from '@/lib/member-name'
 import type {
   AvailableAccessSlot,
   DeviceAccessState,
@@ -8,41 +8,18 @@ import type {
 } from '@/types'
 
 const memberTypeValues = ['General', 'Civil Servant', 'Student/BPO'] as const
-const memberCardSourceValues = ['inventory', 'manual'] as const
 const placeholderSlotNamePattern = /^[A-Z]\d{1,2}$/
 export const DEFAULT_RESET_SLOT_END_TIME = '2037-12-31T23:59:59'
+export const MAX_SHORT_EMPLOYEE_NO = 999_999_999
 
 const expiryDateSchema = z
   .string()
   .trim()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expiry must be in YYYY-MM-DD format.')
 
-function validateManualCardNo(
-  input: {
-    cardSource: (typeof memberCardSourceValues)[number]
-    cardNo: string
-  },
-  ctx: z.RefinementCtx,
-) {
-  if (input.cardSource !== 'manual') {
-    return
-  }
-
-  const validationError = getManualCardNoValidationError(input.cardNo)
-
-  if (!validationError) {
-    return
-  }
-
-  ctx.addIssue({
-    code: z.ZodIssueCode.custom,
-    path: ['cardNo'],
-    message: validationError,
-  })
-}
-
 export const availableAccessCardSchema = z.object({
   cardNo: z.string().trim().min(1, 'Card number is required.'),
+  cardCode: z.string().trim().min(1).nullable(),
 })
 
 export const availableAccessSlotSchema = z.object({
@@ -58,9 +35,9 @@ export const addMemberRequestSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
   type: z.enum(memberTypeValues),
   expiry: expiryDateSchema,
-  cardSource: z.enum(memberCardSourceValues),
   cardNo: z.string().trim().min(1, 'Card number is required.'),
-}).superRefine(validateManualCardNo)
+  cardCode: z.string().trim().min(1, 'Card code is required.'),
+})
 
 export const addMemberUserJobRequestSchema = z.object({
   employeeNo: z.string().trim().min(1, 'Employee number is required.'),
@@ -70,10 +47,11 @@ export const addMemberUserJobRequestSchema = z.object({
 
 export const provisionMemberAccessRequestSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
+  type: z.enum(memberTypeValues),
   expiry: expiryDateSchema,
-  cardSource: z.enum(memberCardSourceValues),
   cardNo: z.string().trim().min(1, 'Card number is required.'),
-}).superRefine(validateManualCardNo)
+  cardCode: z.string().trim().min(1, 'Card code is required.'),
+})
 
 export const addMemberCardJobRequestSchema = z.object({
   employeeNo: z.string().trim().min(1, 'Employee number is required.'),
@@ -126,6 +104,10 @@ type BuildMemberPreviewOptions = {
   slotPlaceholderName?: string
 }
 
+function normalizeText(value: string | null | undefined) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 function pad(value: number) {
   return String(value).padStart(2, '0')
 }
@@ -135,19 +117,61 @@ function formatDatePart(date: Date) {
 }
 
 export function generateEmployeeNo(now: Date = new Date()) {
-  const timestamp = [
-    now.getFullYear(),
-    pad(now.getMonth() + 1),
-    pad(now.getDate()),
-    pad(now.getHours()),
-    pad(now.getMinutes()),
-    pad(now.getSeconds()),
-  ].join('')
-  const randomSuffix = String(
-    parseInt(crypto.randomUUID().replaceAll('-', '').slice(0, 12), 16) % 1_000_000,
-  ).padStart(6, '0')
+  return String(now.getTime()).slice(-9)
+}
 
-  return `${timestamp}${randomSuffix}`
+export function isShortNumericEmployeeNo(value: string | null | undefined) {
+  return /^\d{1,9}$/.test(normalizeText(value))
+}
+
+export function ensureUniqueShortEmployeeNo(
+  startEmployeeNo: string,
+  existingEmployeeNos: string[],
+) {
+  const normalizedStartEmployeeNo = normalizeText(startEmployeeNo)
+  const existingEmployeeNoSet = new Set(
+    existingEmployeeNos.map((employeeNo) => normalizeText(employeeNo)).filter(Boolean),
+  )
+
+  if (!isShortNumericEmployeeNo(normalizedStartEmployeeNo)) {
+    throw new Error('Failed to derive a unique short numeric employee number.')
+  }
+
+  let candidate = Number(normalizedStartEmployeeNo)
+
+  while (
+    Number.isSafeInteger(candidate) &&
+    candidate > 0 &&
+    candidate <= MAX_SHORT_EMPLOYEE_NO
+  ) {
+    const candidateValue = String(candidate)
+
+    if (!existingEmployeeNoSet.has(candidateValue)) {
+      return candidateValue
+    }
+
+    candidate += 1
+  }
+
+  throw new Error('Failed to derive a unique short numeric employee number.')
+}
+
+export function getNextShortEmployeeNo(
+  existingEmployeeNos: string[],
+  fallbackEmployeeNo: string,
+) {
+  const normalizedExistingEmployeeNos = existingEmployeeNos
+    .map((employeeNo) => normalizeText(employeeNo))
+    .filter(Boolean)
+  const shortNumericEmployeeNos = normalizedExistingEmployeeNos
+    .filter((employeeNo) => isShortNumericEmployeeNo(employeeNo))
+    .map((employeeNo) => Number(employeeNo))
+  const nextEmployeeNo =
+    shortNumericEmployeeNos.length > 0
+      ? String(Math.max(...shortNumericEmployeeNos) + 1)
+      : fallbackEmployeeNo
+
+  return ensureUniqueShortEmployeeNo(nextEmployeeNo, normalizedExistingEmployeeNos)
 }
 
 export function buildAddUserPayload(
@@ -166,13 +190,13 @@ export function buildAddUserPayload(
 }
 
 export function buildAssignSlotPayload(
-  { employeeNo, name, expiry }: AssignAccessSlotJobRequest,
+  { employeeNo, placeholderName, name, expiry }: AssignAccessSlotJobRequest,
   now: Date = new Date(),
 ): AddUserPayload {
   return buildAddUserPayload(
     {
       employeeNo,
-      name,
+      name: buildHikMemberName(name, placeholderName),
       expiry,
     },
     now,
@@ -229,6 +253,7 @@ export function buildSlotBackedMemberPreview(
     employeeNo,
     name: name.trim(),
     cardNo: slot.cardNo.trim(),
+    cardCode: slot.placeholderName.trim(),
     slotPlaceholderName,
     type,
     status: 'Active',
@@ -245,6 +270,7 @@ export function buildMemberPreview(
     type,
     expiry,
     cardNo,
+    cardCode,
   }: AddMemberRequest,
   {
     now = new Date(),
@@ -257,6 +283,7 @@ export function buildMemberPreview(
     employeeNo,
     name: name.trim(),
     cardNo: cardNo.trim(),
+    cardCode: cardCode.trim(),
     type,
     status: 'Active',
     deviceAccessState,

@@ -14,7 +14,7 @@ function createCardsAdminClient({
   rows = [],
   error = null,
 }: {
-  rows?: Array<{ card_no: string }>
+  rows?: Array<{ card_no: string; card_code?: string | null }>
   error?: { message: string } | null
 } = {}) {
   return {
@@ -25,7 +25,7 @@ function createCardsAdminClient({
 
       return {
         select(columns: string) {
-          expect(columns).toBe('card_no')
+          expect(columns).toBe('card_no, card_code')
 
           return {
             eq(column: string, value: string) {
@@ -62,9 +62,9 @@ describe('GET /api/access/cards/available', () => {
     getSupabaseAdminClientMock.mockReturnValue(
       createCardsAdminClient({
         rows: [
-          { card_no: '0104620061' },
-          { card_no: '0102857149' },
-          { card_no: '0102857149' },
+          { card_no: '0104620061', card_code: null },
+          { card_no: '0102857149', card_code: 'A18' },
+          { card_no: '0102857149', card_code: 'A18' },
         ],
       }),
     )
@@ -75,8 +75,8 @@ describe('GET /api/access/cards/available', () => {
     await expect(response.json()).resolves.toEqual({
       ok: true,
       cards: [
-        { cardNo: '0102857149' },
-        { cardNo: '0104620061' },
+        { cardNo: '0102857149', cardCode: 'A18' },
+        { cardNo: '0104620061', cardCode: null },
       ],
     })
   })
