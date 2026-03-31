@@ -21,12 +21,19 @@ describe('member actions', () => {
     vi.unstubAllGlobals()
   })
 
-  it('assigns a selected Hik slot and stores a ready member', async () => {
+  it('provisions a selected card and stores a ready member', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-03-30T14:15:16'))
 
     const fetchMock = vi.fn().mockResolvedValueOnce(
-      createJsonResponse({ ok: true, jobId: 'assign-job', result: { ok: true } }, 200),
+      createJsonResponse(
+        {
+          ok: true,
+          employeeNo: '20260330141516593046',
+          cardNo: '0102857149',
+        },
+        200,
+      ),
     )
     const stepSpy = vi.fn()
 
@@ -37,30 +44,26 @@ describe('member actions', () => {
         name: 'Jane Doe',
         type: 'General',
         expiry: '2026-07-15',
-        slot: {
-          employeeNo: '00000611',
-          cardNo: '0102857149',
-          placeholderName: 'P42',
-        },
+        cardSource: 'inventory',
+        cardNo: '0102857149',
       },
       { onStepChange: stepSpy },
     )
 
-    expect(stepSpy.mock.calls).toEqual([['assigning_slot']])
+    expect(stepSpy.mock.calls).toEqual([['provisioning_member']])
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/access/slots/assign')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/access/members/provision')
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
-      employeeNo: '00000611',
       cardNo: '0102857149',
-      placeholderName: 'P42',
+      cardSource: 'inventory',
       name: 'Jane Doe',
       expiry: '2026-07-15',
     })
     expect(member).toEqual({
-      id: '00000611',
+      id: '20260330141516593046',
+      employeeNo: '20260330141516593046',
       name: 'Jane Doe',
       cardNo: '0102857149',
-      slotPlaceholderName: 'P42',
       type: 'General',
       status: 'Active',
       deviceAccessState: 'ready',
@@ -71,9 +74,12 @@ describe('member actions', () => {
     expect(getSessionMembers()).toEqual([member])
   })
 
-  it('throws a step-specific error when slot assignment fails', async () => {
+  it('throws a step-specific error when member provisioning fails', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
-      createJsonResponse({ ok: false, jobId: 'assign-job', error: 'Slot update failed.' }, 502),
+      createJsonResponse(
+        { ok: false, error: 'Failed to issue card 0102857149: Card setup failed.' },
+        502,
+      ),
     )
 
     vi.stubGlobal('fetch', fetchMock)
@@ -83,15 +89,12 @@ describe('member actions', () => {
         name: 'Jane Doe',
         type: 'General',
         expiry: '2026-07-15',
-        slot: {
-          employeeNo: '00000611',
-          cardNo: '0102857149',
-          placeholderName: 'P42',
-        },
+        cardSource: 'manual',
+        cardNo: '0102857149',
       }),
     ).rejects.toMatchObject({
       name: 'MemberProvisioningError',
-      step: 'assigning_slot',
+      step: 'provisioning_member',
     })
 
     expect(getSessionMembers()).toEqual([])
@@ -106,6 +109,7 @@ describe('member actions', () => {
 
     const member = {
       id: '00000611',
+      employeeNo: '00000611',
       name: 'Jane Doe',
       cardNo: '0102857149',
       slotPlaceholderName: 'P42',
@@ -131,6 +135,7 @@ describe('member actions', () => {
     expect(getSessionMembers()).toEqual([
       expect.objectContaining({
         id: '00000611',
+        employeeNo: '00000611',
         deviceAccessState: 'released',
       }),
     ])
@@ -145,6 +150,7 @@ describe('member actions', () => {
 
     const member = {
       id: '00000611',
+      employeeNo: '00000611',
       name: 'Jane Doe',
       cardNo: '0102857149',
       slotPlaceholderName: 'P42',

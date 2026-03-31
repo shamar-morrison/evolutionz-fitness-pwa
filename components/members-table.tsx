@@ -19,8 +19,18 @@ type MembersTableProps = {
   members: Member[]
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-JM', {
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) {
+    return 'Not set'
+  }
+
+  const date = new Date(dateStr)
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Not set'
+  }
+
+  return date.toLocaleDateString('en-JM', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -73,7 +83,7 @@ export function MembersTable({ members }: MembersTableProps) {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col">
-                    <span className="font-mono text-sm">{member.cardNo}</span>
+                    <span className="font-mono text-sm">{member.cardNo || 'Unassigned'}</span>
                     {member.deviceAccessState === 'released' && member.slotPlaceholderName ? (
                       <span className="text-xs text-muted-foreground">
                         Released to {member.slotPlaceholderName}

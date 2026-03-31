@@ -23,13 +23,15 @@ import {
   addMember,
   MemberProvisioningError,
   type AddMemberData,
+  type MemberCardSource,
 } from '@/lib/member-actions'
+import { getManualCardNoValidationError, normalizeCardNo } from '@/lib/card-no'
+import { useAvailableCards } from '@/hooks/use-available-cards'
 import {
-  fetchAvailableAccessSlots,
-  formatAvailableAccessSlotLabel,
-} from '@/lib/available-slots'
+  formatAvailableAccessCardLabel,
+} from '@/lib/available-cards'
 import { toast } from '@/hooks/use-toast'
-import type { AvailableAccessSlot, Member, MemberType } from '@/types'
+import type { AvailableAccessCard, Member, MemberType } from '@/types'
 
 type AddMemberModalProps = {
   open: boolean
@@ -39,7 +41,9 @@ type AddMemberModalProps = {
 
 type AddMemberFormState = {
   name: string
-  selectedSlotEmployeeNo: string
+  cardSource: MemberCardSource
+  selectedInventoryCardNo: string
+  manualCardNo: string
   type: MemberType
   expiry: string
 }
@@ -48,73 +52,91 @@ const memberTypes: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
 
 const initialFormState: AddMemberFormState = {
   name: '',
-  selectedSlotEmployeeNo: '',
+  cardSource: 'inventory',
+  selectedInventoryCardNo: '',
+  manualCardNo: '',
   type: 'General',
   expiry: '',
 }
 
 export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModalProps) {
-  const [submissionStep, setSubmissionStep] = useState<'idle' | 'assigning_slot'>('idle')
-  const [availableSlots, setAvailableSlots] = useState<AvailableAccessSlot[]>([])
-  const [isSlotsLoading, setIsSlotsLoading] = useState(false)
-  const [slotsError, setSlotsError] = useState<string | null>(null)
+  const [submissionStep, setSubmissionStep] = useState<'idle' | 'provisioning_member'>('idle')
   const [formData, setFormData] = useState<AddMemberFormState>(initialFormState)
+  const {
+    cards: availableCards,
+    isLoading: isCardsLoading,
+    error: cardsError,
+    refetch: refetchAvailableCards,
+  } = useAvailableCards({ enabled: open })
 
   const isSubmitting = submissionStep !== 'idle'
-  const hasNoAvailableSlots = !isSlotsLoading && availableSlots.length === 0 && !slotsError
-  const selectedSlot = useMemo(
+  const hasNoAvailableCards = !isCardsLoading && availableCards.length === 0 && !cardsError
+  const selectedInventoryCard = useMemo(
     () =>
-      availableSlots.find((slot) => slot.employeeNo === formData.selectedSlotEmployeeNo) ?? null,
-    [availableSlots, formData.selectedSlotEmployeeNo],
+      availableCards.find((card) => card.cardNo === formData.selectedInventoryCardNo) ?? null,
+    [availableCards, formData.selectedInventoryCardNo],
   )
-
-  const loadAvailableSlots = async () => {
-    setIsSlotsLoading(true)
-    setSlotsError(null)
-
-    try {
-      const slots = await fetchAvailableAccessSlots()
-
-      setAvailableSlots(slots)
-      setFormData((currentFormData) => ({
-        ...currentFormData,
-        selectedSlotEmployeeNo: slots.some((slot) => slot.employeeNo === currentFormData.selectedSlotEmployeeNo)
-          ? currentFormData.selectedSlotEmployeeNo
-          : slots[0]?.employeeNo ?? '',
-      }))
-    } catch (error) {
-      setAvailableSlots([])
-      setSlotsError(error instanceof Error ? error.message : 'Failed to load available slots.')
-      setFormData((currentFormData) => ({
-        ...currentFormData,
-        selectedSlotEmployeeNo: '',
-      }))
-    } finally {
-      setIsSlotsLoading(false)
-    }
-  }
 
   useEffect(() => {
     if (!open) {
       return
     }
 
-    void loadAvailableSlots()
-  }, [open])
+    setFormData((currentFormData) => ({
+      ...currentFormData,
+      selectedInventoryCardNo: availableCards.some(
+        (card) => card.cardNo === currentFormData.selectedInventoryCardNo,
+      )
+        ? currentFormData.selectedInventoryCardNo
+        : availableCards[0]?.cardNo ?? '',
+    }))
+  }, [availableCards, open])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!selectedSlot) {
+    const normalizedManualCardNo = normalizeCardNo(formData.manualCardNo)
+    const selectedCardNo =
+      formData.cardSource === 'manual'
+        ? normalizedManualCardNo
+        : selectedInventoryCard?.cardNo ?? ''
+
+    if (formData.cardSource === 'manual') {
+      const manualCardValidationError = getManualCardNoValidationError(formData.manualCardNo)
+
+      if (normalizedManualCardNo !== formData.manualCardNo) {
+        setFormData((currentFormData) => ({
+          ...currentFormData,
+          manualCardNo: normalizedManualCardNo,
+        }))
+      }
+
+      if (manualCardValidationError) {
+        toast({
+          title:
+            manualCardValidationError === 'Card number is required.'
+              ? 'Select a card'
+              : 'Invalid card number',
+          description: manualCardValidationError,
+          variant: 'destructive',
+        })
+        return
+      }
+    }
+
+    if (!selectedCardNo) {
       toast({
-        title: 'Select a slot',
-        description: 'Choose an available Hik slot before creating the member.',
+        title: 'Select a card',
+        description:
+          formData.cardSource === 'manual'
+            ? 'Enter a card number before creating the member.'
+            : 'Choose an available access card before creating the member.',
         variant: 'destructive',
       })
       return
     }
 
-    setSubmissionStep('assigning_slot')
+    setSubmissionStep('provisioning_member')
 
     try {
       const member = await addMember(
@@ -122,7 +144,8 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           name: formData.name,
           type: formData.type,
           expiry: formData.expiry,
-          slot: selectedSlot,
+          cardSource: formData.cardSource,
+          cardNo: selectedCardNo,
         },
         {
           onStepChange: setSubmissionStep,
@@ -134,7 +157,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       onSuccess?.(member)
       toast({
         title: 'Member added',
-        description: `${member.name} was assigned to Hik slot ${selectedSlot.placeholderName}.`,
+        description: `${member.name} was provisioned with card ${member.cardNo}.`,
       })
     } catch (error) {
       if (error instanceof MemberProvisioningError) {
@@ -157,20 +180,22 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
   }
 
   const submitLabel =
-    submissionStep === 'assigning_slot'
-      ? 'Assigning Slot...'
+    submissionStep === 'provisioning_member'
+      ? 'Provisioning Access...'
       : 'Save Member'
 
   const progressDescription =
-    submissionStep === 'assigning_slot'
-      ? 'Assigning the selected Hik slot to this member.'
-      : isSlotsLoading
-        ? 'Loading available Hik slots.'
-        : slotsError
-          ? 'Could not load available Hik slots. Refresh and try again.'
-          : hasNoAvailableSlots
-            ? 'No reusable Hik slots are available right now. Reset a slot in the device, then refresh.'
-            : "Enter the member details below and choose an available Hik slot."
+    submissionStep === 'provisioning_member'
+      ? 'Creating the Hik member record and assigning the selected card.'
+      : formData.cardSource === 'manual'
+        ? 'Enter the member details below and type the card number to assign.'
+        : isCardsLoading
+          ? 'Loading imported unassigned cards.'
+          : cardsError
+            ? 'Could not load imported cards. Refresh or switch to manual card entry.'
+            : hasNoAvailableCards
+              ? 'No imported unassigned cards are available. Enter a card number manually or import more cards into iVMS-4200.'
+              : 'Enter the member details below and choose an imported unassigned card.'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -192,54 +217,97 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
               />
             </div>
             <div className="grid gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="slot">Available Hik Slot</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void loadAvailableSlots()}
-                  disabled={isSubmitting || isSlotsLoading}
-                >
-                  Refresh
-                </Button>
-              </div>
+              <Label htmlFor="card-source">Card Source</Label>
               <Select
-                value={formData.selectedSlotEmployeeNo}
-                onValueChange={(value) => setFormData({ ...formData, selectedSlotEmployeeNo: value })}
-                disabled={isSubmitting || isSlotsLoading || availableSlots.length === 0}
+                value={formData.cardSource}
+                onValueChange={(value: MemberCardSource) =>
+                  setFormData({ ...formData, cardSource: value })
+                }
+                disabled={isSubmitting}
               >
-                <SelectTrigger id="slot">
-                  <SelectValue
-                    placeholder={
-                      isSlotsLoading
-                        ? 'Loading slots...'
-                        : hasNoAvailableSlots
-                          ? 'No slots available'
-                          : 'Select a Hik slot'
-                    }
-                  />
+                <SelectTrigger id="card-source">
+                  <SelectValue placeholder="Select card source" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableSlots.map((slot) => (
-                    <SelectItem key={slot.employeeNo} value={slot.employeeNo}>
-                      {formatAvailableAccessSlotLabel(slot)}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="inventory">Imported card inventory</SelectItem>
+                  <SelectItem value="manual">Enter card number manually</SelectItem>
                 </SelectContent>
               </Select>
-              {isSlotsLoading ? (
-                <p className="text-xs text-muted-foreground">Fetching reusable slot records from Hik.</p>
-              ) : slotsError ? (
-                <p className="text-xs text-destructive">{slotsError}</p>
-              ) : hasNoAvailableSlots ? (
-                <p className="text-xs text-muted-foreground">
-                  No reusable placeholder slots are currently available on the device.
-                </p>
+            </div>
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="card-number">
+                  {formData.cardSource === 'manual' ? 'Card Number' : 'Available Access Card'}
+                </Label>
+                {formData.cardSource === 'inventory' ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={refetchAvailableCards}
+                    disabled={isSubmitting || isCardsLoading}
+                  >
+                    Refresh
+                  </Button>
+                ) : null}
+              </div>
+              {formData.cardSource === 'manual' ? (
+                <>
+                  <Input
+                    id="card-number"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={formData.manualCardNo}
+                    onChange={(e) => setFormData({ ...formData, manualCardNo: e.target.value })}
+                    placeholder="Enter card number"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Use this when the physical card number is already known.
+                  </p>
+                </>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  {availableSlots.length} reusable slot{availableSlots.length === 1 ? '' : 's'} loaded from Hik.
-                </p>
+                <>
+                  <Select
+                    value={formData.selectedInventoryCardNo}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, selectedInventoryCardNo: value })
+                    }
+                    disabled={isSubmitting || isCardsLoading || availableCards.length === 0}
+                  >
+                    <SelectTrigger id="card-number">
+                      <SelectValue
+                        placeholder={
+                          isCardsLoading
+                            ? 'Loading cards...'
+                            : hasNoAvailableCards
+                              ? 'No cards available'
+                              : 'Select an access card'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableCards.map((card) => (
+                        <SelectItem key={card.cardNo} value={card.cardNo}>
+                          {formatAvailableAccessCardLabel(card)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {isCardsLoading ? (
+                    <p className="text-xs text-muted-foreground">Fetching unassigned card records from Hik.</p>
+                  ) : cardsError ? (
+                    <p className="text-xs text-destructive">{cardsError}</p>
+                  ) : hasNoAvailableCards ? (
+                    <p className="text-xs text-muted-foreground">
+                      No unassigned cards are currently available from the imported inventory.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {availableCards.length} unassigned card{availableCards.length === 1 ? '' : 's'} loaded from Hik.
+                    </p>
+                  )}
+                </>
               )}
             </div>
             <div className="grid gap-2">
@@ -282,7 +350,10 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || isSlotsLoading || availableSlots.length === 0 || !selectedSlot}
+              disabled={
+                isSubmitting ||
+                (formData.cardSource === 'inventory' && (!selectedInventoryCard || isCardsLoading))
+              }
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {submitLabel}

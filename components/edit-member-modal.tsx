@@ -37,7 +37,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
     name: member.name,
     cardNo: member.cardNo,
     type: member.type,
-    expiry: member.expiry,
+    expiry: member.expiry ?? '',
   })
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
       name: member.name,
       cardNo: member.cardNo,
       type: member.type,
-      expiry: member.expiry,
+      expiry: member.expiry ?? '',
     })
   }, [member])
 

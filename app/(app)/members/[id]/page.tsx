@@ -28,8 +28,18 @@ import { toast } from '@/hooks/use-toast'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-JM', {
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) {
+    return 'Not set'
+  }
+
+  const date = new Date(dateStr)
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Not set'
+  }
+
+  return date.toLocaleDateString('en-JM', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -174,36 +184,38 @@ export default function MemberDetailPage() {
                   )}
                 </Button>
 
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="destructive"
-                      className="w-full"
-                      disabled={isActionLoading || !member.slotPlaceholderName || member.deviceAccessState === 'released'}
-                    >
-                      <CreditCard className="mr-2 h-4 w-4" />
-                      Release Slot
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Release Hik Slot?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will restore slot {member.slotPlaceholderName ?? member.id} on the Hik
-                        device and make it available for reassignment.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleReleaseSlot}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                {member.slotPlaceholderName ? (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        className="w-full"
+                        disabled={isActionLoading || member.deviceAccessState === 'released'}
                       >
+                        <CreditCard className="mr-2 h-4 w-4" />
                         Release Slot
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Release Hik Slot?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will restore slot {member.slotPlaceholderName} on the Hik device and
+                          make it available for reassignment.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleReleaseSlot}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Release Slot
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                ) : null}
               </RoleGuard>
             </div>
           </CardContent>
@@ -218,11 +230,11 @@ export default function MemberDetailPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Card ID</p>
-                <p className="font-mono font-medium">{member.cardNo}</p>
+                <p className="font-mono font-medium">{member.cardNo || 'Unassigned'}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Hik Person ID</p>
-                <p className="font-mono font-medium">{member.id}</p>
+                <p className="font-mono font-medium">{member.employeeNo}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Placeholder Slot</p>
@@ -264,7 +276,7 @@ export default function MemberDetailPage() {
             {member.deviceAccessState === 'released' ? (
               <div className="mt-6 rounded-lg border border-slate-500/30 bg-slate-500/10 p-4 text-sm text-slate-900">
                 This member&apos;s Hik slot has been released back to the available pool as{' '}
-                {member.slotPlaceholderName ?? member.id}.
+                {member.slotPlaceholderName ?? member.employeeNo}.
               </div>
             ) : null}
           </CardContent>

@@ -1,7 +1,14 @@
 import { z } from 'zod'
-import type { AvailableAccessSlot, DeviceAccessState, Member, MemberType } from '@/types'
+import { getManualCardNoValidationError } from '@/lib/card-no'
+import type {
+  AvailableAccessSlot,
+  DeviceAccessState,
+  Member,
+  MemberType,
+} from '@/types'
 
 const memberTypeValues = ['General', 'Civil Servant', 'Student/BPO'] as const
+const memberCardSourceValues = ['inventory', 'manual'] as const
 const placeholderSlotNamePattern = /^[A-Z]\d{1,2}$/
 export const DEFAULT_RESET_SLOT_END_TIME = '2037-12-31T23:59:59'
 
@@ -9,6 +16,34 @@ const expiryDateSchema = z
   .string()
   .trim()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expiry must be in YYYY-MM-DD format.')
+
+function validateManualCardNo(
+  input: {
+    cardSource: (typeof memberCardSourceValues)[number]
+    cardNo: string
+  },
+  ctx: z.RefinementCtx,
+) {
+  if (input.cardSource !== 'manual') {
+    return
+  }
+
+  const validationError = getManualCardNoValidationError(input.cardNo)
+
+  if (!validationError) {
+    return
+  }
+
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: ['cardNo'],
+    message: validationError,
+  })
+}
+
+export const availableAccessCardSchema = z.object({
+  cardNo: z.string().trim().min(1, 'Card number is required.'),
+})
 
 export const availableAccessSlotSchema = z.object({
   employeeNo: z.string().trim().min(1, 'Person ID is required.'),
@@ -23,14 +58,22 @@ export const addMemberRequestSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
   type: z.enum(memberTypeValues),
   expiry: expiryDateSchema,
-  slot: availableAccessSlotSchema,
-})
+  cardSource: z.enum(memberCardSourceValues),
+  cardNo: z.string().trim().min(1, 'Card number is required.'),
+}).superRefine(validateManualCardNo)
 
 export const addMemberUserJobRequestSchema = z.object({
   employeeNo: z.string().trim().min(1, 'Employee number is required.'),
   name: z.string().trim().min(1, 'Name is required.'),
   expiry: expiryDateSchema,
 })
+
+export const provisionMemberAccessRequestSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required.'),
+  expiry: expiryDateSchema,
+  cardSource: z.enum(memberCardSourceValues),
+  cardNo: z.string().trim().min(1, 'Card number is required.'),
+}).superRefine(validateManualCardNo)
 
 export const addMemberCardJobRequestSchema = z.object({
   employeeNo: z.string().trim().min(1, 'Employee number is required.'),
@@ -58,6 +101,7 @@ export const resetAccessSlotJobRequestSchema = z.object({
 
 export type AddMemberRequest = z.infer<typeof addMemberRequestSchema>
 export type AddMemberUserJobRequest = z.infer<typeof addMemberUserJobRequestSchema>
+export type ProvisionMemberAccessRequest = z.infer<typeof provisionMemberAccessRequestSchema>
 export type AddMemberCardJobRequest = z.infer<typeof addMemberCardJobRequestSchema>
 export type AssignAccessSlotJobRequest = z.infer<typeof assignAccessSlotJobRequestSchema>
 export type ResetAccessSlotJobRequest = z.infer<typeof resetAccessSlotJobRequestSchema>
@@ -99,9 +143,11 @@ export function generateEmployeeNo(now: Date = new Date()) {
     pad(now.getMinutes()),
     pad(now.getSeconds()),
   ].join('')
-  const randomSuffix = crypto.randomUUID().replaceAll('-', '').slice(0, 6).toUpperCase()
+  const randomSuffix = String(
+    parseInt(crypto.randomUUID().replaceAll('-', '').slice(0, 12), 16) % 1_000_000,
+  ).padStart(6, '0')
 
-  return `EVZ-${timestamp}-${randomSuffix}`
+  return `${timestamp}${randomSuffix}`
 }
 
 export function buildAddUserPayload(
@@ -180,6 +226,7 @@ export function buildSlotBackedMemberPreview(
 ): Member {
   return {
     id: employeeNo,
+    employeeNo,
     name: name.trim(),
     cardNo: slot.cardNo.trim(),
     slotPlaceholderName,
@@ -197,20 +244,19 @@ export function buildMemberPreview(
     name,
     type,
     expiry,
-    slot,
+    cardNo,
   }: AddMemberRequest,
   {
     now = new Date(),
     employeeNo = generateEmployeeNo(now),
     deviceAccessState = 'ready',
-    slotPlaceholderName = slot.placeholderName.trim(),
   }: BuildMemberPreviewOptions = {},
 ): Member {
   return {
     id: employeeNo,
+    employeeNo,
     name: name.trim(),
-    cardNo: slot.cardNo.trim(),
-    slotPlaceholderName,
+    cardNo: cardNo.trim(),
     type,
     status: 'Active',
     deviceAccessState,

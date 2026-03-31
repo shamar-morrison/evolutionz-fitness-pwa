@@ -7,18 +7,41 @@ export type AvailableAccessSlot = {
   cardNo: string
   placeholderName: string
 }
+export type AvailableAccessCard = {
+  cardNo: string
+}
 
 export type Member = {
   id: string
+  employeeNo: string
   name: string
   cardNo: string
   slotPlaceholderName?: string
   type: MemberType
   status: MemberStatus
   deviceAccessState: DeviceAccessState
-  expiry: string // ISO date string
+  expiry: string | null // ISO date string
   balance: number // JMD, amount owed to gym
   createdAt: string
+}
+
+export type MemberRecord = {
+  id: string
+  employee_no: string
+  name: string
+  card_no: string | null
+  type: MemberType
+  status: MemberStatus
+  expiry: string | null
+  balance: number
+  created_at: string
+  updated_at: string
+}
+
+export type MemberSyncSummary = {
+  membersImported: number
+  cardsImported: number
+  placeholderSlotsSkipped: number
 }
 
 // User & Auth Types

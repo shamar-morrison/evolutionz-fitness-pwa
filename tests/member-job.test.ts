@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_RESET_SLOT_END_TIME,
+  addMemberRequestSchema,
   assignAccessSlotJobRequestSchema,
+  availableAccessCardSchema,
   availableAccessSlotSchema,
   buildAddCardPayload,
   buildAddUserPayload,
   buildAssignSlotPayload,
+  buildMemberPreview,
   buildResetSlotPayload,
   buildSlotBackedMemberPreview,
   generateEmployeeNo,
+  provisionMemberAccessRequestSchema,
   resetAccessSlotJobRequestSchema,
 } from '@/lib/member-job'
 
@@ -23,14 +27,14 @@ describe('member job payload mapping', () => {
     expect(
       buildAddUserPayload(
         {
-          employeeNo: 'EVZ-20260330141516-ABC123',
+          employeeNo: '20260330141516593046',
           name: '  Jane Doe  ',
           expiry: '2026-07-15',
         },
         now,
       ),
     ).toEqual({
-      employeeNo: 'EVZ-20260330141516-ABC123',
+      employeeNo: '20260330141516593046',
       name: 'Jane Doe',
       userType: 'normal',
       beginTime: '2026-03-30T00:00:00',
@@ -58,11 +62,11 @@ describe('member job payload mapping', () => {
 
     expect(
       buildAddCardPayload({
-        employeeNo: 'EVZ-20260330141516-ABC123',
+        employeeNo: '20260330141516593046',
         cardNo: ' EF-009999 ',
       }),
     ).toEqual({
-      employeeNo: 'EVZ-20260330141516-ABC123',
+      employeeNo: '20260330141516593046',
       cardNo: 'EF-009999',
     })
   })
@@ -109,6 +113,7 @@ describe('member job payload mapping', () => {
       ),
     ).toEqual({
       id: '00000611',
+      employeeNo: '00000611',
       name: 'Jane Doe',
       cardNo: '0102857149',
       slotPlaceholderName: 'P42',
@@ -121,14 +126,110 @@ describe('member job payload mapping', () => {
     })
   })
 
-  it('still generates a stable prefixed employee number for legacy paths', () => {
+  it('builds card-backed preview members without reusable slot metadata', () => {
+    const now = new Date('2026-03-30T14:15:16')
+
+    expect(
+      buildMemberPreview(
+        {
+          name: '  Jane Doe  ',
+          type: 'General',
+          expiry: '2026-07-15',
+          cardSource: 'manual',
+          cardNo: ' 0102857149 ',
+        },
+        {
+          now,
+          employeeNo: '20260330141516593046',
+        },
+      ),
+    ).toEqual({
+      id: '20260330141516593046',
+      employeeNo: '20260330141516593046',
+      name: 'Jane Doe',
+      cardNo: '0102857149',
+      type: 'General',
+      status: 'Active',
+      deviceAccessState: 'ready',
+      expiry: '2026-07-15',
+      balance: 0,
+      createdAt: now.toISOString(),
+    })
+  })
+
+  it('generates a stable numeric Hik person id', () => {
     vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
       'abcdef12-3456-7890-abcd-ef1234567890',
     )
 
-    expect(generateEmployeeNo(new Date('2026-03-30T14:15:16'))).toBe(
-      'EVZ-20260330141516-ABCDEF',
-    )
+    const employeeNo = generateEmployeeNo(new Date('2026-03-30T14:15:16'))
+
+    expect(employeeNo).toBe('20260330141516593046')
+    expect(employeeNo).toMatch(/^\d+$/)
+    expect(employeeNo.startsWith('20260330141516')).toBe(true)
+    expect(employeeNo.length).toBe(20)
+    expect(employeeNo.length).toBeLessThan(32)
+  })
+
+  it('accepts card-first member requests and manual card provisioning requests', () => {
+    expect(
+      availableAccessCardSchema.parse({
+        cardNo: '0105451261',
+      }),
+    ).toEqual({
+      cardNo: '0105451261',
+    })
+
+    expect(
+      addMemberRequestSchema.parse({
+        name: 'Jane Doe',
+        type: 'General',
+        expiry: '2026-07-15',
+        cardSource: 'inventory',
+        cardNo: '0105451261',
+      }),
+    ).toEqual({
+      name: 'Jane Doe',
+      type: 'General',
+      expiry: '2026-07-15',
+      cardSource: 'inventory',
+      cardNo: '0105451261',
+    })
+
+    expect(
+      provisionMemberAccessRequestSchema.parse({
+        name: 'Jane Doe',
+        expiry: '2026-07-15',
+        cardSource: 'manual',
+        cardNo: ' 0105451261 ',
+      }),
+    ).toEqual({
+      name: 'Jane Doe',
+      expiry: '2026-07-15',
+      cardSource: 'manual',
+      cardNo: '0105451261',
+    })
+  })
+
+  it('rejects manual card numbers with embedded control characters', () => {
+    expect(() =>
+      addMemberRequestSchema.parse({
+        name: 'Jane Doe',
+        type: 'General',
+        expiry: '2026-07-15',
+        cardSource: 'manual',
+        cardNo: '0102\n857149',
+      }),
+    ).toThrow(/Manual card numbers cannot contain control characters or line breaks\./)
+
+    expect(() =>
+      provisionMemberAccessRequestSchema.parse({
+        name: 'Jane Doe',
+        expiry: '2026-07-15',
+        cardSource: 'manual',
+        cardNo: '0102\u0000857149',
+      }),
+    ).toThrow(/Manual card numbers cannot contain control characters or line breaks\./)
   })
 
   it('accepts exact one-digit and two-digit Hik slot labels', () => {

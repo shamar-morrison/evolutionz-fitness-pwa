@@ -1,18 +1,22 @@
 import { upsertSessionMember } from '@/lib/member-session-store'
 import {
-  buildSlotBackedMemberPreview,
+  buildMemberPreview,
   type AssignAccessSlotJobRequest,
   type ResetAccessSlotJobRequest,
 } from '@/lib/member-job'
-import type { AvailableAccessSlot, Member, MemberType } from '@/types'
+import { normalizeCardNo } from '@/lib/card-no'
+import type { Member, MemberType } from '@/types'
 
 // TODO: Replace with Supabase mutations
+
+export type MemberCardSource = 'inventory' | 'manual'
 
 export type AddMemberData = {
   name: string
   type: MemberType
   expiry: string
-  slot: AvailableAccessSlot
+  cardSource: MemberCardSource
+  cardNo: string
 }
 
 type AccessControlJobSuccessResponse = {
@@ -27,7 +31,13 @@ type AccessControlJobErrorResponse = {
   error: string
 }
 
-export type MemberProvisioningStep = 'assigning_slot'
+type ProvisionMemberSuccessResponse = {
+  ok: true
+  employeeNo: string
+  cardNo: string
+}
+
+export type MemberProvisioningStep = 'provisioning_member'
 
 export class MemberProvisioningError extends Error {
   step: MemberProvisioningStep
@@ -90,34 +100,59 @@ async function queueSlotJob(
 
 export async function addMember(data: AddMemberData, options: AddMemberOptions = {}): Promise<Member> {
   const now = new Date()
-  const readyMember = buildSlotBackedMemberPreview(data, {
-    now,
-    deviceAccessState: 'ready',
-  })
-
-  options.onStepChange?.('assigning_slot')
+  const normalizedCardNo = normalizeCardNo(data.cardNo)
+  options.onStepChange?.('provisioning_member')
 
   try {
-    await queueSlotJob('/api/access/slots/assign', {
-      employeeNo: data.slot.employeeNo,
-      cardNo: data.slot.cardNo,
-      placeholderName: data.slot.placeholderName,
-      name: data.name,
-      expiry: data.expiry,
+    const response = await fetch('/api/access/members/provision', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: data.name,
+        expiry: data.expiry,
+        cardSource: data.cardSource,
+        cardNo: normalizedCardNo,
+      }),
     })
+
+    let responseBody: ProvisionMemberSuccessResponse | AccessControlJobErrorResponse | null = null
+
+    try {
+      responseBody = (await response.json()) as
+        | ProvisionMemberSuccessResponse
+        | AccessControlJobErrorResponse
+    } catch {
+      responseBody = null
+    }
+
+    if (!response.ok || !responseBody || responseBody.ok === false) {
+      throw new Error(
+        responseBody && responseBody.ok === false
+          ? responseBody.error
+          : 'Failed to provision the selected card.',
+      )
+    }
+
+    const readyMember = buildMemberPreview(data, {
+      now,
+      employeeNo: responseBody.employeeNo,
+      deviceAccessState: 'ready',
+    })
+
+    upsertSessionMember(readyMember)
+
+    return readyMember
   } catch (error) {
     throw new MemberProvisioningError({
-      step: 'assigning_slot',
+      step: 'provisioning_member',
       message:
         error instanceof Error
-          ? `Failed to assign the selected Hik slot: ${error.message}`
-          : 'Failed to assign the selected Hik slot.',
+          ? error.message
+          : 'Failed to provision the selected card.',
     })
   }
-
-  upsertSessionMember(readyMember)
-
-  return readyMember
 }
 
 export async function releaseMemberSlot(member: Member): Promise<Member> {
@@ -127,7 +162,7 @@ export async function releaseMemberSlot(member: Member): Promise<Member> {
 
   try {
     await queueSlotJob('/api/access/slots/reset', {
-      employeeNo: member.id,
+      employeeNo: member.employeeNo,
       placeholderName: member.slotPlaceholderName,
     })
   } catch (error) {
@@ -163,6 +198,7 @@ export async function updateMember(id: string, data: UpdateMemberData): Promise<
   // Return mock updated member
   return {
     id,
+    employeeNo: id,
     name: data.name ?? 'Unknown',
     cardNo: data.cardNo ?? 'EF-000000',
     type: data.type ?? 'General',

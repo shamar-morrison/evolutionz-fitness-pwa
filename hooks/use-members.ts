@@ -1,127 +1,26 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { fetchMember as fetchPersistedMember, fetchMembers as fetchPersistedMembers } from '@/lib/members'
 import { getSessionMembers, subscribeToSessionMembers } from '@/lib/member-session-store'
 import type { Member, MemberStatus, MemberType } from '@/types'
-
-// TODO: Replace with Supabase queries
-const MOCK_MEMBERS: Member[] = [
-  {
-    id: '1',
-    name: 'Damion Williams',
-    cardNo: 'EF-001234',
-    type: 'General',
-    status: 'Active',
-    deviceAccessState: 'ready',
-    expiry: '2025-06-15',
-    balance: 0,
-    createdAt: '2024-01-15',
-  },
-  {
-    id: '2',
-    name: 'Keisha Brown',
-    cardNo: 'EF-001235',
-    type: 'Civil Servant',
-    status: 'Active',
-    deviceAccessState: 'ready',
-    expiry: '2025-07-20',
-    balance: 2500,
-    createdAt: '2024-02-10',
-  },
-  {
-    id: '3',
-    name: 'Marcus Thompson',
-    cardNo: 'EF-001236',
-    type: 'Student/BPO',
-    status: 'Expired',
-    deviceAccessState: 'ready',
-    expiry: '2024-12-01',
-    balance: 5000,
-    createdAt: '2023-12-01',
-  },
-  {
-    id: '4',
-    name: 'Andre Campbell',
-    cardNo: 'EF-001237',
-    type: 'General',
-    status: 'Active',
-    deviceAccessState: 'ready',
-    expiry: '2025-03-30',
-    balance: 0,
-    createdAt: '2024-03-30',
-  },
-  {
-    id: '5',
-    name: 'Shanique Mighty',
-    cardNo: 'EF-001238',
-    type: 'General',
-    status: 'Active',
-    deviceAccessState: 'ready',
-    expiry: '2025-08-15',
-    balance: 1500,
-    createdAt: '2024-04-15',
-  },
-  {
-    id: '6',
-    name: 'Robert Grant',
-    cardNo: 'EF-001239',
-    type: 'Civil Servant',
-    status: 'Suspended',
-    deviceAccessState: 'ready',
-    expiry: '2025-05-10',
-    balance: 7500,
-    createdAt: '2024-01-20',
-  },
-  {
-    id: '7',
-    name: 'Tanesha Morgan',
-    cardNo: 'EF-001240',
-    type: 'Student/BPO',
-    status: 'Active',
-    deviceAccessState: 'ready',
-    expiry: '2025-09-01',
-    balance: 0,
-    createdAt: '2024-05-01',
-  },
-  {
-    id: '8',
-    name: 'Michael Reid',
-    cardNo: 'EF-001241',
-    type: 'General',
-    status: 'Expired',
-    deviceAccessState: 'ready',
-    expiry: '2024-10-15',
-    balance: 3000,
-    createdAt: '2023-10-15',
-  },
-  {
-    id: '9',
-    name: 'Sashane Henry',
-    cardNo: 'EF-001242',
-    type: 'Civil Servant',
-    status: 'Active',
-    deviceAccessState: 'ready',
-    expiry: '2025-11-20',
-    balance: 0,
-    createdAt: '2024-06-20',
-  },
-  {
-    id: '10',
-    name: 'Daniel Ferguson',
-    cardNo: 'EF-001243',
-    type: 'General',
-    status: 'Active',
-    deviceAccessState: 'ready',
-    expiry: '2025-04-10',
-    balance: 500,
-    createdAt: '2024-04-10',
-  },
-]
 
 type UseMembersOptions = {
   search?: string
   status?: MemberStatus | 'All'
   type?: MemberType | 'All'
+}
+
+function normalizeSearchValue(value: unknown) {
+  return typeof value === 'string' ? value.toLowerCase() : ''
+}
+
+function getMemberIdentity(member: Partial<Member>) {
+  if (typeof member.employeeNo === 'string' && member.employeeNo.trim()) {
+    return member.employeeNo.trim()
+  }
+
+  return typeof member.id === 'string' ? member.id.trim() : ''
 }
 
 function mergeMembers(...memberGroups: Member[][]) {
@@ -130,11 +29,13 @@ function mergeMembers(...memberGroups: Member[][]) {
 
   for (const members of memberGroups) {
     for (const member of members) {
-      if (seenMemberIds.has(member.id)) {
+      const memberIdentity = getMemberIdentity(member)
+
+      if (!memberIdentity || seenMemberIds.has(memberIdentity)) {
         continue
       }
 
-      seenMemberIds.add(member.id)
+      seenMemberIds.add(memberIdentity)
       merged.push(member)
     }
   }
@@ -147,23 +48,38 @@ export function useMembers(options: UseMembersOptions = {}) {
   const [sessionMembers, setSessionMembers] = useState<Member[]>(() => getSessionMembers())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const [refreshToken, setRefreshToken] = useState(0)
 
   useEffect(() => {
-    // TODO: Replace with Supabase query
-    const fetchMembers = async () => {
+    let isCancelled = false
+
+    async function loadMembers() {
       setIsLoading(true)
+      setError(null)
+
       try {
-        await new Promise((resolve) => setTimeout(resolve, 400))
-        setMembers(MOCK_MEMBERS)
+        const nextMembers = await fetchPersistedMembers()
+
+        if (!isCancelled) {
+          setMembers(nextMembers)
+        }
       } catch (err) {
-        setError(err instanceof Error ? err : new Error('Failed to fetch members'))
+        if (!isCancelled) {
+          setError(err instanceof Error ? err : new Error('Failed to fetch members'))
+        }
       } finally {
-        setIsLoading(false)
+        if (!isCancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
-    fetchMembers()
-  }, [])
+    void loadMembers()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [refreshToken])
 
   useEffect(() => subscribeToSessionMembers(setSessionMembers), [])
 
@@ -172,30 +88,33 @@ export function useMembers(options: UseMembersOptions = {}) {
   const filteredMembers = useMemo(() => {
     let result = mergedMembers
 
-    // Search filter
     if (options.search) {
       const searchLower = options.search.toLowerCase()
       result = result.filter(
-        (m) =>
-          m.name.toLowerCase().includes(searchLower) ||
-          m.cardNo.toLowerCase().includes(searchLower)
+        (member) =>
+          normalizeSearchValue(member.name).includes(searchLower) ||
+          normalizeSearchValue(member.cardNo).includes(searchLower) ||
+          normalizeSearchValue(member.employeeNo).includes(searchLower)
       )
     }
 
-    // Status filter
     if (options.status && options.status !== 'All') {
-      result = result.filter((m) => m.status === options.status)
+      result = result.filter((member) => member.status === options.status)
     }
 
-    // Type filter
     if (options.type && options.type !== 'All') {
-      result = result.filter((m) => m.type === options.type)
+      result = result.filter((member) => member.type === options.type)
     }
 
     return result
   }, [mergedMembers, options.search, options.status, options.type])
 
-  return { members: filteredMembers, isLoading, error }
+  return {
+    members: filteredMembers,
+    isLoading,
+    error,
+    refetch: () => setRefreshToken((currentToken) => currentToken + 1),
+  }
 }
 
 export function useMember(id: string) {
@@ -206,26 +125,52 @@ export function useMember(id: string) {
 
   useEffect(() => subscribeToSessionMembers(setSessionMembers), [])
 
+  const sessionMember = useMemo(
+    () =>
+      sessionMembers.find(
+        (candidate) => candidate.id === id || candidate.employeeNo === id,
+      ) ?? null,
+    [id, sessionMembers],
+  )
+
   useEffect(() => {
-    // TODO: Replace with Supabase query
-    const fetchMember = async () => {
+    if (sessionMember) {
+      setMember(sessionMember)
+      setError(null)
+      setIsLoading(false)
+      return
+    }
+
+    let isCancelled = false
+
+    async function loadMember() {
       setIsLoading(true)
+      setError(null)
+
       try {
-        await new Promise((resolve) => setTimeout(resolve, 300))
-        const found = mergeMembers(sessionMembers, MOCK_MEMBERS).find((m) => m.id === id)
-        if (!found) {
-          throw new Error('Member not found')
+        const nextMember = await fetchPersistedMember(id)
+
+        if (!isCancelled) {
+          setMember(nextMember)
         }
-        setMember(found)
       } catch (err) {
-        setError(err instanceof Error ? err : new Error('Failed to fetch member'))
+        if (!isCancelled) {
+          setMember(null)
+          setError(err instanceof Error ? err : new Error('Failed to fetch member'))
+        }
       } finally {
-        setIsLoading(false)
+        if (!isCancelled) {
+          setIsLoading(false)
+        }
       }
     }
 
-    fetchMember()
-  }, [id, sessionMembers])
+    void loadMember()
 
-  return { member, isLoading, error }
+    return () => {
+      isCancelled = true
+    }
+  }, [id, sessionMember])
+
+  return { member: sessionMember ?? member, isLoading, error }
 }

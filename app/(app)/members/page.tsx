@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { useMembers } from '@/hooks/use-members'
 import { MembersTable } from '@/components/members-table'
 import { AddMemberModal } from '@/components/add-member-modal'
+import { RoleGuard } from '@/components/role-guard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -15,7 +16,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Search, UserPlus } from 'lucide-react'
+import { Spinner } from '@/components/ui/spinner'
+import { toast } from '@/hooks/use-toast'
+import { syncMembersFromDevice } from '@/lib/hik-sync'
+import { RefreshCw, Search, UserPlus } from 'lucide-react'
 import type { MemberStatus, MemberType } from '@/types'
 
 const statusOptions: (MemberStatus | 'All')[] = ['All', 'Active', 'Expired', 'Suspended']
@@ -52,12 +56,38 @@ function MembersPageContent() {
   const [statusFilter, setStatusFilter] = useState<MemberStatus | 'All'>('All')
   const [typeFilter, setTypeFilter] = useState<MemberType | 'All'>('All')
   const [showAddModal, setShowAddModal] = useState(searchParams.get('action') === 'add')
+  const [isSyncingMembers, setIsSyncingMembers] = useState(false)
 
-  const { members, isLoading, error } = useMembers({
+  const { members, isLoading, error, refetch } = useMembers({
     search,
     status: statusFilter,
     type: typeFilter,
   })
+
+  const handleSyncMembers = async () => {
+    setIsSyncingMembers(true)
+
+    try {
+      const summary = await syncMembersFromDevice()
+
+      toast({
+        title: 'Members synced',
+        description: `Sync complete — ${summary.membersImported} members and ${summary.cardsImported} cards imported`,
+      })
+      refetch()
+    } catch (syncError) {
+      toast({
+        title: 'Sync failed',
+        description:
+          syncError instanceof Error
+            ? syncError.message
+            : 'Failed to sync members from the device.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSyncingMembers(false)
+    }
+  }
 
   if (error) {
     return (
@@ -74,13 +104,26 @@ function MembersPageContent() {
           <h1 className="text-3xl font-bold tracking-tight">Members</h1>
           <p className="text-muted-foreground">Manage your gym members and their subscriptions.</p>
         </div>
-        <Button
-          onClick={() => setShowAddModal(true)}
-          className="bg-primary text-primary-foreground hover:bg-primary/90"
-        >
-          <UserPlus className="mr-2 h-4 w-4" />
-          Add Member
-        </Button>
+        <div className="flex items-center gap-2">
+          <RoleGuard role="admin">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleSyncMembers()}
+              disabled={isSyncingMembers}
+            >
+              {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Sync Members
+            </Button>
+          </RoleGuard>
+          <Button
+            onClick={() => setShowAddModal(true)}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add Member
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
