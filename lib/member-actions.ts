@@ -43,6 +43,13 @@ type ProvisionMemberSuccessResponse = {
 type MemberMutationSuccessResponse = {
   ok: true
   member: Member
+  warning?: string
+}
+
+export type AssignMemberCardData = {
+  cardNo: string
+  beginTime: string
+  endTime: string
 }
 
 export type MemberProvisioningStep = 'provisioning_member'
@@ -73,8 +80,12 @@ type AddMemberOptions = {
 
 type SlotJobPath = '/api/access/slots/assign' | '/api/access/slots/reset'
 type MemberMutationPath =
+  | `/api/access/members/${string}/assign-card`
   | `/api/access/members/${string}/suspend`
   | `/api/access/members/${string}/unassign-card`
+  | `/api/access/members/${string}/report-card-lost`
+  | `/api/access/members/${string}/recover-card`
+  | `/api/members/${string}/edit`
   | `/api/members/${string}`
 
 async function queueSlotJob(
@@ -152,7 +163,31 @@ async function requestMemberMutation(
     throw new Error('Failed to read the updated member response.')
   }
 
-  return member
+  return {
+    member,
+    warning: responseBody.warning,
+  }
+}
+
+export async function assignMemberCard(
+  memberId: string,
+  data: AssignMemberCardData,
+): Promise<Member> {
+  const normalizedCardNo = normalizeCardNo(data.cardNo)
+  const response = await requestMemberMutation(
+    `/api/access/members/${encodeURIComponent(memberId)}/assign-card`,
+    {
+      method: 'POST',
+      body: {
+        cardNo: normalizedCardNo,
+        beginTime: data.beginTime,
+        endTime: data.endTime,
+      },
+      errorMessage: 'Failed to assign the member card.',
+    },
+  )
+
+  return response.member
 }
 
 export async function addMember(data: AddMemberData, options: AddMemberOptions = {}): Promise<Member> {
@@ -243,61 +278,70 @@ export async function releaseMemberSlot(member: Member): Promise<Member> {
   return releasedMember
 }
 
-export type UpdateMemberData = Partial<{
+export type UpdateMemberData = {
   name: string
-  cardNo: string
   type: MemberType
+  gender?: MemberGender | null
+  email?: string | null
+  phone?: string | null
+  remark?: string | null
+  beginTime: string
   endTime: string
-}>
+}
 
-export async function updateMember(id: string, data: UpdateMemberData): Promise<Member> {
-  // TODO: Replace with Supabase update
-  console.log('Updating member:', id, data)
-  await new Promise((resolve) => setTimeout(resolve, 500))
-  
-  // Return mock updated member
-  return {
-    id,
-    employeeNo: id,
-    name: data.name ?? 'Unknown',
-    cardNo: data.cardNo ?? 'EF-000000',
-    cardCode: null,
-    type: data.type ?? 'General',
-    gender: null,
-    email: null,
-    phone: null,
-    remark: null,
-    photoUrl: null,
-    beginTime: null,
-    endTime: data.endTime ?? new Date().toISOString(),
-    status: 'Active',
-    deviceAccessState: 'ready',
-    balance: 0,
-    createdAt: new Date().toISOString(),
-  }
+export type UpdateMemberResult = {
+  member: Member
+  warning?: string
+}
+
+export async function updateMember(
+  id: string,
+  data: UpdateMemberData,
+): Promise<UpdateMemberResult> {
+  return requestMemberMutation(`/api/members/${encodeURIComponent(id)}/edit`, {
+    method: 'PATCH',
+    body: {
+      name: data.name,
+      type: data.type,
+      gender: data.gender ?? null,
+      email: data.email ?? null,
+      phone: data.phone ?? null,
+      remark: data.remark ?? null,
+      beginTime: data.beginTime,
+      endTime: data.endTime,
+    },
+    errorMessage: 'Failed to update member.',
+  })
 }
 
 export async function suspendMember(
   member: Pick<Member, 'id' | 'employeeNo' | 'cardNo'>,
 ): Promise<Member> {
-  return requestMemberMutation(`/api/access/members/${encodeURIComponent(member.id)}/suspend`, {
-    method: 'POST',
-    body: {
-      employeeNo: member.employeeNo,
-      cardNo: hasAssignedCard(member.cardNo) ? member.cardNo : null,
+  const response = await requestMemberMutation(
+    `/api/access/members/${encodeURIComponent(member.id)}/suspend`,
+    {
+      method: 'POST',
+      body: {
+        employeeNo: member.employeeNo,
+        cardNo: hasAssignedCard(member.cardNo) ? member.cardNo : null,
+      },
+      errorMessage: 'Failed to suspend member.',
     },
-    errorMessage: 'Failed to suspend member.',
-  })
+  )
+
+  return response.member
 }
 
 export async function reactivateMember(id: string): Promise<Member> {
-  return requestMemberMutation(`/api/members/${encodeURIComponent(id)}`, {
+  const response = await requestMemberMutation(`/api/members/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: {
       status: 'Active',
     },
     errorMessage: 'Failed to reactivate member.',
   })
+
+  return response.member
 }
 
 export async function unassignMemberCard(
@@ -307,7 +351,7 @@ export async function unassignMemberCard(
     throw new Error('No card assigned.')
   }
 
-  return requestMemberMutation(
+  const response = await requestMemberMutation(
     `/api/access/members/${encodeURIComponent(member.id)}/unassign-card`,
     {
       method: 'POST',
@@ -318,6 +362,52 @@ export async function unassignMemberCard(
       errorMessage: 'Failed to unassign the member card.',
     },
   )
+
+  return response.member
+}
+
+export async function reportMemberCardLost(
+  member: Pick<Member, 'id' | 'employeeNo' | 'cardNo'>,
+): Promise<Member> {
+  if (!hasAssignedCard(member.cardNo)) {
+    throw new Error('No card assigned.')
+  }
+
+  const response = await requestMemberMutation(
+    `/api/access/members/${encodeURIComponent(member.id)}/report-card-lost`,
+    {
+      method: 'POST',
+      body: {
+        employeeNo: member.employeeNo,
+        cardNo: member.cardNo,
+      },
+      errorMessage: 'Failed to report the member card as lost.',
+    },
+  )
+
+  return response.member
+}
+
+export async function recoverMemberCard(
+  member: Pick<Member, 'id' | 'employeeNo' | 'cardNo'>,
+): Promise<Member> {
+  if (!hasAssignedCard(member.cardNo)) {
+    throw new Error('No card assigned.')
+  }
+
+  const response = await requestMemberMutation(
+    `/api/access/members/${encodeURIComponent(member.id)}/recover-card`,
+    {
+      method: 'POST',
+      body: {
+        employeeNo: member.employeeNo,
+        cardNo: member.cardNo,
+      },
+      errorMessage: 'Failed to recover the member card.',
+    },
+  )
+
+  return response.member
 }
 
 export async function revokeCardAccess(id: string): Promise<void> {

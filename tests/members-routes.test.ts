@@ -56,7 +56,7 @@ function createMembersAdminClient({
       if (table === 'cards') {
         return {
           select(columns: string) {
-            expect(columns).toBe('card_no, card_code')
+            expect(columns).toBe('card_no, card_code, status, lost_at')
 
             return {
               in(column: string, values: string[]) {
@@ -107,7 +107,7 @@ describe('members API routes', () => {
             updated_at: '2026-03-30T14:15:16Z',
           },
         ],
-        cardRows: [{ card_no: '0102857149', card_code: 'A18' }],
+        cardRows: [{ card_no: '0102857149', card_code: 'A18', status: 'assigned', lost_at: null }],
       }),
     )
 
@@ -123,6 +123,8 @@ describe('members API routes', () => {
           name: 'Jane Doe',
           cardNo: '0102857149',
           cardCode: 'A18',
+          cardStatus: 'assigned',
+          cardLostAt: null,
           type: 'General',
           status: 'Expired',
           deviceAccessState: 'ready',
@@ -161,7 +163,7 @@ describe('members API routes', () => {
           created_at: '2026-03-01T10:00:00Z',
           updated_at: '2026-03-01T10:00:00Z',
         },
-        cardRows: [{ card_no: '0102857149', card_code: 'A1' }],
+        cardRows: [{ card_no: '0102857149', card_code: 'A1', status: 'assigned', lost_at: null }],
       }),
     )
 
@@ -178,6 +180,8 @@ describe('members API routes', () => {
         name: 'Marcus Brown',
         cardNo: '0102857149',
         cardCode: 'A1',
+        cardStatus: 'assigned',
+        cardLostAt: null,
         type: 'Student/BPO',
         status: 'Active',
         deviceAccessState: 'ready',
@@ -320,6 +324,8 @@ describe('members API routes', () => {
         name: 'Marcus Brown',
         cardNo: null,
         cardCode: null,
+        cardStatus: null,
+        cardLostAt: null,
         type: 'Student/BPO',
         status: 'Active',
         deviceAccessState: 'ready',

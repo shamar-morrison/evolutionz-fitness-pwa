@@ -8,6 +8,8 @@ const member = {
   name: 'Kimberly Connell',
   cardNo: '3583058668',
   cardCode: 'A1',
+  cardStatus: 'assigned' as const,
+  cardLostAt: null,
   type: 'General' as const,
   status: 'Active' as const,
   deviceAccessState: 'ready' as const,

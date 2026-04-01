@@ -10,7 +10,8 @@ import type {
 
 const memberTypeValues = ['General', 'Civil Servant', 'Student/BPO'] as const
 const memberGenderValues = ['Male', 'Female'] as const
-const placeholderSlotNamePattern = /^[A-Z]\d{1,2}$/
+export const DEFAULT_PLACEHOLDER_SLOT_PATTERN = '^[A-Z]\\d{1,2}$'
+const placeholderSlotNamePattern = new RegExp(DEFAULT_PLACEHOLDER_SLOT_PATTERN)
 export const DEFAULT_RESET_SLOT_END_TIME = '2037-12-31T23:59:59'
 export const MAX_SHORT_EMPLOYEE_NO = 999_999_999
 
@@ -306,6 +307,8 @@ export function buildSlotBackedMemberPreview(
     name: name.trim(),
     cardNo: slot.cardNo.trim(),
     cardCode: slot.placeholderName.trim(),
+    cardStatus: 'assigned',
+    cardLostAt: null,
     slotPlaceholderName,
     type,
     status: 'Active',
@@ -347,6 +350,8 @@ export function buildMemberPreview(
     name: name.trim(),
     cardNo: cardNo.trim(),
     cardCode: cardCode.trim(),
+    cardStatus: 'assigned',
+    cardLostAt: null,
     type,
     status: 'Active',
     deviceAccessState,

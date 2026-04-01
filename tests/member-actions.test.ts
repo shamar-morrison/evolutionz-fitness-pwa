@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   addMember,
+  assignMemberCard,
+  recoverMemberCard,
   reactivateMember,
+  reportMemberCardLost,
   releaseMemberSlot,
   suspendMember,
+  updateMember,
   unassignMemberCard,
 } from '@/lib/member-actions'
 import {
@@ -39,6 +43,8 @@ describe('member actions', () => {
             name: 'Jane Doe',
             cardNo: '0102857149',
             cardCode: 'A18',
+            cardStatus: 'assigned',
+            cardLostAt: null,
             type: 'General',
             status: 'Active',
             deviceAccessState: 'ready',
@@ -97,6 +103,8 @@ describe('member actions', () => {
       name: 'Jane Doe',
       cardNo: '0102857149',
       cardCode: 'A18',
+      cardStatus: 'assigned',
+      cardLostAt: null,
       type: 'General',
       status: 'Active',
       deviceAccessState: 'ready',
@@ -151,6 +159,8 @@ describe('member actions', () => {
             name: 'Jane Doe',
             cardNo: '0102857149',
             cardCode: 'P42',
+            cardStatus: 'assigned',
+            cardLostAt: null,
             type: 'General',
             status: 'Suspended',
             deviceAccessState: 'ready',
@@ -187,6 +197,57 @@ describe('member actions', () => {
     expect(member.status).toBe('Suspended')
   })
 
+  it('assigns a card to an existing member through the access route', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          member: {
+            id: 'member-1',
+            employeeNo: '000611',
+            name: 'Jane Doe',
+            cardNo: '0102857149',
+            cardCode: 'A18',
+            cardStatus: 'assigned',
+            cardLostAt: null,
+            type: 'General',
+            status: 'Suspended',
+            deviceAccessState: 'ready',
+            gender: null,
+            email: null,
+            phone: null,
+            remark: null,
+            photoUrl: null,
+            beginTime: '2026-03-30T00:00:00.000Z',
+            endTime: '2026-07-15T23:59:59.000Z',
+            balance: 0,
+            createdAt: '2026-03-30T14:15:16.000Z',
+          },
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const member = await assignMemberCard('member-1', {
+      cardNo: ' 0102857149 ',
+      beginTime: '2026-04-01T00:00:00',
+      endTime: '2026-07-15T23:59:59',
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/access/members/member-1/assign-card')
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      cardNo: '0102857149',
+      beginTime: '2026-04-01T00:00:00',
+      endTime: '2026-07-15T23:59:59',
+    })
+    expect(member.cardNo).toBe('0102857149')
+    expect(member.cardStatus).toBe('assigned')
+  })
+
   it('sends null cardNo when suspending a member without a card', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       createJsonResponse(
@@ -198,6 +259,8 @@ describe('member actions', () => {
             name: 'Jane Doe',
             cardNo: null,
             cardCode: null,
+            cardStatus: null,
+            cardLostAt: null,
             type: 'General',
             status: 'Suspended',
             deviceAccessState: 'ready',
@@ -242,6 +305,8 @@ describe('member actions', () => {
             name: 'Jane Doe',
             cardNo: null,
             cardCode: null,
+            cardStatus: null,
+            cardLostAt: null,
             type: 'General',
             status: 'Active',
             deviceAccessState: 'ready',
@@ -273,6 +338,67 @@ describe('member actions', () => {
     expect(member.status).toBe('Active')
   })
 
+  it('updates a member through the edit route and returns warnings when provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          member: {
+            id: 'member-1',
+            employeeNo: '000611',
+            name: 'Jane Doe',
+            cardNo: '0102857149',
+            cardCode: 'A18',
+            cardStatus: 'assigned',
+            cardLostAt: null,
+            type: 'Civil Servant',
+            status: 'Active',
+            deviceAccessState: 'ready',
+            gender: 'Female',
+            email: 'jane@example.com',
+            phone: '876-555-1212',
+            remark: 'Updated remark',
+            photoUrl: null,
+            beginTime: '2026-03-30T08:00:00.000Z',
+            endTime: '2026-04-29T23:59:59.000Z',
+            balance: 0,
+            createdAt: '2026-03-30T14:15:16.000Z',
+          },
+          warning: 'Member updated but device sync failed. Please try again.',
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await updateMember('member-1', {
+      name: 'Jane Doe',
+      type: 'Civil Servant',
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
+      remark: 'Updated remark',
+      beginTime: '2026-03-30T08:00:00',
+      endTime: '2026-04-29T23:59:59',
+    })
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/members/member-1/edit')
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('PATCH')
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      name: 'Jane Doe',
+      type: 'Civil Servant',
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
+      remark: 'Updated remark',
+      beginTime: '2026-03-30T08:00:00',
+      endTime: '2026-04-29T23:59:59',
+    })
+    expect(result.warning).toBe('Member updated but device sync failed. Please try again.')
+    expect(result.member.type).toBe('Civil Servant')
+  })
+
   it('unassigns a member card through the access route', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       createJsonResponse(
@@ -284,6 +410,8 @@ describe('member actions', () => {
             name: 'Jane Doe',
             cardNo: null,
             cardCode: null,
+            cardStatus: null,
+            cardLostAt: null,
             type: 'General',
             status: 'Suspended',
             deviceAccessState: 'ready',
@@ -332,6 +460,102 @@ describe('member actions', () => {
     ).rejects.toThrow('No card assigned.')
   })
 
+  it('reports a member card as lost through the access route', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          member: {
+            id: 'member-1',
+            employeeNo: '000611',
+            name: 'Jane Doe',
+            cardNo: '0102857149',
+            cardCode: 'A18',
+            cardStatus: 'suspended_lost',
+            cardLostAt: '2026-04-01T05:00:00.000Z',
+            type: 'General',
+            status: 'Suspended',
+            deviceAccessState: 'ready',
+            gender: null,
+            email: null,
+            phone: null,
+            remark: null,
+            photoUrl: null,
+            beginTime: '2026-03-30T00:00:00.000Z',
+            endTime: '2026-07-15T23:59:59.000Z',
+            balance: 0,
+            createdAt: '2026-03-30T14:15:16.000Z',
+          },
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const member = await reportMemberCardLost({
+      id: 'member-1',
+      employeeNo: '000611',
+      cardNo: '0102857149',
+    } as const)
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/access/members/member-1/report-card-lost')
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      employeeNo: '000611',
+      cardNo: '0102857149',
+    })
+    expect(member.cardStatus).toBe('suspended_lost')
+    expect(member.status).toBe('Suspended')
+  })
+
+  it('recovers a lost member card through the access route', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          member: {
+            id: 'member-1',
+            employeeNo: '000611',
+            name: 'Jane Doe',
+            cardNo: '0102857149',
+            cardCode: 'A18',
+            cardStatus: 'assigned',
+            cardLostAt: null,
+            type: 'General',
+            status: 'Active',
+            deviceAccessState: 'ready',
+            gender: null,
+            email: null,
+            phone: null,
+            remark: null,
+            photoUrl: null,
+            beginTime: '2026-03-30T00:00:00.000Z',
+            endTime: '2026-07-15T23:59:59.000Z',
+            balance: 0,
+            createdAt: '2026-03-30T14:15:16.000Z',
+          },
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const member = await recoverMemberCard({
+      id: 'member-1',
+      employeeNo: '000611',
+      cardNo: '0102857149',
+    } as const)
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/access/members/member-1/recover-card')
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      employeeNo: '000611',
+      cardNo: '0102857149',
+    })
+    expect(member.cardStatus).toBe('assigned')
+    expect(member.cardLostAt).toBeNull()
+  })
+
   it('releases a member slot and stores the released state', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       createJsonResponse({ ok: true, jobId: 'reset-job', result: { ok: true } }, 200),
@@ -345,6 +569,8 @@ describe('member actions', () => {
       name: 'Jane Doe',
       cardNo: '0102857149',
       cardCode: 'P42',
+      cardStatus: 'assigned' as const,
+      cardLostAt: null,
       slotPlaceholderName: 'P42',
       type: 'General' as const,
       status: 'Active' as const,
@@ -394,6 +620,8 @@ describe('member actions', () => {
       name: 'Jane Doe',
       cardNo: '0102857149',
       cardCode: 'P42',
+      cardStatus: 'assigned' as const,
+      cardLostAt: null,
       slotPlaceholderName: 'P42',
       type: 'General' as const,
       status: 'Active' as const,

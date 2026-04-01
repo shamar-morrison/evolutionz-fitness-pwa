@@ -162,6 +162,51 @@ export function buildEndTimeValue(endDateValue: string) {
   return `${endDateValue}T23:59:59`
 }
 
+export function getAccessDateTimeValue(value: string | null | undefined) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/.exec(value.trim())
+
+  if (!match) {
+    return null
+  }
+
+  return `${match[1]}T${match[2]}`
+}
+
+export function getAccessDateInputValue(value: string | null | undefined) {
+  return getAccessDateTimeValue(value)?.slice(0, 10) ?? ''
+}
+
+export function getAccessTimeInputValue(value: string | null | undefined) {
+  return getAccessDateTimeValue(value)?.slice(11) ?? ''
+}
+
+export function findMatchingMemberDuration(
+  beginTime: string | null | undefined,
+  endTime: string | null | undefined,
+): MemberDurationValue | null {
+  const startDateValue = getAccessDateInputValue(beginTime)
+  const normalizedEndTime = getAccessDateTimeValue(endTime)
+
+  if (!startDateValue || !normalizedEndTime) {
+    return null
+  }
+
+  for (const option of MEMBER_DURATION_OPTIONS) {
+    const inclusiveEndDate = calculateInclusiveEndDate(startDateValue, option.value)
+    const expectedEndTime = inclusiveEndDate ? buildEndTimeValue(inclusiveEndDate) : null
+
+    if (expectedEndTime === normalizedEndTime) {
+      return option.value
+    }
+  }
+
+  return null
+}
+
 export function formatAccessDate(
   value: string | null,
   month: 'short' | 'long' = 'short',

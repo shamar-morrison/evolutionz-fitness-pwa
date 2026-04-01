@@ -83,6 +83,24 @@ export async function POST(
 
     // TODO: add admin role check once auth is fully wired up
 
+    const currentMember = await readMemberWithCardCode(supabase, id)
+
+    if (!currentMember) {
+      return createErrorResponse('Member not found.', 404)
+    }
+
+    if (currentMember.employeeNo !== input.employeeNo) {
+      return createErrorResponse('Employee number does not match this member.', 400)
+    }
+
+    if (currentMember.cardNo !== input.cardNo) {
+      return createErrorResponse('This member does not currently have that card assigned.', 400)
+    }
+
+    if (currentMember.cardStatus !== 'assigned') {
+      return createErrorResponse('Only assigned cards can be unassigned.', 400)
+    }
+
     const revokeJob = await revokeAssignedCard(input.employeeNo, input.cardNo, supabase)
 
     if (revokeJob.status !== 'done') {

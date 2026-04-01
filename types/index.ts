@@ -3,6 +3,7 @@ export type MemberType = 'General' | 'Civil Servant' | 'Student/BPO'
 export type MemberStatus = 'Active' | 'Expired' | 'Suspended'
 export type DeviceAccessState = 'ready' | 'released'
 export type MemberGender = 'Male' | 'Female'
+export type CardStatus = 'available' | 'assigned' | 'suspended_lost' | 'disabled'
 export type AvailableAccessSlot = {
   employeeNo: string
   cardNo: string
@@ -11,8 +12,13 @@ export type AvailableAccessSlot = {
 export type Card = {
   cardNo: string
   cardCode: string | null
+  status: CardStatus
+  lostAt: string | null
 }
-export type AvailableAccessCard = Card
+export type AvailableAccessCard = {
+  cardNo: string
+  cardCode: string | null
+}
 
 export type Member = {
   id: string
@@ -20,6 +26,8 @@ export type Member = {
   name: string
   cardNo: string | null
   cardCode: string | null
+  cardStatus: CardStatus | null
+  cardLostAt: string | null
   slotPlaceholderName?: string
   type: MemberType
   status: MemberStatus
@@ -57,6 +65,8 @@ export type MemberRecord = {
 export type CardRecord = {
   card_no: string
   card_code: string | null
+  status: CardStatus
+  lost_at: string | null
 }
 
 export type MemberSyncSummary = {

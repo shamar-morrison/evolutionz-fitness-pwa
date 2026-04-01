@@ -25,6 +25,8 @@ describe('member normalization', () => {
 
     expect(member.cardNo).toBeNull()
     expect(member.cardCode).toBeNull()
+    expect(member.cardStatus).toBeNull()
+    expect(member.cardLostAt).toBeNull()
   })
 
   it('keeps assigned cards as trimmed strings', () => {
@@ -47,11 +49,22 @@ describe('member normalization', () => {
         created_at: '2026-03-30T14:15:16Z',
         updated_at: '2026-03-30T14:15:16Z',
       },
-      new Map([['0102857149', 'P42']]),
+      new Map([
+        [
+          '0102857149',
+          {
+            cardCode: 'P42',
+            status: 'assigned',
+            lostAt: null,
+          },
+        ],
+      ]),
     )
 
     expect(member.cardNo).toBe('0102857149')
     expect(member.cardCode).toBe('P42')
+    expect(member.cardStatus).toBe('assigned')
+    expect(member.cardLostAt).toBeNull()
   })
 
   it('treats null and empty card numbers as unassigned', () => {

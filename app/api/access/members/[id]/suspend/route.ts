@@ -94,7 +94,17 @@ export async function POST(
 
     // TODO: add admin role check once auth is fully wired up
 
-    if (hasAssignedCard(input.cardNo)) {
+    const currentMember = await readMemberWithCardCode(supabase, id)
+
+    if (!currentMember) {
+      return createErrorResponse('Member not found.', 404)
+    }
+
+    if (
+      hasAssignedCard(input.cardNo) &&
+      currentMember.cardNo === input.cardNo &&
+      currentMember.cardStatus === 'assigned'
+    ) {
       const revokeJob = await revokeAssignedCard(input.employeeNo, input.cardNo, supabase)
 
       if (revokeJob.status !== 'done') {

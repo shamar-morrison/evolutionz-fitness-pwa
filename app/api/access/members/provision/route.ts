@@ -679,7 +679,16 @@ export async function POST(request: Request) {
         ok: true,
         member: mapMemberRecordToMemberWithCardCode(
           memberRecord,
-          new Map([[normalizedCardNo, normalizedCardCode]]),
+          new Map([
+            [
+              normalizedCardNo,
+              {
+                cardCode: normalizedCardCode,
+                status: 'assigned',
+                lostAt: null,
+              },
+            ],
+          ]),
         ),
       })
     } catch (error) {

@@ -296,6 +296,8 @@ describe('POST /api/access/members/provision', () => {
         name: 'Jane Doe',
         cardNo: '0102857149',
         cardCode: 'A18',
+        cardStatus: 'assigned',
+        cardLostAt: null,
         type: 'General',
         status: 'Active',
         deviceAccessState: 'ready',

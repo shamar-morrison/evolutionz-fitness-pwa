@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { AssignCardModal } from '@/components/assign-card-modal'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { formatAccessDate } from '@/lib/member-access-time'
 import { useMember } from '@/hooks/use-members'
@@ -27,12 +28,15 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
+  recoverMemberCard,
   reactivateMember,
+  reportMemberCardLost,
   releaseMemberSlot,
   suspendMember,
   unassignMemberCard,
 } from '@/lib/member-actions'
 import { hasAssignedCard } from '@/lib/member-card'
+import { getMemberCardActionState } from '@/lib/member-card-action-state'
 import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
 import { toast } from '@/hooks/use-toast'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, User } from 'lucide-react'
@@ -70,10 +74,11 @@ export default function MemberDetailPage() {
   const memberId = params.id as string
   const { member, isLoading, error, refetch } = useMember(memberId)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showAssignCardModal, setShowAssignCardModal] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
-  const [activeDialog, setActiveDialog] = useState<null | 'suspend' | 'reactivate' | 'unassign'>(
-    null,
-  )
+  const [activeDialog, setActiveDialog] = useState<
+    null | 'suspend' | 'reactivate' | 'unassign' | 'report-lost' | 'recover-card'
+  >(null)
 
   const handleSuspendToggle = async () => {
     if (!member) return
@@ -115,6 +120,48 @@ export default function MemberDetailPage() {
         title: 'Card unassign failed',
         description:
           error instanceof Error ? error.message : 'Failed to unassign this member’s card.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const handleReportCardLost = async () => {
+    if (!member) return
+
+    setIsActionLoading(true)
+
+    try {
+      await reportMemberCardLost(member)
+      refetch()
+    } catch (error) {
+      console.error('Failed to report member card lost:', error)
+      toast({
+        title: 'Report lost card failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to report this member card as lost.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const handleRecoverCard = async () => {
+    if (!member) return
+
+    setIsActionLoading(true)
+
+    try {
+      await recoverMemberCard(member)
+      refetch()
+    } catch (error) {
+      console.error('Failed to recover member card:', error)
+      toast({
+        title: 'Card recovery failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to recover this member card.',
         variant: 'destructive',
       })
     } finally {
@@ -173,6 +220,10 @@ export default function MemberDetailPage() {
 
   const memberDisplayName = buildMemberDisplayName(member.name, member.cardCode)
   const memberHasAssignedCard = hasAssignedCard(member.cardNo)
+  const cardActionState = getMemberCardActionState({
+    cardNo: member.cardNo,
+    cardStatus: member.cardStatus,
+  })
 
   return (
     <div className="space-y-6">
@@ -232,22 +283,74 @@ export default function MemberDetailPage() {
                   )}
                 </Button>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="block w-full">
-                      <Button
-                        variant="destructive"
-                        className="w-full"
-                        onClick={() => setActiveDialog('unassign')}
-                        disabled={isActionLoading || !memberHasAssignedCard}
-                      >
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        Unassign Card
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  {!memberHasAssignedCard ? <TooltipContent>No card assigned</TooltipContent> : null}
-                </Tooltip>
+                {!memberHasAssignedCard && member.status !== 'Suspended' ? (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setShowAssignCardModal(true)}
+                    disabled={isActionLoading}
+                  >
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Assign Card
+                  </Button>
+                ) : null}
+
+                {cardActionState.showUnassignCard ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="block w-full">
+                        <Button
+                          variant="destructive"
+                          className="w-full"
+                          onClick={() => setActiveDialog('unassign')}
+                          disabled={isActionLoading || cardActionState.disableUnassignCard}
+                        >
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          Unassign Card
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {!memberHasAssignedCard ? <TooltipContent>No card assigned</TooltipContent> : null}
+                  </Tooltip>
+                ) : null}
+
+                {cardActionState.showReportCardLost ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="block w-full">
+                        <Button
+                          variant="destructive"
+                          className="w-full"
+                          onClick={() => setActiveDialog('report-lost')}
+                          disabled={isActionLoading || cardActionState.disableReportCardLost}
+                        >
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          Report Card Lost
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {cardActionState.disableReportCardLost ? (
+                      <TooltipContent>No card assigned</TooltipContent>
+                    ) : null}
+                  </Tooltip>
+                ) : null}
+
+                {cardActionState.showRecoverCard ? (
+                  <Button
+                    className="w-full bg-green-600 text-white hover:bg-green-700"
+                    onClick={() => setActiveDialog('recover-card')}
+                    disabled={isActionLoading}
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Card Recovered
+                  </Button>
+                ) : null}
+
+                {cardActionState.showDisabledCardLabel ? (
+                  <div className="w-full rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
+                    Card permanently disabled
+                  </div>
+                ) : null}
 
                 {member.slotPlaceholderName ? (
                   <AlertDialog>
@@ -370,6 +473,13 @@ export default function MemberDetailPage() {
 
       <CheckInHistory memberId={memberId} />
 
+      <AssignCardModal
+        member={member}
+        open={showAssignCardModal}
+        onOpenChange={setShowAssignCardModal}
+        onSuccess={refetch}
+      />
+
       <ConfirmDialog
         open={activeDialog === 'suspend'}
         onOpenChange={(open) => setActiveDialog(open ? 'suspend' : null)}
@@ -406,6 +516,31 @@ export default function MemberDetailPage() {
         onCancel={() => setActiveDialog(null)}
         isLoading={isActionLoading}
         variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={activeDialog === 'report-lost'}
+        onOpenChange={(open) => setActiveDialog(open ? 'report-lost' : null)}
+        title="Report this card as lost?"
+        description="Door access will be immediately suspended. If the card is not recovered within 5 days it will be permanently disabled."
+        confirmLabel="Report Card Lost"
+        cancelLabel="Cancel"
+        onConfirm={() => void handleReportCardLost()}
+        onCancel={() => setActiveDialog(null)}
+        isLoading={isActionLoading}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={activeDialog === 'recover-card'}
+        onOpenChange={(open) => setActiveDialog(open ? 'recover-card' : null)}
+        title="Mark this card as recovered?"
+        description="Mark this card as recovered? Door access will be restored and the member will be reactivated."
+        confirmLabel="Card Recovered"
+        cancelLabel="Cancel"
+        onConfirm={() => void handleRecoverCard()}
+        onCancel={() => setActiveDialog(null)}
+        isLoading={isActionLoading}
       />
 
       <EditMemberModal

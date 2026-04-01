@@ -42,7 +42,7 @@ function createSuspendAdminClient({
     updated_at: '2026-03-30T14:20:16Z',
   },
   detailError = null,
-  cardRows = [{ card_no: '0102857149', card_code: 'P42' }],
+  cardRows = [{ card_no: '0102857149', card_code: 'P42', status: 'assigned', lost_at: null }],
   cardsError = null,
 }: {
   pollResults?: Array<QueryResult<{
@@ -119,7 +119,7 @@ function createSuspendAdminClient({
       if (table === 'cards') {
         return {
           select(columns: string) {
-            expect(columns).toBe('card_no, card_code')
+            expect(columns).toBe('card_no, card_code, status, lost_at')
 
             return {
               in(column: string, values: string[]) {
@@ -186,7 +186,7 @@ describe('POST /api/access/members/[id]/suspend', () => {
       },
     ])
     expect(memberUpdates).toEqual([{ status: 'Suspended', id: 'member-1' }])
-    expect(cardLookups).toEqual([['0102857149']])
+    expect(cardLookups).toEqual([['0102857149'], ['0102857149']])
     await expect(response.json()).resolves.toEqual({
       ok: true,
       member: {
@@ -195,6 +195,8 @@ describe('POST /api/access/members/[id]/suspend', () => {
         name: 'Jane Doe',
         cardNo: '0102857149',
         cardCode: 'P42',
+        cardStatus: 'assigned',
+        cardLostAt: null,
         type: 'General',
         status: 'Suspended',
         deviceAccessState: 'ready',
@@ -263,6 +265,8 @@ describe('POST /api/access/members/[id]/suspend', () => {
         name: 'Jane Doe',
         cardNo: null,
         cardCode: null,
+        cardStatus: null,
+        cardLostAt: null,
         type: 'General',
         status: 'Suspended',
         deviceAccessState: 'ready',

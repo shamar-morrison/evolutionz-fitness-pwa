@@ -1,10 +1,12 @@
 import { z } from 'zod'
 import { getAssignedCardNo } from '@/lib/member-card'
 import { getCleanMemberName } from '@/lib/member-name'
-import type { CardRecord, Member, MemberRecord } from '@/types'
+import type { Card, CardRecord, Member, MemberRecord } from '@/types'
 
 export const MEMBER_RECORD_SELECT =
   'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, balance, created_at, updated_at'
+
+type CardLookupEntry = Pick<Card, 'cardCode' | 'status' | 'lostAt'>
 
 const memberSchema = z.object({
   id: z.string().trim().min(1, 'Member id is required.'),
@@ -12,6 +14,8 @@ const memberSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
   cardNo: z.string().trim().min(1).nullable(),
   cardCode: z.string().trim().min(1).nullable(),
+  cardStatus: z.enum(['available', 'assigned', 'suspended_lost', 'disabled']).nullable(),
+  cardLostAt: z.string().trim().min(1).nullable(),
   slotPlaceholderName: z.string().trim().min(1).optional(),
   type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
   status: z.enum(['Active', 'Expired', 'Suspended']),
@@ -99,7 +103,7 @@ function getUniqueAssignedCardNos(memberRecords: MemberRecord[]) {
 }
 
 export function buildCardCodeByCardNo(records: CardRecord[]) {
-  const cardCodeByCardNo = new Map<string, string | null>()
+  const cardByCardNo = new Map<string, CardLookupEntry>()
 
   for (const record of records) {
     const cardNo = normalizeText(record.card_no)
@@ -109,23 +113,30 @@ export function buildCardCodeByCardNo(records: CardRecord[]) {
     }
 
     const cardCode = normalizeText(record.card_code) || null
-    const existingCardCode = cardCodeByCardNo.get(cardNo)
+    const lostAt = normalizeTimestamp(record.lost_at)
+    const nextCard = {
+      cardCode,
+      status: record.status,
+      lostAt,
+    } satisfies CardLookupEntry
+    const existingCard = cardByCardNo.get(cardNo)
 
-    if (!existingCardCode || cardCode) {
-      cardCodeByCardNo.set(cardNo, cardCode)
+    if (!existingCard || cardCode) {
+      cardByCardNo.set(cardNo, nextCard)
     }
   }
 
-  return cardCodeByCardNo
+  return cardByCardNo
 }
 
 export function mapMemberRecordToMemberWithCardCode(
   record: MemberRecord,
-  cardCodeByCardNo: Map<string, string | null> = new Map(),
+  cardByCardNo: Map<string, CardLookupEntry> = new Map(),
 ): Member {
   const employeeNo = normalizeText(record.employee_no)
   const cardNo = getAssignedCardNo(record.card_no)
-  const cardCode = cardNo ? cardCodeByCardNo.get(cardNo) ?? null : null
+  const card = cardNo ? cardByCardNo.get(cardNo) ?? null : null
+  const cardCode = card?.cardCode ?? null
   const createdAt = normalizeTimestamp(record.created_at)
 
   return {
@@ -134,6 +145,8 @@ export function mapMemberRecordToMemberWithCardCode(
     name: getCleanMemberName(normalizeText(record.name) || employeeNo, cardCode) || employeeNo,
     cardNo,
     cardCode,
+    cardStatus: card?.status ?? null,
+    cardLostAt: card?.lostAt ?? null,
     type: record.type,
     status: record.status,
     deviceAccessState: 'ready',
@@ -176,16 +189,16 @@ async function loadCardCodeLookup(
   const cardNos = getUniqueAssignedCardNos(memberRecords)
 
   if (cardNos.length === 0) {
-    return new Map<string, string | null>()
+    return new Map<string, CardLookupEntry>()
   }
 
   const { data: cards, error: cardsError } = await supabase
     .from('cards')
-    .select('card_no, card_code')
+    .select('card_no, card_code, status, lost_at')
     .in('card_no', cardNos)
 
   if (cardsError) {
-    throw new Error(`Failed to read member card codes: ${cardsError.message}`)
+    throw new Error(`Failed to read member card details: ${cardsError.message}`)
   }
 
   return buildCardCodeByCardNo((cards ?? []) as CardRecord[])
