@@ -2,6 +2,7 @@
 export type MemberType = 'General' | 'Civil Servant' | 'Student/BPO'
 export type MemberStatus = 'Active' | 'Expired' | 'Suspended'
 export type DeviceAccessState = 'ready' | 'released'
+export type MemberGender = 'Male' | 'Female'
 export type AvailableAccessSlot = {
   employeeNo: string
   cardNo: string
@@ -17,13 +18,19 @@ export type Member = {
   id: string
   employeeNo: string
   name: string
-  cardNo: string
+  cardNo: string | null
   cardCode: string | null
   slotPlaceholderName?: string
   type: MemberType
   status: MemberStatus
   deviceAccessState: DeviceAccessState
-  expiry: string | null // ISO date string
+  gender: MemberGender | null
+  email: string | null
+  phone: string | null
+  remark: string | null
+  photoUrl: string | null
+  beginTime: string | null // ISO date string
+  endTime: string | null // ISO date string
   balance: number // JMD, amount owed to gym
   createdAt: string
 }
@@ -35,7 +42,13 @@ export type MemberRecord = {
   card_no: string | null
   type: MemberType
   status: MemberStatus
-  expiry: string | null
+  gender: MemberGender | null
+  email: string | null
+  phone: string | null
+  remark: string | null
+  photo_url: string | null
+  begin_time: string | null
+  end_time: string | null
   balance: number
   created_at: string
   updated_at: string

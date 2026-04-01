@@ -1,4 +1,5 @@
 import { buildMemberDisplayName } from '@/lib/member-name'
+import { getAssignedCardNo } from '@/lib/member-card'
 import type { Member } from '@/types'
 
 function normalizeSearchValue(value: unknown) {
@@ -16,7 +17,7 @@ export function matchesMemberSearch(member: Member, query: string) {
     normalizeSearchValue(member.name).includes(normalizedQuery) ||
     normalizeSearchValue(buildMemberDisplayName(member.name, member.cardCode)).includes(normalizedQuery) ||
     normalizeSearchValue(member.cardCode).includes(normalizedQuery) ||
-    normalizeSearchValue(member.cardNo).includes(normalizedQuery) ||
+    normalizeSearchValue(getAssignedCardNo(member.cardNo)).includes(normalizedQuery) ||
     normalizeSearchValue(member.employeeNo).includes(normalizedQuery)
   )
 }

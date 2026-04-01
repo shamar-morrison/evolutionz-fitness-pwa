@@ -11,7 +11,13 @@ const member = {
   type: 'General' as const,
   status: 'Active' as const,
   deviceAccessState: 'ready' as const,
-  expiry: '2026-07-15',
+  gender: null,
+  email: null,
+  phone: null,
+  remark: null,
+  photoUrl: null,
+  beginTime: '2026-03-30T00:00:00.000Z',
+  endTime: '2026-07-15T23:59:59.000Z',
   balance: 0,
   createdAt: '2026-03-30T14:15:16.000Z',
 }
@@ -29,5 +35,17 @@ describe('member search helpers', () => {
     expect(matchesMemberSearch(member, '3583058668')).toBe(true)
     expect(matchesMemberSearch(member, '000611')).toBe(true)
     expect(matchesMemberSearch(member, 'B3')).toBe(false)
+  })
+
+  it('does not throw when cardNo is null', () => {
+    expect(
+      matchesMemberSearch(
+        {
+          ...member,
+          cardNo: null,
+        },
+        '3583058668',
+      ),
+    ).toBe(false)
   })
 })

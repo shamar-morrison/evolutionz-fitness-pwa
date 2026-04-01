@@ -1,0 +1,200 @@
+import { addMonths, addWeeks, addYears, subDays } from 'date-fns'
+
+export type MemberDurationValue =
+  | '1_week'
+  | '1_month'
+  | '3_months'
+  | '6_months'
+  | '1_year'
+
+export const MEMBER_DURATION_OPTIONS: Array<{
+  value: MemberDurationValue
+  label: string
+}> = [
+  { value: '1_week', label: '1 Week' },
+  { value: '1_month', label: '1 Month' },
+  { value: '3_months', label: '3 Months' },
+  { value: '6_months', label: '6 Months' },
+  { value: '1_year', label: '1 Year' },
+]
+
+const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/
+const timePattern = /^(\d{2}):(\d{2})(?::(\d{2}))?$/
+const dateTimePattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/
+
+function pad(value: number) {
+  return String(value).padStart(2, '0')
+}
+
+export function formatDateInputValue(date: Date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+export function normalizeTimeInputValue(value: string) {
+  const match = timePattern.exec(value.trim())
+
+  if (!match) {
+    return null
+  }
+
+  const [, hoursPart, minutesPart, secondsPart = '00'] = match
+  const hours = Number(hoursPart)
+  const minutes = Number(minutesPart)
+  const seconds = Number(secondsPart)
+
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    !Number.isInteger(seconds) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59 ||
+    seconds < 0 ||
+    seconds > 59
+  ) {
+    return null
+  }
+
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+}
+
+export function parseDateInputValue(value: string) {
+  const match = datePattern.exec(value.trim())
+
+  if (!match) {
+    return null
+  }
+
+  const [, yearPart, monthPart, dayPart] = match
+  const year = Number(yearPart)
+  const monthIndex = Number(monthPart) - 1
+  const day = Number(dayPart)
+  const date = new Date(year, monthIndex, day, 12, 0, 0, 0)
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== monthIndex ||
+    date.getDate() !== day
+  ) {
+    return null
+  }
+
+  return date
+}
+
+export function parseLocalDateTime(value: string) {
+  const match = dateTimePattern.exec(value.trim())
+
+  if (!match) {
+    return null
+  }
+
+  const [, yearPart, monthPart, dayPart, hoursPart, minutesPart, secondsPart] = match
+  const year = Number(yearPart)
+  const monthIndex = Number(monthPart) - 1
+  const day = Number(dayPart)
+  const hours = Number(hoursPart)
+  const minutes = Number(minutesPart)
+  const seconds = Number(secondsPart)
+  const date = new Date(year, monthIndex, day, hours, minutes, seconds, 0)
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== monthIndex ||
+    date.getDate() !== day ||
+    date.getHours() !== hours ||
+    date.getMinutes() !== minutes ||
+    date.getSeconds() !== seconds
+  ) {
+    return null
+  }
+
+  return date
+}
+
+export function calculateInclusiveEndDate(
+  startDateValue: string,
+  duration: MemberDurationValue,
+) {
+  const startDate = parseDateInputValue(startDateValue)
+
+  if (!startDate) {
+    return null
+  }
+
+  const exclusiveEndDate =
+    duration === '1_week'
+      ? addWeeks(startDate, 1)
+      : duration === '1_month'
+        ? addMonths(startDate, 1)
+        : duration === '3_months'
+          ? addMonths(startDate, 3)
+          : duration === '6_months'
+            ? addMonths(startDate, 6)
+            : addYears(startDate, 1)
+  const inclusiveEndDate = subDays(exclusiveEndDate, 1)
+
+  return formatDateInputValue(inclusiveEndDate)
+}
+
+export function buildBeginTimeValue(startDateValue: string, startTimeValue: string) {
+  if (!parseDateInputValue(startDateValue)) {
+    return null
+  }
+
+  const normalizedTime = normalizeTimeInputValue(startTimeValue)
+
+  if (!normalizedTime) {
+    return null
+  }
+
+  return `${startDateValue}T${normalizedTime}`
+}
+
+export function buildEndTimeValue(endDateValue: string) {
+  if (!parseDateInputValue(endDateValue)) {
+    return null
+  }
+
+  return `${endDateValue}T23:59:59`
+}
+
+export function formatAccessDate(
+  value: string | null,
+  month: 'short' | 'long' = 'short',
+) {
+  if (!value) {
+    return 'Not set'
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+
+  if (!match) {
+    return 'Not set'
+  }
+
+  const [, yearPart, monthPart, dayPart] = match
+  const year = Number(yearPart)
+  const monthIndex = Number(monthPart) - 1
+  const day = Number(dayPart)
+  const date = new Date(Date.UTC(year, monthIndex, day))
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== monthIndex ||
+    date.getUTCDate() !== day
+  ) {
+    return 'Not set'
+  }
+
+  return date.toLocaleDateString('en-JM', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month,
+    day: 'numeric',
+  })
+}

@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { z } from 'zod'
+import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,6 +21,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  buildBeginTimeValue,
+  buildEndTimeValue,
+  calculateInclusiveEndDate,
+  formatAccessDate,
+  formatDateInputValue,
+  MEMBER_DURATION_OPTIONS,
+  type MemberDurationValue,
+} from '@/lib/member-access-time'
 import {
   addMember,
   MemberProvisioningError,
@@ -27,7 +39,7 @@ import { useAvailableCards } from '@/hooks/use-available-cards'
 import { formatAvailableAccessCardLabel } from '@/lib/available-cards'
 import { buildMemberDisplayName, hasUsableCardCode } from '@/lib/member-name'
 import { toast } from '@/hooks/use-toast'
-import type { Member, MemberType } from '@/types'
+import type { Member, MemberGender, MemberType } from '@/types'
 
 type AddMemberModalProps = {
   open: boolean
@@ -37,35 +49,43 @@ type AddMemberModalProps = {
 
 type AddMemberFormState = {
   name: string
+  gender: MemberGender | ''
+  email: string
+  phone: string
   selectedInventoryCardNo: string
   type: MemberType
-  expiry: string
+  remark: string
+  startDate: string
+  startTime: string
+  duration: MemberDurationValue | ''
 }
 
 const memberTypes: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
+const memberGenders: MemberGender[] = ['Male', 'Female']
+const emailSchema = z.string().trim().email('Enter a valid email address.')
 
-const initialFormState: AddMemberFormState = {
-  name: '',
-  selectedInventoryCardNo: '',
-  type: 'General',
-  expiry: '',
+function createInitialFormState(now: Date = new Date()): AddMemberFormState {
+  return {
+    name: '',
+    gender: '',
+    email: '',
+    phone: '',
+    selectedInventoryCardNo: '',
+    type: 'General',
+    remark: '',
+    startDate: formatDateInputValue(now),
+    startTime: '00:00:00',
+    duration: '',
+  }
 }
 
 function getDefaultCardNo(cards: Array<{ cardNo: string; cardCode: string | null }>) {
   return cards.find((card) => hasUsableCardCode(card.cardCode))?.cardNo ?? cards[0]?.cardNo ?? ''
 }
 
-function formatDateInputValue(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
-}
-
 export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModalProps) {
   const [submissionStep, setSubmissionStep] = useState<'idle' | 'provisioning_member'>('idle')
-  const [formData, setFormData] = useState<AddMemberFormState>(initialFormState)
+  const [formData, setFormData] = useState<AddMemberFormState>(() => createInitialFormState())
   const {
     cards: availableCards,
     isLoading: isCardsLoading,
@@ -75,12 +95,27 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
 
   const isSubmitting = submissionStep !== 'idle'
   const hasNoAvailableCards = !isCardsLoading && availableCards.length === 0 && !cardsError
+  const minimumStartDate = useMemo(() => formatDateInputValue(new Date()), [open])
   const selectedInventoryCard = useMemo(
     () =>
       availableCards.find((card) => card.cardNo === formData.selectedInventoryCardNo) ?? null,
     [availableCards, formData.selectedInventoryCardNo],
   )
-  const minimumExpiryDate = useMemo(() => formatDateInputValue(new Date()), [open])
+  const calculatedEndDate = useMemo(
+    () =>
+      formData.duration
+        ? calculateInclusiveEndDate(formData.startDate, formData.duration)
+        : null,
+    [formData.duration, formData.startDate],
+  )
+  const calculatedBeginTime = useMemo(
+    () => buildBeginTimeValue(formData.startDate, formData.startTime),
+    [formData.startDate, formData.startTime],
+  )
+  const calculatedEndTime = useMemo(
+    () => (calculatedEndDate ? buildEndTimeValue(calculatedEndDate) : null),
+    [calculatedEndDate],
+  )
 
   useEffect(() => {
     if (!open) {
@@ -97,8 +132,26 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     }))
   }, [availableCards, open])
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setSubmissionStep('idle')
+      setFormData(createInitialFormState())
+    }
+
+    onOpenChange(nextOpen)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!formData.name.trim()) {
+      toast({
+        title: 'Full name required',
+        description: 'Enter the member’s full name before saving.',
+        variant: 'destructive',
+      })
+      return
+    }
 
     if (!selectedInventoryCard?.cardNo) {
       toast({
@@ -120,10 +173,46 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       return
     }
 
-    if (formData.expiry && formData.expiry < minimumExpiryDate) {
+    if (!formData.startDate || !calculatedBeginTime) {
       toast({
-        title: 'Invalid expiry date',
-        description: 'Choose today or a future date for the membership expiry.',
+        title: 'Start date required',
+        description: 'Choose a valid access start date and time.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (formData.startDate < minimumStartDate) {
+      toast({
+        title: 'Invalid start date',
+        description: 'Choose today or a future date for access to begin.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!formData.duration) {
+      toast({
+        title: 'Duration required',
+        description: 'Choose how long this member should have access.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!calculatedEndDate || !calculatedEndTime) {
+      toast({
+        title: 'End date unavailable',
+        description: 'The selected duration could not be converted into an access end date.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (formData.email && !emailSchema.safeParse(formData.email).success) {
+      toast({
+        title: 'Invalid email',
+        description: 'Enter a valid email address or leave the field blank.',
         variant: 'destructive',
       })
       return
@@ -134,9 +223,14 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     try {
       const member = await addMember(
         {
-          name: formData.name,
+          name: formData.name.trim(),
           type: formData.type,
-          expiry: formData.expiry,
+          ...(formData.gender ? { gender: formData.gender } : {}),
+          ...(formData.email.trim() ? { email: formData.email.trim() } : {}),
+          ...(formData.phone.trim() ? { phone: formData.phone.trim() } : {}),
+          ...(formData.remark.trim() ? { remark: formData.remark.trim() } : {}),
+          beginTime: calculatedBeginTime,
+          endTime: calculatedEndTime,
           cardNo: selectedInventoryCard.cardNo,
           cardCode: selectedCardCode,
         },
@@ -145,8 +239,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
         },
       )
 
-      onOpenChange(false)
-      setFormData(initialFormState)
+      handleOpenChange(false)
       onSuccess?.(member)
       toast({
         title: 'Member added',
@@ -186,57 +279,134 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           ? 'Could not load imported cards. Refresh the inventory and try again.'
           : hasNoAvailableCards
             ? 'No imported unassigned cards are available. Import more cards into iVMS-4200 and re-sync.'
-            : 'Enter the member details below and choose an imported unassigned card.'
+            : 'Enter the full member profile, choose an imported unassigned card, and confirm the access window.'
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[960px]">
         <DialogHeader>
           <DialogTitle>Add New Member</DialogTitle>
           <DialogDescription>{progressDescription}</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Full Name</Label>
-              <div className="flex overflow-hidden rounded-md border border-input bg-background">
-                {selectedInventoryCard?.cardCode ? (
-                  <span className="flex items-center border-r border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
-                    {selectedInventoryCard.cardCode}
-                  </span>
-                ) : null}
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder={
-                    selectedInventoryCard?.cardCode
-                      ? 'Enter member name'
-                      : 'Select a card with a synced card code'
-                  }
-                  className="border-0 shadow-none focus-visible:ring-0"
-                  disabled={!selectedInventoryCard?.cardCode}
-                  required
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid gap-6 py-2 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="grid gap-4 content-start">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Full Name</Label>
+                <div className="flex overflow-hidden rounded-md border border-input bg-background">
+                  {selectedInventoryCard?.cardCode ? (
+                    <span className="flex items-center border-r border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
+                      {selectedInventoryCard.cardCode}
+                    </span>
+                  ) : null}
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder={
+                      selectedInventoryCard?.cardCode
+                        ? 'Enter member name'
+                        : 'Select a card with a synced card code'
+                    }
+                    className="border-0 shadow-none focus-visible:ring-0"
+                    disabled={!selectedInventoryCard?.cardCode}
+                    required
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  The card code prefix is shown here for staff and sent to Hik automatically.
+                </p>
+              </div>
+
+              <div className="grid gap-2">
+                <Label>Gender</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {memberGenders.map((gender) => (
+                    <Button
+                      key={gender}
+                      type="button"
+                      variant={formData.gender === gender ? 'default' : 'outline'}
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          gender: formData.gender === gender ? '' : gender,
+                        })
+                      }
+                      disabled={isSubmitting}
+                    >
+                      {gender}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="Optional email"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="Optional phone number"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="type">Membership Type</Label>
+                <Select
+                  value={formData.type}
+                  onValueChange={(value: MemberType) => setFormData({ ...formData, type: value })}
+                >
+                  <SelectTrigger id="type">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {memberTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="remark">Remark</Label>
+                <Textarea
+                  id="remark"
+                  rows={3}
+                  value={formData.remark}
+                  onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+                  placeholder="Add notes about this member..."
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
-                The card code prefix is shown here for staff and sent to Hik automatically.
-              </p>
             </div>
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="card-number">Available Access Card</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={refetchAvailableCards}
-                  disabled={isSubmitting || isCardsLoading}
-                >
-                  Refresh
-                </Button>
-              </div>
-              <>
+
+            <div className="grid gap-4 content-start">
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="card-number">Available Access Card</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={refetchAvailableCards}
+                    disabled={isSubmitting || isCardsLoading}
+                  >
+                    Refresh
+                  </Button>
+                </div>
                 <Select
                   value={formData.selectedInventoryCardNo}
                   onValueChange={(value) =>
@@ -280,50 +450,102 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
                     {availableCards.length} unassigned card{availableCards.length === 1 ? '' : 's'} loaded from Hik.
                   </p>
                 )}
-              </>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="type">Membership Type</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value: MemberType) => setFormData({ ...formData, type: value })}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="start-date">Start Date</Label>
+                <Input
+                  id="start-date"
+                  type="date"
+                  value={formData.startDate}
+                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                  min={minimumStartDate}
+                  required
+                />
+                <div className="grid gap-2">
+                  <Label htmlFor="start-time" className="text-xs text-muted-foreground">
+                    Start Time
+                  </Label>
+                  <Input
+                    id="start-time"
+                    type="time"
+                    step={1}
+                    value={formData.startTime}
+                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="duration">Duration</Label>
+                <Select
+                  value={formData.duration}
+                  onValueChange={(value: MemberDurationValue) =>
+                    setFormData({ ...formData, duration: value })
+                  }
+                >
+                  <SelectTrigger id="duration">
+                    <SelectValue placeholder="Select duration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MEMBER_DURATION_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-2 rounded-lg border bg-muted/30 p-4">
+                <Label>End Date</Label>
+                <p className="text-lg font-semibold">
+                  {calculatedEndTime ? formatAccessDate(calculatedEndTime, 'long') : 'Select a duration'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Access always expires at 23:59:59 on the calculated end date.
+                </p>
+              </div>
+
+              {/* TODO: implement photo upload to Supabase Storage */}
+              <button
+                type="button"
+                className="flex min-h-52 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-input bg-muted/20 text-center transition-colors hover:bg-muted/30"
               >
-                <SelectTrigger id="type">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {memberTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="expiry">Expiry Date</Label>
-              <Input
-                id="expiry"
-                type="date"
-                value={formData.expiry}
-                onChange={(e) => setFormData({ ...formData, expiry: e.target.value })}
-                min={minimumExpiryDate}
-                required
-              />
+                <span className="flex h-12 w-12 items-center justify-center rounded-full border border-dashed border-input bg-background">
+                  <Plus className="h-5 w-5 text-muted-foreground" />
+                </span>
+                <div className="space-y-1">
+                  <p className="font-medium">Add Photo</p>
+                  <p className="text-sm text-muted-foreground">
+                    Photo uploads will be connected in a later update.
+                  </p>
+                </div>
+              </button>
             </div>
           </div>
+
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={() => handleOpenChange(false)}
               disabled={isSubmitting}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || !selectedInventoryCard || !selectedInventoryCard.cardCode || isCardsLoading}
+              disabled={
+                isSubmitting ||
+                !selectedInventoryCard ||
+                !selectedInventoryCard.cardCode ||
+                isCardsLoading ||
+                !formData.duration ||
+                !calculatedBeginTime ||
+                !calculatedEndTime
+              }
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {submitLabel}

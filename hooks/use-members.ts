@@ -93,6 +93,7 @@ export function useMember(id: string) {
   const [sessionMemberOverrides, setSessionMemberOverrides] = useState(() => getSessionMemberOverrides())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const [refreshToken, setRefreshToken] = useState(0)
 
   useEffect(() => subscribeToSessionMemberOverrides(setSessionMemberOverrides), [])
 
@@ -126,7 +127,7 @@ export function useMember(id: string) {
     return () => {
       isCancelled = true
     }
-  }, [id])
+  }, [id, refreshToken])
 
   const mergedMember = useMemo(() => {
     if (!member) {
@@ -136,5 +137,10 @@ export function useMember(id: string) {
     return applySessionMemberOverride(member, sessionMemberOverrides)
   }, [member, sessionMemberOverrides])
 
-  return { member: mergedMember, isLoading, error }
+  return {
+    member: mergedMember,
+    isLoading,
+    error,
+    refetch: () => setRefreshToken((currentToken) => currentToken + 1),
+  }
 }

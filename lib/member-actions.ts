@@ -1,18 +1,24 @@
 import { normalizeMember } from '@/lib/members'
+import { hasAssignedCard } from '@/lib/member-card'
 import { upsertSessionMemberOverride } from '@/lib/member-session-store'
 import {
   type AssignAccessSlotJobRequest,
   type ResetAccessSlotJobRequest,
 } from '@/lib/member-job'
 import { normalizeCardNo } from '@/lib/card-no'
-import type { Member, MemberType } from '@/types'
+import type { Member, MemberGender, MemberType } from '@/types'
 
 // TODO: Replace with Supabase mutations
 
 export type AddMemberData = {
   name: string
   type: MemberType
-  expiry: string
+  gender?: MemberGender
+  email?: string
+  phone?: string
+  remark?: string
+  beginTime: string
+  endTime: string
   cardNo: string
   cardCode: string
 }
@@ -30,6 +36,11 @@ type AccessControlJobErrorResponse = {
 }
 
 type ProvisionMemberSuccessResponse = {
+  ok: true
+  member: Member
+}
+
+type MemberMutationSuccessResponse = {
   ok: true
   member: Member
 }
@@ -61,6 +72,10 @@ type AddMemberOptions = {
 }
 
 type SlotJobPath = '/api/access/slots/assign' | '/api/access/slots/reset'
+type MemberMutationPath =
+  | `/api/access/members/${string}/suspend`
+  | `/api/access/members/${string}/unassign-card`
+  | `/api/members/${string}`
 
 async function queueSlotJob(
   path: SlotJobPath,
@@ -95,6 +110,51 @@ async function queueSlotJob(
   return responseBody
 }
 
+async function requestMemberMutation(
+  path: MemberMutationPath,
+  {
+    method,
+    body,
+    errorMessage,
+  }: {
+    method: 'POST' | 'PATCH'
+    body: Record<string, unknown>
+    errorMessage: string
+  },
+) {
+  const response = await fetch(path, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  let responseBody: MemberMutationSuccessResponse | AccessControlJobErrorResponse | null = null
+
+  try {
+    responseBody = (await response.json()) as
+      | MemberMutationSuccessResponse
+      | AccessControlJobErrorResponse
+  } catch {
+    responseBody = null
+  }
+
+  if (!response.ok || !responseBody || responseBody.ok === false) {
+    throw new Error(
+      responseBody && responseBody.ok === false ? responseBody.error : errorMessage,
+    )
+  }
+
+  const member = normalizeMember({ member: responseBody.member })
+
+  if (!member) {
+    throw new Error('Failed to read the updated member response.')
+  }
+
+  return member
+}
+
 export async function addMember(data: AddMemberData, options: AddMemberOptions = {}): Promise<Member> {
   const normalizedCardNo = normalizeCardNo(data.cardNo)
   options.onStepChange?.('provisioning_member')
@@ -108,7 +168,12 @@ export async function addMember(data: AddMemberData, options: AddMemberOptions =
       body: JSON.stringify({
         name: data.name,
         type: data.type,
-        expiry: data.expiry,
+        ...(data.gender ? { gender: data.gender } : {}),
+        ...(data.email ? { email: data.email } : {}),
+        ...(data.phone ? { phone: data.phone } : {}),
+        ...(data.remark ? { remark: data.remark } : {}),
+        beginTime: data.beginTime,
+        endTime: data.endTime,
         cardNo: normalizedCardNo,
         cardCode: data.cardCode,
       }),
@@ -182,7 +247,7 @@ export type UpdateMemberData = Partial<{
   name: string
   cardNo: string
   type: MemberType
-  expiry: string
+  endTime: string
 }>
 
 export async function updateMember(id: string, data: UpdateMemberData): Promise<Member> {
@@ -198,7 +263,13 @@ export async function updateMember(id: string, data: UpdateMemberData): Promise<
     cardNo: data.cardNo ?? 'EF-000000',
     cardCode: null,
     type: data.type ?? 'General',
-    expiry: data.expiry ?? new Date().toISOString(),
+    gender: null,
+    email: null,
+    phone: null,
+    remark: null,
+    photoUrl: null,
+    beginTime: null,
+    endTime: data.endTime ?? new Date().toISOString(),
     status: 'Active',
     deviceAccessState: 'ready',
     balance: 0,
@@ -206,20 +277,50 @@ export async function updateMember(id: string, data: UpdateMemberData): Promise<
   }
 }
 
-export async function suspendMember(id: string): Promise<void> {
-  // TODO: Replace with Supabase update
-  console.log('Suspending member:', id)
-  await new Promise((resolve) => setTimeout(resolve, 500))
+export async function suspendMember(
+  member: Pick<Member, 'id' | 'employeeNo' | 'cardNo'>,
+): Promise<Member> {
+  return requestMemberMutation(`/api/access/members/${encodeURIComponent(member.id)}/suspend`, {
+    method: 'POST',
+    body: {
+      employeeNo: member.employeeNo,
+      cardNo: hasAssignedCard(member.cardNo) ? member.cardNo : null,
+    },
+    errorMessage: 'Failed to suspend member.',
+  })
 }
 
-export async function reactivateMember(id: string): Promise<void> {
-  // TODO: Replace with Supabase update
-  console.log('Reactivating member:', id)
-  await new Promise((resolve) => setTimeout(resolve, 500))
+export async function reactivateMember(id: string): Promise<Member> {
+  return requestMemberMutation(`/api/members/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: {
+      status: 'Active',
+    },
+    errorMessage: 'Failed to reactivate member.',
+  })
+}
+
+export async function unassignMemberCard(
+  member: Pick<Member, 'id' | 'employeeNo' | 'cardNo'>,
+): Promise<Member> {
+  if (!hasAssignedCard(member.cardNo)) {
+    throw new Error('No card assigned.')
+  }
+
+  return requestMemberMutation(
+    `/api/access/members/${encodeURIComponent(member.id)}/unassign-card`,
+    {
+      method: 'POST',
+      body: {
+        employeeNo: member.employeeNo,
+        cardNo: member.cardNo,
+      },
+      errorMessage: 'Failed to unassign the member card.',
+    },
+  )
 }
 
 export async function revokeCardAccess(id: string): Promise<void> {
-  // TODO: Replace with Supabase update
   console.log('Revoking card access for member:', id)
   await new Promise((resolve) => setTimeout(resolve, 500))
 }

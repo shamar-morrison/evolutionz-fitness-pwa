@@ -4,6 +4,7 @@ import {
   createAndWaitForAccessControlJob,
   type AccessControlJobOutcome,
 } from '@/lib/access-control-jobs'
+import { formatDateInputValue, parseLocalDateTime } from '@/lib/member-access-time'
 import { buildHikMemberName } from '@/lib/member-name'
 import {
   mapMemberRecordToMemberWithCardCode,
@@ -12,14 +13,16 @@ import {
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import {
   buildAddCardPayload,
-  buildAddUserPayload,
+  buildAddUserPayloadWithAccessWindow,
   generateEmployeeNo,
   getNextShortEmployeeNo,
   provisionMemberAccessRequestSchema,
 } from '@/lib/member-job'
-import type { MemberRecord, MemberType } from '@/types'
+import type { MemberGender, MemberRecord, MemberType } from '@/types'
 
 const CREATE_USER_TIMEOUT_ERROR = 'Create member request timed out after 10 seconds.'
+const GET_CARD_TIMEOUT_ERROR = 'Check card request timed out after 10 seconds.'
+const REVOKE_CARD_TIMEOUT_ERROR = 'Release card request timed out after 10 seconds.'
 const ISSUE_CARD_TIMEOUT_ERROR = 'Issue card request timed out after 10 seconds.'
 const DELETE_USER_TIMEOUT_ERROR = 'Delete member request timed out after 10 seconds.'
 const ILLEGAL_PERSON_ID_ERROR = 'The Hik device rejected the generated person ID. Please try again.'
@@ -43,13 +46,17 @@ type EmployeeNoRow = {
   employee_no: string | null
 }
 
-type ExpiryValidationResult =
+type HikCardInfoRecord = {
+  cardNo?: unknown
+  employeeNo?: unknown
+}
+
+type AccessWindowValidationResult =
   | {
       ok: true
       value: {
-        value: string
-        hikEndTime: string
-        persistedExpiry: string
+        beginTime: string
+        endTime: string
       }
     }
   | {
@@ -66,7 +73,13 @@ type ProvisioningAdminClient = AccessControlJobsClient & {
       card_no: string
       type: MemberType
       status: 'Active'
-      expiry: string
+      gender: MemberGender | null
+      email: string | null
+      phone: string | null
+      remark: string | null
+      photo_url: string | null
+      begin_time: string
+      end_time: string
       balance: number
     }): {
       select(columns: string): {
@@ -120,57 +133,139 @@ function buildAddUserFailureMessage(error: string) {
   return `${stepSpecificMessage} Card assignment was not attempted because Hik user creation failed first.`
 }
 
-function buildPersistedExpiryTimestamp(expiry: string) {
-  return `${expiry}T23:59:59Z`
-}
+function validateProvisioningAccessWindow(
+  beginTime: string,
+  endTime: string,
+  now: Date,
+): AccessWindowValidationResult {
+  const parsedBeginTime = parseLocalDateTime(beginTime)
 
-function validateProvisioningExpiry(expiry: string, now: Date): ExpiryValidationResult {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(expiry)
-
-  if (!match) {
+  if (!parsedBeginTime) {
     return {
       ok: false,
-      error: 'Expiry must be in YYYY-MM-DD format.',
+      error: 'Begin time must be a valid YYYY-MM-DDTHH:mm:ss datetime.',
     }
   }
 
-  const [, yearPart, monthPart, dayPart] = match
-  const year = Number(yearPart)
-  const monthIndex = Number(monthPart) - 1
-  const day = Number(dayPart)
-  const endOfDay = new Date(year, monthIndex, day, 23, 59, 59, 0)
+  const parsedEndTime = parseLocalDateTime(endTime)
 
-  if (
-    Number.isNaN(endOfDay.getTime()) ||
-    endOfDay.getFullYear() !== year ||
-    endOfDay.getMonth() !== monthIndex ||
-    endOfDay.getDate() !== day
-  ) {
+  if (!parsedEndTime) {
     return {
       ok: false,
-      error: 'Expiry must be a valid calendar date.',
+      error: 'End time must be a valid YYYY-MM-DDTHH:mm:ss datetime.',
     }
   }
 
-  if (endOfDay.getTime() <= now.getTime()) {
+  if (beginTime.slice(0, 10) < formatDateInputValue(now)) {
     return {
       ok: false,
-      error: 'Expiry date must be in the future.',
+      error: 'Begin time date must be today or later.',
+    }
+  }
+
+  if (parsedEndTime.getTime() <= parsedBeginTime.getTime()) {
+    return {
+      ok: false,
+      error: 'End time must be after begin time.',
+    }
+  }
+
+  if (parsedEndTime.getTime() <= now.getTime()) {
+    return {
+      ok: false,
+      error: 'End time must be in the future.',
     }
   }
 
   return {
     ok: true,
     value: {
-      value: expiry,
-      hikEndTime: `${expiry}T23:59:59`,
-      persistedExpiry: buildPersistedExpiryTimestamp(expiry),
+      beginTime,
+      endTime,
     },
   }
 }
 
 function appendDetail(message: string, detail: string) {
   return /[.!?]$/.test(message) ? `${message} ${detail}` : `${message}. ${detail}`
+}
+
+function normalizeText(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function getHikCardInfoRecords(result: unknown): HikCardInfoRecord[] {
+  if (!isRecord(result)) {
+    return []
+  }
+
+  const cardInfoSearch = result.CardInfoSearch
+
+  if (!isRecord(cardInfoSearch)) {
+    return []
+  }
+
+  const cardInfo = cardInfoSearch.CardInfo
+
+  if (Array.isArray(cardInfo)) {
+    return cardInfo.filter(isRecord)
+  }
+
+  if (isRecord(cardInfo)) {
+    return [cardInfo]
+  }
+
+  return []
+}
+
+function getAssignedEmployeeNoForCard(result: unknown, cardNo: string) {
+  const normalizedCardNo = normalizeText(cardNo)
+
+  if (!normalizedCardNo) {
+    return null
+  }
+
+  for (const cardInfo of getHikCardInfoRecords(result)) {
+    if (normalizeText(cardInfo.cardNo) !== normalizedCardNo) {
+      continue
+    }
+
+    const employeeNo = normalizeText(cardInfo.employeeNo)
+    return employeeNo || null
+  }
+
+  return null
+}
+
+function getCompletedAddCardJobFailure(result: unknown) {
+  if (!isRecord(result) || result.type !== 'ResponseStatus') {
+    return null
+  }
+
+  const subStatusCode = normalizeText(result.subStatusCode)
+
+  if (result.statusCode === 1 || subStatusCode.toLowerCase() === 'ok') {
+    return null
+  }
+
+  const details = [
+    typeof result.statusCode === 'number' ? `statusCode=${result.statusCode}` : null,
+    normalizeText(result.statusString)
+      ? `statusString=${normalizeText(result.statusString)}`
+      : null,
+    subStatusCode ? `subStatusCode=${subStatusCode}` : null,
+    normalizeText(result.errorMsg) ? `errorMsg=${normalizeText(result.errorMsg)}` : null,
+  ].filter((detail): detail is string => Boolean(detail))
+
+  if (details.length === 0) {
+    return 'Device reported unsuccessful card assignment response.'
+  }
+
+  return `Device reported unsuccessful card assignment response (${details.join(', ')}).`
 }
 
 async function deleteProvisionedUser(
@@ -189,6 +284,50 @@ async function deleteProvisionedUser(
       missingJobMessage: (jobId) => `Delete user job ${jobId} was not found after creation.`,
       failedJobMessage: 'Delete user job failed.',
       timeoutMessage: DELETE_USER_TIMEOUT_ERROR,
+    },
+    supabase,
+  })
+}
+
+async function getCardAssignment(
+  cardNo: string,
+  supabase: AccessControlJobsClient,
+): Promise<AccessControlJobOutcome> {
+  return createAndWaitForAccessControlJob({
+    jobType: 'get_card',
+    payload: {
+      cardNo,
+    },
+    messages: {
+      createErrorPrefix: 'Failed to create get card job',
+      missingJobIdMessage: 'Failed to create get card job: missing job id in response',
+      readErrorPrefix: (jobId) => `Failed to read get card job ${jobId}`,
+      missingJobMessage: (jobId) => `Get card job ${jobId} was not found after creation.`,
+      failedJobMessage: 'Get card job failed.',
+      timeoutMessage: GET_CARD_TIMEOUT_ERROR,
+    },
+    supabase,
+  })
+}
+
+async function revokeAssignedCard(
+  employeeNo: string,
+  cardNo: string,
+  supabase: AccessControlJobsClient,
+): Promise<AccessControlJobOutcome> {
+  return createAndWaitForAccessControlJob({
+    jobType: 'revoke_card',
+    payload: {
+      employeeNo,
+      cardNo,
+    },
+    messages: {
+      createErrorPrefix: 'Failed to create revoke card job',
+      missingJobIdMessage: 'Failed to create revoke card job: missing job id in response',
+      readErrorPrefix: (jobId) => `Failed to read revoke card job ${jobId}`,
+      missingJobMessage: (jobId) => `Revoke card job ${jobId} was not found after creation.`,
+      failedJobMessage: 'Revoke card job failed.',
+      timeoutMessage: REVOKE_CARD_TIMEOUT_ERROR,
     },
     supabase,
   })
@@ -248,7 +387,12 @@ async function insertMemberRecordInSupabase(
     employeeNo: string
     name: string
     type: MemberType
-    persistedExpiry: string
+    gender: MemberGender | null
+    email: string | null
+    phone: string | null
+    remark: string | null
+    beginTime: string
+    endTime: string
     cardNo: string
     cardCode: string
   },
@@ -262,7 +406,13 @@ async function insertMemberRecordInSupabase(
       card_no: input.cardNo,
       type: input.type,
       status: 'Active',
-      expiry: input.persistedExpiry,
+      gender: input.gender,
+      email: input.email,
+      phone: input.phone,
+      remark: input.remark,
+      photo_url: null,
+      begin_time: input.beginTime,
+      end_time: input.endTime,
       balance: 0,
     })
     .select(MEMBER_RECORD_SELECT)
@@ -337,6 +487,24 @@ function buildPersistenceRollbackError(
   return appendDetail(message, 'Hik rollback failed.')
 }
 
+async function createDeviceRollbackResponse(
+  baseError: string,
+  employeeNo: string,
+  supabase: AccessControlJobsClient,
+  status: number,
+) {
+  let rollbackResult: AccessControlJobOutcome | null = null
+  let rollbackError: string | null = null
+
+  try {
+    rollbackResult = await deleteProvisionedUser(employeeNo, supabase)
+  } catch (error) {
+    rollbackError = error instanceof Error ? error.message : 'Unexpected rollback error.'
+  }
+
+  return createErrorResponse(buildRollbackError(baseError, rollbackResult, rollbackError), status)
+}
+
 export async function POST(request: Request) {
   try {
     const requestBody = await request.json()
@@ -345,24 +513,26 @@ export async function POST(request: Request) {
     const normalizedCardNo = input.cardNo.trim()
     const normalizedCardCode = input.cardCode.trim()
     const supabase = getSupabaseAdminClient() as unknown as ProvisioningAdminClient
-    const validatedExpiry = validateProvisioningExpiry(input.expiry, now)
+    const validatedAccessWindow = validateProvisioningAccessWindow(
+      input.beginTime,
+      input.endTime,
+      now,
+    )
 
-    if (!validatedExpiry.ok) {
-      return createErrorResponse(validatedExpiry.error, 400)
+    if (!validatedAccessWindow.ok) {
+      return createErrorResponse(validatedAccessWindow.error, 400)
     }
 
     const employeeNo = await getNextProvisioningEmployeeNo(now, supabase)
 
     const addUserJob = await createAndWaitForAccessControlJob({
       jobType: 'add_user',
-      payload: buildAddUserPayload(
-        {
-          employeeNo,
-          name: buildHikMemberName(input.name, normalizedCardCode),
-          expiry: validatedExpiry.value.value,
-        },
-        now,
-      ),
+      payload: buildAddUserPayloadWithAccessWindow({
+        employeeNo,
+        name: buildHikMemberName(input.name, normalizedCardCode),
+        beginTime: validatedAccessWindow.value.beginTime,
+        endTime: validatedAccessWindow.value.endTime,
+      }),
       messages: {
         createErrorPrefix: 'Failed to create add user job',
         missingJobIdMessage: 'Failed to create add user job: missing job id in response',
@@ -376,6 +546,62 @@ export async function POST(request: Request) {
 
     if (addUserJob.status !== 'done') {
       return createErrorResponse(buildAddUserFailureMessage(addUserJob.error), addUserJob.httpStatus)
+    }
+
+    let existingCardEmployeeNo: string | null = null
+
+    try {
+      const getCardJob = await getCardAssignment(normalizedCardNo, supabase)
+
+      if (getCardJob.status !== 'done') {
+        return await createDeviceRollbackResponse(
+          `Failed to check card ${normalizedCardNo}: ${getCardJob.error}`,
+          employeeNo,
+          supabase,
+          getCardJob.httpStatus,
+        )
+      }
+
+      existingCardEmployeeNo = getAssignedEmployeeNoForCard(getCardJob.result, normalizedCardNo)
+    } catch (error) {
+      return await createDeviceRollbackResponse(
+        `Failed to check card ${normalizedCardNo}: ${
+          error instanceof Error ? error.message : 'Unexpected card lookup error.'
+        }`,
+        employeeNo,
+        supabase,
+        500,
+      )
+    }
+
+    if (existingCardEmployeeNo && existingCardEmployeeNo !== employeeNo) {
+      try {
+        const revokeCardJob = await revokeAssignedCard(
+          existingCardEmployeeNo,
+          normalizedCardNo,
+          supabase,
+        )
+
+        if (revokeCardJob.status !== 'done') {
+          return await createDeviceRollbackResponse(
+            `Failed to release card ${normalizedCardNo} from Hik user ${existingCardEmployeeNo}: ${revokeCardJob.error}`,
+            employeeNo,
+            supabase,
+            revokeCardJob.httpStatus,
+          )
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+      } catch (error) {
+        return await createDeviceRollbackResponse(
+          `Failed to release card ${normalizedCardNo} from Hik user ${existingCardEmployeeNo}: ${
+            error instanceof Error ? error.message : 'Unexpected card release error.'
+          }`,
+          employeeNo,
+          supabase,
+          500,
+        )
+      }
     }
 
     try {
@@ -397,45 +623,31 @@ export async function POST(request: Request) {
       })
 
       if (addCardJob.status !== 'done') {
-        let rollbackResult: AccessControlJobOutcome | null = null
-        let rollbackError: string | null = null
-
-        try {
-          rollbackResult = await deleteProvisionedUser(employeeNo, supabase)
-        } catch (error) {
-          rollbackError = error instanceof Error ? error.message : 'Unexpected rollback error.'
-        }
-
-        return createErrorResponse(
-          buildRollbackError(
-            `Failed to issue card ${normalizedCardNo}: ${addCardJob.error}`,
-            rollbackResult,
-            rollbackError,
-          ),
+        return await createDeviceRollbackResponse(
+          `Failed to issue card ${normalizedCardNo}: ${addCardJob.error}`,
+          employeeNo,
+          supabase,
           addCardJob.httpStatus,
         )
       }
-    } catch (error) {
-      let rollbackResult: AccessControlJobOutcome | null = null
-      let rollbackError: string | null = null
 
-      try {
-        rollbackResult = await deleteProvisionedUser(employeeNo, supabase)
-      } catch (rollbackFailure) {
-        rollbackError =
-          rollbackFailure instanceof Error
-            ? rollbackFailure.message
-            : 'Unexpected rollback error.'
+      const addCardFailure = getCompletedAddCardJobFailure(addCardJob.result)
+
+      if (addCardFailure) {
+        return await createDeviceRollbackResponse(
+          `Failed to issue card ${normalizedCardNo}: ${addCardFailure}`,
+          employeeNo,
+          supabase,
+          502,
+        )
       }
-
-      return createErrorResponse(
-        buildRollbackError(
-          `Failed to issue card ${normalizedCardNo}: ${
-            error instanceof Error ? error.message : 'Unexpected card provisioning error.'
-          }`,
-          rollbackResult,
-          rollbackError,
-        ),
+    } catch (error) {
+      return await createDeviceRollbackResponse(
+        `Failed to issue card ${normalizedCardNo}: ${
+          error instanceof Error ? error.message : 'Unexpected card provisioning error.'
+        }`,
+        employeeNo,
+        supabase,
         500,
       )
     }
@@ -451,7 +663,12 @@ export async function POST(request: Request) {
           employeeNo,
           name: input.name,
           type: input.type,
-          persistedExpiry: validatedExpiry.value.persistedExpiry,
+          gender: input.gender ?? null,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          remark: input.remark ?? null,
+          beginTime: validatedAccessWindow.value.beginTime,
+          endTime: validatedAccessWindow.value.endTime,
           cardNo: normalizedCardNo,
           cardCode: normalizedCardCode,
         },

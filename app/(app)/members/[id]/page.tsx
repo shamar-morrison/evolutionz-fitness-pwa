@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { formatAccessDate } from '@/lib/member-access-time'
 import { useMember } from '@/hooks/use-members'
 import { MemberAvatar } from '@/components/member-avatar'
 import { StatusBadge } from '@/components/status-badge'
@@ -23,7 +25,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { suspendMember, reactivateMember, releaseMemberSlot } from '@/lib/member-actions'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  reactivateMember,
+  releaseMemberSlot,
+  suspendMember,
+  unassignMemberCard,
+} from '@/lib/member-actions'
+import { hasAssignedCard } from '@/lib/member-card'
 import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
 import { toast } from '@/hooks/use-toast'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, User } from 'lucide-react'
@@ -59,22 +68,55 @@ export default function MemberDetailPage() {
   const params = useParams()
   const router = useRouter()
   const memberId = params.id as string
-  const { member, isLoading, error } = useMember(memberId)
+  const { member, isLoading, error, refetch } = useMember(memberId)
   const [showEditModal, setShowEditModal] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
+  const [activeDialog, setActiveDialog] = useState<null | 'suspend' | 'reactivate' | 'unassign'>(
+    null,
+  )
 
   const handleSuspendToggle = async () => {
     if (!member) return
+
     setIsActionLoading(true)
+
     try {
       if (member.status === 'Suspended') {
         await reactivateMember(member.id)
       } else {
-        await suspendMember(member.id)
+        await suspendMember(member)
       }
-      // TODO: Refresh member data
+
+      refetch()
     } catch (error) {
       console.error('Failed to update member status:', error)
+      toast({
+        title: member.status === 'Suspended' ? 'Reactivation failed' : 'Suspension failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to update this member’s access.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const handleUnassignCard = async () => {
+    if (!member) return
+
+    setIsActionLoading(true)
+
+    try {
+      await unassignMemberCard(member)
+      refetch()
+    } catch (error) {
+      console.error('Failed to unassign member card:', error)
+      toast({
+        title: 'Card unassign failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to unassign this member’s card.',
+        variant: 'destructive',
+      })
     } finally {
       setIsActionLoading(false)
     }
@@ -130,6 +172,7 @@ export default function MemberDetailPage() {
   if (!member) return null
 
   const memberDisplayName = buildMemberDisplayName(member.name, member.cardCode)
+  const memberHasAssignedCard = hasAssignedCard(member.cardNo)
 
   return (
     <div className="space-y-6">
@@ -171,7 +214,9 @@ export default function MemberDetailPage() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={handleSuspendToggle}
+                  onClick={() =>
+                    setActiveDialog(member.status === 'Suspended' ? 'reactivate' : 'suspend')
+                  }
                   disabled={isActionLoading}
                 >
                   {member.status === 'Suspended' ? (
@@ -186,6 +231,23 @@ export default function MemberDetailPage() {
                     </>
                   )}
                 </Button>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="block w-full">
+                      <Button
+                        variant="destructive"
+                        className="w-full"
+                        onClick={() => setActiveDialog('unassign')}
+                        disabled={isActionLoading || !memberHasAssignedCard}
+                      >
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Unassign Card
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {!memberHasAssignedCard ? <TooltipContent>No card assigned</TooltipContent> : null}
+                </Tooltip>
 
                 {member.slotPlaceholderName ? (
                   <AlertDialog>
@@ -233,7 +295,7 @@ export default function MemberDetailPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Card ID</p>
-                <p className="font-mono font-medium">{member.cardNo || 'Unassigned'}</p>
+                <p className="font-mono font-medium">{member.cardNo ?? 'Unassigned'}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Hik Person ID</p>
@@ -248,6 +310,22 @@ export default function MemberDetailPage() {
                 <p className="font-medium">{member.type}</p>
               </div>
               <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Gender</p>
+                <p className="font-medium">{member.gender ?? 'Not set'}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Email</p>
+                <p className="font-medium">{member.email ?? 'Not set'}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Phone</p>
+                <p className="font-medium">{member.phone ?? 'Not set'}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Remark</p>
+                <p className="font-medium">{member.remark ?? 'Not set'}</p>
+              </div>
+              <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Status</p>
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge status={member.status} />
@@ -259,8 +337,12 @@ export default function MemberDetailPage() {
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Expiry Date</p>
-                <p className="font-medium">{formatDate(member.expiry)}</p>
+                <p className="text-sm text-muted-foreground">Begin Date</p>
+                <p className="font-medium">{formatAccessDate(member.beginTime, 'long')}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">End Date</p>
+                <p className="font-medium">{formatAccessDate(member.endTime, 'long')}</p>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Balance</p>
@@ -288,13 +370,49 @@ export default function MemberDetailPage() {
 
       <CheckInHistory memberId={memberId} />
 
+      <ConfirmDialog
+        open={activeDialog === 'suspend'}
+        onOpenChange={(open) => setActiveDialog(open ? 'suspend' : null)}
+        title="Suspend member?"
+        description="Are you sure you want to suspend this member? Their card will no longer work at the door."
+        confirmLabel="Suspend Member"
+        cancelLabel="Cancel"
+        onConfirm={() => void handleSuspendToggle()}
+        onCancel={() => setActiveDialog(null)}
+        isLoading={isActionLoading}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={activeDialog === 'reactivate'}
+        onOpenChange={(open) => setActiveDialog(open ? 'reactivate' : null)}
+        title="Reactivate member?"
+        description="Reactivate this member? This will restore their account but will not re-issue door access."
+        confirmLabel="Reactivate"
+        cancelLabel="Cancel"
+        onConfirm={() => void handleSuspendToggle()}
+        onCancel={() => setActiveDialog(null)}
+        isLoading={isActionLoading}
+      />
+
+      <ConfirmDialog
+        open={activeDialog === 'unassign'}
+        onOpenChange={(open) => setActiveDialog(open ? 'unassign' : null)}
+        title="Unassign card?"
+        description="This will remove the card from this member and make it available for reassignment. The member will be suspended. This cannot be undone."
+        confirmLabel="Unassign Card"
+        cancelLabel="Cancel"
+        onConfirm={() => void handleUnassignCard()}
+        onCancel={() => setActiveDialog(null)}
+        isLoading={isActionLoading}
+        variant="destructive"
+      />
+
       <EditMemberModal
         member={member}
         open={showEditModal}
         onOpenChange={setShowEditModal}
-        onSuccess={() => {
-          console.log('Member updated successfully')
-        }}
+        onSuccess={() => refetch()}
       />
     </div>
   )

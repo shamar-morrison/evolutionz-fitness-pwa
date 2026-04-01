@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { formatAccessDate } from '@/lib/member-access-time'
 import {
   Table,
   TableBody,
@@ -18,24 +19,6 @@ import { cn } from '@/lib/utils'
 
 type MembersTableProps = {
   members: Member[]
-}
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) {
-    return 'Not set'
-  }
-
-  const date = new Date(dateStr)
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Not set'
-  }
-
-  return date.toLocaleDateString('en-JM', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
 }
 
 function formatCurrency(amount: number): string {
@@ -58,7 +41,7 @@ export function MembersTable({ members }: MembersTableProps) {
             <TableHead>Card ID</TableHead>
             <TableHead>Type</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>Expiry</TableHead>
+            <TableHead>End Date</TableHead>
             <TableHead className="text-right">Balance</TableHead>
           </TableRow>
         </TableHeader>
@@ -86,7 +69,7 @@ export function MembersTable({ members }: MembersTableProps) {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col">
-                    <span className="font-mono text-sm">{member.cardNo || 'Unassigned'}</span>
+                    <span className="font-mono text-sm">{member.cardNo ?? 'Unassigned'}</span>
                     {member.deviceAccessState === 'released' && member.slotPlaceholderName ? (
                       <span className="text-xs text-muted-foreground">
                         Released to {member.slotPlaceholderName}
@@ -107,7 +90,7 @@ export function MembersTable({ members }: MembersTableProps) {
                     ) : null}
                   </div>
                 </TableCell>
-                <TableCell>{formatDate(member.expiry)}</TableCell>
+                <TableCell>{formatAccessDate(member.endTime)}</TableCell>
                 <TableCell className="text-right">
                   <span
                     className={cn(

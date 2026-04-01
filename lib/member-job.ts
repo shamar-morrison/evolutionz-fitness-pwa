@@ -4,10 +4,12 @@ import type {
   AvailableAccessSlot,
   DeviceAccessState,
   Member,
+  MemberGender,
   MemberType,
 } from '@/types'
 
 const memberTypeValues = ['General', 'Civil Servant', 'Student/BPO'] as const
+const memberGenderValues = ['Male', 'Female'] as const
 const placeholderSlotNamePattern = /^[A-Z]\d{1,2}$/
 export const DEFAULT_RESET_SLOT_END_TIME = '2037-12-31T23:59:59'
 export const MAX_SHORT_EMPLOYEE_NO = 999_999_999
@@ -16,6 +18,12 @@ const expiryDateSchema = z
   .string()
   .trim()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expiry must be in YYYY-MM-DD format.')
+const memberDateTimeSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/, 'Datetime must be in YYYY-MM-DDTHH:mm:ss format.')
+const memberGenderSchema = z.enum(memberGenderValues)
+const memberOptionalTextSchema = z.string().trim().min(1).optional()
 
 export const availableAccessCardSchema = z.object({
   cardNo: z.string().trim().min(1, 'Card number is required.'),
@@ -34,7 +42,12 @@ export const availableAccessSlotSchema = z.object({
 export const addMemberRequestSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
   type: z.enum(memberTypeValues),
-  expiry: expiryDateSchema,
+  gender: memberGenderSchema.optional(),
+  email: z.string().trim().email('Email must be valid.').optional(),
+  phone: memberOptionalTextSchema,
+  remark: memberOptionalTextSchema,
+  beginTime: memberDateTimeSchema,
+  endTime: memberDateTimeSchema,
   cardNo: z.string().trim().min(1, 'Card number is required.'),
   cardCode: z.string().trim().min(1, 'Card code is required.'),
 })
@@ -48,7 +61,12 @@ export const addMemberUserJobRequestSchema = z.object({
 export const provisionMemberAccessRequestSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
   type: z.enum(memberTypeValues),
-  expiry: expiryDateSchema,
+  gender: memberGenderSchema.optional(),
+  email: z.string().trim().email('Email must be valid.').optional(),
+  phone: memberOptionalTextSchema,
+  remark: memberOptionalTextSchema,
+  beginTime: memberDateTimeSchema,
+  endTime: memberDateTimeSchema,
   cardNo: z.string().trim().min(1, 'Card number is required.'),
   cardCode: z.string().trim().min(1, 'Card code is required.'),
 })
@@ -95,6 +113,13 @@ export type AddUserPayload = {
 export type AddCardPayload = {
   employeeNo: string
   cardNo: string
+}
+
+export type AddUserAccessWindowRequest = {
+  employeeNo: string
+  name: string
+  beginTime: string
+  endTime: string
 }
 
 type BuildMemberPreviewOptions = {
@@ -189,6 +214,21 @@ export function buildAddUserPayload(
   }
 }
 
+export function buildAddUserPayloadWithAccessWindow({
+  employeeNo,
+  name,
+  beginTime,
+  endTime,
+}: AddUserAccessWindowRequest): AddUserPayload {
+  return {
+    employeeNo: employeeNo.trim(),
+    name: name.trim(),
+    userType: 'normal',
+    beginTime: beginTime.trim(),
+    endTime: endTime.trim(),
+  }
+}
+
 export function buildAssignSlotPayload(
   { employeeNo, placeholderName, name, expiry }: AssignAccessSlotJobRequest,
   now: Date = new Date(),
@@ -233,13 +273,25 @@ export function buildSlotBackedMemberPreview(
   {
     name,
     type,
-    expiry,
+    beginTime,
+    endTime,
     slot,
+    gender = null,
+    email = null,
+    phone = null,
+    remark = null,
+    photoUrl = null,
   }: {
     name: string
     type: MemberType
-    expiry: string
+    beginTime: string
+    endTime: string
     slot: AvailableAccessSlot
+    gender?: MemberGender | null
+    email?: string | null
+    phone?: string | null
+    remark?: string | null
+    photoUrl?: string | null
   },
   {
     now = new Date(),
@@ -258,7 +310,13 @@ export function buildSlotBackedMemberPreview(
     type,
     status: 'Active',
     deviceAccessState,
-    expiry,
+    gender,
+    email,
+    phone,
+    remark,
+    photoUrl,
+    beginTime,
+    endTime,
     balance: 0,
     createdAt: now.toISOString(),
   }
@@ -268,7 +326,12 @@ export function buildMemberPreview(
   {
     name,
     type,
-    expiry,
+    gender,
+    email,
+    phone,
+    remark,
+    beginTime,
+    endTime,
     cardNo,
     cardCode,
   }: AddMemberRequest,
@@ -287,7 +350,13 @@ export function buildMemberPreview(
     type,
     status: 'Active',
     deviceAccessState,
-    expiry,
+    gender: gender ?? null,
+    email: email ?? null,
+    phone: phone ?? null,
+    remark: remark ?? null,
+    photoUrl: null,
+    beginTime,
+    endTime,
     balance: 0,
     createdAt: now.toISOString(),
   }

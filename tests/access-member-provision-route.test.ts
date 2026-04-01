@@ -19,41 +19,57 @@ const DEFAULT_MEMBER_ROWS = [
   { employee_no: '00000911' },
   { employee_no: '20260330141516593046' },
 ]
+const VALID_PROVISION_REQUEST_BODY = {
+  name: 'Jane Doe',
+  type: 'General',
+  gender: 'Female',
+  email: 'jane@example.com',
+  phone: '876-555-1212',
+  remark: 'Prefers morning sessions',
+  beginTime: '2026-03-30T00:00:00',
+  endTime: '2026-07-15T23:59:59',
+  cardNo: '0102857149',
+  cardCode: 'A18',
+} as const
 
 type QueryResult<T> = {
   data: T | null
   error: { message: string } | null
 }
 
+function createDoneJobResult(result: unknown = { accepted: true }) {
+  return {
+    data: {
+      id: 'job-123',
+      status: 'done' as const,
+      result,
+      error: null,
+    },
+    error: null,
+  }
+}
+
+function createFailedJobResult(error: string) {
+  return {
+    data: {
+      id: 'job-123',
+      status: 'failed' as const,
+      result: null,
+      error,
+    },
+    error: null,
+  }
+}
+
 function createProvisioningAdminClient({
   pollResults = [
-    {
-      data: {
-        id: 'job-123',
-        status: 'done',
-        result: { accepted: true },
-        error: null,
+    createDoneJobResult(),
+    createDoneJobResult({
+      CardInfoSearch: {
+        CardInfo: [],
       },
-      error: null,
-    },
-    {
-      data: {
-        id: 'job-123',
-        status: 'done',
-        result: { accepted: true },
-        error: null,
-      },
-      error: null,
-    },
-    {
-      data: {
-        id: 'job-123',
-        status: 'done',
-        result: { accepted: true },
-        error: null,
-      },
-      error: null,
-    },
+    }),
+    createDoneJobResult(),
   ],
   assignCardResult = {
     data: {
@@ -82,7 +98,13 @@ function createProvisioningAdminClient({
       card_no: '0102857149',
       type: 'General',
       status: 'Active',
-      expiry: '2026-07-15T23:59:59Z',
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
+      remark: 'Prefers morning sessions',
+      photo_url: null,
+      begin_time: '2026-03-30T00:00:00Z',
+      end_time: '2026-07-15T23:59:59Z',
       balance: 0,
       created_at: '2026-03-30T14:15:16Z',
       updated_at: '2026-03-30T14:15:16Z',
@@ -162,7 +184,7 @@ function createProvisioningAdminClient({
             return {
               select(columns: string) {
                 expect(columns).toBe(
-                  'id, employee_no, name, card_no, type, status, expiry, balance, created_at, updated_at',
+                  'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, balance, created_at, updated_at',
                 )
 
                 return {
@@ -206,13 +228,7 @@ describe('POST /api/access/members/provision', () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: 'Jane Doe',
-          type: 'General',
-          expiry: '2026-07-15',
-          cardNo: '0102857149',
-          cardCode: 'A18',
-        }),
+        body: JSON.stringify(VALID_PROVISION_REQUEST_BODY),
       }),
     )
 
@@ -226,6 +242,12 @@ describe('POST /api/access/members/provision', () => {
           userType: 'normal',
           beginTime: '2026-03-30T00:00:00',
           endTime: '2026-07-15T23:59:59',
+        },
+      },
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
         },
       },
       {
@@ -256,7 +278,13 @@ describe('POST /api/access/members/provision', () => {
         card_no: '0102857149',
         type: 'General',
         status: 'Active',
-        expiry: '2026-07-15T23:59:59Z',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Prefers morning sessions',
+        photo_url: null,
+        begin_time: '2026-03-30T00:00:00',
+        end_time: '2026-07-15T23:59:59',
         balance: 0,
       },
     ])
@@ -271,7 +299,13 @@ describe('POST /api/access/members/provision', () => {
         type: 'General',
         status: 'Active',
         deviceAccessState: 'ready',
-        expiry: '2026-07-15T23:59:59.000Z',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Prefers morning sessions',
+        photoUrl: null,
+        beginTime: '2026-03-30T00:00:00.000Z',
+        endTime: '2026-07-15T23:59:59.000Z',
         balance: 0,
         createdAt: '2026-03-30T14:15:16.000Z',
       },
@@ -292,7 +326,13 @@ describe('POST /api/access/members/provision', () => {
           card_no: '0102857149',
           type: 'General',
           status: 'Active',
-          expiry: '2026-07-15T23:59:59Z',
+          gender: 'Female',
+          email: 'jane@example.com',
+          phone: '876-555-1212',
+          remark: 'Prefers morning sessions',
+          photo_url: null,
+          begin_time: '2026-03-30T00:00:00Z',
+          end_time: '2026-07-15T23:59:59Z',
           balance: 0,
           created_at: '2026-03-30T14:15:16Z',
           updated_at: '2026-03-30T14:15:16Z',
@@ -308,13 +348,7 @@ describe('POST /api/access/members/provision', () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: 'Jane Doe',
-          type: 'General',
-          expiry: '2026-07-15',
-          cardNo: '0102857149',
-          cardCode: 'A18',
-        }),
+        body: JSON.stringify(VALID_PROVISION_REQUEST_BODY),
       }),
     )
 
@@ -334,18 +368,11 @@ describe('POST /api/access/members/provision', () => {
   })
 
   it('returns the add_user failure without attempting card assignment', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
     const { client, insertedJobs, cardUpdates, insertedMembers } = createProvisioningAdminClient({
-      pollResults: [
-        {
-          data: {
-            id: 'job-123',
-            status: 'failed',
-            result: null,
-            error: 'Device rejected request.',
-          },
-          error: null,
-        },
-      ],
+      pollResults: [createFailedJobResult('Device rejected request.')],
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
 
@@ -355,13 +382,7 @@ describe('POST /api/access/members/provision', () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: 'Jane Doe',
-          type: 'General',
-          expiry: '2026-07-15',
-          cardNo: '0102857149',
-          cardCode: 'A18',
-        }),
+        body: JSON.stringify(VALID_PROVISION_REQUEST_BODY),
       }),
     )
 
@@ -391,10 +412,7 @@ describe('POST /api/access/members/provision', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: 'Jane Doe',
-          type: 'General',
-          expiry: '2026-07-15',
-          cardNo: '0102857149',
+          ...VALID_PROVISION_REQUEST_BODY,
           cardCode: '  ',
         }),
       }),
@@ -407,7 +425,7 @@ describe('POST /api/access/members/provision', () => {
     })
   })
 
-  it('returns 400 and queues no jobs when the expiry date is already in the past', async () => {
+  it('returns 400 and queues no jobs when the selected end time is already in the past', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(FIXED_NOW)
 
@@ -421,11 +439,9 @@ describe('POST /api/access/members/provision', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: 'Jane Doe',
-          type: 'General',
-          expiry: '2026-03-25',
-          cardNo: '0102857149',
-          cardCode: 'A18',
+          ...VALID_PROVISION_REQUEST_BODY,
+          beginTime: '2026-03-30T00:00:00',
+          endTime: '2026-03-30T12:00:00',
         }),
       }),
     )
@@ -436,7 +452,69 @@ describe('POST /api/access/members/provision', () => {
     expect(insertedMembers).toEqual([])
     await expect(response.json()).resolves.toEqual({
       ok: false,
-      error: 'Expiry date must be in the future.',
+      error: 'End time must be in the future.',
+    })
+  })
+
+  it('returns 400 and queues no jobs when end time is not after begin time', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
+    const { client, insertedJobs, cardUpdates, insertedMembers } = createProvisioningAdminClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/provision', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...VALID_PROVISION_REQUEST_BODY,
+          beginTime: '2026-07-15T23:59:59',
+          endTime: '2026-07-15T23:59:59',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    expect(insertedJobs).toEqual([])
+    expect(cardUpdates).toEqual([])
+    expect(insertedMembers).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'End time must be after begin time.',
+    })
+  })
+
+  it('returns 400 and queues no jobs when the selected start date is in the past', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
+    const { client, insertedJobs, cardUpdates, insertedMembers } = createProvisioningAdminClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/provision', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...VALID_PROVISION_REQUEST_BODY,
+          beginTime: '2026-03-29T00:00:00',
+          endTime: '2026-07-15T23:59:59',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    expect(insertedJobs).toEqual([])
+    expect(cardUpdates).toEqual([])
+    expect(insertedMembers).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Begin time date must be today or later.',
     })
   })
 
@@ -458,13 +536,7 @@ describe('POST /api/access/members/provision', () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: 'Jane Doe',
-          type: 'General',
-          expiry: '2026-07-15',
-          cardNo: '0102857149',
-          cardCode: 'A18',
-        }),
+        body: JSON.stringify(VALID_PROVISION_REQUEST_BODY),
       }),
     )
 
@@ -473,6 +545,12 @@ describe('POST /api/access/members/provision', () => {
       {
         type: 'add_user',
         payload: expect.any(Object),
+      },
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
       },
       {
         type: 'add_card',
@@ -516,7 +594,13 @@ describe('POST /api/access/members/provision', () => {
         card_no: '0102857149',
         type: 'General',
         status: 'Active',
-        expiry: '2026-07-15T23:59:59Z',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Prefers morning sessions',
+        photo_url: null,
+        begin_time: '2026-03-30T00:00:00',
+        end_time: '2026-07-15T23:59:59',
         balance: 0,
       },
     ])
@@ -544,13 +628,7 @@ describe('POST /api/access/members/provision', () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: 'Jane Doe',
-          type: 'General',
-          expiry: '2026-07-15',
-          cardNo: '0102857149',
-          cardCode: 'A18',
-        }),
+        body: JSON.stringify(VALID_PROVISION_REQUEST_BODY),
       }),
     )
 
@@ -559,6 +637,12 @@ describe('POST /api/access/members/provision', () => {
       {
         type: 'add_user',
         payload: expect.any(Object),
+      },
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
       },
       {
         type: 'add_card',
@@ -601,33 +685,14 @@ describe('POST /api/access/members/provision', () => {
 
     const { client, insertedJobs } = createProvisioningAdminClient({
       pollResults: [
-        {
-          data: {
-            id: 'job-123',
-            status: 'done',
-            result: { accepted: true },
-            error: null,
+        createDoneJobResult(),
+        createDoneJobResult({
+          CardInfoSearch: {
+            CardInfo: [],
           },
-          error: null,
-        },
-        {
-          data: {
-            id: 'job-123',
-            status: 'failed',
-            result: null,
-            error: 'Card setup failed.',
-          },
-          error: null,
-        },
-        {
-          data: {
-            id: 'job-123',
-            status: 'failed',
-            result: null,
-            error: 'Cleanup failed.',
-          },
-          error: null,
-        },
+        }),
+        createFailedJobResult('Card setup failed.'),
+        createFailedJobResult('Cleanup failed.'),
       ],
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -638,13 +703,7 @@ describe('POST /api/access/members/provision', () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: 'Jane Doe',
-          type: 'General',
-          expiry: '2026-07-15',
-          cardNo: '0102857149',
-          cardCode: 'A18',
-        }),
+        body: JSON.stringify(VALID_PROVISION_REQUEST_BODY),
       }),
     )
 
@@ -653,6 +712,12 @@ describe('POST /api/access/members/provision', () => {
       {
         type: 'add_user',
         payload: expect.any(Object),
+      },
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
       },
       {
         type: 'add_card',
@@ -674,19 +739,84 @@ describe('POST /api/access/members/provision', () => {
     })
   })
 
+  it('rolls back without persisting when add_card completes with a Hik failure response', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
+    const { client, insertedJobs, cardUpdates, insertedMembers } = createProvisioningAdminClient({
+      pollResults: [
+        createDoneJobResult(),
+        createDoneJobResult({
+          CardInfoSearch: {
+            CardInfo: [],
+          },
+        }),
+        createDoneJobResult({
+          type: 'ResponseStatus',
+          statusCode: 6,
+          statusString: 'Invalid Content',
+          subStatusCode: 'badParameters',
+          errorMsg: '0x60000001',
+        }),
+        createDoneJobResult(),
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/provision', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(VALID_PROVISION_REQUEST_BODY),
+      }),
+    )
+
+    expect(response.status).toBe(502)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'add_user',
+        payload: expect.any(Object),
+      },
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'add_card',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'delete_user',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+        },
+      },
+    ])
+    expect(cardUpdates).toEqual([])
+    expect(insertedMembers).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error:
+        'Failed to issue card 0102857149: Device reported unsuccessful card assignment response (statusCode=6, statusString=Invalid Content, subStatusCode=badParameters, errorMsg=0x60000001). The created Hik user was rolled back.',
+    })
+  })
+
   it('normalizes illegal person id errors from the device', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
     const { client } = createProvisioningAdminClient({
       pollResults: [
-        {
-          data: {
-            id: 'job-123',
-            status: 'failed',
-            result: null,
-            error:
-              'Device returned 400 for PUT /ISAPI/AccessControl/UserInfo/Modify?format=json: {"subStatusCode":"illegalEmployeeNo"}',
-          },
-          error: null,
-        },
+        createFailedJobResult(
+          'Device returned 400 for PUT /ISAPI/AccessControl/UserInfo/Modify?format=json: {"subStatusCode":"illegalEmployeeNo"}',
+        ),
       ],
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -699,13 +829,7 @@ describe('POST /api/access/members/provision', () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: 'Jane Doe',
-          type: 'General',
-          expiry: '2026-07-15',
-          cardCode: 'A18',
-          cardNo: '0102857149',
-        }),
+        body: JSON.stringify(VALID_PROVISION_REQUEST_BODY),
       }),
     )
 
@@ -719,5 +843,229 @@ describe('POST /api/access/members/provision', () => {
       '[access] Hik rejected generated person ID:',
       'Device returned 400 for PUT /ISAPI/AccessControl/UserInfo/Modify?format=json: {"subStatusCode":"illegalEmployeeNo"}',
     )
+  })
+
+  it('revokes a placeholder-held card before assigning it to the new member', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
+    const { client, insertedJobs } = createProvisioningAdminClient({
+      pollResults: [
+        createDoneJobResult(),
+        createDoneJobResult({
+          CardInfoSearch: {
+            CardInfo: [
+              {
+                cardNo: '0102857149',
+                employeeNo: '136',
+              },
+            ],
+          },
+        }),
+        createDoneJobResult(),
+        createDoneJobResult(),
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const responsePromise = POST(
+      new Request('http://localhost/api/access/members/provision', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(VALID_PROVISION_REQUEST_BODY),
+      }),
+    )
+
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(insertedJobs).toEqual([
+      {
+        type: 'add_user',
+        payload: expect.any(Object),
+      },
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'revoke_card',
+        payload: {
+          employeeNo: '136',
+          cardNo: '0102857149',
+        },
+      },
+    ])
+
+    await vi.advanceTimersByTimeAsync(1_999)
+
+    expect(insertedJobs).toEqual([
+      {
+        type: 'add_user',
+        payload: expect.any(Object),
+      },
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'revoke_card',
+        payload: {
+          employeeNo: '136',
+          cardNo: '0102857149',
+        },
+      },
+    ])
+
+    await vi.advanceTimersByTimeAsync(1)
+
+    const response = await responsePromise
+
+    expect(response.status).toBe(200)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'add_user',
+        payload: expect.any(Object),
+      },
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'revoke_card',
+        payload: {
+          employeeNo: '136',
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'add_card',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+          cardNo: '0102857149',
+        },
+      },
+    ])
+  })
+
+  it('rolls back the created user when get_card fails', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
+    const { client, insertedJobs } = createProvisioningAdminClient({
+      pollResults: [
+        createDoneJobResult(),
+        createFailedJobResult('Card lookup failed.'),
+        createDoneJobResult(),
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/provision', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(VALID_PROVISION_REQUEST_BODY),
+      }),
+    )
+
+    expect(response.status).toBe(502)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'add_user',
+        payload: expect.any(Object),
+      },
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'delete_user',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+        },
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Failed to check card 0102857149: Card lookup failed. The created Hik user was rolled back.',
+    })
+  })
+
+  it('rolls back the created user when revoke_card fails', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
+    const { client, insertedJobs } = createProvisioningAdminClient({
+      pollResults: [
+        createDoneJobResult(),
+        createDoneJobResult({
+          CardInfoSearch: {
+            CardInfo: [
+              {
+                cardNo: '0102857149',
+                employeeNo: '136',
+              },
+            ],
+          },
+        }),
+        createFailedJobResult('Card release failed.'),
+        createDoneJobResult(),
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/provision', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(VALID_PROVISION_REQUEST_BODY),
+      }),
+    )
+
+    expect(response.status).toBe(502)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'add_user',
+        payload: expect.any(Object),
+      },
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'revoke_card',
+        payload: {
+          employeeNo: '136',
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'delete_user',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+        },
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error:
+        'Failed to release card 0102857149 from Hik user 136: Card release failed. The created Hik user was rolled back.',
+    })
   })
 })

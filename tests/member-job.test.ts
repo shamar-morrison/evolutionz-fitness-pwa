@@ -101,7 +101,8 @@ describe('member job payload mapping', () => {
         {
           name: '  Jane Doe  ',
           type: 'Student/BPO',
-          expiry: '2026-07-15',
+          beginTime: '2026-03-30T00:00:00',
+          endTime: '2026-07-15T23:59:59',
           slot: {
             employeeNo: '00000611',
             cardNo: ' 0102857149 ',
@@ -123,7 +124,13 @@ describe('member job payload mapping', () => {
       type: 'Student/BPO',
       status: 'Active',
       deviceAccessState: 'released',
-      expiry: '2026-07-15',
+      gender: null,
+      email: null,
+      phone: null,
+      remark: null,
+      photoUrl: null,
+      beginTime: '2026-03-30T00:00:00',
+      endTime: '2026-07-15T23:59:59',
       balance: 0,
       createdAt: now.toISOString(),
     })
@@ -137,7 +144,12 @@ describe('member job payload mapping', () => {
         {
           name: '  Jane Doe  ',
           type: 'General',
-          expiry: '2026-07-15',
+          gender: 'Female',
+          email: 'jane@example.com',
+          phone: '876-555-1212',
+          remark: 'Prefers morning sessions',
+          beginTime: '2026-03-30T00:00:00',
+          endTime: '2026-07-15T23:59:59',
           cardNo: ' 0102857149 ',
           cardCode: ' A18 ',
         },
@@ -155,7 +167,13 @@ describe('member job payload mapping', () => {
       type: 'General',
       status: 'Active',
       deviceAccessState: 'ready',
-      expiry: '2026-07-15',
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
+      remark: 'Prefers morning sessions',
+      photoUrl: null,
+      beginTime: '2026-03-30T00:00:00',
+      endTime: '2026-07-15T23:59:59',
       balance: 0,
       createdAt: now.toISOString(),
     })
@@ -202,14 +220,24 @@ describe('member job payload mapping', () => {
       addMemberRequestSchema.parse({
         name: 'Jane Doe',
         type: 'General',
-        expiry: '2026-07-15',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Prefers morning sessions',
+        beginTime: '2026-03-30T00:00:00',
+        endTime: '2026-07-15T23:59:59',
         cardNo: '0105451261',
         cardCode: 'A18',
       }),
     ).toEqual({
       name: 'Jane Doe',
       type: 'General',
-      expiry: '2026-07-15',
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
+      remark: 'Prefers morning sessions',
+      beginTime: '2026-03-30T00:00:00',
+      endTime: '2026-07-15T23:59:59',
       cardNo: '0105451261',
       cardCode: 'A18',
     })
@@ -218,14 +246,24 @@ describe('member job payload mapping', () => {
       provisionMemberAccessRequestSchema.parse({
         name: 'Jane Doe',
         type: 'General',
-        expiry: '2026-07-15',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Prefers morning sessions',
+        beginTime: '2026-03-30T00:00:00',
+        endTime: '2026-07-15T23:59:59',
         cardNo: ' 0105451261 ',
         cardCode: ' A18 ',
       }),
     ).toEqual({
       name: 'Jane Doe',
       type: 'General',
-      expiry: '2026-07-15',
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
+      remark: 'Prefers morning sessions',
+      beginTime: '2026-03-30T00:00:00',
+      endTime: '2026-07-15T23:59:59',
       cardNo: '0105451261',
       cardCode: 'A18',
     })
@@ -236,7 +274,8 @@ describe('member job payload mapping', () => {
       addMemberRequestSchema.parse({
         name: 'Jane Doe',
         type: 'General',
-        expiry: '2026-07-15',
+        beginTime: '2026-03-30T00:00:00',
+        endTime: '2026-07-15T23:59:59',
         cardNo: '0102857149',
         cardCode: '',
       }),
@@ -246,11 +285,37 @@ describe('member job payload mapping', () => {
       provisionMemberAccessRequestSchema.parse({
         name: 'Jane Doe',
         type: 'General',
-        expiry: '2026-07-15',
+        beginTime: '2026-03-30T00:00:00',
+        endTime: '2026-07-15T23:59:59',
         cardNo: '0102857149',
         cardCode: '  ',
       }),
     ).toThrow(/Card code is required\./)
+  })
+
+  it('validates optional profile fields and access window datetimes for provisioning requests', () => {
+    expect(() =>
+      addMemberRequestSchema.parse({
+        name: 'Jane Doe',
+        type: 'General',
+        email: 'not-an-email',
+        beginTime: '2026-03-30T00:00:00',
+        endTime: '2026-07-15T23:59:59',
+        cardNo: '0102857149',
+        cardCode: 'A18',
+      }),
+    ).toThrow(/Email must be valid\./)
+
+    expect(() =>
+      provisionMemberAccessRequestSchema.parse({
+        name: 'Jane Doe',
+        type: 'General',
+        beginTime: '2026-03-30',
+        endTime: '2026-07-15T23:59:59',
+        cardNo: '0102857149',
+        cardCode: 'A18',
+      }),
+    ).toThrow(/Datetime must be in YYYY-MM-DDTHH:mm:ss format\./)
   })
 
   it('accepts exact one-digit and two-digit Hik slot labels', () => {

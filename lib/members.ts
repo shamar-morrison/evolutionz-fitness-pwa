@@ -1,21 +1,28 @@
 import { z } from 'zod'
+import { getAssignedCardNo } from '@/lib/member-card'
 import { getCleanMemberName } from '@/lib/member-name'
 import type { CardRecord, Member, MemberRecord } from '@/types'
 
 export const MEMBER_RECORD_SELECT =
-  'id, employee_no, name, card_no, type, status, expiry, balance, created_at, updated_at'
+  'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, balance, created_at, updated_at'
 
 const memberSchema = z.object({
   id: z.string().trim().min(1, 'Member id is required.'),
   employeeNo: z.string().trim().min(1, 'Employee number is required.'),
   name: z.string().trim().min(1, 'Name is required.'),
-  cardNo: z.string(),
+  cardNo: z.string().trim().min(1).nullable(),
   cardCode: z.string().trim().min(1).nullable(),
   slotPlaceholderName: z.string().trim().min(1).optional(),
   type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
   status: z.enum(['Active', 'Expired', 'Suspended']),
   deviceAccessState: z.enum(['ready', 'released']),
-  expiry: z.string().trim().min(1).nullable(),
+  gender: z.enum(['Male', 'Female']).nullable(),
+  email: z.string().trim().min(1).nullable(),
+  phone: z.string().trim().min(1).nullable(),
+  remark: z.string().trim().min(1).nullable(),
+  photoUrl: z.string().trim().min(1).nullable(),
+  beginTime: z.string().trim().min(1).nullable(),
+  endTime: z.string().trim().min(1).nullable(),
   balance: z.number(),
   createdAt: z.string().trim().min(1, 'Created timestamp is required.'),
 })
@@ -48,8 +55,17 @@ type MemberErrorResponse = {
   error: string
 }
 
+export type MembersReadClient = {
+  from(table: string): any
+}
+
 function normalizeText(value: string | null | undefined) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeNullableText(value: string | null | undefined) {
+  const normalizedValue = normalizeText(value)
+  return normalizedValue || null
 }
 
 function normalizeTimestamp(value: string | null | undefined) {
@@ -70,6 +86,16 @@ function normalizeTimestamp(value: string | null | undefined) {
 
 export function mapMemberRecordToMember(record: MemberRecord): Member {
   return mapMemberRecordToMemberWithCardCode(record)
+}
+
+function getUniqueAssignedCardNos(memberRecords: MemberRecord[]) {
+  return Array.from(
+    new Set(
+      memberRecords
+        .map((record) => getAssignedCardNo(record.card_no))
+        .filter((cardNo): cardNo is string => cardNo !== null),
+    ),
+  )
 }
 
 export function buildCardCodeByCardNo(records: CardRecord[]) {
@@ -98,7 +124,7 @@ export function mapMemberRecordToMemberWithCardCode(
   cardCodeByCardNo: Map<string, string | null> = new Map(),
 ): Member {
   const employeeNo = normalizeText(record.employee_no)
-  const cardNo = normalizeText(record.card_no)
+  const cardNo = getAssignedCardNo(record.card_no)
   const cardCode = cardNo ? cardCodeByCardNo.get(cardNo) ?? null : null
   const createdAt = normalizeTimestamp(record.created_at)
 
@@ -111,7 +137,13 @@ export function mapMemberRecordToMemberWithCardCode(
     type: record.type,
     status: record.status,
     deviceAccessState: 'ready',
-    expiry: normalizeTimestamp(record.expiry),
+    gender: record.gender,
+    email: normalizeNullableText(record.email),
+    phone: normalizeNullableText(record.phone),
+    remark: normalizeNullableText(record.remark),
+    photoUrl: normalizeNullableText(record.photo_url),
+    beginTime: normalizeTimestamp(record.begin_time),
+    endTime: normalizeTimestamp(record.end_time),
     balance: Number.isFinite(record.balance) ? record.balance : 0,
     createdAt: createdAt ?? normalizeText(record.created_at),
   }
@@ -135,6 +167,68 @@ export function normalizeMember(input: unknown): Member | null {
   }
 
   return parsed.data.member
+}
+
+async function loadCardCodeLookup(
+  supabase: MembersReadClient,
+  memberRecords: MemberRecord[],
+) {
+  const cardNos = getUniqueAssignedCardNos(memberRecords)
+
+  if (cardNos.length === 0) {
+    return new Map<string, string | null>()
+  }
+
+  const { data: cards, error: cardsError } = await supabase
+    .from('cards')
+    .select('card_no, card_code')
+    .in('card_no', cardNos)
+
+  if (cardsError) {
+    throw new Error(`Failed to read member card codes: ${cardsError.message}`)
+  }
+
+  return buildCardCodeByCardNo((cards ?? []) as CardRecord[])
+}
+
+export async function readMembersWithCardCodes(supabase: MembersReadClient) {
+  const { data, error } = await supabase
+    .from('members')
+    .select(MEMBER_RECORD_SELECT)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    throw new Error(`Failed to read members: ${error.message}`)
+  }
+
+  const memberRecords = (data ?? []) as MemberRecord[]
+  const cardCodeByCardNo = await loadCardCodeLookup(supabase, memberRecords)
+
+  return memberRecords.map((record) => mapMemberRecordToMemberWithCardCode(record, cardCodeByCardNo))
+}
+
+export async function readMemberWithCardCode(
+  supabase: MembersReadClient,
+  id: string,
+) {
+  const { data, error } = await supabase
+    .from('members')
+    .select(MEMBER_RECORD_SELECT)
+    .eq('id', id)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to read member ${id}: ${error.message}`)
+  }
+
+  if (!data) {
+    return null
+  }
+
+  const memberRecord = data as MemberRecord
+  const cardCodeByCardNo = await loadCardCodeLookup(supabase, [memberRecord])
+
+  return mapMemberRecordToMemberWithCardCode(memberRecord, cardCodeByCardNo)
 }
 
 export async function fetchMembers(): Promise<Member[]> {

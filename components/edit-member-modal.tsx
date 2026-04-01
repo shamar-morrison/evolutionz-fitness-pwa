@@ -31,22 +31,27 @@ type EditMemberModalProps = {
 }
 
 const memberTypes: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
+const END_OF_DAY_SUFFIX = 'T23:59:59'
+
+function getDateInputValue(value: string | null | undefined) {
+  return typeof value === 'string' ? value.slice(0, 10) : ''
+}
 
 export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditMemberModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState<UpdateMemberData>({
     name: getCleanMemberName(member.name, member.cardCode),
-    cardNo: member.cardNo,
+    cardNo: member.cardNo ?? '',
     type: member.type,
-    expiry: member.expiry ?? '',
+    endTime: member.endTime ?? '',
   })
 
   useEffect(() => {
     setFormData({
       name: getCleanMemberName(member.name, member.cardCode),
-      cardNo: member.cardNo,
+      cardNo: member.cardNo ?? '',
       type: member.type,
-      expiry: member.expiry ?? '',
+      endTime: member.endTime ?? '',
     })
   }, [member])
 
@@ -115,12 +120,17 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="edit-expiry">Expiry Date</Label>
+              <Label htmlFor="edit-end-time">End Date</Label>
               <Input
-                id="edit-expiry"
+                id="edit-end-time"
                 type="date"
-                value={formData.expiry}
-                onChange={(e) => setFormData({ ...formData, expiry: e.target.value })}
+                value={getDateInputValue(formData.endTime)}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    endTime: e.target.value ? `${e.target.value}${END_OF_DAY_SUFFIX}` : '',
+                  })
+                }
                 required
               />
             </div>

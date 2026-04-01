@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import {
-  buildCardCodeByCardNo,
-  mapMemberRecordToMemberWithCardCode,
-  MEMBER_RECORD_SELECT,
-} from '@/lib/members'
+import { z } from 'zod'
+import { MEMBER_RECORD_SELECT, readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import type { CardRecord, MemberRecord } from '@/types'
+
+const reactivateMemberRequestSchema = z.object({
+  status: z.literal('Active'),
+})
 
 export async function GET(
   _request: Request,
@@ -13,15 +13,68 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const supabase = getSupabaseAdminClient()
-    const { data, error } = await supabase
-      .from('members')
-      .select(MEMBER_RECORD_SELECT)
+    const supabase = getSupabaseAdminClient() as unknown as MembersReadClient
+    const member = await readMemberWithCardCode(supabase, id)
+
+    if (!member) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Member not found.',
+        },
+        { status: 404 },
+      )
+    }
+
+    return NextResponse.json({
+      ok: true,
+      member,
+    })
+  } catch (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          error instanceof Error ? error.message : 'Unexpected server error while loading member.',
+      },
+      { status: 500 },
+    )
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params
+    const requestBody = await request.json()
+    const input = reactivateMemberRequestSchema.parse(requestBody)
+    const supabase = getSupabaseAdminClient() as unknown as MembersReadClient
+
+    // TODO: add admin role check once auth is fully wired up
+
+    const { data, error } = await (supabase.from('members') as unknown as {
+      update(values: { status: 'Active' }): {
+        eq(column: 'id', value: string): {
+          select(columns: typeof MEMBER_RECORD_SELECT): {
+            maybeSingle(): PromiseLike<{
+              data: { id: string } | null
+              error: { message: string } | null
+            }>
+          }
+        }
+      }
+    })
+      .update({
+        status: input.status,
+      })
       .eq('id', id)
+      .select(MEMBER_RECORD_SELECT)
       .maybeSingle()
 
     if (error) {
-      throw new Error(`Failed to read member ${id}: ${error.message}`)
+      throw new Error(`Failed to update member ${id}: ${error.message}`)
     }
 
     if (!data) {
@@ -34,33 +87,50 @@ export async function GET(
       )
     }
 
-    const memberRecord = data as MemberRecord
-    const cardNo = typeof memberRecord.card_no === 'string' ? memberRecord.card_no.trim() : ''
-    let cardCodeByCardNo = new Map<string, string | null>()
+    const member = await readMemberWithCardCode(supabase, id)
 
-    if (cardNo) {
-      const { data: cards, error: cardsError } = await supabase
-        .from('cards')
-        .select('card_no, card_code')
-        .in('card_no', [cardNo])
-
-      if (cardsError) {
-        throw new Error(`Failed to read member card code for ${id}: ${cardsError.message}`)
-      }
-
-      cardCodeByCardNo = buildCardCodeByCardNo((cards ?? []) as CardRecord[])
+    if (!member) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Member not found.',
+        },
+        { status: 404 },
+      )
     }
 
     return NextResponse.json({
       ok: true,
-      member: mapMemberRecordToMemberWithCardCode(memberRecord, cardCodeByCardNo),
+      member,
     })
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Invalid JSON body.',
+        },
+        { status: 400 },
+      )
+    }
+
+    if (error instanceof Error && error.name === 'ZodError') {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: error.message,
+        },
+        { status: 400 },
+      )
+    }
+
     return NextResponse.json(
       {
         ok: false,
         error:
-          error instanceof Error ? error.message : 'Unexpected server error while loading member.',
+          error instanceof Error
+            ? error.message
+            : 'Unexpected server error while updating a member.',
       },
       { status: 500 },
     )
