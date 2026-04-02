@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { format } from 'date-fns'
 import { z } from 'zod'
-import { Plus } from 'lucide-react'
+import { Calendar as CalendarIcon, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
 import {
   Dialog,
   DialogContent,
@@ -14,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -28,6 +31,7 @@ import {
   calculateInclusiveEndDate,
   formatAccessDate,
   formatDateInputValue,
+  parseDateInputValue,
   MEMBER_DURATION_OPTIONS,
   type MemberDurationValue,
 } from '@/lib/member-access-time'
@@ -86,6 +90,7 @@ function getDefaultCardNo(cards: Array<{ cardNo: string; cardCode: string | null
 export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModalProps) {
   const [submissionStep, setSubmissionStep] = useState<'idle' | 'provisioning_member'>('idle')
   const [formData, setFormData] = useState<AddMemberFormState>(() => createInitialFormState())
+  const [isStartDatePickerOpen, setIsStartDatePickerOpen] = useState(false)
   const {
     cards: availableCards,
     isLoading: isCardsLoading,
@@ -96,6 +101,10 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
   const isSubmitting = submissionStep !== 'idle'
   const hasNoAvailableCards = !isCardsLoading && availableCards.length === 0 && !cardsError
   const minimumStartDate = useMemo(() => formatDateInputValue(new Date()), [open])
+  const selectedStartDate = useMemo(
+    () => parseDateInputValue(formData.startDate),
+    [formData.startDate],
+  )
   const selectedInventoryCard = useMemo(
     () =>
       availableCards.find((card) => card.cardNo === formData.selectedInventoryCardNo) ?? null,
@@ -116,6 +125,10 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     () => (calculatedEndDate ? buildEndTimeValue(calculatedEndDate) : null),
     [calculatedEndDate],
   )
+  const displayedStartDate = useMemo(
+    () => (selectedStartDate ? format(selectedStartDate, 'MMM d, yyyy') : 'Select a date'),
+    [selectedStartDate],
+  )
 
   useEffect(() => {
     if (!open) {
@@ -135,6 +148,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       setSubmissionStep('idle')
+      setIsStartDatePickerOpen(false)
       setFormData(createInitialFormState())
     }
 
@@ -454,14 +468,39 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
 
               <div className="grid gap-2">
                 <Label htmlFor="start-date">Start Date</Label>
-                <Input
-                  id="start-date"
-                  type="date"
-                  value={formData.startDate}
-                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                  min={minimumStartDate}
-                  required
-                />
+                <Popover open={isStartDatePickerOpen} onOpenChange={setIsStartDatePickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="start-date"
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-between px-3 text-left font-normal"
+                      disabled={isSubmitting}
+                    >
+                      <span>{displayedStartDate}</span>
+                      <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedStartDate ?? undefined}
+                      defaultMonth={selectedStartDate ?? undefined}
+                      onSelect={(date) => {
+                        if (!date) {
+                          return
+                        }
+
+                        setFormData((currentFormData) => ({
+                          ...currentFormData,
+                          startDate: formatDateInputValue(date),
+                        }))
+                        setIsStartDatePickerOpen(false)
+                      }}
+                      disabled={(date) => formatDateInputValue(date) < minimumStartDate}
+                    />
+                  </PopoverContent>
+                </Popover>
                 <div className="grid gap-2">
                   <Label htmlFor="start-time" className="text-xs text-muted-foreground">
                     Start Time
