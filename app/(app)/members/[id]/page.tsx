@@ -1,5 +1,6 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { AssignCardModal } from '@/components/assign-card-modal'
@@ -38,6 +39,7 @@ import {
 import { hasAssignedCard } from '@/lib/member-card'
 import { getMemberCardActionState } from '@/lib/member-card-action-state'
 import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
+import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, User } from 'lucide-react'
 
@@ -45,13 +47,27 @@ export default function MemberDetailPage() {
   const params = useParams()
   const router = useRouter()
   const memberId = params.id as string
-  const { member, isLoading, error, refetch } = useMember(memberId)
+  const queryClient = useQueryClient()
+  const { member, isLoading, error } = useMember(memberId)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showAssignCardModal, setShowAssignCardModal] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [activeDialog, setActiveDialog] = useState<
     null | 'suspend' | 'reactivate' | 'unassign' | 'report-lost' | 'recover-card'
   >(null)
+
+  const invalidateMemberQueries = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(memberId) }),
+    ])
+
+  const invalidateMemberAndCardQueries = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(memberId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
+    ])
 
   const handleSuspendToggle = async () => {
     if (!member) return
@@ -65,7 +81,7 @@ export default function MemberDetailPage() {
         await suspendMember(member)
       }
 
-      refetch()
+      void invalidateMemberQueries()
     } catch (error) {
       console.error('Failed to update member status:', error)
       toast({
@@ -86,7 +102,7 @@ export default function MemberDetailPage() {
 
     try {
       await unassignMemberCard(member)
-      refetch()
+      void invalidateMemberAndCardQueries()
     } catch (error) {
       console.error('Failed to unassign member card:', error)
       toast({
@@ -107,7 +123,7 @@ export default function MemberDetailPage() {
 
     try {
       await reportMemberCardLost(member)
-      refetch()
+      void invalidateMemberQueries()
     } catch (error) {
       console.error('Failed to report member card lost:', error)
       toast({
@@ -128,7 +144,7 @@ export default function MemberDetailPage() {
 
     try {
       await recoverMemberCard(member)
-      refetch()
+      void invalidateMemberQueries()
     } catch (error) {
       console.error('Failed to recover member card:', error)
       toast({
@@ -438,7 +454,6 @@ export default function MemberDetailPage() {
         member={member}
         open={showAssignCardModal}
         onOpenChange={setShowAssignCardModal}
-        onSuccess={refetch}
       />
 
       <ConfirmDialog
@@ -508,7 +523,6 @@ export default function MemberDetailPage() {
         member={member}
         open={showEditModal}
         onOpenChange={setShowEditModal}
-        onSuccess={() => refetch()}
       />
     </div>
   )

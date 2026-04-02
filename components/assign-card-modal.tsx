@@ -1,5 +1,6 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,6 +33,7 @@ import {
 } from '@/lib/member-access-time'
 import { assignMemberCard } from '@/lib/member-actions'
 import { buildMemberDisplayName } from '@/lib/member-name'
+import { queryKeys } from '@/lib/query-keys'
 import type { Member } from '@/types'
 
 type AssignCardModalProps = {
@@ -69,6 +71,7 @@ export function AssignCardModal({
   onOpenChange,
   onSuccess,
 }: AssignCardModalProps) {
+  const queryClient = useQueryClient()
   const [formData, setFormData] = useState<AssignCardFormState>(() => createInitialFormState(member))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const {
@@ -201,6 +204,11 @@ export function AssignCardModal({
 
       resetModalState()
       onOpenChange(false)
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
+      ])
       onSuccess?.()
       toast({
         title: 'Card assigned',

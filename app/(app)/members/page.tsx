@@ -1,5 +1,6 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useMembers } from '@/hooks/use-members'
@@ -20,6 +21,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { toast } from '@/hooks/use-toast'
 import { syncMembersFromDevice } from '@/lib/hik-sync'
 import { syncAvailableAccessCards } from '@/lib/available-cards'
+import { queryKeys } from '@/lib/query-keys'
 import { RefreshCw, Search, UserPlus } from 'lucide-react'
 import type { MemberStatus, MemberType } from '@/types'
 
@@ -59,8 +61,9 @@ function MembersPageContent() {
   const [showAddModal, setShowAddModal] = useState(searchParams.get('action') === 'add')
   const [isSyncingMembers, setIsSyncingMembers] = useState(false)
   const [isSyncingCards, setIsSyncingCards] = useState(false)
+  const queryClient = useQueryClient()
 
-  const { members, isLoading, error, refetch } = useMembers({
+  const { members, isLoading, error } = useMembers({
     search,
     status: statusFilter,
     type: typeFilter,
@@ -76,7 +79,7 @@ function MembersPageContent() {
         title: 'Members synced',
         description: `Sync complete — ${summary.membersAdded} new members added, ${summary.membersUpdated} members updated.`,
       })
-      refetch()
+      void queryClient.invalidateQueries({ queryKey: queryKeys.members.all })
     } catch (syncError) {
       toast({
         title: 'Sync failed',
@@ -101,6 +104,7 @@ function MembersPageContent() {
         title: 'Cards synced',
         description: `Sync complete — ${syncedCards} cards synced`,
       })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.cards.available })
     } catch (syncError) {
       toast({
         title: 'Card sync failed',
@@ -219,7 +223,6 @@ function MembersPageContent() {
       <AddMemberModal
         open={showAddModal}
         onOpenChange={setShowAddModal}
-        onSuccess={() => refetch()}
       />
     </div>
   )

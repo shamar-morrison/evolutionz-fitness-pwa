@@ -1,5 +1,6 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { z } from 'zod'
@@ -39,6 +40,7 @@ import {
   addMember,
   MemberProvisioningError,
 } from '@/lib/member-actions'
+import { queryKeys } from '@/lib/query-keys'
 import { useAvailableCards } from '@/hooks/use-available-cards'
 import { formatAvailableAccessCardLabel } from '@/lib/available-cards'
 import { buildMemberDisplayName, hasUsableCardCode } from '@/lib/member-name'
@@ -88,6 +90,7 @@ function getDefaultCardNo(cards: Array<{ cardNo: string; cardCode: string | null
 }
 
 export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModalProps) {
+  const queryClient = useQueryClient()
   const [submissionStep, setSubmissionStep] = useState<'idle' | 'provisioning_member'>('idle')
   const [formData, setFormData] = useState<AddMemberFormState>(() => createInitialFormState())
   const [isStartDatePickerOpen, setIsStartDatePickerOpen] = useState(false)
@@ -254,6 +257,10 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       )
 
       handleOpenChange(false)
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
+      ])
       onSuccess?.(member)
       toast({
         title: 'Member added',

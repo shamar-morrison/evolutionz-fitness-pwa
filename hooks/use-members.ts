@@ -1,8 +1,10 @@
 'use client'
 
+import { useQuery } from '@tanstack/react-query'
 import { useState, useEffect, useMemo } from 'react'
 import { fetchMember as fetchPersistedMember, fetchMembers as fetchPersistedMembers } from '@/lib/members'
 import { matchesMemberSearch } from '@/lib/member-search'
+import { queryKeys } from '@/lib/query-keys'
 import {
   applySessionMemberOverride,
   applySessionMemberOverrides,
@@ -18,48 +20,17 @@ type UseMembersOptions = {
 }
 
 export function useMembers(options: UseMembersOptions = {}) {
-  const [members, setMembers] = useState<Member[]>([])
   const [sessionMemberOverrides, setSessionMemberOverrides] = useState(() => getSessionMemberOverrides())
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
-  const [refreshToken, setRefreshToken] = useState(0)
-
-  useEffect(() => {
-    let isCancelled = false
-
-    async function loadMembers() {
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        const nextMembers = await fetchPersistedMembers()
-
-        if (!isCancelled) {
-          setMembers(nextMembers)
-        }
-      } catch (err) {
-        if (!isCancelled) {
-          setError(err instanceof Error ? err : new Error('Failed to fetch members'))
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    void loadMembers()
-
-    return () => {
-      isCancelled = true
-    }
-  }, [refreshToken])
+  const membersQuery = useQuery({
+    queryKey: queryKeys.members.all,
+    queryFn: fetchPersistedMembers,
+  })
 
   useEffect(() => subscribeToSessionMemberOverrides(setSessionMemberOverrides), [])
 
   const mergedMembers = useMemo(
-    () => applySessionMemberOverrides(members, sessionMemberOverrides),
-    [members, sessionMemberOverrides],
+    () => applySessionMemberOverrides(membersQuery.data ?? [], sessionMemberOverrides),
+    [membersQuery.data, sessionMemberOverrides],
   )
 
   const filteredMembers = useMemo(() => {
@@ -82,65 +53,34 @@ export function useMembers(options: UseMembersOptions = {}) {
 
   return {
     members: filteredMembers,
-    isLoading,
-    error,
-    refetch: () => setRefreshToken((currentToken) => currentToken + 1),
+    isLoading: membersQuery.isLoading,
+    error: membersQuery.error ?? null,
+    refetch: () => membersQuery.refetch(),
   }
 }
 
 export function useMember(id: string) {
-  const [member, setMember] = useState<Member | null>(null)
   const [sessionMemberOverrides, setSessionMemberOverrides] = useState(() => getSessionMemberOverrides())
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
-  const [refreshToken, setRefreshToken] = useState(0)
+  const memberQuery = useQuery({
+    queryKey: queryKeys.members.detail(id),
+    queryFn: () => fetchPersistedMember(id),
+    enabled: Boolean(id),
+  })
 
   useEffect(() => subscribeToSessionMemberOverrides(setSessionMemberOverrides), [])
 
-  useEffect(() => {
-    let isCancelled = false
-
-    async function loadMember() {
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        const nextMember = await fetchPersistedMember(id)
-
-        if (!isCancelled) {
-          setMember(nextMember)
-        }
-      } catch (err) {
-        if (!isCancelled) {
-          setMember(null)
-          setError(err instanceof Error ? err : new Error('Failed to fetch member'))
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    void loadMember()
-
-    return () => {
-      isCancelled = true
-    }
-  }, [id, refreshToken])
-
   const mergedMember = useMemo(() => {
-    if (!member) {
+    if (!memberQuery.data) {
       return null
     }
 
-    return applySessionMemberOverride(member, sessionMemberOverrides)
-  }, [member, sessionMemberOverrides])
+    return applySessionMemberOverride(memberQuery.data, sessionMemberOverrides)
+  }, [memberQuery.data, sessionMemberOverrides])
 
   return {
     member: mergedMember,
-    isLoading,
-    error,
-    refetch: () => setRefreshToken((currentToken) => currentToken + 1),
+    isLoading: id ? memberQuery.isLoading : false,
+    error: memberQuery.error ?? null,
+    refetch: () => memberQuery.refetch(),
   }
 }

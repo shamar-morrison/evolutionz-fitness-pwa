@@ -1,9 +1,12 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
+import { format } from 'date-fns'
 import { z } from 'zod'
-import { Plus } from 'lucide-react'
+import { Calendar as CalendarIcon, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
 import {
   Dialog,
   DialogContent,
@@ -14,6 +17,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -29,13 +33,16 @@ import {
   findMatchingMemberDuration,
   formatAccessDate,
   formatDateInputValue,
+  getAccessDateTimeValue,
   getAccessDateInputValue,
   getAccessTimeInputValue,
   MEMBER_DURATION_OPTIONS,
+  parseDateInputValue,
   type MemberDurationValue,
 } from '@/lib/member-access-time'
 import { updateMember, type UpdateMemberData } from '@/lib/member-actions'
 import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
+import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
 import type { Member, MemberGender, MemberType } from '@/types'
 
@@ -62,6 +69,20 @@ const memberTypes: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
 const memberGenders: MemberGender[] = ['Male', 'Female']
 const emailSchema = z.string().trim().email('Enter a valid email address.')
 
+function normalizeEditMemberFormState(formState: EditMemberFormState) {
+  return {
+    name: formState.name.trim(),
+    gender: formState.gender,
+    email: formState.email.trim(),
+    phone: formState.phone.trim(),
+    type: formState.type,
+    remark: formState.remark.trim(),
+    startDate: formState.startDate,
+    startTime: formState.startTime,
+    duration: formState.duration,
+  }
+}
+
 function createInitialFormState(member: Member): EditMemberFormState {
   return {
     name: getCleanMemberName(member.name, member.cardCode),
@@ -77,13 +98,50 @@ function createInitialFormState(member: Member): EditMemberFormState {
 }
 
 export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditMemberModalProps) {
+  const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [formData, setFormData] = useState<EditMemberFormState>(() => createInitialFormState(member))
+  const [isStartDatePickerOpen, setIsStartDatePickerOpen] = useState(false)
+  const initialFormState = useMemo(() => createInitialFormState(member), [member])
+  const [formData, setFormData] = useState<EditMemberFormState>(initialFormState)
 
   useEffect(() => {
-    setFormData(createInitialFormState(member))
+    setFormData(initialFormState)
     setIsSubmitting(false)
-  }, [member, open])
+    setIsStartDatePickerOpen(false)
+  }, [initialFormState, open])
+
+  const selectedStartDate = useMemo(
+    () => parseDateInputValue(formData.startDate),
+    [formData.startDate],
+  )
+  const displayedStartDate = useMemo(
+    () => (selectedStartDate ? format(selectedStartDate, 'MMM d, yyyy') : 'Select a date'),
+    [selectedStartDate],
+  )
+  const existingBeginTime = useMemo(
+    () => getAccessDateTimeValue(member.beginTime),
+    [member.beginTime],
+  )
+  const existingEndTime = useMemo(
+    () => getAccessDateTimeValue(member.endTime),
+    [member.endTime],
+  )
+  const hasChanges = useMemo(() => {
+    const currentState = normalizeEditMemberFormState(formData)
+    const initialState = normalizeEditMemberFormState(initialFormState)
+
+    return JSON.stringify(currentState) !== JSON.stringify(initialState)
+  }, [formData, initialFormState])
+  const hasAccessWindowChanged = useMemo(() => {
+    const currentState = normalizeEditMemberFormState(formData)
+    const initialState = normalizeEditMemberFormState(initialFormState)
+
+    return (
+      currentState.startDate !== initialState.startDate ||
+      currentState.startTime !== initialState.startTime ||
+      currentState.duration !== initialState.duration
+    )
+  }, [formData, initialFormState])
 
   const calculatedEndDate = useMemo(
     () =>
@@ -100,12 +158,40 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
     () => (calculatedEndDate ? buildEndTimeValue(calculatedEndDate) : null),
     [calculatedEndDate],
   )
-  const displayedEndTime = calculatedEndTime ?? member.endTime
+  const submittedBeginTime = hasAccessWindowChanged ? calculatedBeginTime : existingBeginTime
+  const submittedEndTime = hasAccessWindowChanged ? calculatedEndTime : existingEndTime
+  const displayedEndTime = hasAccessWindowChanged ? calculatedEndTime : calculatedEndTime ?? member.endTime
+  const isEmailValid = useMemo(
+    () => !formData.email || emailSchema.safeParse(formData.email).success,
+    [formData.email],
+  )
+  const isFormValid = useMemo(() => {
+    if (!formData.name.trim() || !isEmailValid) {
+      return false
+    }
+
+    if (hasAccessWindowChanged) {
+      return Boolean(formData.startDate && formData.duration && calculatedBeginTime && calculatedEndTime)
+    }
+
+    return Boolean(submittedBeginTime && submittedEndTime)
+  }, [
+    calculatedBeginTime,
+    calculatedEndTime,
+    formData.duration,
+    formData.name,
+    formData.startDate,
+    hasAccessWindowChanged,
+    isEmailValid,
+    submittedBeginTime,
+    submittedEndTime,
+  ])
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       setIsSubmitting(false)
-      setFormData(createInitialFormState(member))
+      setIsStartDatePickerOpen(false)
+      setFormData(initialFormState)
     }
 
     onOpenChange(nextOpen)
@@ -113,38 +199,13 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    let nextBeginTime: string
+    let nextEndTime: string
 
     if (!formData.name.trim()) {
       toast({
         title: 'Full name required',
         description: 'Enter the member’s full name before saving.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    if (!formData.startDate || !calculatedBeginTime) {
-      toast({
-        title: 'Start date required',
-        description: 'Choose a valid access start date and time.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    if (!formData.duration) {
-      toast({
-        title: 'Duration required',
-        description: 'Choose how long this member should have access.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    if (!calculatedEndTime) {
-      toast({
-        title: 'End date unavailable',
-        description: 'The selected duration could not be converted into an access end date.',
         variant: 'destructive',
       })
       return
@@ -159,6 +220,48 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
       return
     }
 
+    if (hasAccessWindowChanged) {
+      if (!formData.startDate || !calculatedBeginTime) {
+        toast({
+          title: 'Start date required',
+          description: 'Choose a valid access start date and time.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      if (!formData.duration) {
+        toast({
+          title: 'Duration required',
+          description: 'Choose how long this member should have access.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      if (!calculatedEndTime) {
+        toast({
+          title: 'End date unavailable',
+          description: 'The selected duration could not be converted into an access end date.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      nextBeginTime = calculatedBeginTime
+      nextEndTime = calculatedEndTime
+    } else if (!submittedBeginTime || !submittedEndTime) {
+      toast({
+        title: 'Access window unavailable',
+        description: 'This member’s current access window could not be read. Update the start date and duration before saving.',
+        variant: 'destructive',
+      })
+      return
+    } else {
+      nextBeginTime = submittedBeginTime
+      nextEndTime = submittedEndTime
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -169,12 +272,16 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
         email: formData.email.trim() || null,
         phone: formData.phone.trim() || null,
         remark: formData.remark.trim() || null,
-        beginTime: calculatedBeginTime,
-        endTime: calculatedEndTime,
+        beginTime: nextBeginTime,
+        endTime: nextEndTime,
       }
       const { member: updatedMember, warning } = await updateMember(member.id, payload)
 
       handleOpenChange(false)
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) }),
+      ])
       onSuccess?.()
 
       toast({
@@ -332,18 +439,38 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
             <div className="grid content-start gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="edit-start-date">Start Date</Label>
-                <Input
-                  id="edit-start-date"
-                  type="date"
-                  value={formData.startDate}
-                  onChange={(event) =>
-                    setFormData((currentFormData) => ({
-                      ...currentFormData,
-                      startDate: event.target.value,
-                    }))
-                  }
-                  required
-                />
+                <Popover open={isStartDatePickerOpen} onOpenChange={setIsStartDatePickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="edit-start-date"
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-between px-3 text-left font-normal"
+                      disabled={isSubmitting}
+                    >
+                      <span>{displayedStartDate}</span>
+                      <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedStartDate ?? undefined}
+                      defaultMonth={selectedStartDate ?? undefined}
+                      onSelect={(date) => {
+                        if (!date) {
+                          return
+                        }
+
+                        setFormData((currentFormData) => ({
+                          ...currentFormData,
+                          startDate: formatDateInputValue(date),
+                        }))
+                        setIsStartDatePickerOpen(false)
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
                 <div className="grid gap-2">
                   <Label htmlFor="edit-start-time" className="text-xs text-muted-foreground">
                     Start Time
@@ -427,7 +554,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || !formData.duration || !calculatedBeginTime || !calculatedEndTime}
+              disabled={isSubmitting || !hasChanges || !isFormValid}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
               {isSubmitting ? 'Saving...' : 'Save Changes'}
