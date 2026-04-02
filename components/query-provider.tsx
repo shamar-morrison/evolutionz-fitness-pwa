@@ -10,7 +10,7 @@ function createQueryClient() {
         staleTime: Infinity,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
-        retry: false,
+        retry: 2,
       },
     },
   })
