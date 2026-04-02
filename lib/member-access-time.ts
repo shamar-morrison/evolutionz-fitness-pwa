@@ -1,22 +1,51 @@
-import { addMonths, addWeeks, addYears, subDays } from 'date-fns'
+import { addDays, subDays } from 'date-fns'
 
 export type MemberDurationValue =
+  | '1_day'
   | '1_week'
+  | '2_weeks'
   | '1_month'
+  | '2_months'
   | '3_months'
+  | '4_months'
+  | '5_months'
   | '6_months'
-  | '1_year'
+  | '9_months'
+  | '12_months'
+  | '13_months'
 
 export const MEMBER_DURATION_OPTIONS: Array<{
   value: MemberDurationValue
   label: string
 }> = [
+  { value: '1_day', label: '1 Day' },
   { value: '1_week', label: '1 Week' },
+  { value: '2_weeks', label: '2 Weeks' },
   { value: '1_month', label: '1 Month' },
+  { value: '2_months', label: '2 Months' },
   { value: '3_months', label: '3 Months' },
+  { value: '4_months', label: '4 Months' },
+  { value: '5_months', label: '5 Months' },
   { value: '6_months', label: '6 Months' },
-  { value: '1_year', label: '1 Year' },
+  { value: '9_months', label: '9 Months' },
+  { value: '12_months', label: '12 Months' },
+  { value: '13_months', label: '13 Months / 1 Year' },
 ]
+
+const MEMBER_DURATION_DAYS: Record<MemberDurationValue, number> = {
+  '1_day': 1,
+  '1_week': 7,
+  '2_weeks': 14,
+  '1_month': 28,
+  '2_months': 56,
+  '3_months': 84,
+  '4_months': 112,
+  '5_months': 140,
+  '6_months': 168,
+  '9_months': 252,
+  '12_months': 336,
+  '13_months': 364,
+}
 
 const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/
 const timePattern = /^(\d{2}):(\d{2})(?::(\d{2}))?$/
@@ -125,16 +154,7 @@ export function calculateInclusiveEndDate(
     return null
   }
 
-  const exclusiveEndDate =
-    duration === '1_week'
-      ? addWeeks(startDate, 1)
-      : duration === '1_month'
-        ? addMonths(startDate, 1)
-        : duration === '3_months'
-          ? addMonths(startDate, 3)
-          : duration === '6_months'
-            ? addMonths(startDate, 6)
-            : addYears(startDate, 1)
+  const exclusiveEndDate = addDays(startDate, MEMBER_DURATION_DAYS[duration])
   const inclusiveEndDate = subDays(exclusiveEndDate, 1)
 
   return formatDateInputValue(inclusiveEndDate)

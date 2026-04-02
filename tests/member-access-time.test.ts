@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  calculateInclusiveEndDate,
   findMatchingMemberDuration,
   getAccessDateInputValue,
   getAccessTimeInputValue,
@@ -11,20 +12,26 @@ describe('member access time helpers', () => {
     expect(getAccessTimeInputValue('2026-03-30T00:00:00.000Z')).toBe('00:00:00')
   })
 
+  it('calculates fixed-day inclusive end dates for supported durations', () => {
+    expect(calculateInclusiveEndDate('2026-03-30', '1_day')).toBe('2026-03-30')
+    expect(calculateInclusiveEndDate('2026-03-30', '1_month')).toBe('2026-04-26')
+    expect(calculateInclusiveEndDate('2026-03-30', '13_months')).toBe('2027-03-28')
+  })
+
   it('matches a persisted access window back to a supported duration', () => {
     expect(
       findMatchingMemberDuration(
         '2026-03-30T08:00:00.000Z',
-        '2026-04-29T23:59:59.000Z',
+        '2026-04-12T23:59:59.000Z',
       ),
-    ).toBe('1_month')
+    ).toBe('2_weeks')
   })
 
   it('returns null when the persisted end date does not map to a supported duration', () => {
     expect(
       findMatchingMemberDuration(
         '2026-03-30T08:00:00.000Z',
-        '2026-04-30T23:59:59.000Z',
+        '2026-04-13T23:59:59.000Z',
       ),
     ).toBeNull()
   })
