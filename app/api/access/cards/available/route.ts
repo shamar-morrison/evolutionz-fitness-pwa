@@ -16,13 +16,57 @@ type ExistingCardRow = {
   status: CardStatus | null
 }
 
+type PersistenceErrorDetails = {
+  message: string
+  code: string | null
+  details: string | null
+  hint: string | null
+}
+
+class SyncedAvailableCardsPersistenceError extends Error {
+  details: PersistenceErrorDetails
+
+  constructor(message: string, details: PersistenceErrorDetails) {
+    super(message)
+    this.name = 'SyncedAvailableCardsPersistenceError'
+    this.details = details
+  }
+}
+
 function normalizeText(value: string | null | undefined) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function getPersistenceErrorDetails(error: unknown): PersistenceErrorDetails {
+  const values =
+    typeof error === 'object' && error !== null
+      ? (error as Partial<Record<keyof PersistenceErrorDetails, unknown>>)
+      : {}
+
+  const message =
+    typeof values.message === 'string'
+      ? values.message
+      : error instanceof Error
+        ? error.message
+        : 'Unknown Supabase persistence error.'
+
+  return {
+    message,
+    code: typeof values.code === 'string' ? values.code : null,
+    details: typeof values.details === 'string' ? values.details : null,
+    hint: typeof values.hint === 'string' ? values.hint : null,
+  }
+}
+
+function createPersistenceError(prefix: string, error: unknown) {
+  const details = getPersistenceErrorDetails(error)
+
+  return new SyncedAvailableCardsPersistenceError(`${prefix}: ${details.message}`, details)
+}
+
 async function persistSyncedAvailableCards(cards: AvailableAccessCard[]) {
   if (cards.length === 0) {
-    return
+    return 0
   }
 
   const supabase = getSupabaseAdminClient()
@@ -55,11 +99,23 @@ async function persistSyncedAvailableCards(cards: AvailableAccessCard[]) {
       employee_no: null,
     }))
 
-  if (missingRows.length > 0) {
-    const { error } = await supabase.from('cards').insert(missingRows)
+  let syncedCardsCount = 0
 
-    if (error) {
-      throw new Error(`Failed to insert synced cards: ${error.message}`)
+  if (missingRows.length > 0) {
+    try {
+      const { data, error } = await supabase.from('cards').insert(missingRows).select('card_no')
+
+      if (error) {
+        throw createPersistenceError('Failed to insert synced cards', error)
+      }
+
+      syncedCardsCount += Array.isArray(data) ? data.length : 0
+    } catch (error) {
+      if (error instanceof SyncedAvailableCardsPersistenceError) {
+        throw error
+      }
+
+      throw createPersistenceError('Failed to insert synced cards', error)
     }
   }
 
@@ -83,16 +139,32 @@ async function persistSyncedAvailableCards(cards: AvailableAccessCard[]) {
       updateValues.card_code = card.cardCode
     }
 
-    const { error } = await supabase
-      .from('cards')
-      .update(updateValues)
-      .eq('card_no', card.cardNo)
-      .eq('status', 'available')
+    try {
+      const { data, error } = await supabase
+        .from('cards')
+        .update(updateValues)
+        .eq('card_no', card.cardNo)
+        .eq('status', 'available')
+        .select('card_no')
+        .maybeSingle()
 
-    if (error) {
-      throw new Error(`Failed to update synced card ${card.cardNo}: ${error.message}`)
+      if (error) {
+        throw createPersistenceError(`Failed to update synced card ${card.cardNo}`, error)
+      }
+
+      if (data) {
+        syncedCardsCount += 1
+      }
+    } catch (error) {
+      if (error instanceof SyncedAvailableCardsPersistenceError) {
+        throw error
+      }
+
+      throw createPersistenceError(`Failed to update synced card ${card.cardNo}`, error)
     }
   }
+
+  return syncedCardsCount
 }
 
 export async function GET() {
@@ -152,12 +224,11 @@ export async function POST() {
 
     if (job.status === 'done') {
       const syncedCards = normalizeSyncedAvailableAccessCards(job.result)
-
-      await persistSyncedAvailableCards(syncedCards)
+      const persistedCardsCount = await persistSyncedAvailableCards(syncedCards)
 
       return NextResponse.json({
         ok: true,
-        syncedCards: syncedCards.length,
+        syncedCards: persistedCardsCount,
       })
     }
 
@@ -170,6 +241,17 @@ export async function POST() {
       { status: job.httpStatus },
     )
   } catch (error) {
+    if (error instanceof SyncedAvailableCardsPersistenceError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: error.message,
+          details: error.details,
+        },
+        { status: 500 },
+      )
+    }
+
     const message =
       error instanceof Error ? error.message : 'Unexpected server error while syncing cards.'
 

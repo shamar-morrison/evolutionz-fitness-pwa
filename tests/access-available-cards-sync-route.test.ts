@@ -13,6 +13,9 @@ import { POST } from '@/app/api/access/cards/available/route'
 
 type QueryError = {
   message: string
+  code?: string | null
+  details?: string | null
+  hint?: string | null
 }
 
 type StoredCardRow = {
@@ -38,6 +41,7 @@ function createSyncCardsAdminClient({
   selectError = null,
   insertError = null,
   updateErrorsByCardNo = {},
+  updateNoRowsByCardNo = {},
 }: {
   pollResults?: Array<{
     data: {
@@ -52,6 +56,7 @@ function createSyncCardsAdminClient({
   selectError?: QueryError | null
   insertError?: QueryError | null
   updateErrorsByCardNo?: Record<string, QueryError | undefined>
+  updateNoRowsByCardNo?: Record<string, boolean | undefined>
 } = {}) {
   const { client: accessControlClient, insertedJobs } = createFakeAccessControlClient({
     pollResults,
@@ -117,21 +122,27 @@ function createSyncCardsAdminClient({
           insert(rows: Array<{ card_no: string; card_code: string | null; status: 'available'; employee_no: null }>) {
             insertedCardPayloads.push(rows)
 
-            if (!insertError) {
-              for (const row of rows) {
-                cardsTable.set(row.card_no, {
-                  card_no: row.card_no,
-                  card_code: row.card_code,
-                  status: row.status,
-                  employee_no: row.employee_no,
-                })
-              }
-            }
+            return {
+              select(columns: string) {
+                expect(columns).toBe('card_no')
 
-            return Promise.resolve({
-              data: null,
-              error: insertError,
-            })
+                if (!insertError) {
+                  for (const row of rows) {
+                    cardsTable.set(row.card_no, {
+                      card_no: row.card_no,
+                      card_code: row.card_code,
+                      status: row.status,
+                      employee_no: row.employee_no,
+                    })
+                  }
+                }
+
+                return Promise.resolve({
+                  data: insertError ? null : rows.map((row) => ({ card_no: row.card_no })),
+                  error: insertError,
+                })
+              },
+            }
           },
           update(values: { status: 'available'; employee_no: null; card_code?: string }) {
             return {
@@ -148,25 +159,35 @@ function createSyncCardsAdminClient({
                       values,
                     })
 
-                    const updateError = updateErrorsByCardNo[value] ?? null
+                    return {
+                      select(columns: string) {
+                        expect(columns).toBe('card_no')
 
-                    if (!updateError) {
-                      const card = cardsTable.get(value)
+                        return {
+                          maybeSingle() {
+                            const updateError = updateErrorsByCardNo[value] ?? null
+                            const shouldReturnNoRow = updateNoRowsByCardNo[value] ?? false
+                            const card = cardsTable.get(value)
+                            const canUpdate =
+                              !updateError && !shouldReturnNoRow && card?.status === 'available'
 
-                      if (card && card.status === 'available') {
-                        card.status = values.status
-                        card.employee_no = values.employee_no
+                            if (canUpdate) {
+                              card.status = values.status
+                              card.employee_no = values.employee_no
 
-                        if ('card_code' in values) {
-                          card.card_code = values.card_code ?? null
+                              if ('card_code' in values) {
+                                card.card_code = values.card_code ?? null
+                              }
+                            }
+
+                            return Promise.resolve({
+                              data: canUpdate ? { card_no: value } : null,
+                              error: updateError,
+                            })
+                          },
                         }
-                      }
+                      },
                     }
-
-                    return Promise.resolve({
-                      data: null,
-                      error: updateError,
-                    })
                   },
                 }
               },
@@ -276,7 +297,7 @@ describe('POST /api/access/cards/available', () => {
     })
     await expect(response.json()).resolves.toEqual({
       ok: true,
-      syncedCards: 4,
+      syncedCards: 3,
     })
   })
 
@@ -374,7 +395,12 @@ describe('POST /api/access/cards/available', () => {
           error: null,
         },
       ],
-      insertError: { message: 'insert exploded' },
+      insertError: {
+        message: 'insert exploded',
+        code: '23505',
+        details: 'duplicate key value violates unique constraint',
+        hint: 'Ensure card numbers remain unique.',
+      },
     })
 
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -385,6 +411,12 @@ describe('POST /api/access/cards/available', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Failed to insert synced cards: insert exploded',
+      details: {
+        message: 'insert exploded',
+        code: '23505',
+        details: 'duplicate key value violates unique constraint',
+        hint: 'Ensure card numbers remain unique.',
+      },
     })
   })
 
@@ -405,7 +437,12 @@ describe('POST /api/access/cards/available', () => {
         { card_no: '0101', card_code: null, status: 'available', employee_no: 'stale-user' },
       ],
       updateErrorsByCardNo: {
-        '0101': { message: 'update exploded' },
+        '0101': {
+          message: 'update exploded',
+          code: '40001',
+          details: 'row was updated concurrently',
+          hint: 'Retry the transaction.',
+        },
       },
     })
 
@@ -417,6 +454,60 @@ describe('POST /api/access/cards/available', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Failed to update synced card 0101: update exploded',
+      details: {
+        message: 'update exploded',
+        code: '40001',
+        details: 'row was updated concurrently',
+        hint: 'Retry the transaction.',
+      },
+    })
+  })
+
+  it('counts only rows that Supabase confirms were updated', async () => {
+    const { client, updatedCardPayloads, cardsTable } = createSyncCardsAdminClient({
+      pollResults: [
+        {
+          data: {
+            id: 'job-123',
+            status: 'done',
+            result: [{ cardNo: '0101', card_code: 'A18' }],
+            error: null,
+          },
+          error: null,
+        },
+      ],
+      existingCards: [
+        { card_no: '0101', card_code: null, status: 'available', employee_no: 'stale-user' },
+      ],
+      updateNoRowsByCardNo: {
+        '0101': true,
+      },
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST()
+
+    expect(response.status).toBe(200)
+    expect(updatedCardPayloads).toEqual([
+      {
+        cardNo: '0101',
+        values: {
+          status: 'available',
+          employee_no: null,
+          card_code: 'A18',
+        },
+      },
+    ])
+    expect(cardsTable.get('0101')).toEqual({
+      card_no: '0101',
+      card_code: null,
+      status: 'available',
+      employee_no: 'stale-user',
+    })
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      syncedCards: 0,
     })
   })
 })
