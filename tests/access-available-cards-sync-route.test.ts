@@ -313,7 +313,53 @@ describe('POST /api/access/cards/available', () => {
     })
     await expect(response.json()).resolves.toEqual({
       ok: true,
-      syncedCards: 4,
+      syncedCards: 2,
+    })
+  })
+
+  it('does not count available-to-available refreshes in syncedCards', async () => {
+    const { client, updatedCardPayloads, cardsTable } = createSyncCardsAdminClient({
+      pollResults: [
+        {
+          data: {
+            id: 'job-123',
+            status: 'done',
+            result: [{ cardNo: '0101', card_code: 'A18' }],
+            error: null,
+          },
+          error: null,
+        },
+      ],
+      existingCards: [
+        { card_no: '0101', card_code: null, status: 'available', employee_no: 'stale-user' },
+      ],
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST()
+
+    expect(response.status).toBe(200)
+    expect(updatedCardPayloads).toEqual([
+      {
+        cardNo: '0101',
+        statusFilter: 'available',
+        values: {
+          status: 'available',
+          employee_no: null,
+          card_code: 'A18',
+        },
+      },
+    ])
+    expect(cardsTable.get('0101')).toEqual({
+      card_no: '0101',
+      card_code: 'A18',
+      status: 'available',
+      employee_no: null,
+    })
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      syncedCards: 0,
     })
   })
 
@@ -527,7 +573,7 @@ describe('POST /api/access/cards/available', () => {
     })
   })
 
-  it('counts only rows that Supabase confirms were updated', async () => {
+  it('counts only assigned rows that Supabase confirms were updated', async () => {
     const { client, updatedCardPayloads, cardsTable } = createSyncCardsAdminClient({
       pollResults: [
         {
@@ -541,7 +587,7 @@ describe('POST /api/access/cards/available', () => {
         },
       ],
       existingCards: [
-        { card_no: '0101', card_code: null, status: 'available', employee_no: 'stale-user' },
+        { card_no: '0101', card_code: null, status: 'assigned', employee_no: 'stale-user' },
       ],
       updateNoRowsByCardNo: {
         '0101': true,
@@ -556,7 +602,7 @@ describe('POST /api/access/cards/available', () => {
     expect(updatedCardPayloads).toEqual([
       {
         cardNo: '0101',
-        statusFilter: 'available',
+        statusFilter: 'assigned',
         values: {
           status: 'available',
           employee_no: null,
@@ -567,7 +613,7 @@ describe('POST /api/access/cards/available', () => {
     expect(cardsTable.get('0101')).toEqual({
       card_no: '0101',
       card_code: null,
-      status: 'available',
+      status: 'assigned',
       employee_no: 'stale-user',
     })
     await expect(response.json()).resolves.toEqual({

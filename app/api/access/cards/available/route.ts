@@ -99,7 +99,8 @@ async function persistSyncedAvailableCards(cards: AvailableAccessCard[]) {
       employee_no: null,
     }))
 
-  let syncedCardsCount = 0
+  let insertedCardsCount = 0
+  let reassignedCardsCount = 0
 
   if (missingRows.length > 0) {
     try {
@@ -109,7 +110,7 @@ async function persistSyncedAvailableCards(cards: AvailableAccessCard[]) {
         throw createPersistenceError('Failed to insert synced cards', error)
       }
 
-      syncedCardsCount += Array.isArray(data) ? data.length : 0
+      insertedCardsCount += Array.isArray(data) ? data.length : 0
     } catch (error) {
       if (error instanceof SyncedAvailableCardsPersistenceError) {
         throw error
@@ -158,8 +159,8 @@ async function persistSyncedAvailableCards(cards: AvailableAccessCard[]) {
         throw createPersistenceError(`Failed to update synced card ${card.cardNo}`, error)
       }
 
-      if (data) {
-        syncedCardsCount += 1
+      if (data && currentStatus === 'assigned') {
+        reassignedCardsCount += 1
       }
     } catch (error) {
       if (error instanceof SyncedAvailableCardsPersistenceError) {
@@ -170,7 +171,7 @@ async function persistSyncedAvailableCards(cards: AvailableAccessCard[]) {
     }
   }
 
-  return syncedCardsCount
+  return insertedCardsCount + reassignedCardsCount
 }
 
 export async function GET() {
