@@ -122,7 +122,13 @@ async function persistSyncedAvailableCards(cards: AvailableAccessCard[]) {
   for (const card of cards) {
     const existingCard = existingCardsByNumber.get(card.cardNo)
 
-    if (!existingCard || existingCard.status !== 'available') {
+    if (!existingCard) {
+      continue
+    }
+
+    const currentStatus = existingCard.status
+
+    if (currentStatus !== 'available' && currentStatus !== 'assigned') {
       continue
     }
 
@@ -144,7 +150,7 @@ async function persistSyncedAvailableCards(cards: AvailableAccessCard[]) {
         .from('cards')
         .update(updateValues)
         .eq('card_no', card.cardNo)
-        .eq('status', 'available')
+        .eq('status', currentStatus)
         .select('card_no')
         .maybeSingle()
 

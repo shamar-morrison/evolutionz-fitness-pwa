@@ -25,6 +25,8 @@ type StoredCardRow = {
   employee_no: string | null
 }
 
+type UpdatableStoredCardStatus = 'available' | 'assigned'
+
 function createSyncCardsAdminClient({
   pollResults = [
     {
@@ -72,6 +74,7 @@ function createSyncCardsAdminClient({
   > = []
   const updatedCardPayloads: Array<{
     cardNo: string
+    statusFilter: UpdatableStoredCardStatus
     values: {
       status: 'available'
       employee_no: null
@@ -152,10 +155,12 @@ function createSyncCardsAdminClient({
                 return {
                   eq(nextColumn: string, nextValue: string) {
                     expect(nextColumn).toBe('status')
-                    expect(nextValue).toBe('available')
+                    expect(['available', 'assigned']).toContain(nextValue)
+                    const statusFilter = nextValue as UpdatableStoredCardStatus
 
                     updatedCardPayloads.push({
                       cardNo: value,
+                      statusFilter,
                       values,
                     })
 
@@ -169,7 +174,7 @@ function createSyncCardsAdminClient({
                             const shouldReturnNoRow = updateNoRowsByCardNo[value] ?? false
                             const card = cardsTable.get(value)
                             const canUpdate =
-                              !updateError && !shouldReturnNoRow && card?.status === 'available'
+                              !updateError && !shouldReturnNoRow && card?.status === statusFilter
 
                             if (canUpdate) {
                               card.status = values.status
@@ -257,6 +262,7 @@ describe('POST /api/access/cards/available', () => {
     expect(updatedCardPayloads).toEqual([
       {
         cardNo: '0101',
+        statusFilter: 'available',
         values: {
           status: 'available',
           employee_no: null,
@@ -264,7 +270,17 @@ describe('POST /api/access/cards/available', () => {
         },
       },
       {
+        cardNo: '0102',
+        statusFilter: 'assigned',
+        values: {
+          status: 'available',
+          employee_no: null,
+          card_code: 'B2',
+        },
+      },
+      {
         cardNo: '0103',
+        statusFilter: 'available',
         values: {
           status: 'available',
           employee_no: null,
@@ -279,9 +295,9 @@ describe('POST /api/access/cards/available', () => {
     })
     expect(cardsTable.get('0102')).toEqual({
       card_no: '0102',
-      card_code: 'KEEP',
-      status: 'assigned',
-      employee_no: '000611',
+      card_code: 'B2',
+      status: 'available',
+      employee_no: null,
     })
     expect(cardsTable.get('0103')).toEqual({
       card_no: '0103',
@@ -297,7 +313,55 @@ describe('POST /api/access/cards/available', () => {
     })
     await expect(response.json()).resolves.toEqual({
       ok: true,
-      syncedCards: 3,
+      syncedCards: 4,
+    })
+  })
+
+  it('skips suspended_lost and disabled cards during sync persistence', async () => {
+    const { client, insertedCardPayloads, updatedCardPayloads, cardsTable } =
+      createSyncCardsAdminClient({
+        pollResults: [
+          {
+            data: {
+              id: 'job-123',
+              status: 'done',
+              result: [
+                { cardNo: '0105', card_code: 'L5' },
+                { cardNo: '0106', card_code: 'D6' },
+              ],
+              error: null,
+            },
+            error: null,
+          },
+        ],
+        existingCards: [
+          { card_no: '0105', card_code: 'OLD-L5', status: 'suspended_lost', employee_no: '000105' },
+          { card_no: '0106', card_code: 'OLD-D6', status: 'disabled', employee_no: '000106' },
+        ],
+      })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST()
+
+    expect(response.status).toBe(200)
+    expect(insertedCardPayloads).toEqual([])
+    expect(updatedCardPayloads).toEqual([])
+    expect(cardsTable.get('0105')).toEqual({
+      card_no: '0105',
+      card_code: 'OLD-L5',
+      status: 'suspended_lost',
+      employee_no: '000105',
+    })
+    expect(cardsTable.get('0106')).toEqual({
+      card_no: '0106',
+      card_code: 'OLD-D6',
+      status: 'disabled',
+      employee_no: '000106',
+    })
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      syncedCards: 0,
     })
   })
 
@@ -492,6 +556,7 @@ describe('POST /api/access/cards/available', () => {
     expect(updatedCardPayloads).toEqual([
       {
         cardNo: '0101',
+        statusFilter: 'available',
         values: {
           status: 'available',
           employee_no: null,
