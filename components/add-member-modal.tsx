@@ -138,14 +138,22 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       return
     }
 
-    setFormData((currentFormData) => ({
-      ...currentFormData,
-      selectedInventoryCardNo: availableCards.some(
+    setFormData((currentFormData) => {
+      const nextSelectedInventoryCardNo = availableCards.some(
         (card) => card.cardNo === currentFormData.selectedInventoryCardNo,
       )
         ? currentFormData.selectedInventoryCardNo
-        : getDefaultCardNo(availableCards),
-    }))
+        : getDefaultCardNo(availableCards)
+
+      if (nextSelectedInventoryCardNo === currentFormData.selectedInventoryCardNo) {
+        return currentFormData
+      }
+
+      return {
+        ...currentFormData,
+        selectedInventoryCardNo: nextSelectedInventoryCardNo,
+      }
+    })
   }, [availableCards, open])
 
   const handleOpenChange = (nextOpen: boolean) => {

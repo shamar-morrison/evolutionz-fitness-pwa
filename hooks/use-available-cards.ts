@@ -9,6 +9,8 @@ type UseAvailableCardsOptions = {
   enabled?: boolean
 }
 
+const EMPTY_AVAILABLE_CARDS: AvailableAccessCard[] = []
+
 export function useAvailableCards({ enabled = true }: UseAvailableCardsOptions = {}) {
   const availableCardsQuery = useQuery<AvailableAccessCard[], Error>({
     queryKey: queryKeys.cards.available,
@@ -18,7 +20,7 @@ export function useAvailableCards({ enabled = true }: UseAvailableCardsOptions =
   })
 
   return {
-    cards: availableCardsQuery.data ?? [],
+    cards: availableCardsQuery.data ?? EMPTY_AVAILABLE_CARDS,
     isLoading: enabled ? availableCardsQuery.isLoading || availableCardsQuery.isFetching : false,
     error: availableCardsQuery.error ? availableCardsQuery.error.message : null,
     refetch: () => availableCardsQuery.refetch(),
