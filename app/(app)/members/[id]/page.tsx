@@ -429,7 +429,7 @@ export default function MemberDetailPage() {
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Begin Date</p>
+                <p className="text-sm text-muted-foreground">Start Date</p>
                 <p className="font-medium">{formatAccessDate(member.beginTime, 'long')}</p>
               </div>
               <div className="space-y-1">

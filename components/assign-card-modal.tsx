@@ -1,8 +1,11 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
+import { format } from 'date-fns'
 import { useEffect, useMemo, useState } from 'react'
+import { Calendar as CalendarIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
 import {
   Dialog,
   DialogContent,
@@ -11,8 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -27,9 +30,14 @@ import { formatAvailableAccessCardLabel } from '@/lib/available-cards'
 import {
   buildBeginTimeValue,
   buildEndTimeValue,
+  calculateInclusiveEndDate,
+  findMatchingMemberDuration,
   formatAccessDate,
   formatDateInputValue,
   getAccessDateInputValue,
+  MEMBER_DURATION_OPTIONS,
+  parseDateInputValue,
+  type MemberDurationValue,
 } from '@/lib/member-access-time'
 import { assignMemberCard } from '@/lib/member-actions'
 import { buildMemberDisplayName } from '@/lib/member-name'
@@ -45,8 +53,8 @@ type AssignCardModalProps = {
 
 type AssignCardFormState = {
   selectedInventoryCardNo: string
-  beginDate: string
-  endDate: string
+  startDate: string
+  duration: MemberDurationValue | ''
 }
 
 function getDefaultCardNo(cards: Array<{ cardNo: string }>) {
@@ -55,13 +63,13 @@ function getDefaultCardNo(cards: Array<{ cardNo: string }>) {
 
 function createInitialFormState(member: Member, now: Date = new Date()): AssignCardFormState {
   const today = formatDateInputValue(now)
-  const beginDate = getAccessDateInputValue(member.beginTime) || today
-  const endDate = getAccessDateInputValue(member.endTime) || beginDate
+  const startDate = getAccessDateInputValue(member.beginTime) || today
+  const duration = findMatchingMemberDuration(member.beginTime, member.endTime) ?? ''
 
   return {
     selectedInventoryCardNo: '',
-    beginDate,
-    endDate,
+    startDate,
+    duration,
   }
 }
 
@@ -74,6 +82,7 @@ export function AssignCardModal({
   const queryClient = useQueryClient()
   const [formData, setFormData] = useState<AssignCardFormState>(() => createInitialFormState(member))
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isStartDatePickerOpen, setIsStartDatePickerOpen] = useState(false)
   const {
     cards: availableCards,
     isLoading: isCardsLoading,
@@ -86,18 +95,29 @@ export function AssignCardModal({
     () => availableCards.find((card) => card.cardNo === formData.selectedInventoryCardNo) ?? null,
     [availableCards, formData.selectedInventoryCardNo],
   )
+  const selectedStartDate = useMemo(
+    () => parseDateInputValue(formData.startDate),
+    [formData.startDate],
+  )
+  const displayedStartDate = useMemo(
+    () => (selectedStartDate ? format(selectedStartDate, 'MMM d, yyyy') : 'Select a date'),
+    [selectedStartDate],
+  )
+  const calculatedEndDate = useMemo(
+    () =>
+      formData.duration
+        ? calculateInclusiveEndDate(formData.startDate, formData.duration)
+        : null,
+    [formData.duration, formData.startDate],
+  )
   const calculatedBeginTime = useMemo(
-    () => buildBeginTimeValue(formData.beginDate, '00:00:00'),
-    [formData.beginDate],
+    () => buildBeginTimeValue(formData.startDate, '00:00:00'),
+    [formData.startDate],
   )
   const calculatedEndTime = useMemo(
-    () => buildEndTimeValue(formData.endDate),
-    [formData.endDate],
+    () => (calculatedEndDate ? buildEndTimeValue(calculatedEndDate) : null),
+    [calculatedEndDate],
   )
-  const hasInvalidAccessWindow =
-    Boolean(formData.beginDate) &&
-    Boolean(formData.endDate) &&
-    formData.endDate < formData.beginDate
   const memberDisplayName = buildMemberDisplayName(member.name, member.cardCode)
   const progressDescription = isSubmitting
     ? `Assigning the selected access card to ${memberDisplayName}.`
@@ -136,6 +156,7 @@ export function AssignCardModal({
     if (!open) {
       setFormData(createInitialFormState(member))
       setIsSubmitting(false)
+      setIsStartDatePickerOpen(false)
       return
     }
 
@@ -148,6 +169,7 @@ export function AssignCardModal({
   const resetModalState = () => {
     setFormData(createInitialFormState(member))
     setIsSubmitting(false)
+    setIsStartDatePickerOpen(false)
   }
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -174,28 +196,28 @@ export function AssignCardModal({
       return
     }
 
-    if (!formData.beginDate || !calculatedBeginTime) {
+    if (!formData.startDate || !calculatedBeginTime) {
       toast({
-        title: 'Begin date required',
-        description: 'Choose a valid begin date before assigning the card.',
+        title: 'Start date required',
+        description: 'Choose a valid start date before assigning the card.',
         variant: 'destructive',
       })
       return
     }
 
-    if (!formData.endDate || !calculatedEndTime) {
+    if (!formData.duration) {
       toast({
-        title: 'End date required',
-        description: 'Choose a valid end date before assigning the card.',
+        title: 'Duration required',
+        description: 'Choose how long this member should have access.',
         variant: 'destructive',
       })
       return
     }
 
-    if (hasInvalidAccessWindow) {
+    if (!calculatedEndDate || !calculatedEndTime) {
       toast({
-        title: 'Invalid access window',
-        description: 'End date must be on or after the begin date.',
+        title: 'End date unavailable',
+        description: 'The selected duration could not be converted into an access end date.',
         variant: 'destructive',
       })
       return
@@ -305,56 +327,76 @@ export function AssignCardModal({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="assign-begin-date">Begin Date</Label>
-                <Input
-                  id="assign-begin-date"
-                  type="date"
-                  value={formData.beginDate}
-                  onChange={(event) => {
-                    const nextBeginDate = event.target.value
+                <Label htmlFor="assign-start-date">Start Date</Label>
+                <Popover open={isStartDatePickerOpen} onOpenChange={setIsStartDatePickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="assign-start-date"
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-between px-3 text-left font-normal"
+                      disabled={isSubmitting}
+                    >
+                      <span>{displayedStartDate}</span>
+                      <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedStartDate ?? undefined}
+                      defaultMonth={selectedStartDate ?? undefined}
+                      onSelect={(date) => {
+                        if (!date) {
+                          return
+                        }
 
-                    setFormData((currentFormData) => ({
-                      ...currentFormData,
-                      beginDate: nextBeginDate,
-                      endDate:
-                        !currentFormData.endDate || currentFormData.endDate < nextBeginDate
-                          ? nextBeginDate
-                          : currentFormData.endDate,
-                    }))
-                  }}
-                  required
-                  disabled={isSubmitting}
-                />
+                        setFormData((currentFormData) => ({
+                          ...currentFormData,
+                          startDate: formatDateInputValue(date),
+                        }))
+                        setIsStartDatePickerOpen(false)
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="assign-end-date">End Date</Label>
-                <Input
-                  id="assign-end-date"
-                  type="date"
-                  value={formData.endDate}
-                  onChange={(event) =>
+                <Label htmlFor="assign-duration">Duration</Label>
+                <Select
+                  value={formData.duration}
+                  onValueChange={(value: MemberDurationValue) =>
                     setFormData((currentFormData) => ({
                       ...currentFormData,
-                      endDate: event.target.value,
+                      duration: value,
                     }))
                   }
-                  min={formData.beginDate || undefined}
-                  required
                   disabled={isSubmitting}
-                />
+                >
+                  <SelectTrigger id="assign-duration">
+                    <SelectValue placeholder="Select duration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MEMBER_DURATION_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
             <div className="grid gap-2 rounded-lg border bg-muted/30 p-4">
               <Label>Access Window</Label>
               <p className="text-lg font-semibold">
-                {calculatedBeginTime && calculatedEndTime && !hasInvalidAccessWindow
+                {calculatedBeginTime && calculatedEndTime
                   ? `${formatAccessDate(calculatedBeginTime, 'long')} to ${formatAccessDate(calculatedEndTime, 'long')}`
-                  : 'Choose valid begin and end dates'}
+                  : 'Choose a start date and duration'}
               </p>
               <p className="text-xs text-muted-foreground">
-                Access begins at 00:00:00 on the begin date and ends at 23:59:59 on the end date.
+                Access begins at 00:00:00 on the start date and ends at 23:59:59 on the calculated end date.
               </p>
             </div>
           </div>
@@ -374,9 +416,9 @@ export function AssignCardModal({
                 isSubmitting ||
                 !selectedInventoryCard ||
                 isCardsLoading ||
+                !formData.duration ||
                 !calculatedBeginTime ||
-                !calculatedEndTime ||
-                hasInvalidAccessWindow
+                !calculatedEndTime
               }
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >

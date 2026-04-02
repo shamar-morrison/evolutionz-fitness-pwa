@@ -54,7 +54,7 @@ export function MembersTable({ members }: MembersTableProps) {
             <TableHead className="h-14 px-4 text-sm font-semibold">Card ID</TableHead>
             <TableHead className="h-14 px-4 text-sm font-semibold">Type</TableHead>
             <TableHead className="h-14 px-4 text-sm font-semibold">Status</TableHead>
-            <TableHead className="h-14 px-4 text-sm font-semibold">Begin Date</TableHead>
+            <TableHead className="h-14 px-4 text-sm font-semibold">Start Date</TableHead>
             <TableHead className="h-14 px-4 text-sm font-semibold">End Date</TableHead>
           </TableRow>
         </TableHeader>
