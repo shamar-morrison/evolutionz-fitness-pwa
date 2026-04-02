@@ -40,33 +40,6 @@ import { getMemberCardActionState } from '@/lib/member-card-action-state'
 import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
 import { toast } from '@/hooks/use-toast'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, User } from 'lucide-react'
-import { cn } from '@/lib/utils'
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) {
-    return 'Not set'
-  }
-
-  const date = new Date(dateStr)
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Not set'
-  }
-
-  return date.toLocaleDateString('en-JM', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-JM', {
-    style: 'currency',
-    currency: 'JMD',
-    minimumFractionDigits: 0,
-  }).format(amount)
-}
 
 export default function MemberDetailPage() {
   const params = useParams()
@@ -446,18 +419,6 @@ export default function MemberDetailPage() {
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">End Date</p>
                 <p className="font-medium">{formatAccessDate(member.endTime, 'long')}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Balance</p>
-                <p
-                  className={cn('font-medium', member.balance > 0 ? 'text-red-600' : 'text-foreground')}
-                >
-                  {formatCurrency(member.balance)}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Member Since</p>
-                <p className="font-medium">{formatDate(member.createdAt)}</p>
               </div>
             </div>
 

@@ -38,8 +38,6 @@ function createUnassignAdminClient({
       photo_url: null,
       begin_time: '2026-03-30T00:00:00Z',
       end_time: '2026-07-15T23:59:59Z',
-      balance: 0,
-      created_at: '2026-03-30T14:15:16Z',
       updated_at: '2026-03-30T14:20:16Z',
     },
     {
@@ -56,8 +54,6 @@ function createUnassignAdminClient({
       photo_url: null,
       begin_time: '2026-03-30T00:00:00Z',
       end_time: '2026-07-15T23:59:59Z',
-      balance: 0,
-      created_at: '2026-03-30T14:15:16Z',
       updated_at: '2026-03-30T14:20:16Z',
     },
   ],
@@ -224,8 +220,6 @@ describe('POST /api/access/members/[id]/unassign-card', () => {
         photoUrl: null,
         beginTime: '2026-03-30T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
-        balance: 0,
-        createdAt: '2026-03-30T14:15:16.000Z',
       },
     })
   })

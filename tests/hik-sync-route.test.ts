@@ -26,9 +26,8 @@ describe('POST /api/hik/sync-members', () => {
             id: 'job-123',
             status: 'done',
             result: {
-              membersImported: 8,
-              cardsImported: 12,
-              placeholderSlotsSkipped: 3,
+              membersAdded: 8,
+              membersUpdated: 12,
             },
             error: null,
           },
@@ -51,9 +50,8 @@ describe('POST /api/hik/sync-members', () => {
     await expect(response.json()).resolves.toEqual({
       ok: true,
       summary: {
-        membersImported: 8,
-        cardsImported: 12,
-        placeholderSlotsSkipped: 3,
+        membersAdded: 8,
+        membersUpdated: 12,
       },
     })
   })

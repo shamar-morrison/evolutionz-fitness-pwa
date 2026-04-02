@@ -39,8 +39,6 @@ export type Member = {
   photoUrl: string | null
   beginTime: string | null // ISO date string
   endTime: string | null // ISO date string
-  balance: number // JMD, amount owed to gym
-  createdAt: string
 }
 
 export type MemberRecord = {
@@ -57,8 +55,6 @@ export type MemberRecord = {
   photo_url: string | null
   begin_time: string | null
   end_time: string | null
-  balance: number
-  created_at: string
   updated_at: string
 }
 
@@ -70,9 +66,8 @@ export type CardRecord = {
 }
 
 export type MemberSyncSummary = {
-  membersImported: number
-  cardsImported: number
-  placeholderSlotsSkipped: number
+  membersAdded: number
+  membersUpdated: number
 }
 
 // User & Auth Types

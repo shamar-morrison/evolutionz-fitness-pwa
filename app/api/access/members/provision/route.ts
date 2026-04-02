@@ -80,7 +80,6 @@ type ProvisioningAdminClient = AccessControlJobsClient & {
       photo_url: string | null
       begin_time: string
       end_time: string
-      balance: number
     }): {
       select(columns: string): {
         single(): QueryResult<MemberRecord>
@@ -413,7 +412,6 @@ async function insertMemberRecordInSupabase(
       photo_url: null,
       begin_time: input.beginTime,
       end_time: input.endTime,
-      balance: 0,
     })
     .select(MEMBER_RECORD_SELECT)
     .single()

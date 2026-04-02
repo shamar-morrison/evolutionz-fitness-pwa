@@ -4,7 +4,7 @@ import { getCleanMemberName } from '@/lib/member-name'
 import type { Card, CardRecord, Member, MemberRecord } from '@/types'
 
 export const MEMBER_RECORD_SELECT =
-  'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, balance, created_at, updated_at'
+  'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, updated_at'
 
 type CardLookupEntry = Pick<Card, 'cardCode' | 'status' | 'lostAt'>
 
@@ -27,8 +27,6 @@ const memberSchema = z.object({
   photoUrl: z.string().trim().min(1).nullable(),
   beginTime: z.string().trim().min(1).nullable(),
   endTime: z.string().trim().min(1).nullable(),
-  balance: z.number(),
-  createdAt: z.string().trim().min(1, 'Created timestamp is required.'),
 })
 
 const membersResponseSchema = z.object({
@@ -137,7 +135,6 @@ export function mapMemberRecordToMemberWithCardCode(
   const cardNo = getAssignedCardNo(record.card_no)
   const card = cardNo ? cardByCardNo.get(cardNo) ?? null : null
   const cardCode = card?.cardCode ?? null
-  const createdAt = normalizeTimestamp(record.created_at)
 
   return {
     id: normalizeText(record.id),
@@ -157,8 +154,6 @@ export function mapMemberRecordToMemberWithCardCode(
     photoUrl: normalizeNullableText(record.photo_url),
     beginTime: normalizeTimestamp(record.begin_time),
     endTime: normalizeTimestamp(record.end_time),
-    balance: Number.isFinite(record.balance) ? record.balance : 0,
-    createdAt: createdAt ?? normalizeText(record.created_at),
   }
 }
 

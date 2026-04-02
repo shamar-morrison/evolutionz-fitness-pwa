@@ -229,8 +229,6 @@ describe('PATCH /api/members/[id]/edit', () => {
         photoUrl: null,
         beginTime: '2026-03-30T00:00:00.000Z',
         endTime: '2026-04-29T23:59:59.000Z',
-        balance: 0,
-        createdAt: '2026-03-30T14:15:16.000Z',
       },
     })
   })
@@ -385,8 +383,6 @@ describe('PATCH /api/members/[id]/edit', () => {
         photoUrl: null,
         beginTime: '2026-03-30T08:00:00.000Z',
         endTime: '2026-05-29T23:59:59.000Z',
-        balance: 0,
-        createdAt: '2026-03-30T14:15:16.000Z',
       },
       warning: 'Member updated but device sync failed. Please try again.',
     })

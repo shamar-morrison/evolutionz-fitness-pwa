@@ -105,8 +105,6 @@ function createProvisioningAdminClient({
       photo_url: null,
       begin_time: '2026-03-30T00:00:00Z',
       end_time: '2026-07-15T23:59:59Z',
-      balance: 0,
-      created_at: '2026-03-30T14:15:16Z',
       updated_at: '2026-03-30T14:15:16Z',
     },
     error: null,
@@ -184,7 +182,7 @@ function createProvisioningAdminClient({
             return {
               select(columns: string) {
                 expect(columns).toBe(
-                  'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, balance, created_at, updated_at',
+                  'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, updated_at',
                 )
 
                 return {
@@ -285,7 +283,6 @@ describe('POST /api/access/members/provision', () => {
         photo_url: null,
         begin_time: '2026-03-30T00:00:00',
         end_time: '2026-07-15T23:59:59',
-        balance: 0,
       },
     ])
     await expect(response.json()).resolves.toEqual({
@@ -308,8 +305,6 @@ describe('POST /api/access/members/provision', () => {
         photoUrl: null,
         beginTime: '2026-03-30T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
-        balance: 0,
-        createdAt: '2026-03-30T14:15:16.000Z',
       },
     })
   })
@@ -335,8 +330,6 @@ describe('POST /api/access/members/provision', () => {
           photo_url: null,
           begin_time: '2026-03-30T00:00:00Z',
           end_time: '2026-07-15T23:59:59Z',
-          balance: 0,
-          created_at: '2026-03-30T14:15:16Z',
           updated_at: '2026-03-30T14:15:16Z',
         },
         error: null,
@@ -603,7 +596,6 @@ describe('POST /api/access/members/provision', () => {
         photo_url: null,
         begin_time: '2026-03-30T00:00:00',
         end_time: '2026-07-15T23:59:59',
-        balance: 0,
       },
     ])
     await expect(response.json()).resolves.toEqual({

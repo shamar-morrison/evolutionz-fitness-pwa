@@ -42,8 +42,6 @@ const persistedMember: Member = {
   photoUrl: null,
   beginTime: '2026-03-30T00:00:00.000Z',
   endTime: '2026-07-15T23:59:59.000Z',
-  balance: 0,
-  createdAt: '2026-03-30T14:15:16.000Z',
 }
 
 describe('member session override store', () => {

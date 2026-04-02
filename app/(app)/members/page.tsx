@@ -74,7 +74,7 @@ function MembersPageContent() {
 
       toast({
         title: 'Members synced',
-        description: `Sync complete — ${summary.membersImported} members and ${summary.cardsImported} cards imported`,
+        description: `Sync complete — ${summary.membersAdded} new members added, ${summary.membersUpdated} members updated.`,
       })
       refetch()
     } catch (syncError) {

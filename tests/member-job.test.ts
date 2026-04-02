@@ -133,8 +133,6 @@ describe('member job payload mapping', () => {
       photoUrl: null,
       beginTime: '2026-03-30T00:00:00',
       endTime: '2026-07-15T23:59:59',
-      balance: 0,
-      createdAt: now.toISOString(),
     })
   })
 
@@ -178,8 +176,6 @@ describe('member job payload mapping', () => {
       photoUrl: null,
       beginTime: '2026-03-30T00:00:00',
       endTime: '2026-07-15T23:59:59',
-      balance: 0,
-      createdAt: now.toISOString(),
     })
   })
 

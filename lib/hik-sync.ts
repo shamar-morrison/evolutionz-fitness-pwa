@@ -2,9 +2,8 @@ import { z } from 'zod'
 import type { MemberSyncSummary } from '@/types'
 
 const memberSyncSummarySchema = z.object({
-  membersImported: z.number().int().nonnegative(),
-  cardsImported: z.number().int().nonnegative(),
-  placeholderSlotsSkipped: z.number().int().nonnegative(),
+  membersAdded: z.number().int().nonnegative(),
+  membersUpdated: z.number().int().nonnegative(),
 })
 
 type SyncMembersSuccessResponse = {

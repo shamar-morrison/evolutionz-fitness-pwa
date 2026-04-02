@@ -295,7 +295,6 @@ export function buildSlotBackedMemberPreview(
     photoUrl?: string | null
   },
   {
-    now = new Date(),
     employeeNo = slot.employeeNo.trim(),
     deviceAccessState = 'ready',
     slotPlaceholderName = slot.placeholderName.trim(),
@@ -320,8 +319,6 @@ export function buildSlotBackedMemberPreview(
     photoUrl,
     beginTime,
     endTime,
-    balance: 0,
-    createdAt: now.toISOString(),
   }
 }
 
@@ -362,7 +359,5 @@ export function buildMemberPreview(
     photoUrl: null,
     beginTime,
     endTime,
-    balance: 0,
-    createdAt: now.toISOString(),
   }
 }

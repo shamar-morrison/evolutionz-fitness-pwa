@@ -135,8 +135,6 @@ describe('members API routes', () => {
           photoUrl: null,
           beginTime: '2026-03-30T00:00:00.000Z',
           endTime: null,
-          balance: 2500,
-          createdAt: '2026-03-30T14:15:16.000Z',
         },
       ],
     })
@@ -192,8 +190,6 @@ describe('members API routes', () => {
         photoUrl: null,
         beginTime: '2026-03-01T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
-        balance: 0,
-        createdAt: '2026-03-01T10:00:00.000Z',
       },
     })
   })
@@ -262,7 +258,7 @@ describe('members API routes', () => {
                   return {
                     select(columns: string) {
                       expect(columns).toBe(
-                        'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, balance, created_at, updated_at',
+                        'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, updated_at',
                       )
 
                       return {
@@ -336,8 +332,6 @@ describe('members API routes', () => {
         photoUrl: null,
         beginTime: '2026-03-01T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
-        balance: 0,
-        createdAt: '2026-03-01T10:00:00.000Z',
       },
     })
   })
