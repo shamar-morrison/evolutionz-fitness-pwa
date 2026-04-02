@@ -14,15 +14,15 @@ describe('member event helpers', () => {
     expect(mapMinorCodeToMemberEventStatus(999)).toBe('denied')
   })
 
-  it('converts Hik +08 timestamps to Jamaica ISO timestamps', () => {
-    expect(convertHikEventTimeToJamaicaIso('2026-04-02T14:17:00')).toBe(
-      '2026-04-02T01:17:00-05:00',
+  it('keeps the Hik wall-clock time and ignores the bogus timezone offset', () => {
+    expect(convertHikEventTimeToJamaicaIso('2025-03-03T16:25:49+08:00')).toBe(
+      '2025-03-03T16:25:49-05:00',
     )
   })
 
   it('formats member event times exactly like the member detail table', () => {
-    expect(formatMemberEventTime('2026-04-02T13:17:00-05:00')).toBe(
-      '2 Apr 2026, 01:17 pm',
+    expect(formatMemberEventTime('2025-03-03T16:25:49-05:00')).toBe(
+      '3 Mar 2025, 04:25 pm',
     )
   })
 })

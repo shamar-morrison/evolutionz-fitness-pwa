@@ -1,6 +1,5 @@
 export const MEMBER_EVENTS_PAGE_SIZE = 20
 const JAMAICA_TIME_ZONE = 'America/Jamaica'
-const SHANGHAI_OFFSET = '+08:00'
 const JAMAICA_OFFSET = '-05:00'
 
 export type MemberEventStatus =
@@ -66,23 +65,22 @@ function getFormatterParts(
   return values
 }
 
-function parseHikEventDate(value: string) {
+function parseHikEventLocalDateTime(value: string) {
   const normalizedValue = normalizeText(value)
 
   if (!normalizedValue) {
     return null
   }
 
-  const candidate = /(?:Z|[+-]\d{2}:\d{2})$/u.test(normalizedValue)
-    ? normalizedValue
-    : `${normalizedValue}${SHANGHAI_OFFSET}`
-  const date = new Date(candidate)
+  const match = normalizedValue.match(
+    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$/u,
+  )
 
-  if (Number.isNaN(date.getTime())) {
+  if (!match) {
     return null
   }
 
-  return date
+  return match[1]
 }
 
 export function mapMinorCodeToMemberEventStatus(minor: number): MemberEventStatus {
@@ -101,34 +99,13 @@ export function mapMinorCodeToMemberEventStatus(minor: number): MemberEventStatu
 }
 
 export function convertHikEventTimeToJamaicaIso(value: string) {
-  const date = parseHikEventDate(value)
+  const localDateTime = parseHikEventLocalDateTime(value)
 
-  if (!date) {
+  if (!localDateTime) {
     return null
   }
 
-  const parts = getFormatterParts(date, {
-    timeZone: JAMAICA_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }, 'en-CA')
-  const year = parts.get('year')
-  const month = parts.get('month')
-  const day = parts.get('day')
-  const hour = parts.get('hour')
-  const minute = parts.get('minute')
-  const second = parts.get('second')
-
-  if (!year || !month || !day || !hour || !minute || !second) {
-    return null
-  }
-
-  return `${year}-${month}-${day}T${hour}:${minute}:${second}${JAMAICA_OFFSET}`
+  return `${localDateTime}${JAMAICA_OFFSET}`
 }
 
 export function normalizeBridgeMemberEvents(input: unknown): MemberEventsResponse {

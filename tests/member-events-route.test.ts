@@ -87,7 +87,7 @@ describe('GET /api/members/[id]/events', () => {
             result: {
               events: [
                 {
-                  time: '2026-04-02T14:17:00',
+                  time: '2025-03-03T16:25:49+08:00',
                   major: 5,
                   minor: 1,
                   cardNo: '0102857149',
@@ -128,7 +128,7 @@ describe('GET /api/members/[id]/events', () => {
     await expect(response.json()).resolves.toEqual({
       events: [
         {
-          time: '2026-04-02T01:17:00-05:00',
+          time: '2025-03-03T16:25:49-05:00',
           status: 'success',
           major: 5,
           minor: 1,
