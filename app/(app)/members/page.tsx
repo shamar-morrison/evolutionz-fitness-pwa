@@ -19,6 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from '@/hooks/use-toast'
 import { syncMembersFromDevice } from '@/lib/hik-sync'
+import { syncAvailableAccessCards } from '@/lib/available-cards'
 import { RefreshCw, Search, UserPlus } from 'lucide-react'
 import type { MemberStatus, MemberType } from '@/types'
 
@@ -57,6 +58,7 @@ function MembersPageContent() {
   const [typeFilter, setTypeFilter] = useState<MemberType | 'All'>('All')
   const [showAddModal, setShowAddModal] = useState(searchParams.get('action') === 'add')
   const [isSyncingMembers, setIsSyncingMembers] = useState(false)
+  const [isSyncingCards, setIsSyncingCards] = useState(false)
 
   const { members, isLoading, error, refetch } = useMembers({
     search,
@@ -89,6 +91,28 @@ function MembersPageContent() {
     }
   }
 
+  const handleSyncCards = async () => {
+    setIsSyncingCards(true)
+
+    try {
+      const syncedCards = await syncAvailableAccessCards()
+
+      toast({
+        title: 'Cards synced',
+        description: `Sync complete — ${syncedCards} cards synced`,
+      })
+    } catch (syncError) {
+      toast({
+        title: 'Card sync failed',
+        description:
+          syncError instanceof Error ? syncError.message : 'Failed to sync cards from the device.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSyncingCards(false)
+    }
+  }
+
   if (error) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
@@ -106,15 +130,26 @@ function MembersPageContent() {
         </div>
         <div className="flex items-center gap-2">
           <RoleGuard role="admin">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleSyncMembers()}
-              disabled={isSyncingMembers}
-            >
-              {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-              Sync Members
-            </Button>
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleSyncCards()}
+                disabled={isSyncingCards}
+              >
+                {isSyncingCards ? <Spinner className="mr-2" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                Sync Cards
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleSyncMembers()}
+                disabled={isSyncingMembers}
+              >
+                {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                Sync Members
+              </Button>
+            </>
           </RoleGuard>
           <Button
             onClick={() => setShowAddModal(true)}

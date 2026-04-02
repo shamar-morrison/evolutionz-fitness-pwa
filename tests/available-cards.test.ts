@@ -3,6 +3,8 @@ import {
   fetchAvailableAccessCards,
   formatAvailableAccessCardLabel,
   normalizeAvailableAccessCards,
+  normalizeSyncedAvailableAccessCards,
+  syncAvailableAccessCards,
 } from '@/lib/available-cards'
 
 function createJsonResponse(body: unknown, status: number) {
@@ -44,6 +46,19 @@ describe('available card helpers', () => {
     ).toBe('A18 — 0102857149')
   })
 
+  it('normalizes synced bridge card results and prefers card codes', () => {
+    expect(
+      normalizeSyncedAvailableAccessCards([
+        { cardNo: '0104620061', card_code: null },
+        { cardNo: ' 0102857149 ', card_code: null },
+        { cardNo: '0102857149', card_code: ' A18 ' },
+      ]),
+    ).toEqual([
+      { cardNo: '0102857149', cardCode: 'A18' },
+      { cardNo: '0104620061', cardCode: null },
+    ])
+  })
+
   it('fetches available cards from the PWA route', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       createJsonResponse(
@@ -68,5 +83,41 @@ describe('available card helpers', () => {
       method: 'GET',
       cache: 'no-store',
     })
+  })
+
+  it('syncs available cards through the PWA route', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          syncedCards: 12,
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(syncAvailableAccessCards()).resolves.toBe(12)
+    expect(fetchMock).toHaveBeenCalledWith('/api/access/cards/available', {
+      method: 'POST',
+      cache: 'no-store',
+    })
+  })
+
+  it('throws when syncing available cards fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: false,
+          error: 'Bridge sync failed.',
+        },
+        502,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(syncAvailableAccessCards()).rejects.toThrow('Bridge sync failed.')
   })
 })
