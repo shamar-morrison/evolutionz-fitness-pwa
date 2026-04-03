@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
+  deleteMember,
   deleteMemberPhoto,
   recoverMemberCard,
   reactivateMember,
@@ -55,7 +56,14 @@ export default function MemberDetailPage() {
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null)
   const [activeDialog, setActiveDialog] = useState<
-    null | 'suspend' | 'reactivate' | 'unassign' | 'report-lost' | 'recover-card' | 'delete-photo'
+    | null
+    | 'suspend'
+    | 'reactivate'
+    | 'unassign'
+    | 'report-lost'
+    | 'recover-card'
+    | 'delete-photo'
+    | 'delete-member'
   >(null)
 
   const invalidateMemberQueries = () =>
@@ -71,6 +79,15 @@ export default function MemberDetailPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(memberId) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
+    ])
+
+  const invalidateDeletedMemberQueries = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.recentMembers }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
     ])
 
   const handleSuspendToggle = async () => {
@@ -215,6 +232,35 @@ export default function MemberDetailPage() {
     }
   }
 
+  const handleDeleteMember = async () => {
+    if (!member) return
+
+    setIsActionLoading(true)
+
+    try {
+      const result = await deleteMember(member.id)
+      setActiveDialog(null)
+      await invalidateDeletedMemberQueries()
+      toast({
+        title: 'Member deleted',
+        description:
+          result.warning ??
+          `${buildMemberDisplayName(member.name, member.cardCode)} was permanently deleted.`,
+      })
+      router.replace('/members')
+    } catch (error) {
+      console.error('Failed to delete member:', error)
+      toast({
+        title: 'Member deletion failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to delete this member.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   if (error) {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center gap-4">
@@ -259,7 +305,20 @@ export default function MemberDetailPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-1">
+        <Card className="relative lg:col-span-1">
+          <RoleGuard role="admin">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="absolute top-4 right-4 z-10 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setActiveDialog('delete-member')}
+              disabled={isActionLoading}
+              aria-label="Delete member"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </RoleGuard>
           <CardContent className="flex flex-col items-center pt-6">
             <div className="relative">
               <MemberAvatar
@@ -576,6 +635,19 @@ export default function MemberDetailPage() {
         confirmLabel="Delete Photo"
         cancelLabel="Cancel"
         onConfirm={() => void handleDeletePhoto()}
+        onCancel={() => setActiveDialog(null)}
+        isLoading={isActionLoading}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={activeDialog === 'delete-member'}
+        onOpenChange={(open) => setActiveDialog(open ? 'delete-member' : null)}
+        title="Delete member?"
+        description="This will permanently delete this member and unassign their card. This cannot be undone."
+        confirmLabel="Delete Member"
+        cancelLabel="Cancel"
+        onConfirm={() => void handleDeleteMember()}
         onCancel={() => setActiveDialog(null)}
         isLoading={isActionLoading}
         variant="destructive"

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   addMember,
   assignMemberCard,
+  deleteMember,
   deleteMemberPhoto,
   recoverMemberCard,
   reactivateMember,
@@ -473,6 +474,63 @@ describe('member actions', () => {
     })
     expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined()
     expect(member.photoUrl).toBeNull()
+  })
+
+  it('deletes a member through the member route', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await deleteMember('member-1')
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/members/member-1')
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      method: 'DELETE',
+    })
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined()
+    expect(result).toEqual({})
+  })
+
+  it('returns delete warnings from the member route', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          warning: 'The member was deleted, but the device user may need to be manually removed from iVMS.',
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(deleteMember('member-1')).resolves.toEqual({
+      warning: 'The member was deleted, but the device user may need to be manually removed from iVMS.',
+    })
+  })
+
+  it('propagates delete-member API errors', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: false,
+          error: 'Failed to delete member.',
+        },
+        500,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(deleteMember('member-1')).rejects.toThrow('Failed to delete member.')
   })
 
   it('unassigns a member card through the access route', async () => {

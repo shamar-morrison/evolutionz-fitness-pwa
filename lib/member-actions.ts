@@ -46,6 +46,11 @@ type MemberMutationSuccessResponse = {
   warning?: string
 }
 
+type DeleteMemberSuccessResponse = {
+  ok: true
+  warning?: string
+}
+
 export type AssignMemberCardData = {
   cardNo: string
   beginTime: string
@@ -179,6 +184,35 @@ async function requestMemberMutation(
   })
 
   return parseMemberMutationResponse(response, errorMessage)
+}
+
+async function requestDeleteMember(
+  path: `/api/members/${string}`,
+  errorMessage: string,
+) {
+  const response = await fetch(path, {
+    method: 'DELETE',
+  })
+
+  let responseBody: DeleteMemberSuccessResponse | AccessControlJobErrorResponse | null = null
+
+  try {
+    responseBody = (await response.json()) as
+      | DeleteMemberSuccessResponse
+      | AccessControlJobErrorResponse
+  } catch {
+    responseBody = null
+  }
+
+  if (!response.ok || !responseBody || responseBody.ok === false) {
+    throw new Error(
+      responseBody && responseBody.ok === false ? responseBody.error : errorMessage,
+    )
+  }
+
+  return {
+    warning: typeof responseBody.warning === 'string' ? responseBody.warning : undefined,
+  }
 }
 
 export async function assignMemberCard(
@@ -351,6 +385,15 @@ export async function deleteMemberPhoto(id: string): Promise<Member> {
   })
 
   return response.member
+}
+
+export async function deleteMember(
+  id: string,
+): Promise<{ warning?: string }> {
+  return requestDeleteMember(
+    `/api/members/${encodeURIComponent(id)}`,
+    'Failed to delete member.',
+  )
 }
 
 export async function suspendMember(
