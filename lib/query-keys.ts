@@ -1,6 +1,8 @@
 export const queryKeys = {
   dashboard: {
     stats: ['dashboard', 'stats'] as const,
+    recentMembers: ['dashboard', 'recent-members'] as const,
+    expiringMembers: ['dashboard', 'expiring-members'] as const,
   },
   members: {
     all: ['members', 'all'] as const,

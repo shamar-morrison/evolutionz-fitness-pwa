@@ -81,6 +81,8 @@ function MembersPageContent() {
       })
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.recentMembers }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
       ])
     } catch (syncError) {

@@ -1,18 +1,19 @@
 'use client'
 
-import { useDashboard } from '@/hooks/use-dashboard'
 import { useDashboardStats } from '@/hooks/use-dashboard-stats'
+import {
+  ExpiringThisWeekCard,
+  RecentlyAddedMembersCard,
+} from '@/components/dashboard-member-panels'
 import { StatCard } from '@/components/stat-card'
-import { RecentActivity } from '@/components/recent-activity'
 import { QuickActions } from '@/components/quick-actions'
 import { Users, UserX, Clock3 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function DashboardPage() {
-  const { data: dashboardData, isLoading: isDashboardLoading, error: dashboardError } = useDashboard()
   const { data: stats, isLoading: isStatsLoading, error: statsError } = useDashboardStats()
 
-  if (dashboardError || statsError) {
+  if (statsError) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <p className="text-destructive">Failed to load dashboard data</p>
@@ -67,12 +68,10 @@ export default function DashboardPage() {
         <QuickActions />
       </div>
 
-      {/* Recent Activity */}
-      {isDashboardLoading ? (
-        <Skeleton className="h-96" />
-      ) : (
-        <RecentActivity events={dashboardData?.recentActivity ?? []} />
-      )}
+      <div className="grid gap-4 md:grid-cols-2">
+        <RecentlyAddedMembersCard />
+        <ExpiringThisWeekCard />
+      </div>
     </div>
   )
 }

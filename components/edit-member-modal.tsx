@@ -318,6 +318,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
       handleOpenChange(false)
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) }),
       ])

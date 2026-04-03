@@ -80,17 +80,6 @@ export type User = {
   role: UserRole
 }
 
-// Check-in Types
-export type CheckInStatus = 'success' | 'not_found' | 'expired' | 'suspended'
-
-export type CheckInEvent = {
-  id: string
-  memberId: string
-  memberName: string
-  status: CheckInStatus
-  timestamp: string
-}
-
 // Dashboard Types
 export type DashboardMembershipStats = {
   activeMembers: number
@@ -98,13 +87,12 @@ export type DashboardMembershipStats = {
   expiringSoon: number
 }
 
-export type DashboardStats = {
-  activeMembers: number
-  expiredMembers: number
-  checkInsToday: number
-}
+export type CheckInStatus = 'success' | 'not_found' | 'expired' | 'suspended'
 
-export type DashboardData = {
-  stats: DashboardStats
-  recentActivity: CheckInEvent[]
+export type DashboardMemberListItem = {
+  id: string
+  name: string
+  type: MemberType
+  status: MemberStatus
+  endTime: string | null
 }
