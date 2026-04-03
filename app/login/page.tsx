@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -15,6 +16,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -82,16 +84,26 @@ export default function LoginPage() {
                 <Label htmlFor="password" className="text-white/80">
                   Password
                 </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                  className="h-12 border-white/10 bg-white/5 text-white placeholder:text-white/35 transition-colors focus-visible:border-amber-400/50 focus-visible:ring-amber-400/20"
-                  placeholder="Enter your password"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    required
+                    className="h-12 border-white/10 bg-white/5 text-white placeholder:text-white/35 transition-colors focus-visible:border-amber-400/50 focus-visible:ring-amber-400/20 pr-12"
+                    placeholder="Enter your password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/80 transition-colors focus:outline-none"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
               <Button
