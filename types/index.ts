@@ -92,6 +92,12 @@ export type CheckInEvent = {
 }
 
 // Dashboard Types
+export type DashboardMembershipStats = {
+  activeMembers: number
+  expiredMembers: number
+  expiringSoon: number
+}
+
 export type DashboardStats = {
   activeMembers: number
   expiredMembers: number

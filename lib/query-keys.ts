@@ -1,4 +1,7 @@
 export const queryKeys = {
+  dashboard: {
+    stats: ['dashboard', 'stats'] as const,
+  },
   members: {
     all: ['members', 'all'] as const,
     detail: (id: string) => ['members', 'detail', id] as const,

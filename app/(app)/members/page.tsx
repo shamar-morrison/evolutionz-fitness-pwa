@@ -79,7 +79,10 @@ function MembersPageContent() {
         title: 'Members synced',
         description: `Sync complete — ${summary.membersAdded} new members added, ${summary.membersUpdated} members updated.`,
       })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.members.all })
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+      ])
     } catch (syncError) {
       toast({
         title: 'Sync failed',

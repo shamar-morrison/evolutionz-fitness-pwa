@@ -290,6 +290,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
 
       handleOpenChange(false)
       void Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
       ])

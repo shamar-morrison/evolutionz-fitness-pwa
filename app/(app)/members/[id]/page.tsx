@@ -60,12 +60,14 @@ export default function MemberDetailPage() {
 
   const invalidateMemberQueries = () =>
     Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(memberId) }),
     ])
 
   const invalidateMemberAndCardQueries = () =>
     Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(memberId) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
@@ -284,14 +286,6 @@ export default function MemberDetailPage() {
             <Badge variant="outline" className="mt-2">
               {member.type}
             </Badge>
-            <div className="mt-2 flex flex-col items-center gap-2">
-              <StatusBadge status={member.status} />
-              {member.deviceAccessState === 'released' ? (
-                <Badge className="bg-slate-500/15 text-slate-700 hover:bg-slate-500/25">
-                  Slot Released
-                </Badge>
-              ) : null}
-            </div>
 
             <div className="mt-6 w-full space-y-3">
               <RoleGuard role="admin">
