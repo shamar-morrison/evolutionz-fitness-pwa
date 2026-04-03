@@ -1,12 +1,19 @@
 import { NextResponse } from 'next/server'
 import { createAndWaitForAccessControlJob } from '@/lib/access-control-jobs'
 import { normalizeAvailableAccessSlots } from '@/lib/available-slots'
+import { requireAdminUser } from '@/lib/server-auth'
 
 const MAX_WAIT_MS = 60_000
 const TIMEOUT_ERROR = 'Fetch available slots request timed out after 60 seconds.'
 
 export async function GET() {
   try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const job = await createAndWaitForAccessControlJob({
       jobType: 'list_available_slots',
       payload: {},

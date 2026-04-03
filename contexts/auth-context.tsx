@@ -1,40 +1,119 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
-import type { User } from '@/types'
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
+import { createClient } from '@/lib/supabase/client'
+import type { Profile, UserRole } from '@/types'
 
 type AuthContextType = {
   user: User | null
-  signOut: () => Promise<void>
-  isLoading: boolean
+  profile: Profile | null
+  role: UserRole | null
+  loading: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const PROFILE_SELECT = 'id, name, email, role, title, created_at'
 
-// TODO: Replace with Supabase auth - this is a mock user for development
-const MOCK_USER: User = {
-  id: '1',
-  name: 'Marcus Johnson',
-  email: 'marcus@evolutionzfitness.com',
-  role: 'admin', // Change to 'staff' to test staff permissions
+async function readProfile(userId: string) {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('profiles')
+    .select(PROFILE_SELECT)
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to read profile ${userId}: ${error.message}`)
+  }
+
+  return (data as Profile | null) ?? null
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(MOCK_USER)
-  const [isLoading, setIsLoading] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const signOut = useCallback(async () => {
-    setIsLoading(true)
-    // TODO: Replace with Supabase signOut
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    setUser(null)
-    setIsLoading(false)
+  useEffect(() => {
+    const supabase = createClient()
+    let isMounted = true
+
+    async function syncSession(session: Session | null) {
+      const nextUser = session?.user ?? null
+
+      if (!nextUser) {
+        if (!isMounted) {
+          return
+        }
+
+        setUser(null)
+        setProfile(null)
+        setLoading(false)
+        return
+      }
+
+      try {
+        const nextProfile = await readProfile(nextUser.id)
+
+        if (!isMounted) {
+          return
+        }
+
+        setUser(nextUser)
+        setProfile(nextProfile)
+      } catch (error) {
+        console.error('Failed to sync authenticated profile:', error)
+
+        if (!isMounted) {
+          return
+        }
+
+        setUser(nextUser)
+        setProfile(null)
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void supabase.auth
+      .getSession()
+      .then((result: { data: { session: Session | null } }) => syncSession(result.data.session))
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+      setLoading(true)
+      void syncSession(session)
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
+  const value = useMemo<AuthContextType>(
+    () => ({
+      user,
+      profile,
+      role: profile?.role ?? null,
+      loading,
+    }),
+    [loading, profile, user],
+  )
+
   return (
-    <AuthContext.Provider value={{ user, signOut, isLoading }}>
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
   )
 }
 

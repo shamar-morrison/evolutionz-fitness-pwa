@@ -4,6 +4,7 @@ import {
   normalizeAvailableAccessCards,
   normalizeSyncedAvailableAccessCards,
 } from '@/lib/available-cards'
+import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import type { AvailableAccessCard, CardStatus } from '@/types'
 
@@ -176,6 +177,12 @@ async function persistSyncedAvailableCards(cards: AvailableAccessCard[]) {
 
 export async function GET() {
   try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const supabase = getSupabaseAdminClient()
     const { data, error } = await supabase
       .from('cards')
@@ -214,6 +221,12 @@ export async function GET() {
 
 export async function POST() {
   try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const job = await createAndWaitForAccessControlJob({
       jobType: 'sync_available_cards',
       payload: {},

@@ -10,6 +10,7 @@ import {
   readMemberWithCardCode,
   type MembersReadClient,
 } from '@/lib/members'
+import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 type QueryError = {
@@ -65,6 +66,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const { id } = await params
     const formData = await request.formData()
     const photo = formData.get('photo')
@@ -133,6 +140,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const { id } = await params
     const supabase = getSupabaseAdminClient() as unknown as MemberPhotoMutationClient
     const existingMember = await readMemberWithCardCode(supabase, id)

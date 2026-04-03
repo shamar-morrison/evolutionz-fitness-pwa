@@ -1,11 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createAndWaitForAccessControlJob } from '@/lib/access-control-jobs'
 import { resetAccessSlotJobRequestSchema } from '@/lib/member-job'
+import { requireAdminUser } from '@/lib/server-auth'
 
 const TIMEOUT_ERROR = 'Reset slot request timed out after 10 seconds.'
 
 export async function POST(request: Request) {
   try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const requestBody = await request.json()
     const input = resetAccessSlotJobRequestSchema.parse(requestBody)
 

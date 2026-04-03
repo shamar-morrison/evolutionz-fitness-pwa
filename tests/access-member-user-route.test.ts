@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createFakeAccessControlClient } from '@/tests/support/access-control-client'
+import { resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -9,6 +10,15 @@ vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdminClient: getSupabaseAdminClientMock,
 }))
 
+vi.mock('@/lib/server-auth', async () => {
+  const mod = await import('@/tests/support/server-auth')
+
+  return {
+    requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
+    requireAdminUser: mod.requireAdminUserMock,
+  }
+})
+
 import { POST } from '@/app/api/access/members/user/route'
 
 describe('POST /api/access/members/user', () => {
@@ -16,6 +26,7 @@ describe('POST /api/access/members/user', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
+    resetServerAuthMocks()
   })
 
   it('queues add_user with the bridge-native payload', async () => {

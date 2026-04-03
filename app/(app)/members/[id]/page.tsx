@@ -268,19 +268,21 @@ export default function MemberDetailPage() {
                 size="lg"
                 className="h-28 w-28 text-2xl"
               />
-              {avatarPhotoUrl ? (
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="outline"
-                  className="absolute bottom-0 right-0 z-10 size-8 rounded-full border-2 border-background shadow-sm"
-                  onClick={() => setActiveDialog('delete-photo')}
-                  disabled={isActionLoading}
-                  aria-label="Delete member photo"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              ) : null}
+              <RoleGuard role="admin">
+                {avatarPhotoUrl ? (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="absolute bottom-0 right-0 z-10 size-8 rounded-full border-2 border-background shadow-sm"
+                    onClick={() => setActiveDialog('delete-photo')}
+                    disabled={isActionLoading}
+                    aria-label="Delete member photo"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </RoleGuard>
             </div>
             <h2 className="mt-4 text-xl font-bold">{memberDisplayName}</h2>
             <Badge variant="outline" className="mt-2">

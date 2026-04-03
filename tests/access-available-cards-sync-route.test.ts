@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createFakeAccessControlClient } from '@/tests/support/access-control-client'
+import { resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -8,6 +9,15 @@ const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
 vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdminClient: getSupabaseAdminClientMock,
 }))
+
+vi.mock('@/lib/server-auth', async () => {
+  const mod = await import('@/tests/support/server-auth')
+
+  return {
+    requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
+    requireAdminUser: mod.requireAdminUserMock,
+  }
+})
 
 import { POST } from '@/app/api/access/cards/available/route'
 
@@ -209,6 +219,7 @@ describe('POST /api/access/cards/available', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
+    resetServerAuthMocks()
   })
 
   it('queues sync_available_cards and safely persists synced available cards', async () => {

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createFakeAccessControlClient } from '@/tests/support/access-control-client'
+import { resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -8,6 +9,15 @@ const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
 vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdminClient: getSupabaseAdminClientMock,
 }))
+
+vi.mock('@/lib/server-auth', async () => {
+  const mod = await import('@/tests/support/server-auth')
+
+  return {
+    requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
+    requireAdminUser: mod.requireAdminUserMock,
+  }
+})
 
 import { GET } from '@/app/api/members/[id]/events/route'
 
@@ -74,6 +84,7 @@ describe('GET /api/members/[id]/events', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
+    resetServerAuthMocks()
   })
 
   it('queues probe and fetch get_member_events jobs for page 0 and returns member events latest-first', async () => {

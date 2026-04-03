@@ -73,11 +73,13 @@ export type MemberSyncSummary = {
 // User & Auth Types
 export type UserRole = 'admin' | 'staff'
 
-export type User = {
+export type Profile = {
   id: string
   name: string
   email: string
   role: UserRole
+  title: string | null
+  created_at: string
 }
 
 // Dashboard Types

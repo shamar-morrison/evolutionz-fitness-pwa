@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server'
 import { readMembersWithCardCodes } from '@/lib/members'
+import { requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 export async function GET() {
   try {
+    const authResult = await requireAuthenticatedUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const supabase = getSupabaseAdminClient()
     const members = await readMembersWithCardCodes(supabase)
 

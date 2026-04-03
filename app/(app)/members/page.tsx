@@ -158,15 +158,15 @@ function MembersPageContent() {
                 {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                 Sync Members
               </Button>
+              <Button
+                onClick={() => setShowAddModal(true)}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add Member
+              </Button>
             </>
           </RoleGuard>
-          <Button
-            onClick={() => setShowAddModal(true)}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add Member
-          </Button>
         </div>
       </div>
 
@@ -225,10 +225,12 @@ function MembersPageContent() {
         <MembersTable members={members} />
       )}
 
-      <AddMemberModal
-        open={showAddModal}
-        onOpenChange={setShowAddModal}
-      />
+      <RoleGuard role="admin">
+        <AddMemberModal
+          open={showAddModal}
+          onOpenChange={setShowAddModal}
+        />
+      </RoleGuard>
     </div>
   )
 }

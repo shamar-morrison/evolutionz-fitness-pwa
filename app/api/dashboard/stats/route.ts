@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 type DashboardStatsClient = ReturnType<typeof getSupabaseAdminClient>
@@ -40,6 +41,12 @@ async function countExpiringSoon(
 
 export async function GET() {
   try {
+    const authResult = await requireAuthenticatedUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const supabase = getSupabaseAdminClient()
     const now = new Date()
     const sevenDaysFromNow = new Date(now)

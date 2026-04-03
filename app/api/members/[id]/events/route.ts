@@ -4,6 +4,7 @@ import {
   type AccessControlJobsClient,
 } from '@/lib/access-control-jobs'
 import { MEMBER_EVENTS_PAGE_SIZE, normalizeBridgeMemberEvents } from '@/lib/member-events'
+import { requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const MAX_WAIT_MS = 60_000
@@ -68,6 +69,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const authResult = await requireAuthenticatedUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const { id } = await params
     const { searchParams } = new URL(request.url)
     const page = parseNonNegativeInteger(searchParams.get('page'), 0)
@@ -112,7 +119,6 @@ export async function GET(
 
     const searchID = Date.now().toString()
 
-    // TODO: add admin role check once auth is fully wired up
     const probeJob = await requestMemberEvents({
       employeeNo,
       maxResults: 1,

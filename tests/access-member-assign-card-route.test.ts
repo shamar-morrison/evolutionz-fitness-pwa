@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MEMBER_RECORD_SELECT } from '@/lib/members'
 import { createFakeAccessControlClient } from '@/tests/support/access-control-client'
+import { resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -9,6 +10,15 @@ const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
 vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdminClient: getSupabaseAdminClientMock,
 }))
+
+vi.mock('@/lib/server-auth', async () => {
+  const mod = await import('@/tests/support/server-auth')
+
+  return {
+    requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
+    requireAdminUser: mod.requireAdminUserMock,
+  }
+})
 
 import { POST } from '@/app/api/access/members/[id]/assign-card/route'
 
@@ -248,6 +258,7 @@ describe('POST /api/access/members/[id]/assign-card', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
+    resetServerAuthMocks()
   })
 
   it('assigns an available card and returns the updated member', async () => {

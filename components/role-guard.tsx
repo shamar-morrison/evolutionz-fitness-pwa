@@ -11,14 +11,14 @@ type RoleGuardProps = {
 }
 
 export function RoleGuard({ role, children, fallback = null }: RoleGuardProps) {
-  const { user } = useAuth()
+  const { role: currentRole, loading } = useAuth()
 
-  if (!user) {
+  if (loading || !currentRole) {
     return fallback
   }
 
   // Admin can see everything, staff only sees staff-level content
-  if (role === 'admin' && user.role !== 'admin') {
+  if (role === 'admin' && currentRole !== 'admin') {
     return fallback
   }
 

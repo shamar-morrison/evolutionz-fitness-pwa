@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { hydrateMemberPhotoUrl, type MemberPhotoStorageClient } from '@/lib/member-photo-storage'
 import { MEMBER_RECORD_SELECT, readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
+import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const reactivateMemberRequestSchema = z.object({
@@ -13,6 +14,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const authResult = await requireAuthenticatedUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const { id } = await params
     const supabase = getSupabaseAdminClient() as unknown as MembersReadClient & MemberPhotoStorageClient
     const memberRecord = await readMemberWithCardCode(supabase, id)
@@ -50,12 +57,16 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const { id } = await params
     const requestBody = await request.json()
     const input = reactivateMemberRequestSchema.parse(requestBody)
     const supabase = getSupabaseAdminClient() as unknown as MembersReadClient
-
-    // TODO: add admin role check once auth is fully wired up
 
     const { data, error } = await (supabase.from('members') as unknown as {
       update(values: { status: 'Active' }): {

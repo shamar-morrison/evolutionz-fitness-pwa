@@ -1,11 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
 import { RoleGuard } from '@/components/role-guard'
+import { createClient } from '@/lib/supabase/client'
 import {
   LayoutDashboard,
   Users,
@@ -14,7 +15,6 @@ import {
   Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { toast } from '@/hooks/use-toast'
 
 type UnlockDoorResponse =
@@ -52,8 +52,10 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { user, signOut } = useAuth()
+  const router = useRouter()
+  const { user, profile, loading } = useAuth()
   const [unlockState, setUnlockState] = useState<'idle' | 'unlocking' | 'unlocked'>('idle')
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
   const handleUnlock = async () => {
     setUnlockState('unlocking')
@@ -81,6 +83,34 @@ export function Sidebar() {
       .toUpperCase()
       .slice(0, 2)
   }
+
+  const handleSignOut = async () => {
+    const supabase = createClient()
+    setIsSigningOut(true)
+
+    try {
+      const { error } = await supabase.auth.signOut()
+
+      if (error) {
+        throw error
+      }
+
+      router.push('/login')
+      router.refresh()
+    } catch (error) {
+      toast({
+        title: 'Sign out failed',
+        description: 'Unable to sign out right now.',
+        variant: 'destructive',
+      })
+      console.error('Failed to sign out:', error)
+    } finally {
+      setIsSigningOut(false)
+    }
+  }
+
+  const displayName = profile?.name ?? user?.email ?? 'Account'
+  const subtitle = profile?.title ?? user?.email ?? null
 
   return (
     <aside className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground">
@@ -149,27 +179,20 @@ export function Sidebar() {
           </Button>
         </RoleGuard>
 
-        {user && (
+        {user && !loading && (
           <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent p-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-foreground/10 text-sm font-semibold">
-              {getInitials(user.name)}
+              {getInitials(displayName)}
             </div>
             <div className="flex-1 overflow-hidden">
-              <p className="truncate text-sm font-medium">{user.name}</p>
-              <Badge
-                variant="secondary"
-                className={cn(
-                  'mt-0.5 text-xs uppercase',
-                  user.role === 'admin'
-                    ? 'bg-primary/20 text-primary'
-                    : 'bg-sidebar-foreground/20 text-sidebar-foreground/80'
-                )}
-              >
-                {user.role}
-              </Badge>
+              <p className="truncate text-sm font-medium">{displayName}</p>
+              <p className="truncate text-xs text-sidebar-foreground/65">
+                {subtitle ?? 'Signed in'}
+              </p>
             </div>
             <button
-              onClick={signOut}
+              onClick={() => void handleSignOut()}
+              disabled={isSigningOut}
               className="rounded-md p-2 text-sidebar-foreground/60 transition-colors hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground"
               title="Sign out"
             >

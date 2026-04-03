@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DASHBOARD_MEMBER_SELECT } from '@/lib/dashboard-members'
+import { resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -8,6 +9,15 @@ const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
 vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdminClient: getSupabaseAdminClientMock,
 }))
+
+vi.mock('@/lib/server-auth', async () => {
+  const mod = await import('@/tests/support/server-auth')
+
+  return {
+    requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
+    requireAdminUser: mod.requireAdminUserMock,
+  }
+})
 
 import { GET } from '@/app/api/dashboard/expiring-members/route'
 
@@ -120,6 +130,7 @@ describe('GET /api/dashboard/expiring-members', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
+    resetServerAuthMocks()
   })
 
   it('returns active members expiring in the next 7 days ordered by expiry date', async () => {

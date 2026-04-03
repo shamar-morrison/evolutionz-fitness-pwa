@@ -6,6 +6,7 @@ import {
 } from '@/lib/access-control-jobs'
 import { buildAddCardPayload } from '@/lib/member-job'
 import { MEMBER_RECORD_SELECT, readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
+import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const recoverCardRequestSchema = z.object({
@@ -30,12 +31,16 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const { id } = await params
     const requestBody = await request.json()
     const input = recoverCardRequestSchema.parse(requestBody)
     const supabase = getSupabaseAdminClient() as unknown as MembersReadClient & AccessControlJobsClient
-
-    // TODO: add admin role check once auth is fully wired up
 
     const currentMember = await readMemberWithCardCode(supabase, id)
 

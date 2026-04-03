@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DASHBOARD_MEMBER_SELECT } from '@/lib/dashboard-members'
+import { resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -8,6 +9,15 @@ const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
 vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdminClient: getSupabaseAdminClientMock,
 }))
+
+vi.mock('@/lib/server-auth', async () => {
+  const mod = await import('@/tests/support/server-auth')
+
+  return {
+    requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
+    requireAdminUser: mod.requireAdminUserMock,
+  }
+})
 
 import { GET } from '@/app/api/dashboard/recent-members/route'
 
@@ -104,6 +114,7 @@ describe('GET /api/dashboard/recent-members', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
+    resetServerAuthMocks()
   })
 
   it('returns the most recently created members with clean names and an 8-row limit', async () => {

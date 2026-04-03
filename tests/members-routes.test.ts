@@ -1,4 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  mockForbidden,
+  mockUnauthorized,
+  resetServerAuthMocks,
+} from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -7,6 +12,15 @@ const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
 vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdminClient: getSupabaseAdminClientMock,
 }))
+
+vi.mock('@/lib/server-auth', async () => {
+  const mod = await import('@/tests/support/server-auth')
+
+  return {
+    requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
+    requireAdminUser: mod.requireAdminUserMock,
+  }
+})
 
 import { GET as getMembers } from '@/app/api/members/route'
 import { GET as getMember, PATCH as patchMember } from '@/app/api/members/[id]/route'
@@ -104,6 +118,7 @@ describe('members API routes', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
+    resetServerAuthMocks()
   })
 
   it('returns mapped members from Supabase rows', async () => {
@@ -159,6 +174,17 @@ describe('members API routes', () => {
           endTime: null,
         },
       ],
+    })
+  })
+
+  it('returns 401 when the members list is requested without a session', async () => {
+    mockUnauthorized()
+
+    const response = await getMembers()
+
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Unauthorized',
     })
   })
 
@@ -266,6 +292,30 @@ describe('members API routes', () => {
         beginTime: '2026-03-01T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
       },
+    })
+  })
+
+  it('returns 403 when the member patch is requested by a non-admin user', async () => {
+    mockForbidden()
+
+    const response = await patchMember(
+      new Request('http://localhost/api/members/member-2', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'Active',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-2' }),
+      },
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Forbidden',
     })
   })
 

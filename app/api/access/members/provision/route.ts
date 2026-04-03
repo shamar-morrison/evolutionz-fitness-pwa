@@ -18,6 +18,7 @@ import {
   getNextShortEmployeeNo,
   provisionMemberAccessRequestSchema,
 } from '@/lib/member-job'
+import { requireAdminUser } from '@/lib/server-auth'
 import type { MemberGender, MemberRecord, MemberType } from '@/types'
 
 const CREATE_USER_TIMEOUT_ERROR = 'Create member request timed out after 10 seconds.'
@@ -505,6 +506,12 @@ async function createDeviceRollbackResponse(
 
 export async function POST(request: Request) {
   try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const requestBody = await request.json()
     const input = provisionMemberAccessRequestSchema.parse(requestBody)
     const now = new Date()

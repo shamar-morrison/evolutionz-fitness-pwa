@@ -1,11 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createAndWaitForAccessControlJob } from '@/lib/access-control-jobs'
+import { requireAdminUser } from '@/lib/server-auth'
 
 const DOOR_NUMBER = 1
 const TIMEOUT_ERROR = 'Unlock request timed out after 10 seconds.'
 
 export async function POST() {
   try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const job = await createAndWaitForAccessControlJob({
       jobType: 'unlock_door',
       payload: { doorNo: DOOR_NUMBER },

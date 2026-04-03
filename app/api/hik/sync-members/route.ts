@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAndWaitForAccessControlJob } from '@/lib/access-control-jobs'
 import { normalizeMemberSyncSummary } from '@/lib/hik-sync'
+import { requireAdminUser } from '@/lib/server-auth'
 
 const POLL_INTERVAL_MS = 2_000
 const MAX_WAIT_MS = 180_000
@@ -8,7 +9,12 @@ const TIMEOUT_ERROR = 'Sync members request timed out after 180 seconds.'
 
 export async function POST() {
   try {
-    // TODO: add admin role check once auth is fully wired up
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
     const job = await createAndWaitForAccessControlJob({
       jobType: 'sync_all_members',
       payload: {},
