@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export interface FileWithPreview {
   id: string
@@ -48,6 +48,24 @@ function generateId(): string {
   return Math.random().toString(36).slice(2, 11)
 }
 
+function revokeFilePreview(file: FileWithPreview) {
+  URL.revokeObjectURL(file.preview)
+}
+
+function revokeFilePreviews(files: FileWithPreview[]) {
+  for (const file of files) {
+    revokeFilePreview(file)
+  }
+}
+
+function getRemovedFiles(
+  currentFiles: FileWithPreview[],
+  nextFiles: FileWithPreview[],
+): FileWithPreview[] {
+  const nextIds = new Set(nextFiles.map((file) => file.id))
+  return currentFiles.filter((file) => !nextIds.has(file.id))
+}
+
 export function useFileUpload(
   options: UseFileUploadOptions = {},
 ): [FileUploadState, FileUploadActions] {
@@ -60,9 +78,26 @@ export function useFileUpload(
   } = options
 
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const filesRef = useRef<FileWithPreview[]>([])
   const [files, setFiles] = useState<FileWithPreview[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
+
+  const syncFiles = useCallback(
+    (nextFiles: FileWithPreview[]) => {
+      filesRef.current = nextFiles
+      setFiles(nextFiles)
+      onFilesChange?.(nextFiles)
+    },
+    [onFilesChange],
+  )
+
+  useEffect(() => {
+    return () => {
+      revokeFilePreviews(filesRef.current)
+      filesRef.current = []
+    }
+  }, [])
 
   const processFiles = useCallback(
     (incoming: File[]) => {
@@ -101,26 +136,28 @@ export function useFileUpload(
 
       setErrors(newErrors)
 
-      setFiles((prev) => {
-        const next = maxFiles === 1 ? accepted : [...prev, ...accepted].slice(0, maxFiles)
-        onFilesChange?.(next)
-        return next
-      })
+      const currentFiles = filesRef.current
+      const nextFiles =
+        maxFiles === 1
+          ? accepted.slice(0, 1)
+          : [...currentFiles, ...accepted].slice(0, maxFiles)
+
+      revokeFilePreviews(getRemovedFiles(currentFiles, nextFiles))
+      revokeFilePreviews(getRemovedFiles(accepted, nextFiles))
+      syncFiles(nextFiles)
     },
-    [accept, maxFiles, maxSize, onFilesChange],
+    [accept, maxFiles, maxSize, syncFiles],
   )
 
   const removeFile = useCallback(
     (id: string) => {
-      setFiles((prev) => {
-        const removed = prev.find((f) => f.id === id)
-        if (removed) URL.revokeObjectURL(removed.preview)
-        const next = prev.filter((f) => f.id !== id)
-        onFilesChange?.(next)
-        return next
-      })
+      const currentFiles = filesRef.current
+      const nextFiles = currentFiles.filter((file) => file.id !== id)
+
+      revokeFilePreviews(getRemovedFiles(currentFiles, nextFiles))
+      syncFiles(nextFiles)
     },
-    [onFilesChange],
+    [syncFiles],
   )
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {

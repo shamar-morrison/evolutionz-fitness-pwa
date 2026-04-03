@@ -40,9 +40,12 @@ import {
 import {
   addMember,
   MemberProvisioningError,
+  uploadMemberPhoto,
 } from '@/lib/member-actions'
+import { compressImage } from '@/lib/compress-image'
 import { queryKeys } from '@/lib/query-keys'
 import { useAvailableCards } from '@/hooks/use-available-cards'
+import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { formatAvailableAccessCardLabel } from '@/lib/available-cards'
 import { buildMemberDisplayName, hasUsableCardCode } from '@/lib/member-name'
 import { toast } from '@/hooks/use-toast'
@@ -94,6 +97,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
   const queryClient = useQueryClient()
   const [submissionStep, setSubmissionStep] = useState<'idle' | 'provisioning_member'>('idle')
   const [formData, setFormData] = useState<AddMemberFormState>(() => createInitialFormState())
+  const [photoFile, setPhotoFile] = useState<FileWithPreview | null>(null)
   const [isStartDatePickerOpen, setIsStartDatePickerOpen] = useState(false)
   const {
     cards: availableCards,
@@ -161,6 +165,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     if (!nextOpen) {
       setSubmissionStep('idle')
       setIsStartDatePickerOpen(false)
+      setPhotoFile(null)
       setFormData(createInitialFormState())
     }
 
@@ -264,6 +269,24 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           onStepChange: setSubmissionStep,
         },
       )
+
+      if (photoFile) {
+        try {
+          const compressedPhoto = await compressImage(photoFile.file)
+          await uploadMemberPhoto(member.id, compressedPhoto)
+          void queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) })
+        } catch (photoError) {
+          console.error('Failed to upload member photo:', photoError)
+          toast({
+            title: 'Photo upload failed',
+            description:
+              photoError instanceof Error
+                ? `${photoError.message} The member was saved without a photo.`
+                : 'The member was saved without a photo.',
+            variant: 'destructive',
+          })
+        }
+      }
 
       handleOpenChange(false)
       void Promise.all([
@@ -564,9 +587,8 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
             <div className="h-px bg-border" />
 
             {/* Row 7: Avatar — centered */}
-            {/* TODO: wire onFileChange to Supabase Storage upload */}
             <div className="flex justify-center py-2">
-              <Pattern />
+              <Pattern onFileChange={setPhotoFile} />
             </div>
 
             <div className="h-px bg-border" />

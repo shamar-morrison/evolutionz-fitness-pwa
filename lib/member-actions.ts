@@ -85,8 +85,41 @@ type MemberMutationPath =
   | `/api/access/members/${string}/unassign-card`
   | `/api/access/members/${string}/report-card-lost`
   | `/api/access/members/${string}/recover-card`
+  | `/api/members/${string}/photo`
   | `/api/members/${string}/edit`
   | `/api/members/${string}`
+
+async function parseMemberMutationResponse(
+  response: Response,
+  errorMessage: string,
+) {
+  let responseBody: MemberMutationSuccessResponse | AccessControlJobErrorResponse | null = null
+
+  try {
+    responseBody = (await response.json()) as
+      | MemberMutationSuccessResponse
+      | AccessControlJobErrorResponse
+  } catch {
+    responseBody = null
+  }
+
+  if (!response.ok || !responseBody || responseBody.ok === false) {
+    throw new Error(
+      responseBody && responseBody.ok === false ? responseBody.error : errorMessage,
+    )
+  }
+
+  const member = normalizeMember({ member: responseBody.member })
+
+  if (!member) {
+    throw new Error('Failed to read the updated member response.')
+  }
+
+  return {
+    member,
+    warning: responseBody.warning,
+  }
+}
 
 async function queueSlotJob(
   path: SlotJobPath,
@@ -128,45 +161,24 @@ async function requestMemberMutation(
     body,
     errorMessage,
   }: {
-    method: 'POST' | 'PATCH'
-    body: Record<string, unknown>
+    method: 'POST' | 'PATCH' | 'DELETE'
+    body?: Record<string, unknown>
     errorMessage: string
   },
 ) {
   const response = await fetch(path, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
+    ...(body
+      ? {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        }
+      : {}),
   })
 
-  let responseBody: MemberMutationSuccessResponse | AccessControlJobErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as
-      | MemberMutationSuccessResponse
-      | AccessControlJobErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(
-      responseBody && responseBody.ok === false ? responseBody.error : errorMessage,
-    )
-  }
-
-  const member = normalizeMember({ member: responseBody.member })
-
-  if (!member) {
-    throw new Error('Failed to read the updated member response.')
-  }
-
-  return {
-    member,
-    warning: responseBody.warning,
-  }
+  return parseMemberMutationResponse(response, errorMessage)
 }
 
 export async function assignMemberCard(
@@ -312,6 +324,33 @@ export async function updateMember(
     },
     errorMessage: 'Failed to update member.',
   })
+}
+
+export async function uploadMemberPhoto(
+  id: string,
+  photo: Blob,
+): Promise<Member> {
+  const formData = new FormData()
+
+  formData.append('photo', photo, `${id}.jpg`)
+
+  const response = await fetch(`/api/members/${encodeURIComponent(id)}/photo`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  const result = await parseMemberMutationResponse(response, 'Failed to upload member photo.')
+
+  return result.member
+}
+
+export async function deleteMemberPhoto(id: string): Promise<Member> {
+  const response = await requestMemberMutation(`/api/members/${encodeURIComponent(id)}/photo`, {
+    method: 'DELETE',
+    errorMessage: 'Failed to delete member photo.',
+  })
+
+  return response.member
 }
 
 export async function suspendMember(

@@ -1,7 +1,7 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { AssignCardModal } from '@/components/assign-card-modal'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
+  deleteMemberPhoto,
   recoverMemberCard,
   reactivateMember,
   reportMemberCardLost,
@@ -41,7 +42,7 @@ import { getMemberCardActionState } from '@/lib/member-card-action-state'
 import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
 import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
-import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, User } from 'lucide-react'
+import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, Trash2, User } from 'lucide-react'
 
 export default function MemberDetailPage() {
   const params = useParams()
@@ -52,8 +53,9 @@ export default function MemberDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showAssignCardModal, setShowAssignCardModal] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
+  const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null)
   const [activeDialog, setActiveDialog] = useState<
-    null | 'suspend' | 'reactivate' | 'unassign' | 'report-lost' | 'recover-card'
+    null | 'suspend' | 'reactivate' | 'unassign' | 'report-lost' | 'recover-card' | 'delete-photo'
   >(null)
 
   const invalidateMemberQueries = () =>
@@ -180,6 +182,37 @@ export default function MemberDetailPage() {
     }
   }
 
+  useEffect(() => {
+    setAvatarPhotoUrl(member?.photoUrl ?? null)
+  }, [member?.photoUrl])
+
+  const handleDeletePhoto = async () => {
+    if (!member) return
+
+    setIsActionLoading(true)
+
+    try {
+      await deleteMemberPhoto(member.id)
+      setAvatarPhotoUrl(null)
+      setActiveDialog(null)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) })
+      toast({
+        title: 'Photo deleted',
+        description: `${buildMemberDisplayName(member.name, member.cardCode)}’s photo was removed.`,
+      })
+    } catch (error) {
+      console.error('Failed to delete member photo:', error)
+      toast({
+        title: 'Photo deletion failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to delete this member photo.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   if (error) {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center gap-4">
@@ -226,7 +259,27 @@ export default function MemberDetailPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <CardContent className="flex flex-col items-center pt-6">
-            <MemberAvatar name={getCleanMemberName(member.name, member.cardCode)} size="lg" />
+            <div className="relative">
+              <MemberAvatar
+                name={getCleanMemberName(member.name, member.cardCode)}
+                photoUrl={avatarPhotoUrl}
+                size="lg"
+                className="h-28 w-28 text-2xl"
+              />
+              {avatarPhotoUrl ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="absolute bottom-0 right-0 z-10 size-8 rounded-full border-2 border-background shadow-sm"
+                  onClick={() => setActiveDialog('delete-photo')}
+                  disabled={isActionLoading}
+                  aria-label="Delete member photo"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              ) : null}
+            </div>
             <h2 className="mt-4 text-xl font-bold">{memberDisplayName}</h2>
             <Badge variant="outline" className="mt-2">
               {member.type}
@@ -517,6 +570,19 @@ export default function MemberDetailPage() {
         onConfirm={() => void handleRecoverCard()}
         onCancel={() => setActiveDialog(null)}
         isLoading={isActionLoading}
+      />
+
+      <ConfirmDialog
+        open={activeDialog === 'delete-photo'}
+        onOpenChange={(open) => setActiveDialog(open ? 'delete-photo' : null)}
+        title="Delete member photo?"
+        description="This will permanently delete the member's photo. This action cannot be undone."
+        confirmLabel="Delete Photo"
+        cancelLabel="Cancel"
+        onConfirm={() => void handleDeletePhoto()}
+        onCancel={() => setActiveDialog(null)}
+        isLoading={isActionLoading}
+        variant="destructive"
       />
 
       <EditMemberModal

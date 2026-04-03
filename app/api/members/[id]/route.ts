@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { hydrateMemberPhotoUrl, type MemberPhotoStorageClient } from '@/lib/member-photo-storage'
 import { MEMBER_RECORD_SELECT, readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -13,10 +14,10 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const supabase = getSupabaseAdminClient() as unknown as MembersReadClient
-    const member = await readMemberWithCardCode(supabase, id)
+    const supabase = getSupabaseAdminClient() as unknown as MembersReadClient & MemberPhotoStorageClient
+    const memberRecord = await readMemberWithCardCode(supabase, id)
 
-    if (!member) {
+    if (!memberRecord) {
       return NextResponse.json(
         {
           ok: false,
@@ -25,6 +26,8 @@ export async function GET(
         { status: 404 },
       )
     }
+
+    const member = await hydrateMemberPhotoUrl(supabase, memberRecord)
 
     return NextResponse.json({
       ok: true,

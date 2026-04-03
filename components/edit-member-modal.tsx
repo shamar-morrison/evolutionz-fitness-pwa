@@ -41,7 +41,9 @@ import {
   parseDateInputValue,
   type MemberDurationValue,
 } from '@/lib/member-access-time'
-import { updateMember, type UpdateMemberData } from '@/lib/member-actions'
+import { compressImage } from '@/lib/compress-image'
+import { updateMember, uploadMemberPhoto, type UpdateMemberData } from '@/lib/member-actions'
+import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
 import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
@@ -84,6 +86,21 @@ function normalizeEditMemberFormState(formState: EditMemberFormState) {
   }
 }
 
+export function hasEditMemberChanges(
+  initialFormState: EditMemberFormState,
+  formData: EditMemberFormState,
+  hasNewPhoto = false,
+) {
+  if (hasNewPhoto) {
+    return true
+  }
+
+  const currentState = normalizeEditMemberFormState(formData)
+  const initialState = normalizeEditMemberFormState(initialFormState)
+
+  return JSON.stringify(currentState) !== JSON.stringify(initialState)
+}
+
 function createInitialFormState(member: Member): EditMemberFormState {
   return {
     name: getCleanMemberName(member.name, member.cardCode),
@@ -102,6 +119,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
   const queryClient = useQueryClient()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isStartDatePickerOpen, setIsStartDatePickerOpen] = useState(false)
+  const [photoFile, setPhotoFile] = useState<FileWithPreview | null>(null)
   const initialFormState = useMemo(() => createInitialFormState(member), [member])
   const [formData, setFormData] = useState<EditMemberFormState>(initialFormState)
 
@@ -109,6 +127,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
     setFormData(initialFormState)
     setIsSubmitting(false)
     setIsStartDatePickerOpen(false)
+    setPhotoFile(null)
   }, [initialFormState, open])
 
   const selectedStartDate = useMemo(
@@ -127,12 +146,11 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
     () => getAccessDateTimeValue(member.endTime),
     [member.endTime],
   )
-  const hasChanges = useMemo(() => {
-    const currentState = normalizeEditMemberFormState(formData)
-    const initialState = normalizeEditMemberFormState(initialFormState)
-
-    return JSON.stringify(currentState) !== JSON.stringify(initialState)
-  }, [formData, initialFormState])
+  const hasFormChanges = useMemo(
+    () => hasEditMemberChanges(initialFormState, formData),
+    [formData, initialFormState],
+  )
+  const hasChanges = hasFormChanges || photoFile !== null
   const hasAccessWindowChanged = useMemo(() => {
     const currentState = normalizeEditMemberFormState(formData)
     const initialState = normalizeEditMemberFormState(initialFormState)
@@ -192,6 +210,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
     if (!nextOpen) {
       setIsSubmitting(false)
       setIsStartDatePickerOpen(false)
+      setPhotoFile(null)
       setFormData(initialFormState)
     }
 
@@ -277,6 +296,24 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
         endTime: nextEndTime,
       }
       const { member: updatedMember, warning } = await updateMember(member.id, payload)
+
+      if (photoFile) {
+        try {
+          const compressedPhoto = await compressImage(photoFile.file)
+          await uploadMemberPhoto(member.id, compressedPhoto)
+          void queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) })
+        } catch (photoError) {
+          console.error('Failed to upload member photo:', photoError)
+          toast({
+            title: 'Photo upload failed',
+            description:
+              photoError instanceof Error
+                ? `${photoError.message} The member details were saved without updating the photo.`
+                : 'The member details were saved without updating the photo.',
+            variant: 'destructive',
+          })
+        }
+      }
 
       handleOpenChange(false)
       void Promise.all([
@@ -519,9 +556,11 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
             <div className="h-px bg-border" />
 
             {/* Row 6: Avatar — centered */}
-            {/* TODO: wire onFileChange to Supabase Storage upload */}
             <div className="flex justify-center py-2">
-              <Pattern />
+              <Pattern
+                onFileChange={setPhotoFile}
+                defaultAvatar={member.photoUrl ?? undefined}
+              />
             </div>
 
             <div className="h-px bg-border" />

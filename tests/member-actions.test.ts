@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   addMember,
   assignMemberCard,
+  deleteMemberPhoto,
   recoverMemberCard,
   reactivateMember,
   reportMemberCardLost,
   releaseMemberSlot,
   suspendMember,
+  uploadMemberPhoto,
   updateMember,
   unassignMemberCard,
 } from '@/lib/member-actions'
@@ -383,6 +385,94 @@ describe('member actions', () => {
     })
     expect(result.warning).toBe('Member updated but device sync failed. Please try again.')
     expect(result.member.type).toBe('Civil Servant')
+  })
+
+  it('uploads a member photo through the photo route', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          member: {
+            id: 'member-1',
+            employeeNo: '000611',
+            name: 'Jane Doe',
+            cardNo: null,
+            cardCode: null,
+            cardStatus: null,
+            cardLostAt: null,
+            type: 'General',
+            status: 'Active',
+            deviceAccessState: 'ready',
+            gender: null,
+            email: null,
+            phone: null,
+            remark: null,
+            photoUrl: 'https://signed.example.com/member-1.jpg',
+            beginTime: '2026-03-30T00:00:00.000Z',
+            endTime: '2026-07-15T23:59:59.000Z',
+          },
+        },
+        200,
+      ),
+    )
+    const photo = new Blob(['jpeg-bytes'], { type: 'image/jpeg' })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const member = await uploadMemberPhoto('member-1', photo)
+    const requestOptions = fetchMock.mock.calls[0]?.[1] as { body: FormData; method: string }
+    const requestPhoto = requestOptions.body.get('photo')
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/members/member-1/photo')
+    expect(requestOptions.method).toBe('POST')
+    expect(requestOptions.body).toBeInstanceOf(FormData)
+    expect(requestPhoto).toBeInstanceOf(File)
+    expect((requestPhoto as File).name).toBe('member-1.jpg')
+    expect((requestPhoto as File).type).toBe('image/jpeg')
+    expect(member.photoUrl).toBe('https://signed.example.com/member-1.jpg')
+  })
+
+  it('deletes a member photo through the photo route', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          member: {
+            id: 'member-1',
+            employeeNo: '000611',
+            name: 'Jane Doe',
+            cardNo: null,
+            cardCode: null,
+            cardStatus: null,
+            cardLostAt: null,
+            type: 'General',
+            status: 'Active',
+            deviceAccessState: 'ready',
+            gender: null,
+            email: null,
+            phone: null,
+            remark: null,
+            photoUrl: null,
+            beginTime: '2026-03-30T00:00:00.000Z',
+            endTime: '2026-07-15T23:59:59.000Z',
+          },
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const member = await deleteMemberPhoto('member-1')
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/members/member-1/photo')
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      method: 'DELETE',
+    })
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined()
+    expect(member.photoUrl).toBeNull()
   })
 
   it('unassigns a member card through the access route', async () => {

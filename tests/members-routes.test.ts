@@ -18,6 +18,10 @@ function createMembersAdminClient({
   detailError = null,
   cardRows = [],
   cardsError = null,
+  signedUrlResult = {
+    data: { signedUrl: 'https://signed.example.com/member-2.jpg' },
+    error: null,
+  },
 }: {
   listRows?: Array<Record<string, unknown>>
   listError?: { message: string } | null
@@ -25,6 +29,10 @@ function createMembersAdminClient({
   detailError?: { message: string } | null
   cardRows?: Array<Record<string, unknown>>
   cardsError?: { message: string } | null
+  signedUrlResult?: {
+    data: { signedUrl: string } | null
+    error: { message: string } | null
+  }
 } = {}) {
   return {
     from(table: string) {
@@ -74,6 +82,20 @@ function createMembersAdminClient({
       }
 
       throw new Error(`Unexpected table: ${table}`)
+    },
+    storage: {
+      from(bucket: string) {
+        expect(bucket).toBe('member-photos')
+
+        return {
+          createSignedUrl(path: string, expiresIn: number) {
+            expect(path).toBeDefined()
+            expect(expiresIn).toBe(3600)
+
+            return Promise.resolve(signedUrlResult)
+          },
+        }
+      },
     },
   }
 }
@@ -192,6 +214,119 @@ describe('members API routes', () => {
         endTime: '2026-07-15T23:59:59.000Z',
       },
     })
+  })
+
+  it('hydrates the member photo with a signed URL on detail reads', async () => {
+    getSupabaseAdminClientMock.mockReturnValue(
+      createMembersAdminClient({
+        detailRow: {
+          id: 'member-2',
+          employee_no: '000777',
+          name: 'A1 Marcus Brown',
+          card_no: '0102857149',
+          type: 'Student/BPO',
+          status: 'Active',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: 'Requires weekend access',
+          photo_url: 'member-2.jpg',
+          begin_time: '2026-03-01T00:00:00Z',
+          end_time: '2026-07-15T23:59:59Z',
+          created_at: '2026-03-01T10:00:00Z',
+          updated_at: '2026-03-01T10:00:00Z',
+        },
+        cardRows: [{ card_no: '0102857149', card_code: 'A1', status: 'assigned', lost_at: null }],
+      }),
+    )
+
+    const response = await getMember(new Request('http://localhost/api/members/member-2'), {
+      params: Promise.resolve({ id: 'member-2' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      member: {
+        id: 'member-2',
+        employeeNo: '000777',
+        name: 'Marcus Brown',
+        cardNo: '0102857149',
+        cardCode: 'A1',
+        cardStatus: 'assigned',
+        cardLostAt: null,
+        type: 'Student/BPO',
+        status: 'Active',
+        deviceAccessState: 'ready',
+        gender: null,
+        email: null,
+        phone: null,
+        remark: 'Requires weekend access',
+        photoUrl: 'https://signed.example.com/member-2.jpg',
+        beginTime: '2026-03-01T00:00:00.000Z',
+        endTime: '2026-07-15T23:59:59.000Z',
+      },
+    })
+  })
+
+  it('falls back to a null member photo when signed URL creation fails', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    getSupabaseAdminClientMock.mockReturnValue(
+      createMembersAdminClient({
+        detailRow: {
+          id: 'member-2',
+          employee_no: '000777',
+          name: 'A1 Marcus Brown',
+          card_no: '0102857149',
+          type: 'Student/BPO',
+          status: 'Active',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: 'Requires weekend access',
+          photo_url: 'member-2.jpg',
+          begin_time: '2026-03-01T00:00:00Z',
+          end_time: '2026-07-15T23:59:59Z',
+          created_at: '2026-03-01T10:00:00Z',
+          updated_at: '2026-03-01T10:00:00Z',
+        },
+        signedUrlResult: {
+          data: null,
+          error: { message: 'Signature failed.' },
+        },
+        cardRows: [{ card_no: '0102857149', card_code: 'A1', status: 'assigned', lost_at: null }],
+      }),
+    )
+
+    const response = await getMember(new Request('http://localhost/api/members/member-2'), {
+      params: Promise.resolve({ id: 'member-2' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      member: {
+        id: 'member-2',
+        employeeNo: '000777',
+        name: 'Marcus Brown',
+        cardNo: '0102857149',
+        cardCode: 'A1',
+        cardStatus: 'assigned',
+        cardLostAt: null,
+        type: 'Student/BPO',
+        status: 'Active',
+        deviceAccessState: 'ready',
+        gender: null,
+        email: null,
+        phone: null,
+        remark: 'Requires weekend access',
+        photoUrl: null,
+        beginTime: '2026-03-01T00:00:00.000Z',
+        endTime: '2026-07-15T23:59:59.000Z',
+      },
+    })
+    expect(consoleErrorSpy).toHaveBeenCalled()
   })
 
   it('returns 404 when the member does not exist', async () => {
