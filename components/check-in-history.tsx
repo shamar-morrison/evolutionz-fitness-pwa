@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { PaginationControls } from '@/components/pagination-controls'
 import {
   Table,
   TableBody,
@@ -31,9 +32,8 @@ export function CheckInHistory({ memberId }: CheckInHistoryProps) {
 
   const events = data?.events ?? []
   const totalMatches = data?.totalMatches ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalMatches / MEMBER_EVENTS_PAGE_SIZE))
   const showPagination = totalMatches > MEMBER_EVENTS_PAGE_SIZE
-  const canGoPrevious = page > 0
-  const canGoNext = (page + 1) * MEMBER_EVENTS_PAGE_SIZE < totalMatches
   const rangeStart = totalMatches === 0 ? 0 : page * MEMBER_EVENTS_PAGE_SIZE + 1
   const rangeEnd = Math.min((page + 1) * MEMBER_EVENTS_PAGE_SIZE, totalMatches)
 
@@ -112,24 +112,11 @@ export function CheckInHistory({ memberId }: CheckInHistoryProps) {
             <p className="text-sm text-muted-foreground">
               Showing {rangeStart}-{rangeEnd} of {totalMatches}
             </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((currentPage) => Math.max(0, currentPage - 1))}
-                disabled={!canGoPrevious}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((currentPage) => currentPage + 1)}
-                disabled={!canGoNext}
-              >
-                Next
-              </Button>
-            </div>
+            <PaginationControls
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+            />
           </div>
         ) : (
           null

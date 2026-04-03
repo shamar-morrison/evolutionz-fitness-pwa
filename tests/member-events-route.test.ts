@@ -76,7 +76,9 @@ describe('GET /api/members/[id]/events', () => {
     getSupabaseAdminClientMock.mockReset()
   })
 
-  it('queues get_member_events and returns normalized member events', async () => {
+  it('queues probe and fetch get_member_events jobs for page 0 and returns member events latest-first', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+
     const { client, insertedJobs } = createMemberEventsAdminClient({
       memberRow: { employee_no: ' 000611 ' },
       pollResults: [
@@ -85,12 +87,36 @@ describe('GET /api/members/[id]/events', () => {
             id: 'job-123',
             status: 'done',
             result: {
+              events: [],
+              totalMatches: 41,
+            },
+            error: null,
+          },
+          error: null,
+        },
+        {
+          data: {
+            id: 'job-123',
+            status: 'done',
+            result: {
               events: [
+                {
+                  time: '2025-03-01T10:00:00+08:00',
+                  major: 5,
+                  minor: 1,
+                  cardNo: '0102857147',
+                },
                 {
                   time: '2025-03-03T16:25:49+08:00',
                   major: 5,
                   minor: 1,
                   cardNo: '0102857149',
+                },
+                {
+                  time: '2025-03-04T18:00:00+08:00',
+                  major: 5,
+                  minor: 75,
+                  cardNo: '0100000001',
                 },
                 {
                   time: 'not-a-date',
@@ -99,7 +125,7 @@ describe('GET /api/members/[id]/events', () => {
                   cardNo: '0100000000',
                 },
               ],
-              totalMatches: 2,
+              totalMatches: 41,
             },
             error: null,
           },
@@ -110,9 +136,12 @@ describe('GET /api/members/[id]/events', () => {
 
     getSupabaseAdminClientMock.mockReturnValue(client)
 
-    const response = await GET(new Request('http://localhost/api/members/member-1/events?page=1&limit=20'), {
-      params: Promise.resolve({ id: 'member-1' }),
-    })
+    const response = await GET(
+      new Request('http://localhost/api/members/member-1/events?page=0&limit=10'),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
 
     expect(response.status).toBe(200)
     expect(insertedJobs).toEqual([
@@ -120,13 +149,30 @@ describe('GET /api/members/[id]/events', () => {
         type: 'get_member_events',
         payload: {
           employeeNoString: '000611',
-          maxResults: 20,
-          searchResultPosition: 20,
+          maxResults: 1,
+          searchResultPosition: 0,
+          searchID: '1700000000000',
+        },
+      },
+      {
+        type: 'get_member_events',
+        payload: {
+          employeeNoString: '000611',
+          maxResults: 10,
+          searchResultPosition: 31,
+          searchID: '1700000000000',
         },
       },
     ])
     await expect(response.json()).resolves.toEqual({
       events: [
+        {
+          time: '2025-03-04T18:00:00-05:00',
+          status: 'denied_not_in_whitelist',
+          major: 5,
+          minor: 75,
+          cardNo: '0100000001',
+        },
         {
           time: '2025-03-03T16:25:49-05:00',
           status: 'success',
@@ -134,8 +180,254 @@ describe('GET /api/members/[id]/events', () => {
           minor: 1,
           cardNo: '0102857149',
         },
+        {
+          time: '2025-03-01T10:00:00-05:00',
+          status: 'success',
+          major: 5,
+          minor: 1,
+          cardNo: '0102857147',
+        },
       ],
-      totalMatches: 2,
+      totalMatches: 41,
+    })
+  })
+
+  it('queues probe and fetch get_member_events jobs for later pages using reverse pagination offsets', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+
+    const { client, insertedJobs } = createMemberEventsAdminClient({
+      pollResults: [
+        {
+          data: {
+            id: 'job-123',
+            status: 'done',
+            result: {
+              events: [],
+              totalMatches: 41,
+            },
+            error: null,
+          },
+          error: null,
+        },
+        {
+          data: {
+            id: 'job-123',
+            status: 'done',
+            result: {
+              events: [
+                {
+                  time: '2025-03-01T09:00:00+08:00',
+                  major: 5,
+                  minor: 1,
+                  cardNo: '0102857149',
+                },
+                {
+                  time: '2025-03-01T09:30:00+08:00',
+                  major: 5,
+                  minor: 3,
+                  cardNo: '0100000002',
+                },
+              ],
+              totalMatches: 41,
+            },
+            error: null,
+          },
+          error: null,
+        },
+      ],
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(
+      new Request('http://localhost/api/members/member-1/events?page=1&limit=10'),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'get_member_events',
+        payload: {
+          employeeNoString: '000611',
+          maxResults: 1,
+          searchResultPosition: 0,
+          searchID: '1700000000000',
+        },
+      },
+      {
+        type: 'get_member_events',
+        payload: {
+          employeeNoString: '000611',
+          maxResults: 10,
+          searchResultPosition: 21,
+          searchID: '1700000000000',
+        },
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      events: [
+        {
+          time: '2025-03-01T09:30:00-05:00',
+          status: 'denied_expired',
+          major: 5,
+          minor: 3,
+          cardNo: '0100000002',
+        },
+        {
+          time: '2025-03-01T09:00:00-05:00',
+          status: 'success',
+          major: 5,
+          minor: 1,
+          cardNo: '0102857149',
+        },
+      ],
+      totalMatches: 41,
+    })
+  })
+
+  it('uses a partial reverse page fetch when the last page has fewer than the page size', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+
+    const { client, insertedJobs } = createMemberEventsAdminClient({
+      pollResults: [
+        {
+          data: {
+            id: 'job-123',
+            status: 'done',
+            result: {
+              events: [],
+              totalMatches: 25,
+            },
+            error: null,
+          },
+          error: null,
+        },
+        {
+          data: {
+            id: 'job-123',
+            status: 'done',
+            result: {
+              events: [
+                {
+                  time: '2025-03-01T06:00:00+08:00',
+                  major: 5,
+                  minor: 1,
+                  cardNo: '0100000005',
+                },
+                {
+                  time: '2025-03-01T07:00:00+08:00',
+                  major: 5,
+                  minor: 2,
+                  cardNo: '0100000006',
+                },
+              ],
+              totalMatches: 25,
+            },
+            error: null,
+          },
+          error: null,
+        },
+      ],
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(
+      new Request('http://localhost/api/members/member-1/events?page=2&limit=10'),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'get_member_events',
+        payload: {
+          employeeNoString: '000611',
+          maxResults: 1,
+          searchResultPosition: 0,
+          searchID: '1700000000000',
+        },
+      },
+      {
+        type: 'get_member_events',
+        payload: {
+          employeeNoString: '000611',
+          maxResults: 5,
+          searchResultPosition: 0,
+          searchID: '1700000000000',
+        },
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      events: [
+        {
+          time: '2025-03-01T07:00:00-05:00',
+          status: 'denied_invalid_card',
+          major: 5,
+          minor: 2,
+          cardNo: '0100000006',
+        },
+        {
+          time: '2025-03-01T06:00:00-05:00',
+          status: 'success',
+          major: 5,
+          minor: 1,
+          cardNo: '0100000005',
+        },
+      ],
+      totalMatches: 25,
+    })
+  })
+
+  it('returns empty events for out-of-range pages after the shared-searchID probe', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+
+    const { client, insertedJobs } = createMemberEventsAdminClient({
+      pollResults: [
+        {
+          data: {
+            id: 'job-123',
+            status: 'done',
+            result: {
+              events: [],
+              totalMatches: 25,
+            },
+            error: null,
+          },
+          error: null,
+        },
+      ],
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(
+      new Request('http://localhost/api/members/member-1/events?page=3&limit=10'),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'get_member_events',
+        payload: {
+          employeeNoString: '000611',
+          maxResults: 1,
+          searchResultPosition: 0,
+          searchID: '1700000000000',
+        },
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      events: [],
+      totalMatches: 25,
     })
   })
 

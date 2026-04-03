@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { PaginationControls } from '@/components/pagination-controls'
 import { formatAccessDate } from '@/lib/member-access-time'
 import {
   Table,
@@ -34,15 +34,13 @@ const PAGE_SIZE_OPTIONS = ['10', '25', '50'] as const
 export function MembersTable({ members }: MembersTableProps) {
   const router = useRouter()
   const [pageSize, setPageSize] = useState<number>(Number(PAGE_SIZE_OPTIONS[0]))
-  const [currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(0)
 
   const totalPages = Math.max(1, Math.ceil(members.length / pageSize))
-  const paginatedMembers = members.slice((currentPage - 1) * pageSize, currentPage * pageSize)
-  const isFirstPage = currentPage === 1
-  const isLastPage = currentPage === totalPages
+  const paginatedMembers = members.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
 
   useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages))
+    setCurrentPage((page) => Math.max(0, Math.min(page, totalPages - 1)))
   }, [totalPages])
 
   return (
@@ -119,7 +117,7 @@ export function MembersTable({ members }: MembersTableProps) {
                 value={String(pageSize)}
                 onValueChange={(value) => {
                   setPageSize(Number(value))
-                  setCurrentPage(1)
+                  setCurrentPage(0)
                 }}
               >
                 <SelectTrigger className="h-9 w-[92px] rounded-md bg-background text-sm shadow-none">
@@ -136,54 +134,13 @@ export function MembersTable({ members }: MembersTableProps) {
             </div>
 
             <p className="text-sm font-medium">
-              Page {currentPage} of {totalPages}
+              Page {currentPage + 1} of {totalPages}
             </p>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="rounded-md shadow-none"
-                onClick={() => setCurrentPage(1)}
-                disabled={isFirstPage}
-                aria-label="Go to first page"
-              >
-                <ChevronsLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="rounded-md shadow-none"
-                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                disabled={isFirstPage}
-                aria-label="Go to previous page"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="rounded-md shadow-none"
-                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                disabled={isLastPage}
-                aria-label="Go to next page"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="rounded-md shadow-none"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={isLastPage}
-                aria-label="Go to last page"
-              >
-                <ChevronsRight className="h-4 w-4" />
-              </Button>
-            </div>
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           </div>
         </div>
       ) : null}

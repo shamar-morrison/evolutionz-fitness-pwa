@@ -1,4 +1,4 @@
-export const MEMBER_EVENTS_PAGE_SIZE = 20
+export const MEMBER_EVENTS_PAGE_SIZE = 10
 const JAMAICA_TIME_ZONE = 'America/Jamaica'
 const JAMAICA_OFFSET = '-05:00'
 
@@ -91,6 +91,8 @@ export function mapMinorCodeToMemberEventStatus(minor: number): MemberEventStatu
       return 'denied_invalid_card'
     case 3:
       return 'denied_expired'
+    case 8:
+      return 'denied'
     case 75:
       return 'denied_not_in_whitelist'
     default:
@@ -230,7 +232,12 @@ export async function fetchMemberEvents(
   page: number,
   limit = MEMBER_EVENTS_PAGE_SIZE,
 ): Promise<MemberEventsResponse> {
-  const response = await fetch(`/api/members/${id}/events?page=${page}&limit=${limit}`, {
+  const searchParams = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+  })
+
+  const response = await fetch(`/api/members/${id}/events?${searchParams.toString()}`, {
     method: 'GET',
     cache: 'no-store',
   })
