@@ -4,7 +4,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { z } from 'zod'
-import { Calendar as CalendarIcon, Plus } from 'lucide-react'
+import { Calendar as CalendarIcon } from 'lucide-react'
+import { Pattern } from '@/components/ui/file-upload'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import {
@@ -562,37 +563,25 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
 
             <div className="h-px bg-border" />
 
-            {/* Row 7: Remark + Photo — 2 cols */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="remark">Remark</Label>
-                <Textarea
-                  id="remark"
-                  rows={4}
-                  value={formData.remark}
-                  onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
-                  placeholder="Add notes about this member..."
-                  className="resize-none"
-                />
-              </div>
-              {/* TODO: implement photo upload to Supabase Storage */}
-              <div className="grid gap-2">
-                <Label>Photo</Label>
-                <button
-                  type="button"
-                  className="flex h-full min-h-[104px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-input bg-muted/20 text-center transition-colors hover:bg-muted/30"
-                >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-input bg-background">
-                    <Plus className="h-4 w-4 text-muted-foreground" />
-                  </span>
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-medium">Add Photo</p>
-                    <p className="text-xs text-muted-foreground">
-                      Coming in a later update.
-                    </p>
-                  </div>
-                </button>
-              </div>
+            {/* Row 7: Avatar — centered */}
+            {/* TODO: wire onFileChange to Supabase Storage upload */}
+            <div className="flex justify-center py-2">
+              <Pattern />
+            </div>
+
+            <div className="h-px bg-border" />
+
+            {/* Row 8: Remark — full width */}
+            <div className="grid gap-2">
+              <Label htmlFor="remark">Remark</Label>
+              <Textarea
+                id="remark"
+                rows={3}
+                value={formData.remark}
+                onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+                placeholder="Add notes about this member..."
+                className="resize-none"
+              />
             </div>
           </div>
 
