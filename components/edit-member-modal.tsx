@@ -4,7 +4,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { z } from 'zod'
-import { Calendar as CalendarIcon, Plus } from 'lucide-react'
+import { Calendar as CalendarIcon } from 'lucide-react'
+import { Pattern } from '@/components/ui/file-upload'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import {
@@ -304,43 +305,45 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[960px]">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>Edit Member</DialogTitle>
           <DialogDescription>
             Update the member profile and access window below. Card actions stay on the member detail page.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid gap-6 py-2 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="grid content-start gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-name">Full Name</Label>
-                <div className="flex overflow-hidden rounded-md border border-input bg-background">
-                  {member.cardCode ? (
-                    <span className="flex items-center border-r border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
-                      {member.cardCode}
-                    </span>
-                  ) : null}
-                  <Input
-                    id="edit-name"
-                    value={formData.name}
-                    onChange={(event) =>
-                      setFormData((currentFormData) => ({
-                        ...currentFormData,
-                        name: event.target.value,
-                      }))
-                    }
-                    placeholder="Enter member name"
-                    className="border-0 shadow-none focus-visible:ring-0"
-                    required
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  The card code prefix is shown here for staff and remains part of the Hik member name.
-                </p>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="grid gap-4 py-2">
+            {/* Row 1: Full Name — full width */}
+            <div className="grid gap-2">
+              <Label htmlFor="edit-name">Full Name</Label>
+              <div className="flex overflow-hidden rounded-md border border-input bg-background">
+                {member.cardCode ? (
+                  <span className="flex items-center border-r border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
+                    {member.cardCode}
+                  </span>
+                ) : null}
+                <Input
+                  id="edit-name"
+                  value={formData.name}
+                  onChange={(event) =>
+                    setFormData((currentFormData) => ({
+                      ...currentFormData,
+                      name: event.target.value,
+                    }))
+                  }
+                  placeholder="Enter member name"
+                  className="border-0 shadow-none focus-visible:ring-0"
+                  required
+                />
               </div>
+              <p className="text-xs text-muted-foreground">
+                The card code prefix is shown here for staff and remains part of the Hik member name.
+              </p>
+            </div>
 
+            {/* Row 2: Gender + Membership Type — 2 cols */}
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label>Gender</Label>
                 <div className="grid grid-cols-2 gap-2">
@@ -362,39 +365,6 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
                   ))}
                 </div>
               </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-email">Email</Label>
-                  <Input
-                    id="edit-email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(event) =>
-                      setFormData((currentFormData) => ({
-                        ...currentFormData,
-                        email: event.target.value,
-                      }))
-                    }
-                    placeholder="Optional email"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-phone">Phone</Label>
-                  <Input
-                    id="edit-phone"
-                    value={formData.phone}
-                    onChange={(event) =>
-                      setFormData((currentFormData) => ({
-                        ...currentFormData,
-                        phone: event.target.value,
-                      }))
-                    }
-                    placeholder="Optional phone number"
-                  />
-                </div>
-              </div>
-
               <div className="grid gap-2">
                 <Label htmlFor="edit-type">Membership Type</Label>
                 <Select
@@ -418,25 +388,45 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
+            {/* Row 3: Email + Phone — 2 cols */}
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="edit-remark">Remark</Label>
-                <Textarea
-                  id="edit-remark"
-                  rows={3}
-                  value={formData.remark}
+                <Label htmlFor="edit-email">Email</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={formData.email}
                   onChange={(event) =>
                     setFormData((currentFormData) => ({
                       ...currentFormData,
-                      remark: event.target.value,
+                      email: event.target.value,
                     }))
                   }
-                  placeholder="Add notes about this member..."
+                  placeholder="Optional email"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-phone">Phone</Label>
+                <Input
+                  id="edit-phone"
+                  value={formData.phone}
+                  onChange={(event) =>
+                    setFormData((currentFormData) => ({
+                      ...currentFormData,
+                      phone: event.target.value,
+                    }))
+                  }
+                  placeholder="Optional phone number"
                 />
               </div>
             </div>
 
-            <div className="grid content-start gap-4">
+            <div className="h-px bg-border" />
+
+            {/* Row 4: Start Date + Start Time + Duration — 3 cols */}
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="grid gap-2">
                 <Label htmlFor="edit-start-date">Start Date</Label>
                 <Popover open={isStartDatePickerOpen} onOpenChange={setIsStartDatePickerOpen}>
@@ -471,26 +461,23 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
                     />
                   </PopoverContent>
                 </Popover>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-start-time" className="text-xs text-muted-foreground">
-                    Start Time
-                  </Label>
-                  <Input
-                    id="edit-start-time"
-                    type="time"
-                    step={1}
-                    value={formData.startTime}
-                    onChange={(event) =>
-                      setFormData((currentFormData) => ({
-                        ...currentFormData,
-                        startTime: event.target.value,
-                      }))
-                    }
-                    required
-                  />
-                </div>
               </div>
-
+              <div className="grid gap-2">
+                <Label htmlFor="edit-start-time">Start Time</Label>
+                <Input
+                  id="edit-start-time"
+                  type="time"
+                  step={1}
+                  value={formData.startTime}
+                  onChange={(event) =>
+                    setFormData((currentFormData) => ({
+                      ...currentFormData,
+                      startTime: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-duration">Duration</Label>
                 <Select
@@ -514,32 +501,47 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
-              <div className="grid gap-2 rounded-lg border bg-muted/30 p-4">
-                <Label>End Date</Label>
-                <p className="text-lg font-semibold">
-                  {displayedEndTime ? formatAccessDate(displayedEndTime, 'long') : 'Select a duration'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Access always expires at 23:59:59 on the calculated end date.
+            {/* Row 5: End Date summary — full width */}
+            <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-4 py-3">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">End Date</p>
+                <p className="text-base font-semibold mt-0.5">
+                  {displayedEndTime ? formatAccessDate(displayedEndTime, 'long') : 'Select a duration above'}
                 </p>
               </div>
+              <p className="text-xs text-muted-foreground text-right max-w-[200px]">
+                Access always expires at 23:59:59 on the calculated end date.
+              </p>
+            </div>
 
-              {/* TODO: implement photo upload to Supabase Storage */}
-              <button
-                type="button"
-                className="flex min-h-52 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-input bg-muted/20 text-center transition-colors hover:bg-muted/30"
-              >
-                <span className="flex h-12 w-12 items-center justify-center rounded-full border border-dashed border-input bg-background">
-                  <Plus className="h-5 w-5 text-muted-foreground" />
-                </span>
-                <div className="space-y-1">
-                  <p className="font-medium">Add Photo</p>
-                  <p className="text-sm text-muted-foreground">
-                    Photo uploads will be connected in a later update.
-                  </p>
-                </div>
-              </button>
+            <div className="h-px bg-border" />
+
+            {/* Row 6: Avatar — centered */}
+            {/* TODO: wire onFileChange to Supabase Storage upload */}
+            <div className="flex justify-center py-2">
+              <Pattern />
+            </div>
+
+            <div className="h-px bg-border" />
+
+            {/* Row 7: Remark — full width */}
+            <div className="grid gap-2">
+              <Label htmlFor="edit-remark">Remark</Label>
+              <Textarea
+                id="edit-remark"
+                rows={3}
+                value={formData.remark}
+                onChange={(event) =>
+                  setFormData((currentFormData) => ({
+                    ...currentFormData,
+                    remark: event.target.value,
+                  }))
+                }
+                placeholder="Add notes about this member..."
+                className="resize-none"
+              />
             </div>
           </div>
 
