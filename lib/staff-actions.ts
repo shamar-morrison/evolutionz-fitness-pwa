@@ -1,5 +1,9 @@
-import { normalizeProfile, type StaffTitle } from '@/lib/staff'
-import type { Profile, StaffGender } from '@/types'
+import {
+  normalizeProfile,
+  type EditableStaffGender,
+  type StaffTitle,
+} from '@/lib/staff'
+import type { Profile } from '@/types'
 
 type StaffMutationErrorResponse = {
   ok: false
@@ -26,7 +30,7 @@ export type CreateStaffData = {
   email: string
   password: string
   phone?: string
-  gender?: StaffGender
+  gender?: EditableStaffGender
   remark?: string
   title: StaffTitle
 }
@@ -34,7 +38,7 @@ export type CreateStaffData = {
 export type UpdateStaffData = {
   name: string
   phone?: string | null
-  gender?: StaffGender | null
+  gender?: EditableStaffGender | null
   remark?: string | null
   title: StaffTitle
 }
@@ -102,7 +106,7 @@ export async function updateStaff(
     body: JSON.stringify({
       name: data.name,
       phone: data.phone ?? null,
-      gender: data.gender ?? null,
+      ...('gender' in data ? { gender: data.gender ?? null } : {}),
       remark: data.remark ?? null,
       title: data.title,
     }),

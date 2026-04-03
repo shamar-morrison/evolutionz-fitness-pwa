@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
-  STAFF_GENDERS,
+  STAFF_EDITABLE_GENDERS,
   STAFF_PROFILE_SELECT,
   STAFF_TITLES,
   deriveRoleFromTitle,
@@ -51,7 +51,7 @@ type CreateStaffAdminClient = StaffPhotoStorageClient & {
       role: 'admin' | 'staff'
       title: string
       phone: string | null
-      gender: 'male' | 'female' | 'other' | null
+      gender: 'male' | 'female' | null
       remark: string | null
     }): {
       select(columns: typeof STAFF_PROFILE_SELECT): {
@@ -67,7 +67,7 @@ const createStaffRequestSchema = z.object({
   email: z.string().trim().email('Enter a valid email address.'),
   password: z.string().min(8, 'Password must be at least 8 characters.'),
   phone: z.string().trim().optional(),
-  gender: z.enum(STAFF_GENDERS).optional(),
+  gender: z.enum(STAFF_EDITABLE_GENDERS).optional(),
   remark: z.string().trim().optional(),
   title: z.enum(STAFF_TITLES),
 })

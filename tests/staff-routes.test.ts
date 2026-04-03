@@ -491,6 +491,27 @@ describe('staff API routes', () => {
     })
   })
 
+  it('rejects other as a writable staff gender during creation', async () => {
+    const response = await postStaff(
+      new Request('http://localhost/api/staff', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Invalid Gender',
+          email: 'invalid-gender@evolutionzfitness.com',
+          password: 'password123',
+          gender: 'other',
+          title: 'Trainer',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining('gender'),
+    })
+  })
+
   it('rolls back the auth user when profile insertion fails', async () => {
     const { client, deleteUserCalls } = createStaffAdminClient({
       createUserResult: {
@@ -594,6 +615,68 @@ describe('staff API routes', () => {
     })
   })
 
+  it('preserves a legacy other gender when the PATCH payload omits gender', async () => {
+    const { client, updateValues } = createStaffAdminClient({
+      updateResult: {
+        data: buildProfileRow({
+          id: 'staff-2',
+          name: 'Jordan Trainer',
+          role: 'staff',
+          title: 'Trainer',
+          phone: '876-555-0100',
+          gender: 'other',
+          remark: 'Keeps legacy gender',
+        }),
+        error: null,
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await patchStaff(
+      new Request('http://localhost/api/staff/staff-2', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Jordan Trainer',
+          phone: '876-555-0100',
+          remark: 'Keeps legacy gender',
+          title: 'Trainer',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-2' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(updateValues).toEqual([
+      {
+        name: 'Jordan Trainer',
+        role: 'staff',
+        title: 'Trainer',
+        phone: '876-555-0100',
+        remark: 'Keeps legacy gender',
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      profile: {
+        id: 'staff-2',
+        name: 'Jordan Trainer',
+        email: 'admin@evolutionzfitness.com',
+        role: 'staff',
+        title: 'Trainer',
+        phone: '876-555-0100',
+        gender: 'other',
+        remark: 'Keeps legacy gender',
+        photoUrl: null,
+        created_at: '2026-04-03T00:00:00.000Z',
+      },
+    })
+  })
+
   it('returns 400 when the PATCH payload contains non-editable fields', async () => {
     const response = await patchStaff(
       new Request('http://localhost/api/staff/staff-2', {
@@ -618,6 +701,31 @@ describe('staff API routes', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: expect.stringContaining('Unrecognized key(s)'),
+    })
+  })
+
+  it('rejects other as a writable staff gender during updates', async () => {
+    const response = await patchStaff(
+      new Request('http://localhost/api/staff/staff-2', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Jordan Trainer',
+          gender: 'other',
+          title: 'Trainer',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-2' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining('gender'),
     })
   })
 

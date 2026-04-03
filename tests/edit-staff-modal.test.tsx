@@ -32,4 +32,23 @@ describe('hasEditStaffChanges', () => {
 
     expect(hasEditStaffChanges(initialFormState, initialFormState, true)).toBe(true)
   })
+
+  it('returns false when a legacy other gender is unchanged', () => {
+    const initialFormState = createFormState({
+      gender: 'other',
+    })
+
+    expect(hasEditStaffChanges(initialFormState, initialFormState)).toBe(false)
+  })
+
+  it('returns true when a legacy other gender is changed', () => {
+    const initialFormState = createFormState({
+      gender: 'other',
+    })
+    const formData = createFormState({
+      gender: 'female',
+    })
+
+    expect(hasEditStaffChanges(initialFormState, formData)).toBe(true)
+  })
 })

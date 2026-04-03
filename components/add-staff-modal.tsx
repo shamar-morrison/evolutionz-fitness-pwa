@@ -17,6 +17,7 @@ import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { toast } from '@/hooks/use-toast'
 import { compressImage } from '@/lib/compress-image'
 import { queryKeys } from '@/lib/query-keys'
+import { isEditableStaffGender } from '@/lib/staff'
 import { createStaff, uploadStaffPhoto } from '@/lib/staff-actions'
 import { StaffFormFields, createEmptyStaffFormState } from '@/components/staff-form-fields'
 import type { Profile } from '@/types'
@@ -94,7 +95,7 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
         email: formData.email.trim(),
         password: formData.password,
         ...(formData.phone.trim() ? { phone: formData.phone.trim() } : {}),
-        ...(formData.gender ? { gender: formData.gender } : {}),
+        ...(isEditableStaffGender(formData.gender) ? { gender: formData.gender } : {}),
         ...(formData.remark.trim() ? { remark: formData.remark.trim() } : {}),
         title: formData.title,
       })

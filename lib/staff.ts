@@ -11,9 +11,11 @@ export const STAFF_TITLES = [
 ] as const
 
 export const STAFF_GENDERS = ['male', 'female', 'other'] as const
+export const STAFF_EDITABLE_GENDERS = ['male', 'female'] as const
 
 export type StaffTitle = (typeof STAFF_TITLES)[number]
 export type StaffListFilter = 'All' | StaffTitle
+export type EditableStaffGender = (typeof STAFF_EDITABLE_GENDERS)[number]
 
 export const STAFF_PROFILE_SELECT =
   'id, name, email, role, title, phone, gender, remark, photoUrl:photo_url, created_at'
@@ -138,6 +140,12 @@ export function deriveRoleFromTitle(title: StaffTitle): UserRole {
 
 export function shouldShowOwnerWarning(title: string | null | undefined) {
   return title === 'Owner'
+}
+
+export function isEditableStaffGender(
+  value: string | null | undefined,
+): value is EditableStaffGender {
+  return STAFF_EDITABLE_GENDERS.includes(value as EditableStaffGender)
 }
 
 export function formatStaffGenderLabel(gender: StaffGender | null) {

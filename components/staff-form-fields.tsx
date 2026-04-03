@@ -4,6 +4,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { Pattern } from '@/components/ui/file-upload'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -16,6 +17,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import type { FileWithPreview } from '@/hooks/use-file-upload'
 import {
+  isEditableStaffGender,
   STAFF_TITLES,
   shouldShowOwnerWarning,
   type StaffTitle,
@@ -86,6 +88,7 @@ export function StaffFormFields({
 }: StaffFormFieldsProps) {
   const isEditMode = mode === 'edit'
   const disabledFieldClassName = 'bg-muted/30 text-muted-foreground'
+  const selectedGender = isEditableStaffGender(formData.gender) ? formData.gender : ''
 
   return (
     <div className="grid gap-4 py-2">
@@ -164,26 +167,28 @@ export function StaffFormFields({
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}-gender`}>Gender</Label>
-          <Select
-            value={formData.gender}
-            onValueChange={(value: StaffGender) =>
-              setFormData((currentFormData) => ({
-                ...currentFormData,
-                gender: value,
-              }))
-            }
-            disabled={isSubmitting}
-          >
-            <SelectTrigger id={`${idPrefix}-gender`}>
-              <SelectValue placeholder="Select gender" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="male">Male</SelectItem>
-              <SelectItem value="female">Female</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label>Gender</Label>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { label: 'Male', value: 'male' },
+              { label: 'Female', value: 'female' },
+            ] as const).map((gender) => (
+              <Button
+                key={gender.value}
+                type="button"
+                variant={selectedGender === gender.value ? 'default' : 'outline'}
+                onClick={() =>
+                  setFormData((currentFormData) => ({
+                    ...currentFormData,
+                    gender: currentFormData.gender === gender.value ? '' : gender.value,
+                  }))
+                }
+                disabled={isSubmitting}
+              >
+                {gender.label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 

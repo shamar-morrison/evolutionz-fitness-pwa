@@ -21,7 +21,7 @@ import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { toast } from '@/hooks/use-toast'
 import { compressImage } from '@/lib/compress-image'
 import { queryKeys } from '@/lib/query-keys'
-import { isStaffTitle } from '@/lib/staff'
+import { isEditableStaffGender, isStaffTitle } from '@/lib/staff'
 import { updateStaff, uploadStaffPhoto, type UpdateStaffData } from '@/lib/staff-actions'
 import type { Profile } from '@/types'
 
@@ -120,12 +120,15 @@ export function EditStaffModal({ profile, open, onOpenChange, onSuccess }: EditS
     setIsSubmitting(true)
 
     try {
+      const hasGenderChanged = formData.gender !== initialFormState.gender
       const payload: UpdateStaffData = {
         name: formData.name.trim(),
         phone: formData.phone.trim() || null,
-        gender: formData.gender || null,
         remark: formData.remark.trim() || null,
         title: formData.title,
+        ...(hasGenderChanged
+          ? { gender: isEditableStaffGender(formData.gender) ? formData.gender : null }
+          : {}),
       }
       const updatedProfile = await updateStaff(profile.id, payload)
       let photoUploadError: string | null = null

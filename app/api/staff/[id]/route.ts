@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
-  STAFF_GENDERS,
+  STAFF_EDITABLE_GENDERS,
   STAFF_PROFILE_SELECT,
   STAFF_TITLES,
   deriveRoleFromTitle,
@@ -45,16 +45,18 @@ type DeleteStaffAdminClient = StaffReadClient &
     from(table: string): unknown
   }
 
+type UpdateStaffValues = {
+  name: string
+  role: 'admin' | 'staff'
+  title: string
+  phone: string | null
+  gender?: 'male' | 'female' | null
+  remark: string | null
+}
+
 type UpdateStaffAdminClient = {
   from(table: 'profiles'): {
-    update(values: {
-      name: string
-      role: 'admin' | 'staff'
-      title: string
-      phone: string | null
-      gender: 'male' | 'female' | 'other' | null
-      remark: string | null
-    }): {
+    update(values: UpdateStaffValues): {
       eq(column: 'id', value: string): {
         select(columns: typeof STAFF_PROFILE_SELECT): {
           maybeSingle(): QueryResult<Record<string, unknown>>
@@ -73,7 +75,7 @@ const updateStaffRequestSchema = z
   .object({
     name: z.string().trim().min(1, 'Full name is required.'),
     phone: z.string().trim().nullable().optional(),
-    gender: z.enum(STAFF_GENDERS).nullable().optional(),
+    gender: z.enum(STAFF_EDITABLE_GENDERS).nullable().optional(),
     remark: z.string().trim().nullable().optional(),
     title: z.enum(STAFF_TITLES),
   })
@@ -142,6 +144,10 @@ export async function PATCH(
 
     const { id } = await params
     const requestBody = await request.json()
+    const hasGenderField =
+      typeof requestBody === 'object' &&
+      requestBody !== null &&
+      Object.prototype.hasOwnProperty.call(requestBody, 'gender')
     const input = updateStaffRequestSchema.parse(requestBody)
 
     if (authResult.user.id === id && input.title !== 'Owner') {
@@ -149,16 +155,21 @@ export async function PATCH(
     }
 
     const supabase = getSupabaseAdminClient() as unknown as UpdateStaffAdminClient
+    const updateValues: UpdateStaffValues = {
+      name: input.name.trim(),
+      role: deriveRoleFromTitle(input.title),
+      title: input.title,
+      phone: normalizeOptionalText(input.phone),
+      remark: normalizeOptionalText(input.remark),
+    }
+
+    if (hasGenderField) {
+      updateValues.gender = input.gender ?? null
+    }
+
     const { data, error } = await supabase
       .from('profiles')
-      .update({
-        name: input.name.trim(),
-        role: deriveRoleFromTitle(input.title),
-        title: input.title,
-        phone: normalizeOptionalText(input.phone),
-        gender: input.gender ?? null,
-        remark: normalizeOptionalText(input.remark),
-      })
+      .update(updateValues)
       .eq('id', id)
       .select(STAFF_PROFILE_SELECT)
       .maybeSingle()

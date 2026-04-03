@@ -60,4 +60,43 @@ describe('staff actions', () => {
     expect(profile.title).toBe('Trainer')
     expect(profile.email).toBe('jordan@evolutionzfitness.com')
   })
+
+  it('omits gender from the PATCH payload when it is unchanged in the edit flow', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          profile: {
+            id: 'staff-1',
+            name: 'Jordan Trainer',
+            email: 'jordan@evolutionzfitness.com',
+            role: 'staff',
+            title: 'Trainer',
+            phone: '876-555-0100',
+            gender: 'other',
+            remark: 'Updated remark',
+            photoUrl: null,
+            created_at: '2026-04-03T00:00:00.000Z',
+          },
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await updateStaff('staff-1', {
+      name: 'Jordan Trainer',
+      phone: '876-555-0100',
+      remark: 'Updated remark',
+      title: 'Trainer',
+    })
+
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
+      name: 'Jordan Trainer',
+      phone: '876-555-0100',
+      remark: 'Updated remark',
+      title: 'Trainer',
+    })
+  })
 })
