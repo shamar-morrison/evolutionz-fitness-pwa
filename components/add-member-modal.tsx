@@ -312,41 +312,104 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[960px]">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>Add New Member</DialogTitle>
           <DialogDescription>{progressDescription}</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid gap-6 py-2 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="grid gap-4 content-start">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Full Name</Label>
-                <div className="flex overflow-hidden rounded-md border border-input bg-background">
-                  {selectedInventoryCard?.cardCode ? (
-                    <span className="flex items-center border-r border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
-                      {selectedInventoryCard.cardCode}
-                    </span>
-                  ) : null}
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder={
-                      selectedInventoryCard?.cardCode
-                        ? 'Enter member name'
-                        : 'Select a card with a synced card code'
-                    }
-                    className="border-0 shadow-none focus-visible:ring-0"
-                    disabled={!selectedInventoryCard?.cardCode}
-                    required
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  The card code prefix is shown here for staff and sent to Hik automatically.
-                </p>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="grid gap-4 py-2">
+            {/* Row 1: Access Card — full width, prominent */}
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="card-number">Available Access Card</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={refetchAvailableCards}
+                  disabled={isSubmitting || isCardsLoading}
+                >
+                  Refresh
+                </Button>
               </div>
+              <Select
+                value={formData.selectedInventoryCardNo}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, selectedInventoryCardNo: value })
+                }
+                disabled={isSubmitting || isCardsLoading || availableCards.length === 0}
+              >
+                <SelectTrigger id="card-number">
+                  <SelectValue
+                    placeholder={
+                      isCardsLoading
+                        ? 'Loading cards...'
+                        : hasNoAvailableCards
+                          ? 'No cards available'
+                          : 'Select an access card'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableCards.map((card) => (
+                    <SelectItem key={card.cardNo} value={card.cardNo}>
+                      {formatAvailableAccessCardLabel(card)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isCardsLoading ? (
+                <p className="text-xs text-muted-foreground">Fetching unassigned card records from Hik.</p>
+              ) : cardsError ? (
+                <p className="text-xs text-destructive">{cardsError}</p>
+              ) : hasNoAvailableCards ? (
+                <p className="text-xs text-muted-foreground">
+                  No unassigned cards are currently available from the imported inventory.
+                </p>
+              ) : selectedInventoryCard && !selectedInventoryCard.cardCode ? (
+                <p className="text-xs text-destructive">
+                  This card is missing its synced card code and cannot be assigned until the next successful sync.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {availableCards.length} unassigned card{availableCards.length === 1 ? '' : 's'} loaded from Hik.
+                </p>
+              )}
+            </div>
 
+            <div className="h-px bg-border" />
+
+            {/* Row 2: Full Name — full width */}
+            <div className="grid gap-2">
+              <Label htmlFor="name">Full Name</Label>
+              <div className="flex overflow-hidden rounded-md border border-input bg-background">
+                {selectedInventoryCard?.cardCode ? (
+                  <span className="flex items-center border-r border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
+                    {selectedInventoryCard.cardCode}
+                  </span>
+                ) : null}
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder={
+                    selectedInventoryCard?.cardCode
+                      ? 'Enter member name'
+                      : 'Select a card with a synced card code'
+                  }
+                  className="border-0 shadow-none focus-visible:ring-0"
+                  disabled={!selectedInventoryCard?.cardCode}
+                  required
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The card code prefix is shown here for staff and sent to Hik automatically.
+              </p>
+            </div>
+
+            {/* Row 3: Gender + Membership Type — 2 cols */}
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label>Gender</Label>
                 <div className="grid grid-cols-2 gap-2">
@@ -368,29 +431,6 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
                   ))}
                 </div>
               </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="Optional email"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="Optional phone number"
-                  />
-                </div>
-              </div>
-
               <div className="grid gap-2">
                 <Label htmlFor="type">Membership Type</Label>
                 <Select
@@ -409,78 +449,35 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
+            {/* Row 4: Email + Phone — 2 cols */}
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="remark">Remark</Label>
-                <Textarea
-                  id="remark"
-                  rows={3}
-                  value={formData.remark}
-                  onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
-                  placeholder="Add notes about this member..."
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="Optional email"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="phone">Phone</Label>
+                <Input
+                  id="phone"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="Optional phone number"
                 />
               </div>
             </div>
 
-            <div className="grid gap-4 content-start">
-              <div className="grid gap-2">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="card-number">Available Access Card</Label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={refetchAvailableCards}
-                    disabled={isSubmitting || isCardsLoading}
-                  >
-                    Refresh
-                  </Button>
-                </div>
-                <Select
-                  value={formData.selectedInventoryCardNo}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, selectedInventoryCardNo: value })
-                  }
-                  disabled={isSubmitting || isCardsLoading || availableCards.length === 0}
-                >
-                  <SelectTrigger id="card-number">
-                    <SelectValue
-                      placeholder={
-                        isCardsLoading
-                          ? 'Loading cards...'
-                          : hasNoAvailableCards
-                            ? 'No cards available'
-                            : 'Select an access card'
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableCards.map((card) => (
-                      <SelectItem key={card.cardNo} value={card.cardNo}>
-                        {formatAvailableAccessCardLabel(card)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {isCardsLoading ? (
-                  <p className="text-xs text-muted-foreground">Fetching unassigned card records from Hik.</p>
-                ) : cardsError ? (
-                  <p className="text-xs text-destructive">{cardsError}</p>
-                ) : hasNoAvailableCards ? (
-                  <p className="text-xs text-muted-foreground">
-                    No unassigned cards are currently available from the imported inventory.
-                  </p>
-                ) : selectedInventoryCard && !selectedInventoryCard.cardCode ? (
-                  <p className="text-xs text-destructive">
-                    This card is missing its synced card code and cannot be assigned until the next successful sync.
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    {availableCards.length} unassigned card{availableCards.length === 1 ? '' : 's'} loaded from Hik.
-                  </p>
-                )}
-              </div>
+            <div className="h-px bg-border" />
 
+            {/* Row 5: Start Date + Start Time + Duration — 3 cols */}
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="grid gap-2">
                 <Label htmlFor="start-date">Start Date</Label>
                 <Popover open={isStartDatePickerOpen} onOpenChange={setIsStartDatePickerOpen}>
@@ -516,21 +513,18 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
                     />
                   </PopoverContent>
                 </Popover>
-                <div className="grid gap-2">
-                  <Label htmlFor="start-time" className="text-xs text-muted-foreground">
-                    Start Time
-                  </Label>
-                  <Input
-                    id="start-time"
-                    type="time"
-                    step={1}
-                    value={formData.startTime}
-                    onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                    required
-                  />
-                </div>
               </div>
-
+              <div className="grid gap-2">
+                <Label htmlFor="start-time">Start Time</Label>
+                <Input
+                  id="start-time"
+                  type="time"
+                  step={1}
+                  value={formData.startTime}
+                  onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                  required
+                />
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="duration">Duration</Label>
                 <Select
@@ -551,32 +545,54 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
-              <div className="grid gap-2 rounded-lg border bg-muted/30 p-4">
-                <Label>End Date</Label>
-                <p className="text-lg font-semibold">
-                  {calculatedEndTime ? formatAccessDate(calculatedEndTime, 'long') : 'Select a duration'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Access always expires at 23:59:59 on the calculated end date.
+            {/* Row 6: End Date summary — full width */}
+            <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-4 py-3">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">End Date</p>
+                <p className="text-base font-semibold mt-0.5">
+                  {calculatedEndTime ? formatAccessDate(calculatedEndTime, 'long') : 'Select a duration above'}
                 </p>
               </div>
+              <p className="text-xs text-muted-foreground text-right max-w-[200px]">
+                Access always expires at 23:59:59 on the calculated end date.
+              </p>
+            </div>
 
+            <div className="h-px bg-border" />
+
+            {/* Row 7: Remark + Photo — 2 cols */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="remark">Remark</Label>
+                <Textarea
+                  id="remark"
+                  rows={4}
+                  value={formData.remark}
+                  onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
+                  placeholder="Add notes about this member..."
+                  className="resize-none"
+                />
+              </div>
               {/* TODO: implement photo upload to Supabase Storage */}
-              <button
-                type="button"
-                className="flex min-h-52 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-input bg-muted/20 text-center transition-colors hover:bg-muted/30"
-              >
-                <span className="flex h-12 w-12 items-center justify-center rounded-full border border-dashed border-input bg-background">
-                  <Plus className="h-5 w-5 text-muted-foreground" />
-                </span>
-                <div className="space-y-1">
-                  <p className="font-medium">Add Photo</p>
-                  <p className="text-sm text-muted-foreground">
-                    Photo uploads will be connected in a later update.
-                  </p>
-                </div>
-              </button>
+              <div className="grid gap-2">
+                <Label>Photo</Label>
+                <button
+                  type="button"
+                  className="flex h-full min-h-[104px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-input bg-muted/20 text-center transition-colors hover:bg-muted/30"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-dashed border-input bg-background">
+                    <Plus className="h-4 w-4 text-muted-foreground" />
+                  </span>
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium">Add Photo</p>
+                    <p className="text-xs text-muted-foreground">
+                      Coming in a later update.
+                    </p>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
 
