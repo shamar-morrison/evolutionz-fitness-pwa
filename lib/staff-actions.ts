@@ -6,7 +6,7 @@ type StaffMutationErrorResponse = {
   error: string
 }
 
-type CreateStaffSuccessResponse = {
+type ProfileMutationSuccessResponse = {
   ok: true
   profile: Profile
 }
@@ -31,14 +31,24 @@ export type CreateStaffData = {
   title: StaffTitle
 }
 
+export type UpdateStaffData = {
+  name: string
+  phone?: string | null
+  gender?: StaffGender | null
+  remark?: string | null
+  title: StaffTitle
+}
+
 async function parseProfileMutationResponse(
   response: Response,
   errorMessage: string,
 ) {
-  let responseBody: CreateStaffSuccessResponse | StaffMutationErrorResponse | null = null
+  let responseBody: ProfileMutationSuccessResponse | StaffMutationErrorResponse | null = null
 
   try {
-    responseBody = (await response.json()) as CreateStaffSuccessResponse | StaffMutationErrorResponse
+    responseBody = (await response.json()) as
+      | ProfileMutationSuccessResponse
+      | StaffMutationErrorResponse
   } catch {
     responseBody = null
   }
@@ -78,6 +88,27 @@ export async function createStaff(data: CreateStaffData): Promise<Profile> {
   })
 
   return parseProfileMutationResponse(response, 'Failed to create staff.')
+}
+
+export async function updateStaff(
+  id: string,
+  data: UpdateStaffData,
+): Promise<Profile> {
+  const response = await fetch(`/api/staff/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: data.name,
+      phone: data.phone ?? null,
+      gender: data.gender ?? null,
+      remark: data.remark ?? null,
+      title: data.title,
+    }),
+  })
+
+  return parseProfileMutationResponse(response, 'Failed to update staff.')
 }
 
 export async function uploadStaffPhoto(

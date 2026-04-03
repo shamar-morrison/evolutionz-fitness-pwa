@@ -29,7 +29,11 @@ vi.mock('@/lib/server-auth', async () => {
 })
 
 import { GET as getStaff, POST as postStaff } from '@/app/api/staff/route'
-import { DELETE as deleteStaff, GET as getStaffDetail } from '@/app/api/staff/[id]/route'
+import {
+  DELETE as deleteStaff,
+  GET as getStaffDetail,
+  PATCH as patchStaff,
+} from '@/app/api/staff/[id]/route'
 
 type QueryResult<T> = {
   data: T | null
@@ -109,6 +113,10 @@ function createStaffAdminClient({
     data: buildProfileRow(),
     error: null,
   } satisfies QueryResult<Record<string, unknown>>,
+  updateResult = {
+    data: buildProfileRow(),
+    error: null,
+  } satisfies QueryResult<Record<string, unknown>>,
   deleteResult = {
     data: buildProfileRow(),
     error: null,
@@ -132,6 +140,7 @@ function createStaffAdminClient({
 }: {
   detailReads?: Array<Record<string, unknown> | null>
   insertResult?: QueryResult<Record<string, unknown>>
+  updateResult?: QueryResult<Record<string, unknown>>
   deleteResult?: QueryResult<Record<string, unknown>>
   createUserResult?: {
     data: {
@@ -153,6 +162,7 @@ function createStaffAdminClient({
   const createUserCalls: Array<{ email: string; password: string; email_confirm: boolean }> = []
   const deleteUserCalls: string[] = []
   const insertValues: Array<Record<string, unknown>> = []
+  const updateValues: Array<Record<string, unknown>> = []
   const removeCalls: string[][] = []
   const signedUrlCalls: string[] = []
   let detailReadIndex = 0
@@ -217,6 +227,30 @@ function createStaffAdminClient({
               },
             }
           },
+          update(values: Record<string, unknown>) {
+            updateValues.push(values)
+
+            return {
+              eq(column: string, value: string) {
+                expect(column).toBe('id')
+                expect(value).toBeDefined()
+
+                return {
+                  select(columns: string) {
+                    expect(columns).toBe(
+                      'id, name, email, role, title, phone, gender, remark, photoUrl:photo_url, created_at',
+                    )
+
+                    return {
+                      maybeSingle() {
+                        return Promise.resolve(updateResult)
+                      },
+                    }
+                  },
+                }
+              },
+            }
+          },
           delete() {
             return {
               eq(column: string, value: string) {
@@ -266,6 +300,7 @@ function createStaffAdminClient({
     createUserCalls,
     deleteUserCalls,
     insertValues,
+    updateValues,
     removeCalls,
     signedUrlCalls,
   }
@@ -492,6 +527,215 @@ describe('staff API routes', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Failed to create staff profile: duplicate key value violates unique constraint',
+    })
+  })
+
+  it('updates a staff profile, derives the role from title, and clears nullable fields', async () => {
+    const { client, updateValues } = createStaffAdminClient({
+      updateResult: {
+        data: buildProfileRow({
+          id: 'staff-2',
+          name: 'Jordan Trainer',
+          role: 'staff',
+          title: 'Trainer',
+          phone: null,
+          gender: null,
+          remark: null,
+        }),
+        error: null,
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await patchStaff(
+      new Request('http://localhost/api/staff/staff-2', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: '  Jordan Trainer  ',
+          phone: '',
+          gender: null,
+          remark: '   ',
+          title: 'Trainer',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-2' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(updateValues).toEqual([
+      {
+        name: 'Jordan Trainer',
+        role: 'staff',
+        title: 'Trainer',
+        phone: null,
+        gender: null,
+        remark: null,
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      profile: {
+        id: 'staff-2',
+        name: 'Jordan Trainer',
+        email: 'admin@evolutionzfitness.com',
+        role: 'staff',
+        title: 'Trainer',
+        phone: null,
+        gender: null,
+        remark: null,
+        photoUrl: null,
+        created_at: '2026-04-03T00:00:00.000Z',
+      },
+    })
+  })
+
+  it('returns 400 when the PATCH payload contains non-editable fields', async () => {
+    const response = await patchStaff(
+      new Request('http://localhost/api/staff/staff-2', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Jordan Trainer',
+          title: 'Trainer',
+          email: 'jordan@evolutionzfitness.com',
+          password: 'password123',
+          role: 'admin',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-2' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining('Unrecognized key(s)'),
+    })
+  })
+
+  it('returns 401 when the staff patch route is requested without a session', async () => {
+    mockUnauthorized()
+
+    const response = await patchStaff(
+      new Request('http://localhost/api/staff/staff-2', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Jordan Trainer',
+          title: 'Trainer',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-2' }),
+      },
+    )
+
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Unauthorized',
+    })
+  })
+
+  it('returns 403 when a non-admin requests the staff patch route', async () => {
+    mockForbidden()
+
+    const response = await patchStaff(
+      new Request('http://localhost/api/staff/staff-2', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Jordan Trainer',
+          title: 'Trainer',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-2' }),
+      },
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Forbidden',
+    })
+  })
+
+  it('returns 404 when patching a missing staff profile', async () => {
+    const { client } = createStaffAdminClient({
+      updateResult: {
+        data: null,
+        error: null,
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await patchStaff(
+      new Request('http://localhost/api/staff/missing', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Missing Staff',
+          title: 'Trainer',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'missing' }),
+      },
+    )
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Staff profile not found.',
+    })
+  })
+
+  it('blocks admins from removing their own admin access', async () => {
+    mockAdminUser({
+      user: {
+        id: 'staff-1',
+      },
+      profile: {
+        id: 'staff-1',
+        role: 'admin',
+        title: 'Owner',
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(createStaffAdminClient().client)
+
+    const response = await patchStaff(
+      new Request('http://localhost/api/staff/staff-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Admin User',
+          title: 'Trainer',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-1' }),
+      },
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'You cannot remove your own admin access.',
     })
   })
 

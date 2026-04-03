@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchStaff, fetchStaffProfile } from '@/lib/staff'
 import { queryKeys } from '@/lib/query-keys'
 
-const STAFF_QUERY_STALE_TIME_MS = 5 * 60 * 1000
+const STAFF_QUERY_STALE_TIME_MS = 60 * 60 * 5000 // 5 hours
 
 export function useStaff() {
   const staffQuery = useQuery({

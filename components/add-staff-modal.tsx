@@ -3,9 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { z } from 'zod'
-import { AlertTriangle, UserPlus } from 'lucide-react'
-import { Pattern } from '@/components/ui/file-upload'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -15,27 +13,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { toast } from '@/hooks/use-toast'
 import { compressImage } from '@/lib/compress-image'
 import { queryKeys } from '@/lib/query-keys'
-import {
-  STAFF_TITLES,
-  shouldShowOwnerWarning,
-  type StaffTitle,
-} from '@/lib/staff'
 import { createStaff, uploadStaffPhoto } from '@/lib/staff-actions'
-import type { Profile, StaffGender } from '@/types'
+import { StaffFormFields, createEmptyStaffFormState } from '@/components/staff-form-fields'
+import type { Profile } from '@/types'
 
 type AddStaffModalProps = {
   open: boolean
@@ -43,54 +27,19 @@ type AddStaffModalProps = {
   onSuccess?: (profile: Profile) => void
 }
 
-type AddStaffFormState = {
-  name: string
-  email: string
-  password: string
-  phone: string
-  gender: StaffGender | ''
-  remark: string
-  title: StaffTitle | ''
-}
-
 const emailSchema = z.string().trim().email('Enter a valid email address.')
 
-function createInitialFormState(): AddStaffFormState {
-  return {
-    name: '',
-    email: '',
-    password: '',
-    phone: '',
-    gender: '',
-    remark: '',
-    title: '',
-  }
-}
-
-export function OwnerTitleWarning({ title }: { title: StaffTitle | '' }) {
-  if (!shouldShowOwnerWarning(title)) {
-    return null
-  }
-
-  return (
-    <Alert className="border-amber-300 bg-amber-50 text-amber-900">
-      <AlertTriangle className="text-amber-700" />
-      <AlertDescription className="text-amber-900">
-        This title grants full admin access to the entire app.
-      </AlertDescription>
-    </Alert>
-  )
-}
+export { OwnerTitleWarning } from '@/components/staff-form-fields'
 
 export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalProps) {
   const queryClient = useQueryClient()
-  const [formData, setFormData] = useState<AddStaffFormState>(() => createInitialFormState())
+  const [formData, setFormData] = useState(() => createEmptyStaffFormState())
   const [photoFile, setPhotoFile] = useState<FileWithPreview | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
-      setFormData(createInitialFormState())
+      setFormData(createEmptyStaffFormState())
       setPhotoFile(null)
       setIsSubmitting(false)
     }
@@ -204,113 +153,14 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid gap-4 py-2">
-            <div className="grid gap-2">
-              <Label htmlFor="staff-name">Full Name</Label>
-              <Input
-                id="staff-name"
-                value={formData.name}
-                onChange={(event) => setFormData({ ...formData, name: event.target.value })}
-                placeholder="Enter full name"
-                required
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="staff-email">Email</Label>
-                <Input
-                  id="staff-email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(event) => setFormData({ ...formData, email: event.target.value })}
-                  placeholder="staff@evolutionzfitness.com"
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="staff-password">Password</Label>
-                <Input
-                  id="staff-password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(event) => setFormData({ ...formData, password: event.target.value })}
-                  placeholder="Minimum 8 characters"
-                  minLength={8}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="staff-phone">Telephone Number</Label>
-                <Input
-                  id="staff-phone"
-                  value={formData.phone}
-                  onChange={(event) => setFormData({ ...formData, phone: event.target.value })}
-                  placeholder="Optional phone number"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="staff-gender">Gender</Label>
-                <Select
-                  value={formData.gender}
-                  onValueChange={(value: StaffGender) => setFormData({ ...formData, gender: value })}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger id="staff-gender">
-                    <SelectValue placeholder="Select gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="staff-title">Title</Label>
-              <Select
-                value={formData.title}
-                onValueChange={(value: StaffTitle) => setFormData({ ...formData, title: value })}
-                disabled={isSubmitting}
-              >
-              <SelectTrigger id="staff-title">
-                <SelectValue placeholder="Select title" />
-              </SelectTrigger>
-              <SelectContent>
-                  {STAFF_TITLES.map((title) => (
-                    <SelectItem key={title} value={title}>
-                      {title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <OwnerTitleWarning title={formData.title} />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Photo Upload</Label>
-              <div className="rounded-xl border border-dashed px-4 py-5">
-                <Pattern onFileChange={setPhotoFile} />
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="staff-remark">Remark</Label>
-              <Textarea
-                id="staff-remark"
-                rows={3}
-                value={formData.remark}
-                onChange={(event) => setFormData({ ...formData, remark: event.target.value })}
-                placeholder="Optional notes about this staff member..."
-                className="resize-none"
-              />
-            </div>
-          </div>
+          <StaffFormFields
+            idPrefix="staff"
+            mode="add"
+            formData={formData}
+            setFormData={setFormData}
+            setPhotoFile={setPhotoFile}
+            isSubmitting={isSubmitting}
+          />
 
           <DialogFooter>
             <Button

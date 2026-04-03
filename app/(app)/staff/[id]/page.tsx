@@ -5,13 +5,13 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Pencil, Trash2, User } from 'lucide-react'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { EditStaffModal } from '@/components/edit-staff-modal'
 import { MemberAvatar } from '@/components/member-avatar'
 import { RoleGuard } from '@/components/role-guard'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useStaffProfile } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
 import { queryKeys } from '@/lib/query-keys'
@@ -37,6 +37,7 @@ function StaffDetailPageContent() {
   const { profile, isLoading, error } = useStaffProfile(profileId)
   const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
   const [activeDialog, setActiveDialog] = useState<null | 'delete-photo' | 'delete-staff'>(null)
 
   useEffect(() => {
@@ -185,17 +186,15 @@ function StaffDetailPageContent() {
             </div>
 
             <div className="mt-6 w-full space-y-3">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="block w-full">
-                    <Button variant="outline" className="w-full" disabled>
-                      <Pencil className="h-4 w-4" />
-                      Edit
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>Coming soon</TooltipContent>
-              </Tooltip>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowEditModal(true)}
+                disabled={isActionLoading}
+              >
+                <Pencil className="h-4 w-4" />
+                Edit Staff
+              </Button>
 
               <Button
                 variant="destructive"
@@ -279,6 +278,8 @@ function StaffDetailPageContent() {
         isLoading={isActionLoading}
         variant="destructive"
       />
+
+      <EditStaffModal profile={profile} open={showEditModal} onOpenChange={setShowEditModal} />
     </div>
   )
 }

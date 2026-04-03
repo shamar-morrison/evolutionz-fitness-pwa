@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
+  STAFF_GENDERS,
   STAFF_PROFILE_SELECT,
+  STAFF_TITLES,
+  deriveRoleFromTitle,
+  normalizeProfile,
   readStaffProfile,
   type StaffReadClient,
 } from '@/lib/staff'
@@ -40,8 +45,39 @@ type DeleteStaffAdminClient = StaffReadClient &
     from(table: string): unknown
   }
 
+type UpdateStaffAdminClient = {
+  from(table: 'profiles'): {
+    update(values: {
+      name: string
+      role: 'admin' | 'staff'
+      title: string
+      phone: string | null
+      gender: 'male' | 'female' | 'other' | null
+      remark: string | null
+    }): {
+      eq(column: 'id', value: string): {
+        select(columns: typeof STAFF_PROFILE_SELECT): {
+          maybeSingle(): QueryResult<Record<string, unknown>>
+        }
+      }
+    }
+  }
+  from(table: string): unknown
+}
+
 const DELETE_STAFF_AUTH_WARNING =
   'The staff profile was deleted, but the auth user could not be removed. Delete the user manually from Supabase Auth.'
+const SELF_DEMOTION_ERROR = 'You cannot remove your own admin access.'
+
+const updateStaffRequestSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Full name is required.'),
+    phone: z.string().trim().nullable().optional(),
+    gender: z.enum(STAFF_GENDERS).nullable().optional(),
+    remark: z.string().trim().nullable().optional(),
+    title: z.enum(STAFF_TITLES),
+  })
+  .strict()
 
 function createErrorResponse(error: string, status: number) {
   return NextResponse.json(
@@ -51,6 +87,11 @@ function createErrorResponse(error: string, status: number) {
     },
     { status },
   )
+}
+
+function normalizeOptionalText(value: string | null | undefined) {
+  const normalizedValue = typeof value === 'string' ? value.trim() : ''
+  return normalizedValue || null
 }
 
 export async function GET(
@@ -83,6 +124,78 @@ export async function GET(
       error instanceof Error
         ? error.message
         : 'Unexpected server error while loading the staff profile.',
+      500,
+    )
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
+    const { id } = await params
+    const requestBody = await request.json()
+    const input = updateStaffRequestSchema.parse(requestBody)
+
+    if (authResult.user.id === id && input.title !== 'Owner') {
+      return createErrorResponse(SELF_DEMOTION_ERROR, 403)
+    }
+
+    const supabase = getSupabaseAdminClient() as unknown as UpdateStaffAdminClient
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        name: input.name.trim(),
+        role: deriveRoleFromTitle(input.title),
+        title: input.title,
+        phone: normalizeOptionalText(input.phone),
+        gender: input.gender ?? null,
+        remark: normalizeOptionalText(input.remark),
+      })
+      .eq('id', id)
+      .select(STAFF_PROFILE_SELECT)
+      .maybeSingle()
+
+    if (error) {
+      throw new Error(`Failed to update staff profile ${id}: ${error.message}`)
+    }
+
+    if (!data) {
+      return createErrorResponse('Staff profile not found.', 404)
+    }
+
+    const profile = normalizeProfile({
+      profile: data,
+    })
+
+    if (!profile) {
+      throw new Error('Failed to read the updated staff profile response.')
+    }
+
+    return NextResponse.json({
+      ok: true,
+      profile,
+    })
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return createErrorResponse('Invalid JSON body.', 400)
+    }
+
+    if (error instanceof Error && error.name === 'ZodError') {
+      return createErrorResponse(error.message, 400)
+    }
+
+    return createErrorResponse(
+      error instanceof Error
+        ? error.message
+        : 'Unexpected server error while updating the staff profile.',
       500,
     )
   }

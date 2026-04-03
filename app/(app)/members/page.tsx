@@ -146,7 +146,7 @@ function MembersPageContent() {
                 onClick={() => void handleSyncCards()}
                 disabled={isSyncingCards}
               >
-                {isSyncingCards ? <Spinner className="mr-2" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                {isSyncingCards ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
                 Sync Cards
               </Button>
               <Button
@@ -155,14 +155,14 @@ function MembersPageContent() {
                 onClick={() => void handleSyncMembers()}
                 disabled={isSyncingMembers}
               >
-                {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
                 Sync Members
               </Button>
               <Button
                 onClick={() => setShowAddModal(true)}
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                <UserPlus className="mr-2 h-4 w-4" />
+                <UserPlus className="h-4 w-4" />
                 Add Member
               </Button>
             </>
