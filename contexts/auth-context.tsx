@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const syncedUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -50,6 +52,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nextUser = session?.user ?? null
 
       if (!nextUser) {
+        syncedUserIdRef.current = null
+
         if (!isMounted) {
           return
         }
@@ -60,10 +64,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
+      if (syncedUserIdRef.current === nextUser.id) {
+        return
+      }
+
+      syncedUserIdRef.current = nextUser.id
+
       try {
         const nextProfile = await readProfile(nextUser.id)
 
-        if (!isMounted) {
+        if (!isMounted || syncedUserIdRef.current !== nextUser.id) {
           return
         }
 
@@ -72,27 +82,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         console.error('Failed to sync authenticated profile:', error)
 
-        if (!isMounted) {
+        if (!isMounted || syncedUserIdRef.current !== nextUser.id) {
           return
         }
 
         setUser(nextUser)
         setProfile(null)
       } finally {
-        if (isMounted) {
+        if (isMounted && syncedUserIdRef.current === nextUser.id) {
           setLoading(false)
         }
       }
     }
 
-    void supabase.auth
-      .getSession()
-      .then((result: { data: { session: Session | null } }) => syncSession(result.data.session))
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
-      setLoading(true)
+      const nextUserId = session?.user?.id ?? null
+
+      if (nextUserId !== syncedUserIdRef.current) {
+        setLoading(true)
+      }
+
       void syncSession(session)
     })
 

@@ -49,18 +49,18 @@ function createSupabaseBrowserClient({
 
   const client = {
     auth: {
-      getSession: vi.fn().mockImplementation(async () => ({
-        data: {
-          session: activeSession,
-        },
-      })),
       onAuthStateChange: vi.fn((callback) => {
         authCallback = callback
+        void Promise.resolve().then(() => authCallback?.('INITIAL_SESSION', activeSession))
 
         return {
           data: {
             subscription: {
-              unsubscribe: vi.fn(),
+              unsubscribe: vi.fn(() => {
+                if (authCallback === callback) {
+                  authCallback = null
+                }
+              }),
             },
           },
         }
@@ -201,6 +201,7 @@ describe('AuthProvider', () => {
       role: 'admin',
       loading: false,
     })
+    expect(supabase.client.from).toHaveBeenCalledTimes(1)
     expect(container.querySelector('[data-testid="guard"]')?.textContent).toBe('visible')
   })
 
@@ -259,5 +260,47 @@ describe('AuthProvider', () => {
       loading: false,
     })
     expect(container.querySelector('[data-testid="guard"]')?.textContent).toBe('visible')
+    expect(supabase.client.from).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not refetch the profile for repeated auth events from the same user', async () => {
+    const adminProfile = createProfile()
+    const session = {
+      user: {
+        id: adminProfile.id,
+        email: adminProfile.email,
+      },
+    }
+    const supabase = createSupabaseBrowserClient({
+      session,
+      profiles: [adminProfile],
+    })
+
+    createClientMock.mockReturnValue(supabase.client)
+
+    await act(async () => {
+      root.render(
+        <AuthProvider>
+          <AuthHarness />
+        </AuthProvider>,
+      )
+    })
+
+    await flushAsyncWork()
+
+    expect(supabase.client.from).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await supabase.emitAuthStateChange('TOKEN_REFRESHED', session)
+    })
+
+    await flushAsyncWork()
+
+    expect(readAuthState(container)).toMatchObject({
+      userId: 'user-1',
+      role: 'admin',
+      loading: false,
+    })
+    expect(supabase.client.from).toHaveBeenCalledTimes(1)
   })
 })
