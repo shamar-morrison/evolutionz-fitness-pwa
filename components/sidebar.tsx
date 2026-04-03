@@ -9,9 +9,6 @@ import { RoleGuard } from '@/components/role-guard'
 import {
   LayoutDashboard,
   Users,
-  UserCheck,
-  Calendar,
-  Receipt,
   DoorOpen,
   LogOut,
   Check,
@@ -51,9 +48,6 @@ async function unlockDoor() {
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/members', label: 'Members', icon: Users },
-  { href: '/check-in', label: 'Check-In', icon: UserCheck },
-  { href: '/classes', label: 'Classes', icon: Calendar },
-  { href: '/billing', label: 'Billing', icon: Receipt },
 ]
 
 export function Sidebar() {
