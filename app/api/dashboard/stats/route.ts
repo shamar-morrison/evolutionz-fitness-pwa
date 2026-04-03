@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getJamaicaExpiringWindow } from '@/lib/member-access-time'
 import { requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -22,15 +23,15 @@ async function countMembersByStatus(
 
 async function countExpiringSoon(
   supabase: DashboardStatsClient,
-  nowIso: string,
-  sevenDaysFromNowIso: string,
+  startInclusive: string,
+  endExclusive: string,
 ) {
   const { count, error } = await supabase
     .from('members')
     .select('id', { count: 'exact', head: true })
     .eq('status', 'Active')
-    .gte('end_time', nowIso)
-    .lte('end_time', sevenDaysFromNowIso)
+    .gte('end_time', startInclusive)
+    .lt('end_time', endExclusive)
 
   if (error) {
     throw new Error(`Failed to read expiring-soon member count: ${error.message}`)
@@ -48,16 +49,12 @@ export async function GET() {
     }
 
     const supabase = getSupabaseAdminClient()
-    const now = new Date()
-    const sevenDaysFromNow = new Date(now)
-    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7)
-    const nowIso = now.toISOString()
-    const sevenDaysFromNowIso = sevenDaysFromNow.toISOString()
+    const { startInclusive, endExclusive } = getJamaicaExpiringWindow(new Date())
 
     const [activeMembers, expiredMembers, expiringSoon] = await Promise.all([
       countMembersByStatus(supabase, 'Active'),
       countMembersByStatus(supabase, 'Expired'),
-      countExpiringSoon(supabase, nowIso, sevenDaysFromNowIso),
+      countExpiringSoon(supabase, startInclusive, endExclusive),
     ])
 
     return NextResponse.json({

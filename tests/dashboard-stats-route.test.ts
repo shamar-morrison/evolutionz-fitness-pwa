@@ -27,7 +27,7 @@ type RecordedQuery = {
   filters: {
     eq: Array<[string, string]>
     gte: Array<[string, string]>
-    lte: Array<[string, string]>
+    lt: Array<[string, string]>
   }
 }
 
@@ -55,7 +55,7 @@ function createDashboardStatsAdminClient({
           const filters: RecordedQuery['filters'] = {
             eq: [],
             gte: [],
-            lte: [],
+            lt: [],
           }
 
           const builder = {
@@ -67,8 +67,8 @@ function createDashboardStatsAdminClient({
               filters.gte.push([column, value])
               return builder
             },
-            lte(column: string, value: string) {
-              filters.lte.push([column, value])
+            lt(column: string, value: string) {
+              filters.lt.push([column, value])
               return builder
             },
             then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
@@ -78,7 +78,7 @@ function createDashboardStatsAdminClient({
                 filters: {
                   eq: [...filters.eq],
                   gte: [...filters.gte],
-                  lte: [...filters.lte],
+                  lt: [...filters.lt],
                 },
               })
 
@@ -108,7 +108,7 @@ function getQuerySignature(filters: RecordedQuery['filters']): QuerySignature {
   const statusFilter = filters.eq.find(([column]) => column === 'status')?.[1]
   const hasExpiringWindow =
     filters.gte.some(([column]) => column === 'end_time') &&
-    filters.lte.some(([column]) => column === 'end_time')
+    filters.lt.some(([column]) => column === 'end_time')
 
   if (statusFilter === 'Expired') {
     return 'expired'
@@ -161,8 +161,8 @@ describe('GET /api/dashboard/stats', () => {
     expect(activeQuery?.filters.eq).toEqual([['status', 'Active']])
     expect(expiredQuery?.filters.eq).toEqual([['status', 'Expired']])
     expect(expiringSoonQuery?.filters.eq).toEqual([['status', 'Active']])
-    expect(expiringSoonQuery?.filters.gte).toEqual([['end_time', '2026-04-02T10:15:30.000Z']])
-    expect(expiringSoonQuery?.filters.lte).toEqual([['end_time', '2026-04-09T10:15:30.000Z']])
+    expect(expiringSoonQuery?.filters.gte).toEqual([['end_time', '2026-04-02T00:00:00-05:00']])
+    expect(expiringSoonQuery?.filters.lt).toEqual([['end_time', '2026-04-10T00:00:00-05:00']])
   })
 
   it('coerces null Supabase counts to zero', async () => {

@@ -3,6 +3,7 @@ import {
   readExpiringDashboardMembers,
   type DashboardMembersReadClient,
 } from '@/lib/dashboard-members'
+import { getJamaicaExpiringWindow } from '@/lib/member-access-time'
 import { requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -15,13 +16,11 @@ export async function GET() {
     }
 
     const supabase = getSupabaseAdminClient() as unknown as DashboardMembersReadClient
-    const now = new Date()
-    const sevenDaysFromNow = new Date(now)
-    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7)
+    const { startInclusive, endExclusive } = getJamaicaExpiringWindow(new Date())
     const members = await readExpiringDashboardMembers(
       supabase,
-      now.toISOString(),
-      sevenDaysFromNow.toISOString(),
+      startInclusive,
+      endExclusive,
     )
 
     return NextResponse.json({ members })

@@ -47,6 +47,8 @@ const MEMBER_DURATION_DAYS: Record<MemberDurationValue, number> = {
   '13_months': 364,
 }
 
+const JAMAICA_TIME_ZONE = 'America/Jamaica'
+const JAMAICA_OFFSET = '-05:00'
 const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/
 const timePattern = /^(\d{2}):(\d{2})(?::(\d{2}))?$/
 const dateTimePattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/
@@ -55,8 +57,57 @@ function pad(value: number) {
   return String(value).padStart(2, '0')
 }
 
+function getDatePartsInTimeZone(date: Date, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = new Map<string, string>()
+
+  for (const part of formatter.formatToParts(date)) {
+    if (part.type === 'literal') {
+      continue
+    }
+
+    parts.set(part.type, part.value)
+  }
+
+  return parts
+}
+
 export function formatDateInputValue(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+export function getJamaicaDateInputValue(date: Date) {
+  const parts = getDatePartsInTimeZone(date, JAMAICA_TIME_ZONE)
+  const year = parts.get('year')
+  const month = parts.get('month')
+  const day = parts.get('day')
+
+  if (!year || !month || !day) {
+    throw new Error('Failed to format a Jamaica-local calendar date.')
+  }
+
+  return `${year}-${month}-${day}`
+}
+
+export function getJamaicaExpiringWindow(now: Date) {
+  const startDateValue = getJamaicaDateInputValue(now)
+  const startDate = parseDateInputValue(startDateValue)
+
+  if (!startDate) {
+    throw new Error('Failed to build the Jamaica expiring-members window start date.')
+  }
+
+  const endExclusiveDateValue = formatDateInputValue(addDays(startDate, 8))
+
+  return {
+    startInclusive: `${startDateValue}T00:00:00${JAMAICA_OFFSET}`,
+    endExclusive: `${endExclusiveDateValue}T00:00:00${JAMAICA_OFFSET}`,
+  }
 }
 
 export function normalizeTimeInputValue(value: string) {

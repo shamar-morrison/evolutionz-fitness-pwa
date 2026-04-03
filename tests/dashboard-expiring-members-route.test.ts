@@ -51,7 +51,7 @@ function createExpiringDashboardAdminClient({
   const recorded = {
     eq: [] as Array<[string, string]>,
     gte: [] as Array<[string, string]>,
-    lte: [] as Array<[string, string]>,
+    lt: [] as Array<[string, string]>,
     order: null as null | { column: string; ascending: boolean },
     limit: null as number | null,
     cardNos: [] as string[],
@@ -74,8 +74,8 @@ function createExpiringDashboardAdminClient({
                 recorded.gte.push([column, value])
                 return builder
               },
-              lte(column: string, value: string) {
-                recorded.lte.push([column, value])
+              lt(column: string, value: string) {
+                recorded.lt.push([column, value])
                 return builder
               },
               order(column: string, options: { ascending: boolean }) {
@@ -150,13 +150,13 @@ describe('GET /api/dashboard/expiring-members', () => {
           name: 'Marcus Brown',
           type: 'Student/BPO',
           status: 'Active',
-          endTime: '2026-04-05T23:59:59.000Z',
+          endTime: '2026-04-05T23:59:59Z',
         },
       ],
     })
     expect(supabase.recorded.eq).toEqual([['status', 'Active']])
-    expect(supabase.recorded.gte).toEqual([['end_time', '2026-04-02T10:15:30.000Z']])
-    expect(supabase.recorded.lte).toEqual([['end_time', '2026-04-09T10:15:30.000Z']])
+    expect(supabase.recorded.gte).toEqual([['end_time', '2026-04-02T00:00:00-05:00']])
+    expect(supabase.recorded.lt).toEqual([['end_time', '2026-04-10T00:00:00-05:00']])
     expect(supabase.recorded.order).toEqual({
       column: 'end_time',
       ascending: true,

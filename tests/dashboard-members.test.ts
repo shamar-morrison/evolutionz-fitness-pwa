@@ -26,7 +26,7 @@ const EXPIRING_MEMBER = {
   name: 'Marcus Brown',
   type: 'Student/BPO' as const,
   status: 'Active' as const,
-  endTime: '2026-04-05T23:59:59.000Z',
+  endTime: '2026-04-05T23:59:59Z',
 }
 
 describe('dashboard member helpers', () => {

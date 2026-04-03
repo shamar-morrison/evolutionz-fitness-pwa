@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { format } from 'date-fns'
 import { CalendarClock, UserPlus, type LucideIcon } from 'lucide-react'
 import { useExpiringDashboardMembers, useRecentDashboardMembers } from '@/hooks/use-dashboard-members'
+import { formatAccessDate } from '@/lib/member-access-time'
 import { cn } from '@/lib/utils'
 import { MemberAvatar } from '@/components/member-avatar'
 import { StatusBadge } from '@/components/status-badge'
@@ -82,7 +82,7 @@ function formatExpiryDate(endTime: string | null) {
     return 'No expiry date'
   }
 
-  return format(new Date(endTime), 'd MMM yyyy')
+  return formatAccessDate(endTime, 'short')
 }
 
 function RecentMemberRow({ member }: { member: DashboardMemberListItem }) {

@@ -42,7 +42,10 @@ function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function normalizeTimestamp(value: unknown) {
+function normalizeTimestampValue(
+  value: unknown,
+  options: { preserveRaw?: boolean } = {},
+) {
   const normalizedValue = normalizeText(value)
 
   if (!normalizedValue) {
@@ -55,7 +58,7 @@ function normalizeTimestamp(value: unknown) {
     return null
   }
 
-  return timestamp.toISOString()
+  return options.preserveRaw ? normalizedValue : timestamp.toISOString()
 }
 
 function getUniqueAssignedCardNos(memberRecords: DashboardMemberRecord[]) {
@@ -93,6 +96,7 @@ async function loadCardCodeLookup(
 function mapDashboardMemberRecordToListItem(
   record: DashboardMemberRecord,
   cardCodeByCardNo: ReturnType<typeof buildCardCodeByCardNo>,
+  options: { preserveRawEndTime?: boolean } = {},
 ): DashboardMemberListItem {
   const employeeNo = normalizeText(record.employee_no)
   const cardNo = getAssignedCardNo(record.card_no)
@@ -103,13 +107,16 @@ function mapDashboardMemberRecordToListItem(
     name: getCleanMemberName(normalizeText(record.name) || employeeNo, cardCode) || employeeNo,
     type: record.type,
     status: record.status,
-    endTime: normalizeTimestamp(record.end_time),
+    endTime: normalizeTimestampValue(record.end_time, {
+      preserveRaw: options.preserveRawEndTime,
+    }),
   }
 }
 
 async function mapDashboardMemberRecords(
   supabase: DashboardMembersReadClient,
   memberRecords: DashboardMemberRecord[],
+  options: { preserveRawEndTime?: boolean } = {},
 ) {
   if (memberRecords.length === 0) {
     return []
@@ -118,7 +125,7 @@ async function mapDashboardMemberRecords(
   const cardCodeByCardNo = await loadCardCodeLookup(supabase, memberRecords)
 
   return memberRecords.map((record) =>
-    mapDashboardMemberRecordToListItem(record, cardCodeByCardNo),
+    mapDashboardMemberRecordToListItem(record, cardCodeByCardNo, options),
   )
 }
 
@@ -195,16 +202,16 @@ export async function readRecentDashboardMembers(
 
 export async function readExpiringDashboardMembers(
   supabase: DashboardMembersReadClient,
-  nowIso: string,
-  sevenDaysFromNowIso: string,
+  startInclusive: string,
+  endExclusive: string,
   limit = 8,
 ) {
   const { data, error } = await supabase
     .from('members')
     .select(DASHBOARD_MEMBER_SELECT)
     .eq('status', 'Active')
-    .gte('end_time', nowIso)
-    .lte('end_time', sevenDaysFromNowIso)
+    .gte('end_time', startInclusive)
+    .lt('end_time', endExclusive)
     .order('end_time', { ascending: true })
     .limit(limit)
 
@@ -212,5 +219,7 @@ export async function readExpiringDashboardMembers(
     throw new Error(`Failed to read expiring dashboard members: ${error.message}`)
   }
 
-  return mapDashboardMemberRecords(supabase, (data ?? []) as DashboardMemberRecord[])
+  return mapDashboardMemberRecords(supabase, (data ?? []) as DashboardMemberRecord[], {
+    preserveRawEndTime: true,
+  })
 }
