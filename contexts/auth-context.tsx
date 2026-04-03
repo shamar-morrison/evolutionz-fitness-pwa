@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { readStaffProfile } from '@/lib/staff'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile, UserRole } from '@/types'
 
@@ -21,21 +22,10 @@ type AuthContextType = {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-const PROFILE_SELECT = 'id, name, email, role, title, created_at'
 
 async function readProfile(userId: string) {
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('profiles')
-    .select(PROFILE_SELECT)
-    .eq('id', userId)
-    .maybeSingle()
-
-  if (error) {
-    throw new Error(`Failed to read profile ${userId}: ${error.message}`)
-  }
-
-  return (data as Profile | null) ?? null
+  return readStaffProfile(supabase, userId)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {

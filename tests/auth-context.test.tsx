@@ -32,6 +32,10 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     email: overrides.email ?? 'kevin@evolutionzfitness.com',
     role: overrides.role ?? 'admin',
     title: overrides.title ?? 'Owner',
+    phone: overrides.phone ?? null,
+    gender: overrides.gender ?? null,
+    remark: overrides.remark ?? null,
+    photoUrl: overrides.photoUrl ?? null,
     created_at: overrides.created_at ?? '2026-04-03T00:00:00.000Z',
   }
 }
@@ -71,7 +75,9 @@ function createSupabaseBrowserClient({
 
       return {
         select: vi.fn((columns: string) => {
-          expect(columns).toBe('id, name, email, role, title, created_at')
+          expect(columns).toBe(
+            'id, name, email, role, title, phone, gender, remark, photoUrl:photo_url, created_at',
+          )
 
           return {
             eq: vi.fn((column: string, value: string) => {
@@ -110,6 +116,10 @@ function AuthHarness() {
           email: user?.email ?? null,
           name: profile?.name ?? null,
           title: profile?.title ?? null,
+          phone: profile?.phone ?? null,
+          gender: profile?.gender ?? null,
+          remark: profile?.remark ?? null,
+          photoUrl: profile?.photoUrl ?? null,
           role,
           loading,
         })}
@@ -133,6 +143,10 @@ function readAuthState(container: HTMLDivElement) {
     email: string | null
     name: string | null
     title: string | null
+    phone: string | null
+    gender: Profile['gender'] | null
+    remark: string | null
+    photoUrl: string | null
     role: Profile['role'] | null
     loading: boolean
   }
@@ -198,6 +212,10 @@ describe('AuthProvider', () => {
       email: 'kevin@evolutionzfitness.com',
       name: 'Kevin Morrison',
       title: 'Owner',
+      phone: null,
+      gender: null,
+      remark: null,
+      photoUrl: null,
       role: 'admin',
       loading: false,
     })

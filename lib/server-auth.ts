@@ -1,9 +1,8 @@
 import type { User } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { readStaffProfile } from '@/lib/staff'
 import { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/types'
-
-const PROFILE_SELECT = 'id, name, email, role, title, created_at'
 
 type AuthFailure = {
   response: NextResponse
@@ -20,17 +19,7 @@ type AdminAuthSuccess = {
 
 async function readProfile(userId: string) {
   const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('profiles')
-    .select(PROFILE_SELECT)
-    .eq('id', userId)
-    .maybeSingle()
-
-  if (error) {
-    throw new Error(`Failed to read profile ${userId}: ${error.message}`)
-  }
-
-  return (data as Profile | null) ?? null
+  return readStaffProfile(supabase, userId)
 }
 
 export async function requireAuthenticatedUser(): Promise<AuthFailure | AuthSuccess> {

@@ -3,6 +3,7 @@ export type MemberType = 'General' | 'Civil Servant' | 'Student/BPO'
 export type MemberStatus = 'Active' | 'Expired' | 'Suspended'
 export type DeviceAccessState = 'ready' | 'released'
 export type MemberGender = 'Male' | 'Female'
+export type StaffGender = 'male' | 'female' | 'other'
 export type CardStatus = 'available' | 'assigned' | 'suspended_lost' | 'disabled'
 export type AvailableAccessSlot = {
   employeeNo: string
@@ -79,6 +80,10 @@ export type Profile = {
   email: string
   role: UserRole
   title: string | null
+  phone: string | null
+  gender: StaffGender | null
+  remark: string | null
+  photoUrl: string | null
   created_at: string
 }
 

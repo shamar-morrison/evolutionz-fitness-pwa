@@ -48,6 +48,7 @@ async function unlockDoor() {
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/members', label: 'Members', icon: Users },
+  { href: '/staff', label: 'Staff', icon: Users, adminOnly: true },
 ]
 
 export function Sidebar() {
@@ -126,7 +127,7 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
-          return (
+          const navLink = (
             <Link
               key={item.href}
               href={item.href}
@@ -141,6 +142,16 @@ export function Sidebar() {
               {item.label}
             </Link>
           )
+
+          if (item.adminOnly) {
+            return (
+              <RoleGuard key={item.href} role="admin">
+                {navLink}
+              </RoleGuard>
+            )
+          }
+
+          return navLink
         })}
       </nav>
 

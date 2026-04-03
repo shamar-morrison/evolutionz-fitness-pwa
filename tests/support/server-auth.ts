@@ -16,6 +16,10 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     email: overrides.email ?? 'admin@evolutionzfitness.com',
     role: overrides.role ?? 'admin',
     title: overrides.title ?? 'Owner',
+    phone: overrides.phone ?? null,
+    gender: overrides.gender ?? null,
+    remark: overrides.remark ?? null,
+    photoUrl: overrides.photoUrl ?? null,
     created_at: overrides.created_at ?? '2026-04-03T00:00:00.000Z',
   }
 }
