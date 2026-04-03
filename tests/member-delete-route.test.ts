@@ -109,7 +109,7 @@ function createDeleteAdminClient({
       employee_no: null
       card_code: null
     }
-    filters: Array<{ column: 'card_no' | 'employee_no'; value: string }>
+    filters: Array<{ column: 'card_no'; value: string }>
   }> = []
   let pollIndex = 0
 
@@ -179,25 +179,16 @@ function createDeleteAdminClient({
                   expect(firstColumn).toBe('card_no')
 
                   return {
-                    eq(secondColumn: string, secondValue: string) {
-                      expect(secondColumn).toBe('employee_no')
+                    select(columns: string) {
+                      expect(columns).toBe('card_no')
+                      cardUpdateCalls.push({
+                        values,
+                        filters: [{ column: 'card_no', value: firstValue }],
+                      })
 
                       return {
-                        select(columns: string) {
-                          expect(columns).toBe('card_no')
-                          cardUpdateCalls.push({
-                            values,
-                            filters: [
-                              { column: 'card_no', value: firstValue },
-                              { column: 'employee_no', value: secondValue },
-                            ],
-                          })
-
-                          return {
-                            maybeSingle() {
-                              return Promise.resolve(cardUpdateResult)
-                            },
-                          }
+                        maybeSingle() {
+                          return Promise.resolve(cardUpdateResult)
                         },
                       }
                     },
@@ -394,10 +385,7 @@ describe('DELETE /api/members/[id]', () => {
           employee_no: null,
           card_code: null,
         },
-        filters: [
-          { column: 'card_no', value: '0102857149' },
-          { column: 'employee_no', value: '000611' },
-        ],
+        filters: [{ column: 'card_no', value: '0102857149' }],
       },
     ])
     expect(removeCalls).toEqual([['member-1.jpg']])

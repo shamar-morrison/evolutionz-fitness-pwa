@@ -59,10 +59,8 @@ type DeleteMemberAdminClient = MemberPhotoStorageClient &
         card_code: null
       }): {
         eq(column: 'card_no', value: string): {
-          eq(column: 'employee_no', value: string): {
-            select(columns: 'card_no'): {
-              maybeSingle(): QueryResult<{ card_no: string }>
-            }
+          select(columns: 'card_no'): {
+            maybeSingle(): QueryResult<{ card_no: string }>
           }
         }
       }
@@ -292,7 +290,6 @@ export async function DELETE(
           card_code: null,
         })
         .eq('card_no', cardNo)
-        .eq('employee_no', employeeNo)
         .select('card_no')
         .maybeSingle()
 
