@@ -18,9 +18,12 @@ import { Textarea } from '@/components/ui/textarea'
 import type { FileWithPreview } from '@/hooks/use-file-upload'
 import {
   isEditableStaffGender,
+  normalizeTrainerSpecialties,
   STAFF_TITLES,
+  TRAINER_SPECIALTIES,
   shouldShowOwnerWarning,
   type StaffTitle,
+  type TrainerSpecialty,
 } from '@/lib/staff'
 import type { StaffGender } from '@/types'
 
@@ -34,6 +37,7 @@ export type StaffFormState = {
   gender: StaffGender | ''
   remark: string
   title: StaffTitle | ''
+  specialties: TrainerSpecialty[]
 }
 
 type StaffFormFieldsProps = {
@@ -59,6 +63,7 @@ export function createEmptyStaffFormState(): StaffFormState {
     gender: '',
     remark: '',
     title: '',
+    specialties: [],
   }
 }
 
@@ -89,6 +94,8 @@ export function StaffFormFields({
   const isEditMode = mode === 'edit'
   const disabledFieldClassName = 'bg-muted/30 text-muted-foreground'
   const selectedGender = isEditableStaffGender(formData.gender) ? formData.gender : ''
+  const selectedSpecialties = normalizeTrainerSpecialties(formData.specialties)
+  const isTrainerTitle = formData.title === 'Trainer'
 
   return (
     <div className="grid gap-4 py-2">
@@ -200,6 +207,10 @@ export function StaffFormFields({
             setFormData((currentFormData) => ({
               ...currentFormData,
               title: value,
+              specialties:
+                value === 'Trainer'
+                  ? normalizeTrainerSpecialties(currentFormData.specialties)
+                  : [],
             }))
           }
           disabled={isSubmitting}
@@ -217,6 +228,46 @@ export function StaffFormFields({
         </Select>
         <OwnerTitleWarning title={formData.title} />
       </div>
+
+      {isTrainerTitle ? (
+        <div className="grid gap-2">
+          <Label>Specialties</Label>
+          <div className="flex flex-wrap gap-2">
+            {TRAINER_SPECIALTIES.map((specialty) => {
+              const isSelected = selectedSpecialties.includes(specialty)
+
+              return (
+                <Button
+                  key={specialty}
+                  type="button"
+                  variant={isSelected ? 'default' : 'outline'}
+                  className="h-auto min-h-10 justify-start whitespace-normal px-3 py-2 text-left leading-snug"
+                  onClick={() =>
+                    setFormData((currentFormData) => {
+                      const currentSpecialties = normalizeTrainerSpecialties(
+                        currentFormData.specialties,
+                      )
+
+                      return {
+                        ...currentFormData,
+                        specialties: currentSpecialties.includes(specialty)
+                          ? currentSpecialties.filter((value) => value !== specialty)
+                          : normalizeTrainerSpecialties([
+                              ...currentSpecialties,
+                              specialty,
+                            ]),
+                      }
+                    })
+                  }
+                  disabled={isSubmitting}
+                >
+                  {specialty}
+                </Button>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-2">
         <Label>Photo Upload</Label>

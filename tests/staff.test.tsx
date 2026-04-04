@@ -4,7 +4,11 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { OwnerTitleWarning } from '@/components/add-staff-modal'
-import { deriveRoleFromTitle, filterStaffByTitle } from '@/lib/staff'
+import {
+  deriveRoleFromTitle,
+  filterStaffByTitle,
+  normalizeStaffSpecialtiesForTitle,
+} from '@/lib/staff'
 import type { Profile } from '@/types'
 
 function createProfile(overrides: Partial<Profile> = {}): Profile {
@@ -17,6 +21,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     phone: overrides.phone ?? null,
     gender: overrides.gender ?? null,
     remark: overrides.remark ?? null,
+    specialties: overrides.specialties ?? [],
     photoUrl: overrides.photoUrl ?? null,
     created_at: overrides.created_at ?? '2026-04-03T00:00:00.000Z',
   }
@@ -90,5 +95,22 @@ describe('staff helpers', () => {
   it('derives admin access only for the Owner title', () => {
     expect(deriveRoleFromTitle('Owner')).toBe('admin')
     expect(deriveRoleFromTitle('Trainer')).toBe('staff')
+  })
+
+  it('keeps trainer specialties in the shared constant order and removes duplicates', () => {
+    expect(
+      normalizeStaffSpecialtiesForTitle('Trainer', [
+        'HIIT',
+        'Strength Training',
+        'HIIT',
+        'Recovery Training',
+      ]),
+    ).toEqual(['Strength Training', 'HIIT', 'Recovery Training'])
+  })
+
+  it('clears specialties for non-trainer titles', () => {
+    expect(
+      normalizeStaffSpecialtiesForTitle('Owner', ['Strength Training', 'HIIT']),
+    ).toEqual([])
   })
 })

@@ -1,6 +1,12 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest'
-import { hasEditStaffChanges } from '@/components/edit-staff-modal'
+import {
+  createInitialFormState,
+  hasEditStaffChanges,
+} from '@/components/edit-staff-modal'
 import type { StaffFormState } from '@/components/staff-form-fields'
+import type { Profile } from '@/types'
 
 function createFormState(overrides: Partial<StaffFormState> = {}): StaffFormState {
   return {
@@ -11,11 +17,35 @@ function createFormState(overrides: Partial<StaffFormState> = {}): StaffFormStat
     gender: 'female',
     remark: 'Existing staff member',
     title: 'Trainer',
+    specialties: ['Strength Training'],
     ...overrides,
   }
 }
 
+function createProfile(overrides: Partial<Profile> = {}): Profile {
+  return {
+    id: overrides.id ?? 'staff-1',
+    name: overrides.name ?? 'Jane Doe',
+    email: overrides.email ?? 'jane@evolutionzfitness.com',
+    role: overrides.role ?? 'staff',
+    title: overrides.title ?? 'Trainer',
+    phone: overrides.phone ?? '876-555-0100',
+    gender: overrides.gender ?? 'female',
+    remark: overrides.remark ?? 'Existing staff member',
+    specialties: overrides.specialties ?? ['HIIT', 'Strength Training'],
+    photoUrl: overrides.photoUrl ?? null,
+    created_at: overrides.created_at ?? '2026-04-03T00:00:00.000Z',
+  }
+}
+
 describe('hasEditStaffChanges', () => {
+  it('prefills trainer specialties from the profile in shared constant order', () => {
+    expect(createInitialFormState(createProfile()).specialties).toEqual([
+      'Strength Training',
+      'HIIT',
+    ])
+  })
+
   it('returns false when the normalized editable fields are unchanged and no photo was selected', () => {
     const initialFormState = createFormState()
     const formData = createFormState({
@@ -47,6 +77,15 @@ describe('hasEditStaffChanges', () => {
     })
     const formData = createFormState({
       gender: 'female',
+    })
+
+    expect(hasEditStaffChanges(initialFormState, formData)).toBe(true)
+  })
+
+  it('returns true when the specialties change for a trainer', () => {
+    const initialFormState = createFormState()
+    const formData = createFormState({
+      specialties: ['Strength Training', 'HIIT'],
     })
 
     expect(hasEditStaffChanges(initialFormState, formData)).toBe(true)

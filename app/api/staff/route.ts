@@ -4,8 +4,10 @@ import {
   STAFF_EDITABLE_GENDERS,
   STAFF_PROFILE_SELECT,
   STAFF_TITLES,
+  TRAINER_SPECIALTIES,
   deriveRoleFromTitle,
   normalizeProfile,
+  normalizeStaffSpecialtiesForTitle,
   readStaffProfiles,
   type StaffReadClient,
 } from '@/lib/staff'
@@ -53,6 +55,7 @@ type CreateStaffAdminClient = StaffPhotoStorageClient & {
       phone: string | null
       gender: 'male' | 'female' | null
       remark: string | null
+      specialties: string[]
     }): {
       select(columns: typeof STAFF_PROFILE_SELECT): {
         maybeSingle(): QueryResult<Record<string, unknown>>
@@ -70,6 +73,7 @@ const createStaffRequestSchema = z.object({
   gender: z.enum(STAFF_EDITABLE_GENDERS).optional(),
   remark: z.string().trim().optional(),
   title: z.enum(STAFF_TITLES),
+  specialties: z.array(z.enum(TRAINER_SPECIALTIES)).optional(),
 })
 
 function createErrorResponse(error: string, status: number) {
@@ -163,6 +167,7 @@ export async function POST(request: Request) {
         phone: normalizeOptionalText(input.phone),
         gender: input.gender ?? null,
         remark: normalizeOptionalText(input.remark),
+        specialties: normalizeStaffSpecialtiesForTitle(input.title, input.specialties),
       })
       .select(STAFF_PROFILE_SELECT)
       .maybeSingle()

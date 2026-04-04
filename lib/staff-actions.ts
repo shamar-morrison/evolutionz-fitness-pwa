@@ -2,6 +2,7 @@ import {
   normalizeProfile,
   type EditableStaffGender,
   type StaffTitle,
+  type TrainerSpecialty,
 } from '@/lib/staff'
 import type { Profile } from '@/types'
 
@@ -33,6 +34,7 @@ export type CreateStaffData = {
   gender?: EditableStaffGender
   remark?: string
   title: StaffTitle
+  specialties?: TrainerSpecialty[]
 }
 
 export type UpdateStaffData = {
@@ -41,6 +43,7 @@ export type UpdateStaffData = {
   gender?: EditableStaffGender | null
   remark?: string | null
   title: StaffTitle
+  specialties?: TrainerSpecialty[]
 }
 
 async function parseProfileMutationResponse(
@@ -88,6 +91,7 @@ export async function createStaff(data: CreateStaffData): Promise<Profile> {
       ...(data.gender ? { gender: data.gender } : {}),
       ...(data.remark ? { remark: data.remark } : {}),
       title: data.title,
+      ...('specialties' in data ? { specialties: data.specialties ?? [] } : {}),
     }),
   })
 
@@ -109,6 +113,7 @@ export async function updateStaff(
       ...('gender' in data ? { gender: data.gender ?? null } : {}),
       remark: data.remark ?? null,
       title: data.title,
+      ...('specialties' in data ? { specialties: data.specialties ?? [] } : {}),
     }),
   })
 

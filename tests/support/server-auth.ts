@@ -19,6 +19,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     phone: overrides.phone ?? null,
     gender: overrides.gender ?? null,
     remark: overrides.remark ?? null,
+    specialties: overrides.specialties ?? [],
     photoUrl: overrides.photoUrl ?? null,
     created_at: overrides.created_at ?? '2026-04-03T00:00:00.000Z',
   }

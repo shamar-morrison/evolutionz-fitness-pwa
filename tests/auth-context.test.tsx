@@ -14,6 +14,7 @@ vi.mock('@/lib/supabase/client', () => ({
 
 import { AuthProvider, useAuth } from '@/contexts/auth-context'
 import { RoleGuard } from '@/components/role-guard'
+import { STAFF_PROFILE_SELECT } from '@/lib/staff'
 import type { Profile } from '@/types'
 
 type SessionUser = {
@@ -35,6 +36,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     phone: overrides.phone ?? null,
     gender: overrides.gender ?? null,
     remark: overrides.remark ?? null,
+    specialties: overrides.specialties ?? [],
     photoUrl: overrides.photoUrl ?? null,
     created_at: overrides.created_at ?? '2026-04-03T00:00:00.000Z',
   }
@@ -75,9 +77,7 @@ function createSupabaseBrowserClient({
 
       return {
         select: vi.fn((columns: string) => {
-          expect(columns).toBe(
-            'id, name, email, role, title, phone, gender, remark, photoUrl:photo_url, created_at',
-          )
+          expect(columns).toBe(STAFF_PROFILE_SELECT)
 
           return {
             eq: vi.fn((column: string, value: string) => {

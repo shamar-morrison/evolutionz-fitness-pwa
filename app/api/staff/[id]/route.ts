@@ -4,8 +4,10 @@ import {
   STAFF_EDITABLE_GENDERS,
   STAFF_PROFILE_SELECT,
   STAFF_TITLES,
+  TRAINER_SPECIALTIES,
   deriveRoleFromTitle,
   normalizeProfile,
+  normalizeStaffSpecialtiesForTitle,
   readStaffProfile,
   type StaffReadClient,
 } from '@/lib/staff'
@@ -52,6 +54,7 @@ type UpdateStaffValues = {
   phone: string | null
   gender?: 'male' | 'female' | null
   remark: string | null
+  specialties?: string[]
 }
 
 type UpdateStaffAdminClient = {
@@ -78,6 +81,7 @@ const updateStaffRequestSchema = z
     gender: z.enum(STAFF_EDITABLE_GENDERS).nullable().optional(),
     remark: z.string().trim().nullable().optional(),
     title: z.enum(STAFF_TITLES),
+    specialties: z.array(z.enum(TRAINER_SPECIALTIES)).optional(),
   })
   .strict()
 
@@ -148,6 +152,10 @@ export async function PATCH(
       typeof requestBody === 'object' &&
       requestBody !== null &&
       Object.prototype.hasOwnProperty.call(requestBody, 'gender')
+    const hasSpecialtiesField =
+      typeof requestBody === 'object' &&
+      requestBody !== null &&
+      Object.prototype.hasOwnProperty.call(requestBody, 'specialties')
     const input = updateStaffRequestSchema.parse(requestBody)
 
     if (authResult.user.id === id && input.title !== 'Owner') {
@@ -165,6 +173,12 @@ export async function PATCH(
 
     if (hasGenderField) {
       updateValues.gender = input.gender ?? null
+    }
+
+    if (input.title !== 'Trainer') {
+      updateValues.specialties = []
+    } else if (hasSpecialtiesField) {
+      updateValues.specialties = normalizeStaffSpecialtiesForTitle(input.title, input.specialties)
     }
 
     const { data, error } = await supabase

@@ -14,6 +14,7 @@ function createFormState(overrides: Partial<StaffFormState> = {}): StaffFormStat
     gender: '',
     remark: '',
     title: 'Trainer',
+    specialties: [],
     ...overrides,
   }
 }
@@ -38,6 +39,7 @@ function StaffFormFieldsHarness({
         isSubmitting={false}
       />
       <output data-testid="gender-state">{formData.gender || 'empty'}</output>
+      <output data-testid="specialties-state">{JSON.stringify(formData.specialties)}</output>
     </>
   )
 }
@@ -61,6 +63,16 @@ function getButton(container: HTMLDivElement, label: string) {
   }
 
   return button
+}
+
+function getSpecialtiesState(container: HTMLDivElement) {
+  const output = container.querySelector('[data-testid="specialties-state"]')
+
+  if (!(output instanceof HTMLOutputElement)) {
+    throw new Error('Specialties state output not found.')
+  }
+
+  return JSON.parse(output.textContent ?? '[]') as string[]
 }
 
 describe('StaffFormFields', () => {
@@ -144,5 +156,54 @@ describe('StaffFormFields', () => {
     expect(maleButton.className).not.toContain('bg-primary')
     expect(femaleButton.className).not.toContain('bg-primary')
     expect(container.textContent).not.toContain('Other')
+  })
+
+  it('renders trainer specialties as toggleable chips and updates the selected state', async () => {
+    await act(async () => {
+      root.render(
+        <StaffFormFieldsHarness initialFormState={createFormState()} mode="add" />,
+      )
+    })
+
+    const strengthButton = getButton(container, 'Strength Training')
+    const hiitButton = getButton(container, 'HIIT')
+
+    expect(container.textContent).toContain('Specialties')
+    expect(getSpecialtiesState(container)).toEqual([])
+
+    await act(async () => {
+      hiitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(getSpecialtiesState(container)).toEqual(['HIIT'])
+
+    await act(async () => {
+      strengthButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(getSpecialtiesState(container)).toEqual(['Strength Training', 'HIIT'])
+
+    await act(async () => {
+      hiitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(getSpecialtiesState(container)).toEqual(['Strength Training'])
+  })
+
+  it('hides the specialties field for non-trainer titles', async () => {
+    await act(async () => {
+      root.render(
+        <StaffFormFieldsHarness
+          initialFormState={createFormState({
+            title: 'Owner',
+            specialties: ['Strength Training'],
+          })}
+          mode="edit"
+        />,
+      )
+    })
+
+    expect(container.textContent).not.toContain('Specialties')
+    expect(() => getButton(container, 'Strength Training')).toThrow('Strength Training button not found.')
   })
 })

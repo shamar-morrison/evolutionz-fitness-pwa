@@ -10,15 +10,32 @@ export const STAFF_TITLES = [
   'Assistant',
 ] as const
 
+export const TRAINER_SPECIALTIES = [
+  'Strength Training',
+  'Weight Loss',
+  'Functional Training',
+  'Flexibility & Mobility Training',
+  'HIIT',
+  'Cardio Training',
+  'Combat/Boxing Training',
+  'Endurance',
+  'Cross Training',
+  'Recovery Training',
+  'Powerlifting',
+  'Core Training',
+  'Rehabilitation Training',
+] as const
+
 export const STAFF_GENDERS = ['male', 'female', 'other'] as const
 export const STAFF_EDITABLE_GENDERS = ['male', 'female'] as const
 
 export type StaffTitle = (typeof STAFF_TITLES)[number]
 export type StaffListFilter = 'All' | StaffTitle
 export type EditableStaffGender = (typeof STAFF_EDITABLE_GENDERS)[number]
+export type TrainerSpecialty = (typeof TRAINER_SPECIALTIES)[number]
 
 export const STAFF_PROFILE_SELECT =
-  'id, name, email, role, title, phone, gender, remark, photoUrl:photo_url, created_at'
+  'id, name, email, role, title, phone, gender, remark, specialties, photoUrl:photo_url, created_at'
 
 type StaffListSuccessResponse = {
   staff: Profile[]
@@ -48,6 +65,7 @@ const profileRecordSchema = z.object({
   phone: z.string().trim().min(1).nullable(),
   gender: staffGenderSchema.nullable(),
   remark: z.string().trim().min(1).nullable(),
+  specialties: z.array(z.string()).nullable().optional(),
   photoUrl: z.string().trim().min(1).nullable(),
   created_at: z.string().trim().min(1, 'Created timestamp is required.'),
 })
@@ -67,6 +85,34 @@ function normalizeText(value: string | null | undefined) {
 function normalizeNullableText(value: string | null | undefined) {
   const normalizedValue = normalizeText(value)
   return normalizedValue || null
+}
+
+export function normalizeTrainerSpecialties(
+  specialties: ReadonlyArray<string> | null | undefined,
+): TrainerSpecialty[] {
+  if (!Array.isArray(specialties)) {
+    return []
+  }
+
+  const selectedSpecialties = new Set(
+    specialties.filter(
+      (specialty): specialty is TrainerSpecialty =>
+        TRAINER_SPECIALTIES.includes(specialty as TrainerSpecialty),
+    ),
+  )
+
+  return TRAINER_SPECIALTIES.filter((specialty) => selectedSpecialties.has(specialty))
+}
+
+export function normalizeStaffSpecialtiesForTitle(
+  title: string | null | undefined,
+  specialties: ReadonlyArray<string> | null | undefined,
+): TrainerSpecialty[] {
+  if (title !== 'Trainer') {
+    return []
+  }
+
+  return normalizeTrainerSpecialties(specialties)
 }
 
 function normalizeTimestamp(value: string) {
@@ -97,6 +143,7 @@ export function mapProfileRecordToProfile(
     phone: normalizeNullableText(record.phone),
     gender: record.gender,
     remark: normalizeNullableText(record.remark),
+    specialties: normalizeStaffSpecialtiesForTitle(record.title, record.specialties),
     photoUrl: normalizeNullableText(record.photoUrl),
     created_at: normalizeTimestamp(record.created_at),
   }

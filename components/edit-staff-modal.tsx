@@ -21,7 +21,11 @@ import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { toast } from '@/hooks/use-toast'
 import { compressImage } from '@/lib/compress-image'
 import { queryKeys } from '@/lib/query-keys'
-import { isEditableStaffGender, isStaffTitle } from '@/lib/staff'
+import {
+  isEditableStaffGender,
+  isStaffTitle,
+  normalizeStaffSpecialtiesForTitle,
+} from '@/lib/staff'
 import { updateStaff, uploadStaffPhoto, type UpdateStaffData } from '@/lib/staff-actions'
 import type { Profile } from '@/types'
 
@@ -39,6 +43,7 @@ function normalizeEditStaffFormState(formState: StaffFormState) {
     gender: formState.gender,
     remark: formState.remark.trim(),
     title: formState.title,
+    specialties: normalizeStaffSpecialtiesForTitle(formState.title, formState.specialties),
   }
 }
 
@@ -57,7 +62,7 @@ export function hasEditStaffChanges(
   return JSON.stringify(currentState) !== JSON.stringify(initialState)
 }
 
-function createInitialFormState(profile: Profile): StaffFormState {
+export function createInitialFormState(profile: Profile): StaffFormState {
   return {
     name: profile.name,
     email: profile.email,
@@ -66,6 +71,7 @@ function createInitialFormState(profile: Profile): StaffFormState {
     gender: profile.gender ?? '',
     remark: profile.remark ?? '',
     title: isStaffTitle(profile.title) ? profile.title : '',
+    specialties: normalizeStaffSpecialtiesForTitle(profile.title, profile.specialties),
   }
 }
 
@@ -126,6 +132,9 @@ export function EditStaffModal({ profile, open, onOpenChange, onSuccess }: EditS
         phone: formData.phone.trim() || null,
         remark: formData.remark.trim() || null,
         title: formData.title,
+        ...(formData.title === 'Trainer'
+          ? { specialties: normalizeStaffSpecialtiesForTitle(formData.title, formData.specialties) }
+          : {}),
         ...(hasGenderChanged
           ? { gender: isEditableStaffGender(formData.gender) ? formData.gender : null }
           : {}),

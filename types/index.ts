@@ -83,6 +83,7 @@ export type Profile = {
   phone: string | null
   gender: StaffGender | null
   remark: string | null
+  specialties: string[]
   photoUrl: string | null
   created_at: string
 }

@@ -30,6 +30,7 @@ describe('staff actions', () => {
             phone: '876-555-0100',
             gender: 'male',
             remark: 'Updated remark',
+            specialties: ['Strength Training', 'HIIT'],
             photoUrl: null,
             created_at: '2026-04-03T00:00:00.000Z',
           },
@@ -46,6 +47,7 @@ describe('staff actions', () => {
       gender: 'male',
       remark: 'Updated remark',
       title: 'Trainer',
+      specialties: ['Strength Training', 'HIIT'],
     })
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/staff/staff-1')
@@ -56,9 +58,11 @@ describe('staff actions', () => {
       gender: 'male',
       remark: 'Updated remark',
       title: 'Trainer',
+      specialties: ['Strength Training', 'HIIT'],
     })
     expect(profile.title).toBe('Trainer')
     expect(profile.email).toBe('jordan@evolutionzfitness.com')
+    expect(profile.specialties).toEqual(['Strength Training', 'HIIT'])
   })
 
   it('omits gender from the PATCH payload when it is unchanged in the edit flow', async () => {
@@ -75,6 +79,7 @@ describe('staff actions', () => {
             phone: '876-555-0100',
             gender: 'other',
             remark: 'Updated remark',
+            specialties: ['HIIT'],
             photoUrl: null,
             created_at: '2026-04-03T00:00:00.000Z',
           },

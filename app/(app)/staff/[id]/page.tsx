@@ -244,6 +244,26 @@ function StaffDetailPageContent() {
                 <p className="text-sm text-muted-foreground">Remark</p>
                 <p className="font-medium">{profile.remark ?? 'Not set'}</p>
               </div>
+              {profile.title === 'Trainer' ? (
+                <div className="space-y-1 sm:col-span-2">
+                  <p className="text-sm text-muted-foreground">Specialties</p>
+                  {profile.specialties.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {profile.specialties.map((specialty) => (
+                        <Badge
+                          key={specialty}
+                          variant="secondary"
+                          className="rounded-full px-2.5 py-1"
+                        >
+                          {specialty}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="font-medium">Not set</p>
+                  )}
+                </div>
+              ) : null}
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Created At</p>
                 <p className="font-medium">{formatCreatedAt(profile.created_at)}</p>

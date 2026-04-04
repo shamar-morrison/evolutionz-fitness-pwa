@@ -34,6 +34,7 @@ import {
   GET as getStaffDetail,
   PATCH as patchStaff,
 } from '@/app/api/staff/[id]/route'
+import { STAFF_PROFILE_SELECT } from '@/lib/staff'
 
 type QueryResult<T> = {
   data: T | null
@@ -50,6 +51,7 @@ function buildProfileRow(overrides: Partial<Record<string, unknown>> = {}) {
     phone: null,
     gender: null,
     remark: null,
+    specialties: [],
     photoUrl: null,
     created_at: '2026-04-03T00:00:00.000Z',
     ...overrides,
@@ -73,9 +75,7 @@ function createStaffServerClient({
 
       return {
         select(columns: string) {
-          expect(columns).toBe(
-            'id, name, email, role, title, phone, gender, remark, photoUrl:photo_url, created_at',
-          )
+          expect(columns).toBe(STAFF_PROFILE_SELECT)
 
           return {
             order(column: string, options: { ascending: boolean }) {
@@ -186,9 +186,7 @@ function createStaffAdminClient({
 
         return {
           select(columns: string) {
-            expect(columns).toBe(
-              'id, name, email, role, title, phone, gender, remark, photoUrl:photo_url, created_at',
-            )
+            expect(columns).toBe(STAFF_PROFILE_SELECT)
 
             return {
               eq(column: string, value: string) {
@@ -215,9 +213,7 @@ function createStaffAdminClient({
 
             return {
               select(columns: string) {
-                expect(columns).toBe(
-                  'id, name, email, role, title, phone, gender, remark, photoUrl:photo_url, created_at',
-                )
+                expect(columns).toBe(STAFF_PROFILE_SELECT)
 
                 return {
                   maybeSingle() {
@@ -237,9 +233,7 @@ function createStaffAdminClient({
 
                 return {
                   select(columns: string) {
-                    expect(columns).toBe(
-                      'id, name, email, role, title, phone, gender, remark, photoUrl:photo_url, created_at',
-                    )
+                    expect(columns).toBe(STAFF_PROFILE_SELECT)
 
                     return {
                       maybeSingle() {
@@ -259,9 +253,7 @@ function createStaffAdminClient({
 
                 return {
                   select(columns: string) {
-                    expect(columns).toBe(
-                      'id, name, email, role, title, phone, gender, remark, photoUrl:photo_url, created_at',
-                    )
+                    expect(columns).toBe(STAFF_PROFILE_SELECT)
 
                     return {
                       maybeSingle() {
@@ -329,6 +321,7 @@ describe('staff API routes', () => {
             name: 'Trainer Two',
             role: 'staff',
             title: 'Trainer',
+            specialties: ['HIIT', 'Strength Training'],
             created_at: '2026-04-02T00:00:00.000Z',
           }),
         ],
@@ -352,6 +345,7 @@ describe('staff API routes', () => {
           phone: null,
           gender: null,
           remark: null,
+          specialties: [],
           photoUrl: 'https://signed.example.com/staff-1.jpg',
           created_at: '2026-04-01T00:00:00.000Z',
         },
@@ -364,6 +358,7 @@ describe('staff API routes', () => {
           phone: null,
           gender: null,
           remark: null,
+          specialties: ['Strength Training', 'HIIT'],
           photoUrl: null,
           created_at: '2026-04-02T00:00:00.000Z',
         },
@@ -405,6 +400,7 @@ describe('staff API routes', () => {
           phone: '876-555-0101',
           gender: 'female',
           remark: 'Handles billing',
+          specialties: [],
         }),
         error: null,
       },
@@ -430,6 +426,7 @@ describe('staff API routes', () => {
           gender: 'female',
           remark: 'Handles billing',
           title: 'Owner',
+          specialties: ['HIIT'],
         }),
       }),
     )
@@ -452,6 +449,7 @@ describe('staff API routes', () => {
         phone: '876-555-0101',
         gender: 'female',
         remark: 'Handles billing',
+        specialties: [],
       },
     ])
     await expect(response.json()).resolves.toEqual({
@@ -465,6 +463,133 @@ describe('staff API routes', () => {
         phone: '876-555-0101',
         gender: 'female',
         remark: 'Handles billing',
+        specialties: [],
+        photoUrl: null,
+        created_at: '2026-04-03T00:00:00.000Z',
+      },
+    })
+  })
+
+  it('creates a trainer with specialties in shared constant order', async () => {
+    const { client, insertValues } = createStaffAdminClient({
+      insertResult: {
+        data: buildProfileRow({
+          id: 'staff-10',
+          name: 'Coach Kai',
+          email: 'kai@evolutionzfitness.com',
+          role: 'staff',
+          title: 'Trainer',
+          specialties: ['Strength Training', 'HIIT', 'Recovery Training'],
+        }),
+        error: null,
+      },
+      createUserResult: {
+        data: {
+          user: {
+            id: 'staff-10',
+          },
+        },
+        error: null,
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await postStaff(
+      new Request('http://localhost/api/staff', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Coach Kai',
+          email: 'kai@evolutionzfitness.com',
+          password: 'password123',
+          title: 'Trainer',
+          specialties: ['HIIT', 'Strength Training', 'Recovery Training'],
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(201)
+    expect(insertValues).toEqual([
+      {
+        id: 'staff-10',
+        name: 'Coach Kai',
+        email: 'kai@evolutionzfitness.com',
+        role: 'staff',
+        title: 'Trainer',
+        phone: null,
+        gender: null,
+        remark: null,
+        specialties: ['Strength Training', 'HIIT', 'Recovery Training'],
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      profile: {
+        id: 'staff-10',
+        name: 'Coach Kai',
+        email: 'kai@evolutionzfitness.com',
+        role: 'staff',
+        title: 'Trainer',
+        phone: null,
+        gender: null,
+        remark: null,
+        specialties: ['Strength Training', 'HIIT', 'Recovery Training'],
+        photoUrl: null,
+        created_at: '2026-04-03T00:00:00.000Z',
+      },
+    })
+  })
+
+  it('clears specialties when creating a non-trainer even if the request submits them', async () => {
+    const { client, insertValues } = createStaffAdminClient({
+      insertResult: {
+        data: buildProfileRow({
+          id: 'staff-11',
+          name: 'Desk Lead',
+          email: 'desk@evolutionzfitness.com',
+          role: 'admin',
+          title: 'Owner',
+          specialties: [],
+        }),
+        error: null,
+      },
+      createUserResult: {
+        data: {
+          user: {
+            id: 'staff-11',
+          },
+        },
+        error: null,
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await postStaff(
+      new Request('http://localhost/api/staff', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Desk Lead',
+          email: 'desk@evolutionzfitness.com',
+          password: 'password123',
+          title: 'Owner',
+          specialties: ['Strength Training', 'HIIT'],
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(201)
+    expect(insertValues[0]?.specialties).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      profile: {
+        id: 'staff-11',
+        name: 'Desk Lead',
+        email: 'desk@evolutionzfitness.com',
+        role: 'admin',
+        title: 'Owner',
+        phone: null,
+        gender: null,
+        remark: null,
+        specialties: [],
         photoUrl: null,
         created_at: '2026-04-03T00:00:00.000Z',
       },
@@ -562,6 +687,7 @@ describe('staff API routes', () => {
           phone: null,
           gender: null,
           remark: null,
+          specialties: [],
         }),
         error: null,
       },
@@ -609,6 +735,7 @@ describe('staff API routes', () => {
         phone: null,
         gender: null,
         remark: null,
+        specialties: [],
         photoUrl: null,
         created_at: '2026-04-03T00:00:00.000Z',
       },
@@ -626,6 +753,7 @@ describe('staff API routes', () => {
           phone: '876-555-0100',
           gender: 'other',
           remark: 'Keeps legacy gender',
+          specialties: ['Strength Training'],
         }),
         error: null,
       },
@@ -671,6 +799,128 @@ describe('staff API routes', () => {
         phone: '876-555-0100',
         gender: 'other',
         remark: 'Keeps legacy gender',
+        specialties: ['Strength Training'],
+        photoUrl: null,
+        created_at: '2026-04-03T00:00:00.000Z',
+      },
+    })
+  })
+
+  it('updates trainer specialties when the PATCH payload includes them', async () => {
+    const { client, updateValues } = createStaffAdminClient({
+      updateResult: {
+        data: buildProfileRow({
+          id: 'staff-2',
+          name: 'Jordan Trainer',
+          role: 'staff',
+          title: 'Trainer',
+          specialties: ['Strength Training', 'HIIT'],
+        }),
+        error: null,
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await patchStaff(
+      new Request('http://localhost/api/staff/staff-2', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Jordan Trainer',
+          title: 'Trainer',
+          specialties: ['HIIT', 'Strength Training'],
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-2' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(updateValues).toEqual([
+      {
+        name: 'Jordan Trainer',
+        role: 'staff',
+        title: 'Trainer',
+        phone: null,
+        remark: null,
+        specialties: ['Strength Training', 'HIIT'],
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      profile: {
+        id: 'staff-2',
+        name: 'Jordan Trainer',
+        email: 'admin@evolutionzfitness.com',
+        role: 'staff',
+        title: 'Trainer',
+        phone: null,
+        gender: null,
+        remark: null,
+        specialties: ['Strength Training', 'HIIT'],
+        photoUrl: null,
+        created_at: '2026-04-03T00:00:00.000Z',
+      },
+    })
+  })
+
+  it('clears specialties when a trainer is updated to a non-trainer title', async () => {
+    const { client, updateValues } = createStaffAdminClient({
+      updateResult: {
+        data: buildProfileRow({
+          id: 'staff-2',
+          name: 'Jordan Admin',
+          role: 'admin',
+          title: 'Owner',
+          specialties: [],
+        }),
+        error: null,
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await patchStaff(
+      new Request('http://localhost/api/staff/staff-2', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Jordan Admin',
+          title: 'Owner',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-2' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(updateValues).toEqual([
+      {
+        name: 'Jordan Admin',
+        role: 'admin',
+        title: 'Owner',
+        phone: null,
+        remark: null,
+        specialties: [],
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      profile: {
+        id: 'staff-2',
+        name: 'Jordan Admin',
+        email: 'admin@evolutionzfitness.com',
+        role: 'admin',
+        title: 'Owner',
+        phone: null,
+        gender: null,
+        remark: null,
+        specialties: [],
         photoUrl: null,
         created_at: '2026-04-03T00:00:00.000Z',
       },
@@ -856,6 +1106,7 @@ describe('staff API routes', () => {
           role: 'staff',
           title: 'Trainer',
           photoUrl: 'staff-2.jpg',
+          specialties: ['HIIT', 'Strength Training'],
         }),
       }),
     )
@@ -877,6 +1128,7 @@ describe('staff API routes', () => {
         phone: null,
         gender: null,
         remark: null,
+        specialties: ['Strength Training', 'HIIT'],
         photoUrl: 'https://signed.example.com/staff-2.jpg',
         created_at: '2026-04-03T00:00:00.000Z',
       },

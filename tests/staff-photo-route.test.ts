@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { STAFF_PROFILE_SELECT } from '@/lib/staff'
 import { resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
@@ -35,6 +36,7 @@ function buildProfileRow(overrides: Partial<Record<string, unknown>> = {}) {
     phone: null,
     gender: null,
     remark: null,
+    specialties: [],
     photoUrl: null,
     created_at: '2026-04-03T00:00:00.000Z',
     ...overrides,
@@ -84,9 +86,7 @@ function createStaffPhotoAdminClient({
 
         return {
           select(columns: string) {
-            expect(columns).toBe(
-              'id, name, email, role, title, phone, gender, remark, photoUrl:photo_url, created_at',
-            )
+            expect(columns).toBe(STAFF_PROFILE_SELECT)
 
             return {
               eq(column: string, value: string) {
