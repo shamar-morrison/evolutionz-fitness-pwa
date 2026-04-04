@@ -95,6 +95,15 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
       return false
     }
 
+    if (formData.password !== formData.confirmPassword) {
+      toast({
+        title: 'Passwords do not match',
+        description: 'Enter the same password in both password fields.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
     return true
   }
 

@@ -153,6 +153,7 @@ describe('AddStaffModal', () => {
     const nameInput = container.querySelector('#staff-name')
     const emailInput = container.querySelector('#staff-email')
     const passwordInput = container.querySelector('#staff-password')
+    const confirmPasswordInput = container.querySelector('#staff-confirm-password')
 
     if (!(nameInput instanceof HTMLInputElement)) {
       throw new Error('Name input not found.')
@@ -166,10 +167,15 @@ describe('AddStaffModal', () => {
       throw new Error('Password input not found.')
     }
 
+    if (!(confirmPasswordInput instanceof HTMLInputElement)) {
+      throw new Error('Confirm password input not found.')
+    }
+
     await act(async () => {
       setInputValue(nameInput, 'Jordan Trainer')
       setInputValue(emailInput, 'jordan@evolutionzfitness.com')
       setInputValue(passwordInput, 'password123')
+      setInputValue(confirmPasswordInput, 'password123')
     })
 
     await clickButton(container, 'Next')
@@ -224,11 +230,13 @@ describe('AddStaffModal', () => {
     const nameInput = container.querySelector('#staff-name')
     const emailInput = container.querySelector('#staff-email')
     const passwordInput = container.querySelector('#staff-password')
+    const confirmPasswordInput = container.querySelector('#staff-confirm-password')
 
     if (
       !(nameInput instanceof HTMLInputElement) ||
       !(emailInput instanceof HTMLInputElement) ||
-      !(passwordInput instanceof HTMLInputElement)
+      !(passwordInput instanceof HTMLInputElement) ||
+      !(confirmPasswordInput instanceof HTMLInputElement)
     ) {
       throw new Error('Step 1 inputs not found.')
     }
@@ -237,6 +245,7 @@ describe('AddStaffModal', () => {
       setInputValue(nameInput, 'Jordan Trainer')
       setInputValue(emailInput, 'jordan@evolutionzfitness.com')
       setInputValue(passwordInput, 'password123')
+      setInputValue(confirmPasswordInput, 'password123')
     })
 
     await clickButton(container, 'Next')
@@ -262,6 +271,43 @@ describe('AddStaffModal', () => {
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['staff', 'existing-1'],
+    })
+  })
+
+  it('blocks Step 1 progression when the password confirmation does not match', async () => {
+    await act(async () => {
+      root.render(<AddStaffModal open onOpenChange={onOpenChangeMock} />)
+    })
+
+    const nameInput = container.querySelector('#staff-name')
+    const emailInput = container.querySelector('#staff-email')
+    const passwordInput = container.querySelector('#staff-password')
+    const confirmPasswordInput = container.querySelector('#staff-confirm-password')
+
+    if (
+      !(nameInput instanceof HTMLInputElement) ||
+      !(emailInput instanceof HTMLInputElement) ||
+      !(passwordInput instanceof HTMLInputElement) ||
+      !(confirmPasswordInput instanceof HTMLInputElement)
+    ) {
+      throw new Error('Step 1 inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(nameInput, 'Jordan Trainer')
+      setInputValue(emailInput, 'jordan@evolutionzfitness.com')
+      setInputValue(passwordInput, 'password123')
+      setInputValue(confirmPasswordInput, 'different123')
+    })
+
+    await clickButton(container, 'Next')
+
+    expect(container.textContent).toContain('Step 1 of 3')
+    expect(createStaffMock).not.toHaveBeenCalled()
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Passwords do not match',
+      description: 'Enter the same password in both password fields.',
+      variant: 'destructive',
     })
   })
 })

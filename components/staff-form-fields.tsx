@@ -28,6 +28,7 @@ export type StaffFormState = {
   name: string
   email: string
   password: string
+  confirmPassword: string
   phone: string
   gender: StaffGender | ''
   remark: string
@@ -68,6 +69,7 @@ export function createEmptyStaffFormState(): StaffFormState {
     name: '',
     email: '',
     password: '',
+    confirmPassword: '',
     phone: '',
     gender: '',
     remark: '',
@@ -154,41 +156,65 @@ export function StaffIdentityFields({
         />
       </div>
 
-      <div className="grid gap-2">
-        <div className="flex items-baseline gap-2">
-          <Label htmlFor={`${idPrefix}-password`}>Password</Label>
-          {isEditMode ? <ImmutableFieldHint /> : null}
+      <div className={isEditMode ? "grid gap-2" : "grid sm:grid-cols-2 gap-4"}>
+        <div className="grid gap-2">
+          <div className="flex items-baseline gap-2">
+            <Label htmlFor={`${idPrefix}-password`}>Password</Label>
+            {isEditMode ? <ImmutableFieldHint /> : null}
+          </div>
+          <div className="relative">
+            <Input
+              id={`${idPrefix}-password`}
+              type={isEditMode ? 'text' : showPassword ? 'text' : 'password'}
+              value={formData.password}
+              onChange={(event) =>
+                setFormData((currentFormData) => ({
+                  ...currentFormData,
+                  password: event.target.value,
+                }))
+              }
+              placeholder={isEditMode ? 'Not editable' : 'Minimum 8 characters'}
+              minLength={isEditMode ? undefined : 8}
+              required={!isEditMode}
+              disabled={isEditMode || isSubmitting}
+              autoComplete={isEditMode ? undefined : 'new-password'}
+              className={isEditMode ? disabledFieldClassName : 'pr-12'}
+            />
+            {!isEditMode ? (
+              <button
+                type="button"
+                onClick={() => setShowPassword((currentValue) => !currentValue)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
+                disabled={isSubmitting}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            ) : null}
+          </div>
         </div>
-        <div className="relative">
-          <Input
-            id={`${idPrefix}-password`}
-            type={isEditMode ? 'text' : showPassword ? 'text' : 'password'}
-            value={formData.password}
-            onChange={(event) =>
-              setFormData((currentFormData) => ({
-                ...currentFormData,
-                password: event.target.value,
-              }))
-            }
-            placeholder={isEditMode ? 'Not editable' : 'Minimum 8 characters'}
-            minLength={isEditMode ? undefined : 8}
-            required={!isEditMode}
-            disabled={isEditMode || isSubmitting}
-            autoComplete={isEditMode ? undefined : 'new-password'}
-            className={isEditMode ? disabledFieldClassName : 'pr-12'}
-          />
-          {!isEditMode ? (
-            <button
-              type="button"
-              onClick={() => setShowPassword((currentValue) => !currentValue)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
+
+        {!isEditMode ? (
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}-confirm-password`}>Confirm Password</Label>
+            <Input
+              id={`${idPrefix}-confirm-password`}
+              type={showPassword ? 'text' : 'password'}
+              value={formData.confirmPassword}
+              onChange={(event) =>
+                setFormData((currentFormData) => ({
+                  ...currentFormData,
+                  confirmPassword: event.target.value,
+                }))
+              }
+              placeholder="Re-enter password"
+              minLength={8}
+              required
               disabled={isSubmitting}
-            >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          ) : null}
-        </div>
+              autoComplete="new-password"
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   )

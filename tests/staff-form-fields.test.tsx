@@ -10,6 +10,7 @@ function createFormState(overrides: Partial<StaffFormState> = {}): StaffFormStat
     name: 'Jane Doe',
     email: 'jane@evolutionzfitness.com',
     password: 'password123',
+    confirmPassword: 'password123',
     phone: '876-555-0100',
     gender: '',
     remark: '',
@@ -167,7 +168,7 @@ describe('StaffFormFields', () => {
     expect(container.querySelector('button[aria-label="Show password"]')).toBeNull()
   })
 
-  it('renders one add-mode password field and toggles visibility', async () => {
+  it('renders add-mode password confirmation and toggles visibility for both fields', async () => {
     await act(async () => {
       root.render(
         <StaffFormFieldsHarness initialFormState={createFormState()} mode="add" />,
@@ -175,13 +176,18 @@ describe('StaffFormFields', () => {
     })
 
     const passwordInput = container.querySelector('#staff-test-password')
+    const confirmPasswordInput = container.querySelector('#staff-test-confirm-password')
 
     if (!(passwordInput instanceof HTMLInputElement)) {
       throw new Error('Password input not found.')
     }
 
-    expect(container.querySelector('#staff-test-confirm-password')).toBeNull()
+    if (!(confirmPasswordInput instanceof HTMLInputElement)) {
+      throw new Error('Confirm password input not found.')
+    }
+
     expect(passwordInput.type).toBe('password')
+    expect(confirmPasswordInput.type).toBe('password')
 
     await act(async () => {
       getIconButton(container, 'Show password').dispatchEvent(
@@ -190,6 +196,7 @@ describe('StaffFormFields', () => {
     })
 
     expect(passwordInput.type).toBe('text')
+    expect(confirmPasswordInput.type).toBe('text')
   })
 
   it('renders titles as toggleable chips and keeps them deduplicated', async () => {

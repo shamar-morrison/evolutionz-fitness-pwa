@@ -68,6 +68,7 @@ export function createInitialFormState(profile: Profile): StaffFormState {
     name: profile.name,
     email: profile.email,
     password: MASKED_PASSWORD_VALUE,
+    confirmPassword: '',
     phone: profile.phone ?? '',
     gender: profile.gender ?? '',
     remark: profile.remark ?? '',
