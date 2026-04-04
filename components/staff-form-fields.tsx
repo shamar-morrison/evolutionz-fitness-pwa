@@ -231,7 +231,10 @@ export function StaffFormFields({
       {/* Row 3: Email & Phone — 2 cols */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}-email`}>Email</Label>
+          <div className="flex items-baseline gap-2">
+            <Label htmlFor={`${idPrefix}-email`}>Email</Label>
+            {isEditMode ? <ImmutableFieldHint /> : null}
+          </div>
           <Input
             id={`${idPrefix}-email`}
             type="email"
@@ -247,7 +250,6 @@ export function StaffFormFields({
             disabled={isEditMode}
             className={isEditMode ? disabledFieldClassName : undefined}
           />
-          {isEditMode ? <ImmutableFieldHint /> : null}
         </div>
         <div className="grid gap-2">
           <Label htmlFor={`${idPrefix}-phone`}>Telephone Number</Label>
@@ -270,7 +272,10 @@ export function StaffFormFields({
       {/* Row 4: Password & Confirm Password */}
       <div className={isEditMode ? "grid gap-2" : "grid gap-4 sm:grid-cols-2"}>
         <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}-password`}>Password</Label>
+          <div className="flex items-baseline gap-2">
+            <Label htmlFor={`${idPrefix}-password`}>Password</Label>
+            {isEditMode ? <ImmutableFieldHint /> : null}
+          </div>
           <div className="relative">
             <Input
               id={`${idPrefix}-password`}
@@ -301,7 +306,6 @@ export function StaffFormFields({
               </button>
             ) : null}
           </div>
-          {isEditMode ? <ImmutableFieldHint /> : null}
         </div>
 
         {!isEditMode ? (
