@@ -177,6 +177,10 @@ describe('AddStaffModal', () => {
     await clickButton(container, 'Trainer')
     await clickButton(container, 'HIIT')
     await clickButton(container, 'Next')
+
+    expect(container.textContent).toContain('Step 3 of 3')
+    expect(createStaffMock).not.toHaveBeenCalled()
+
     await clickButton(container, 'Save Staff')
 
     await flushAsyncWork()

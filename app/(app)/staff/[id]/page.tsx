@@ -181,16 +181,6 @@ function StaffDetailPageContent() {
               ) : (
                 <Badge variant="outline">No title assigned</Badge>
               )}
-              <Badge
-                className={
-                  profile.role === 'admin'
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-600'
-                    : ''
-                }
-                variant={profile.role === 'admin' ? 'default' : 'outline'}
-              >
-                {profile.role === 'admin' ? 'Admin' : 'Staff'}
-              </Badge>
             </div>
 
             <div className="mt-6 w-full space-y-3">
@@ -282,10 +272,6 @@ function StaffDetailPageContent() {
                   )}
                 </div>
               ) : null}
-              <div className="space-y-1 sm:col-span-2">
-                <p className="text-sm text-muted-foreground">Summary</p>
-                <p className="font-medium">{formatStaffTitles(profile.titles) || 'Not set'}</p>
-              </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Created At</p>
                 <p className="font-medium">{formatCreatedAt(profile.created_at)}</p>

@@ -347,11 +347,19 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
               )}
 
               {step < 3 ? (
-                <Button type="button" onClick={handleNextStep} disabled={isSubmitting}>
+                <Button
+                  key="next-step-button"
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault()
+                    handleNextStep()
+                  }}
+                  disabled={isSubmitting}
+                >
                   Next
                 </Button>
               ) : (
-                <Button type="submit" disabled={isSubmitting}>
+                <Button key="save-staff-button" type="submit" disabled={isSubmitting}>
                   {isSubmitting ? 'Creating Staff...' : (
                     <>
                       <UserPlus className="h-4 w-4" />
