@@ -29,6 +29,7 @@ vi.mock('@/lib/server-auth', async () => {
 })
 
 import { GET as getStaff, POST as postStaff } from '@/app/api/staff/route'
+import { POST as postAddTitle } from '@/app/api/staff/[id]/add-title/route'
 import {
   DELETE as deleteStaff,
   GET as getStaffDetail,
@@ -47,7 +48,7 @@ function buildProfileRow(overrides: Partial<Record<string, unknown>> = {}) {
     name: 'Admin User',
     email: 'admin@evolutionzfitness.com',
     role: 'admin',
-    title: 'Owner',
+    titles: ['Owner'],
     phone: null,
     gender: null,
     remark: null,
@@ -113,6 +114,10 @@ function createStaffAdminClient({
     data: buildProfileRow(),
     error: null,
   } satisfies QueryResult<Record<string, unknown>>,
+  existingEmailResult = {
+    data: null,
+    error: null,
+  } satisfies QueryResult<Record<string, unknown>>,
   updateResult = {
     data: buildProfileRow(),
     error: null,
@@ -140,6 +145,7 @@ function createStaffAdminClient({
 }: {
   detailReads?: Array<Record<string, unknown> | null>
   insertResult?: QueryResult<Record<string, unknown>>
+  existingEmailResult?: QueryResult<Record<string, unknown>>
   updateResult?: QueryResult<Record<string, unknown>>
   deleteResult?: QueryResult<Record<string, unknown>>
   createUserResult?: {
@@ -186,6 +192,21 @@ function createStaffAdminClient({
 
         return {
           select(columns: string) {
+            if (columns === 'id, name, titles') {
+              return {
+                ilike(column: string, value: string) {
+                  expect(column).toBe('email')
+                  expect(value).toBeDefined()
+
+                  return {
+                    maybeSingle() {
+                      return Promise.resolve(existingEmailResult)
+                    },
+                  }
+                },
+              }
+            }
+
             expect(columns).toBe(STAFF_PROFILE_SELECT)
 
             return {
@@ -320,7 +341,7 @@ describe('staff API routes', () => {
             id: 'staff-2',
             name: 'Trainer Two',
             role: 'staff',
-            title: 'Trainer',
+            titles: ['Trainer'],
             specialties: ['HIIT', 'Strength Training'],
             created_at: '2026-04-02T00:00:00.000Z',
           }),
@@ -341,7 +362,7 @@ describe('staff API routes', () => {
           name: 'Owner One',
           email: 'admin@evolutionzfitness.com',
           role: 'admin',
-          title: 'Owner',
+          titles: ['Owner'],
           phone: null,
           gender: null,
           remark: null,
@@ -354,7 +375,7 @@ describe('staff API routes', () => {
           name: 'Trainer Two',
           email: 'admin@evolutionzfitness.com',
           role: 'staff',
-          title: 'Trainer',
+          titles: ['Trainer'],
           phone: null,
           gender: null,
           remark: null,
@@ -396,7 +417,7 @@ describe('staff API routes', () => {
           name: 'Taylor Admin',
           email: 'taylor@evolutionzfitness.com',
           role: 'admin',
-          title: 'Owner',
+          titles: ['Owner'],
           phone: '876-555-0101',
           gender: 'female',
           remark: 'Handles billing',
@@ -425,7 +446,7 @@ describe('staff API routes', () => {
           phone: '876-555-0101',
           gender: 'female',
           remark: 'Handles billing',
-          title: 'Owner',
+          titles: ['Owner'],
           specialties: ['HIIT'],
         }),
       }),
@@ -445,7 +466,7 @@ describe('staff API routes', () => {
         name: 'Taylor Admin',
         email: 'taylor@evolutionzfitness.com',
         role: 'admin',
-        title: 'Owner',
+        titles: ['Owner'],
         phone: '876-555-0101',
         gender: 'female',
         remark: 'Handles billing',
@@ -459,7 +480,7 @@ describe('staff API routes', () => {
         name: 'Taylor Admin',
         email: 'taylor@evolutionzfitness.com',
         role: 'admin',
-        title: 'Owner',
+        titles: ['Owner'],
         phone: '876-555-0101',
         gender: 'female',
         remark: 'Handles billing',
@@ -478,7 +499,7 @@ describe('staff API routes', () => {
           name: 'Coach Kai',
           email: 'kai@evolutionzfitness.com',
           role: 'staff',
-          title: 'Trainer',
+          titles: ['Trainer'],
           specialties: ['Strength Training', 'HIIT', 'Recovery Training'],
         }),
         error: null,
@@ -501,7 +522,7 @@ describe('staff API routes', () => {
           name: 'Coach Kai',
           email: 'kai@evolutionzfitness.com',
           password: 'password123',
-          title: 'Trainer',
+          titles: ['Trainer'],
           specialties: ['HIIT', 'Strength Training', 'Recovery Training'],
         }),
       }),
@@ -514,7 +535,7 @@ describe('staff API routes', () => {
         name: 'Coach Kai',
         email: 'kai@evolutionzfitness.com',
         role: 'staff',
-        title: 'Trainer',
+        titles: ['Trainer'],
         phone: null,
         gender: null,
         remark: null,
@@ -528,7 +549,7 @@ describe('staff API routes', () => {
         name: 'Coach Kai',
         email: 'kai@evolutionzfitness.com',
         role: 'staff',
-        title: 'Trainer',
+        titles: ['Trainer'],
         phone: null,
         gender: null,
         remark: null,
@@ -547,7 +568,7 @@ describe('staff API routes', () => {
           name: 'Desk Lead',
           email: 'desk@evolutionzfitness.com',
           role: 'admin',
-          title: 'Owner',
+          titles: ['Owner'],
           specialties: [],
         }),
         error: null,
@@ -570,7 +591,7 @@ describe('staff API routes', () => {
           name: 'Desk Lead',
           email: 'desk@evolutionzfitness.com',
           password: 'password123',
-          title: 'Owner',
+          titles: ['Owner'],
           specialties: ['Strength Training', 'HIIT'],
         }),
       }),
@@ -585,7 +606,7 @@ describe('staff API routes', () => {
         name: 'Desk Lead',
         email: 'desk@evolutionzfitness.com',
         role: 'admin',
-        title: 'Owner',
+        titles: ['Owner'],
         phone: null,
         gender: null,
         remark: null,
@@ -604,7 +625,7 @@ describe('staff API routes', () => {
           name: 'Invalid User',
           email: 'not-an-email',
           password: 'short',
-          title: 'Trainer',
+          titles: ['Trainer'],
         }),
       }),
     )
@@ -625,7 +646,7 @@ describe('staff API routes', () => {
           email: 'invalid-gender@evolutionzfitness.com',
           password: 'password123',
           gender: 'other',
-          title: 'Trainer',
+          titles: ['Trainer'],
         }),
       }),
     )
@@ -663,7 +684,7 @@ describe('staff API routes', () => {
           name: 'Rollback User',
           email: 'rollback@evolutionzfitness.com',
           password: 'password123',
-          title: 'Trainer',
+          titles: ['Trainer'],
         }),
       }),
     )
@@ -676,6 +697,109 @@ describe('staff API routes', () => {
     })
   })
 
+  it('returns a typed duplicate-email response before creating a new auth user', async () => {
+    const { client, createUserCalls, insertValues } = createStaffAdminClient({
+      existingEmailResult: {
+        data: {
+          id: 'existing-1',
+          name: 'Jordan Existing',
+          titles: ['Assistant'],
+        },
+        error: null,
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await postStaff(
+      new Request('http://localhost/api/staff', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Jordan Existing',
+          email: 'jordan@evolutionzfitness.com',
+          password: 'password123',
+          titles: ['Trainer'],
+          specialties: ['HIIT'],
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(409)
+    expect(createUserCalls).toEqual([])
+    expect(insertValues).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      code: 'EMAIL_EXISTS',
+      existingProfile: {
+        id: 'existing-1',
+        name: 'Jordan Existing',
+        titles: ['Assistant'],
+      },
+    })
+  })
+
+  it('merges new titles into an existing profile and derives role from the merged set', async () => {
+    const { client, updateValues } = createStaffAdminClient({
+      detailReads: [
+        buildProfileRow({
+          id: 'staff-12',
+          name: 'Jordan Existing',
+          role: 'staff',
+          titles: ['Assistant'],
+          specialties: [],
+        }),
+      ],
+      updateResult: {
+        data: buildProfileRow({
+          id: 'staff-12',
+          name: 'Jordan Existing',
+          role: 'admin',
+          titles: ['Owner', 'Trainer', 'Assistant'],
+          specialties: ['Strength Training', 'HIIT'],
+        }),
+        error: null,
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await postAddTitle(
+      new Request('http://localhost/api/staff/staff-12/add-title', {
+        method: 'POST',
+        body: JSON.stringify({
+          titles: ['Trainer', 'Owner'],
+          specialties: ['HIIT', 'Strength Training'],
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-12' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(updateValues).toEqual([
+      {
+        role: 'admin',
+        titles: ['Owner', 'Trainer', 'Assistant'],
+        specialties: ['Strength Training', 'HIIT'],
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      profile: {
+        id: 'staff-12',
+        name: 'Jordan Existing',
+        email: 'admin@evolutionzfitness.com',
+        role: 'admin',
+        titles: ['Owner', 'Trainer', 'Assistant'],
+        phone: null,
+        gender: null,
+        remark: null,
+        specialties: ['Strength Training', 'HIIT'],
+        photoUrl: null,
+        created_at: '2026-04-03T00:00:00.000Z',
+      },
+    })
+  })
+
   it('updates a staff profile, derives the role from title, and clears nullable fields', async () => {
     const { client, updateValues } = createStaffAdminClient({
       updateResult: {
@@ -683,7 +807,7 @@ describe('staff API routes', () => {
           id: 'staff-2',
           name: 'Jordan Trainer',
           role: 'staff',
-          title: 'Trainer',
+          titles: ['Trainer'],
           phone: null,
           gender: null,
           remark: null,
@@ -705,7 +829,7 @@ describe('staff API routes', () => {
           phone: '',
           gender: null,
           remark: '   ',
-          title: 'Trainer',
+          titles: ['Trainer'],
         }),
       }),
       {
@@ -718,7 +842,7 @@ describe('staff API routes', () => {
       {
         name: 'Jordan Trainer',
         role: 'staff',
-        title: 'Trainer',
+        titles: ['Trainer'],
         phone: null,
         gender: null,
         remark: null,
@@ -731,7 +855,7 @@ describe('staff API routes', () => {
         name: 'Jordan Trainer',
         email: 'admin@evolutionzfitness.com',
         role: 'staff',
-        title: 'Trainer',
+        titles: ['Trainer'],
         phone: null,
         gender: null,
         remark: null,
@@ -749,7 +873,7 @@ describe('staff API routes', () => {
           id: 'staff-2',
           name: 'Jordan Trainer',
           role: 'staff',
-          title: 'Trainer',
+          titles: ['Trainer'],
           phone: '876-555-0100',
           gender: 'other',
           remark: 'Keeps legacy gender',
@@ -770,7 +894,7 @@ describe('staff API routes', () => {
           name: 'Jordan Trainer',
           phone: '876-555-0100',
           remark: 'Keeps legacy gender',
-          title: 'Trainer',
+          titles: ['Trainer'],
         }),
       }),
       {
@@ -783,7 +907,7 @@ describe('staff API routes', () => {
       {
         name: 'Jordan Trainer',
         role: 'staff',
-        title: 'Trainer',
+        titles: ['Trainer'],
         phone: '876-555-0100',
         remark: 'Keeps legacy gender',
       },
@@ -795,7 +919,7 @@ describe('staff API routes', () => {
         name: 'Jordan Trainer',
         email: 'admin@evolutionzfitness.com',
         role: 'staff',
-        title: 'Trainer',
+        titles: ['Trainer'],
         phone: '876-555-0100',
         gender: 'other',
         remark: 'Keeps legacy gender',
@@ -813,7 +937,7 @@ describe('staff API routes', () => {
           id: 'staff-2',
           name: 'Jordan Trainer',
           role: 'staff',
-          title: 'Trainer',
+          titles: ['Trainer'],
           specialties: ['Strength Training', 'HIIT'],
         }),
         error: null,
@@ -829,7 +953,7 @@ describe('staff API routes', () => {
         },
         body: JSON.stringify({
           name: 'Jordan Trainer',
-          title: 'Trainer',
+          titles: ['Trainer'],
           specialties: ['HIIT', 'Strength Training'],
         }),
       }),
@@ -843,7 +967,7 @@ describe('staff API routes', () => {
       {
         name: 'Jordan Trainer',
         role: 'staff',
-        title: 'Trainer',
+        titles: ['Trainer'],
         phone: null,
         remark: null,
         specialties: ['Strength Training', 'HIIT'],
@@ -856,7 +980,7 @@ describe('staff API routes', () => {
         name: 'Jordan Trainer',
         email: 'admin@evolutionzfitness.com',
         role: 'staff',
-        title: 'Trainer',
+        titles: ['Trainer'],
         phone: null,
         gender: null,
         remark: null,
@@ -874,7 +998,7 @@ describe('staff API routes', () => {
           id: 'staff-2',
           name: 'Jordan Admin',
           role: 'admin',
-          title: 'Owner',
+          titles: ['Owner'],
           specialties: [],
         }),
         error: null,
@@ -890,7 +1014,7 @@ describe('staff API routes', () => {
         },
         body: JSON.stringify({
           name: 'Jordan Admin',
-          title: 'Owner',
+          titles: ['Owner'],
         }),
       }),
       {
@@ -903,7 +1027,7 @@ describe('staff API routes', () => {
       {
         name: 'Jordan Admin',
         role: 'admin',
-        title: 'Owner',
+        titles: ['Owner'],
         phone: null,
         remark: null,
         specialties: [],
@@ -916,7 +1040,7 @@ describe('staff API routes', () => {
         name: 'Jordan Admin',
         email: 'admin@evolutionzfitness.com',
         role: 'admin',
-        title: 'Owner',
+        titles: ['Owner'],
         phone: null,
         gender: null,
         remark: null,
@@ -936,7 +1060,7 @@ describe('staff API routes', () => {
         },
         body: JSON.stringify({
           name: 'Jordan Trainer',
-          title: 'Trainer',
+          titles: ['Trainer'],
           email: 'jordan@evolutionzfitness.com',
           password: 'password123',
           role: 'admin',
@@ -964,7 +1088,7 @@ describe('staff API routes', () => {
         body: JSON.stringify({
           name: 'Jordan Trainer',
           gender: 'other',
-          title: 'Trainer',
+          titles: ['Trainer'],
         }),
       }),
       {
@@ -990,7 +1114,7 @@ describe('staff API routes', () => {
         },
         body: JSON.stringify({
           name: 'Jordan Trainer',
-          title: 'Trainer',
+          titles: ['Trainer'],
         }),
       }),
       {
@@ -1015,7 +1139,7 @@ describe('staff API routes', () => {
         },
         body: JSON.stringify({
           name: 'Jordan Trainer',
-          title: 'Trainer',
+          titles: ['Trainer'],
         }),
       }),
       {
@@ -1046,7 +1170,7 @@ describe('staff API routes', () => {
         },
         body: JSON.stringify({
           name: 'Missing Staff',
-          title: 'Trainer',
+          titles: ['Trainer'],
         }),
       }),
       {
@@ -1069,7 +1193,7 @@ describe('staff API routes', () => {
       profile: {
         id: 'staff-1',
         role: 'admin',
-        title: 'Owner',
+        titles: ['Owner'],
       },
     })
     getSupabaseAdminClientMock.mockReturnValue(createStaffAdminClient().client)
@@ -1082,7 +1206,7 @@ describe('staff API routes', () => {
         },
         body: JSON.stringify({
           name: 'Admin User',
-          title: 'Trainer',
+          titles: ['Trainer'],
         }),
       }),
       {
@@ -1104,7 +1228,7 @@ describe('staff API routes', () => {
           id: 'staff-2',
           name: 'Jordan Trainer',
           role: 'staff',
-          title: 'Trainer',
+          titles: ['Trainer'],
           photoUrl: 'staff-2.jpg',
           specialties: ['HIIT', 'Strength Training'],
         }),
@@ -1124,7 +1248,7 @@ describe('staff API routes', () => {
         name: 'Jordan Trainer',
         email: 'admin@evolutionzfitness.com',
         role: 'staff',
-        title: 'Trainer',
+        titles: ['Trainer'],
         phone: null,
         gender: null,
         remark: null,

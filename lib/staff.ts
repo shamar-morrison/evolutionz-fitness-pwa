@@ -33,9 +33,14 @@ export type StaffTitle = (typeof STAFF_TITLES)[number]
 export type StaffListFilter = 'All' | StaffTitle
 export type EditableStaffGender = (typeof STAFF_EDITABLE_GENDERS)[number]
 export type TrainerSpecialty = (typeof TRAINER_SPECIALTIES)[number]
+export type ExistingStaffProfileSummary = {
+  id: string
+  name: string
+  titles: StaffTitle[]
+}
 
 export const STAFF_PROFILE_SELECT =
-  'id, name, email, role, title, phone, gender, remark, specialties, photoUrl:photo_url, created_at'
+  'id, name, email, role, titles, phone, gender, remark, specialties, photoUrl:photo_url, created_at'
 
 type StaffListSuccessResponse = {
   staff: Profile[]
@@ -61,13 +66,19 @@ const profileRecordSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
   email: z.string().trim().min(1, 'Email is required.'),
   role: z.enum(['admin', 'staff']),
-  title: z.string().trim().min(1).nullable(),
+  titles: z.array(z.string()).nullable().optional(),
   phone: z.string().trim().min(1).nullable(),
   gender: staffGenderSchema.nullable(),
   remark: z.string().trim().min(1).nullable(),
   specialties: z.array(z.string()).nullable().optional(),
   photoUrl: z.string().trim().min(1).nullable(),
   created_at: z.string().trim().min(1, 'Created timestamp is required.'),
+})
+
+const existingStaffProfileSummarySchema = z.object({
+  id: z.string().trim().min(1, 'Profile id is required.'),
+  name: z.string().trim().min(1, 'Name is required.'),
+  titles: z.array(z.string()).nullable().optional(),
 })
 
 const staffListResponseSchema = z.object({
@@ -87,6 +98,36 @@ function normalizeNullableText(value: string | null | undefined) {
   return normalizedValue || null
 }
 
+export function normalizeStaffTitles(
+  titles: ReadonlyArray<string> | string | null | undefined,
+): StaffTitle[] {
+  const titleValues = Array.isArray(titles)
+    ? titles
+    : typeof titles === 'string'
+      ? [titles]
+      : []
+  const selectedTitles = new Set(
+    titleValues
+      .map((title) => normalizeText(title))
+      .filter((title): title is StaffTitle => isStaffTitle(title)),
+  )
+
+  return STAFF_TITLES.filter((title) => selectedTitles.has(title))
+}
+
+export function hasStaffTitle(
+  titles: ReadonlyArray<string> | string | null | undefined,
+  title: StaffTitle,
+) {
+  return normalizeStaffTitles(titles).includes(title)
+}
+
+export function formatStaffTitles(
+  titles: ReadonlyArray<string> | string | null | undefined,
+) {
+  return normalizeStaffTitles(titles).join(', ')
+}
+
 export function normalizeTrainerSpecialties(
   specialties: ReadonlyArray<string> | null | undefined,
 ): TrainerSpecialty[] {
@@ -104,11 +145,11 @@ export function normalizeTrainerSpecialties(
   return TRAINER_SPECIALTIES.filter((specialty) => selectedSpecialties.has(specialty))
 }
 
-export function normalizeStaffSpecialtiesForTitle(
-  title: string | null | undefined,
+export function normalizeStaffSpecialtiesForTitles(
+  titles: ReadonlyArray<string> | string | null | undefined,
   specialties: ReadonlyArray<string> | null | undefined,
 ): TrainerSpecialty[] {
-  if (title !== 'Trainer') {
+  if (!hasStaffTitle(titles, 'Trainer')) {
     return []
   }
 
@@ -134,18 +175,30 @@ function normalizeTimestamp(value: string) {
 export function mapProfileRecordToProfile(
   record: z.infer<typeof profileRecordSchema>,
 ): Profile {
+  const titles = normalizeStaffTitles(record.titles)
+
   return {
     id: normalizeText(record.id),
     name: normalizeText(record.name),
     email: normalizeText(record.email),
-    role: record.role,
-    title: normalizeNullableText(record.title),
+    role: deriveRoleFromTitles(titles),
+    titles,
     phone: normalizeNullableText(record.phone),
     gender: record.gender,
     remark: normalizeNullableText(record.remark),
-    specialties: normalizeStaffSpecialtiesForTitle(record.title, record.specialties),
+    specialties: normalizeStaffSpecialtiesForTitles(titles, record.specialties),
     photoUrl: normalizeNullableText(record.photoUrl),
     created_at: normalizeTimestamp(record.created_at),
+  }
+}
+
+function mapExistingStaffProfileSummary(
+  record: z.infer<typeof existingStaffProfileSummarySchema>,
+): ExistingStaffProfileSummary {
+  return {
+    id: normalizeText(record.id),
+    name: normalizeText(record.name),
+    titles: normalizeStaffTitles(record.titles),
   }
 }
 
@@ -169,6 +222,18 @@ export function normalizeProfile(input: unknown): Profile | null {
   return mapProfileRecordToProfile(parsed.data.profile)
 }
 
+export function normalizeExistingStaffProfileSummary(
+  input: unknown,
+): ExistingStaffProfileSummary | null {
+  const parsed = existingStaffProfileSummarySchema.safeParse(input)
+
+  if (!parsed.success) {
+    return null
+  }
+
+  return mapExistingStaffProfileSummary(parsed.data)
+}
+
 export function isStaffTitle(value: string | null | undefined): value is StaffTitle {
   return STAFF_TITLES.includes(value as StaffTitle)
 }
@@ -178,15 +243,19 @@ export function filterStaffByTitle(staff: Profile[], filter: StaffListFilter) {
     return staff
   }
 
-  return staff.filter((profile) => profile.title === filter)
+  return staff.filter((profile) => profile.titles.includes(filter))
 }
 
-export function deriveRoleFromTitle(title: StaffTitle): UserRole {
-  return title === 'Owner' ? 'admin' : 'staff'
+export function deriveRoleFromTitles(
+  titles: ReadonlyArray<string> | string | null | undefined,
+): UserRole {
+  return hasStaffTitle(titles, 'Owner') ? 'admin' : 'staff'
 }
 
-export function shouldShowOwnerWarning(title: string | null | undefined) {
-  return title === 'Owner'
+export function shouldShowOwnerWarning(
+  titles: ReadonlyArray<string> | string | null | undefined,
+) {
+  return hasStaffTitle(titles, 'Owner')
 }
 
 export function isEditableStaffGender(

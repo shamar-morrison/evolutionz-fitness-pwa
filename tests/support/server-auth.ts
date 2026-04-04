@@ -15,7 +15,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     name: overrides.name ?? 'Admin User',
     email: overrides.email ?? 'admin@evolutionzfitness.com',
     role: overrides.role ?? 'admin',
-    title: overrides.title ?? 'Owner',
+    titles: overrides.titles ?? ['Owner'],
     phone: overrides.phone ?? null,
     gender: overrides.gender ?? null,
     remark: overrides.remark ?? null,

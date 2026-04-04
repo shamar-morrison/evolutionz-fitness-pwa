@@ -5,9 +5,9 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { OwnerTitleWarning } from '@/components/add-staff-modal'
 import {
-  deriveRoleFromTitle,
+  deriveRoleFromTitles,
   filterStaffByTitle,
-  normalizeStaffSpecialtiesForTitle,
+  normalizeStaffSpecialtiesForTitles,
 } from '@/lib/staff'
 import type { Profile } from '@/types'
 
@@ -17,7 +17,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     name: overrides.name ?? 'Admin User',
     email: overrides.email ?? 'admin@evolutionzfitness.com',
     role: overrides.role ?? 'admin',
-    title: overrides.title ?? 'Owner',
+    titles: overrides.titles ?? ['Owner'],
     phone: overrides.phone ?? null,
     gender: overrides.gender ?? null,
     remark: overrides.remark ?? null,
@@ -50,41 +50,45 @@ describe('staff helpers', () => {
       false
   })
 
-  it('renders the owner warning when the selected title is Owner', async () => {
+  it('renders the owner warning when the selected titles include Owner', async () => {
     await act(async () => {
-      root.render(<OwnerTitleWarning title="Owner" />)
+      root.render(<OwnerTitleWarning titles={['Owner']} />)
     })
 
     expect(container.textContent).toContain('This title grants full admin access to the entire app.')
   })
 
-  it('does not render the owner warning for non-owner titles', async () => {
+  it('does not render the owner warning when the selected titles omit Owner', async () => {
     await act(async () => {
-      root.render(<OwnerTitleWarning title="Trainer" />)
+      root.render(<OwnerTitleWarning titles={['Trainer']} />)
     })
 
     expect(container.textContent).toBe('')
   })
 
-  it('filters staff by title while leaving All untouched', () => {
+  it('filters staff by matching titles while leaving All untouched', () => {
     const staff = [
       createProfile({
         id: 'staff-1',
-        title: 'Owner',
+        titles: ['Owner'],
       }),
       createProfile({
         id: 'staff-2',
         role: 'staff',
-        title: 'Trainer',
+        titles: ['Trainer', 'Assistant'],
       }),
       createProfile({
         id: 'staff-3',
         role: 'staff',
-        title: 'Reception',
+        titles: ['Assistant'],
       }),
     ]
 
     expect(filterStaffByTitle(staff, 'Trainer').map((profile) => profile.id)).toEqual(['staff-2'])
+    expect(filterStaffByTitle(staff, 'Assistant').map((profile) => profile.id)).toEqual([
+      'staff-2',
+      'staff-3',
+    ])
     expect(filterStaffByTitle(staff, 'All').map((profile) => profile.id)).toEqual([
       'staff-1',
       'staff-2',
@@ -92,14 +96,15 @@ describe('staff helpers', () => {
     ])
   })
 
-  it('derives admin access only for the Owner title', () => {
-    expect(deriveRoleFromTitle('Owner')).toBe('admin')
-    expect(deriveRoleFromTitle('Trainer')).toBe('staff')
+  it('derives admin access only when the titles include Owner', () => {
+    expect(deriveRoleFromTitles(['Owner'])).toBe('admin')
+    expect(deriveRoleFromTitles(['Trainer'])).toBe('staff')
+    expect(deriveRoleFromTitles(['Trainer', 'Owner'])).toBe('admin')
   })
 
   it('keeps trainer specialties in the shared constant order and removes duplicates', () => {
     expect(
-      normalizeStaffSpecialtiesForTitle('Trainer', [
+      normalizeStaffSpecialtiesForTitles(['Trainer'], [
         'HIIT',
         'Strength Training',
         'HIIT',
@@ -108,9 +113,9 @@ describe('staff helpers', () => {
     ).toEqual(['Strength Training', 'HIIT', 'Recovery Training'])
   })
 
-  it('clears specialties for non-trainer titles', () => {
+  it('clears specialties when the titles do not include Trainer', () => {
     expect(
-      normalizeStaffSpecialtiesForTitle('Owner', ['Strength Training', 'HIIT']),
+      normalizeStaffSpecialtiesForTitles(['Owner'], ['Strength Training', 'HIIT']),
     ).toEqual([])
   })
 })

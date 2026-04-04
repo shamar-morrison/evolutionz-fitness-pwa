@@ -5,16 +5,14 @@ import {
   STAFF_PROFILE_SELECT,
   STAFF_TITLES,
   TRAINER_SPECIALTIES,
-  deriveRoleFromTitle,
+  deriveRoleFromTitles,
+  normalizeExistingStaffProfileSummary,
   normalizeProfile,
-  normalizeStaffSpecialtiesForTitle,
+  normalizeStaffSpecialtiesForTitles,
   readStaffProfiles,
   type StaffReadClient,
 } from '@/lib/staff'
-import {
-  hydrateStaffPhotoUrls,
-  type StaffPhotoStorageClient,
-} from '@/lib/staff-photo-storage'
+import { hydrateStaffPhotoUrls, type StaffPhotoStorageClient } from '@/lib/staff-photo-storage'
 import { requireAdminUser } from '@/lib/server-auth'
 import { createClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -46,12 +44,17 @@ type CreateStaffAdminClient = StaffPhotoStorageClient & {
     }
   }
   from(table: 'profiles'): {
+    select(columns: 'id, name, titles'): {
+      ilike(column: 'email', value: string): {
+        maybeSingle(): QueryResult<Record<string, unknown>>
+      }
+    }
     insert(values: {
       id: string
       name: string
       email: string
       role: 'admin' | 'staff'
-      title: string
+      titles: string[]
       phone: string | null
       gender: 'male' | 'female' | null
       remark: string | null
@@ -72,7 +75,7 @@ const createStaffRequestSchema = z.object({
   phone: z.string().trim().optional(),
   gender: z.enum(STAFF_EDITABLE_GENDERS).optional(),
   remark: z.string().trim().optional(),
-  title: z.enum(STAFF_TITLES),
+  titles: z.array(z.enum(STAFF_TITLES)).min(1, 'Select at least one title.'),
   specialties: z.array(z.enum(TRAINER_SPECIALTIES)).optional(),
 })
 
@@ -140,8 +143,32 @@ export async function POST(request: Request) {
     const requestBody = await request.json()
     const input = createStaffRequestSchema.parse(requestBody)
     const supabase = getSupabaseAdminClient() as unknown as CreateStaffAdminClient
+    const normalizedEmail = input.email.trim()
+    const { data: existingProfileData, error: existingProfileError } = await supabase
+      .from('profiles')
+      .select('id, name, titles')
+      .ilike('email', normalizedEmail)
+      .maybeSingle()
+
+    if (existingProfileError) {
+      throw new Error(`Failed to check for an existing staff profile: ${existingProfileError.message}`)
+    }
+
+    const existingProfile = normalizeExistingStaffProfileSummary(existingProfileData)
+
+    if (existingProfile) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: 'EMAIL_EXISTS',
+          existingProfile,
+        },
+        { status: 409 },
+      )
+    }
+
     const { data: authData, error: createUserError } = await supabase.auth.admin.createUser({
-      email: input.email.trim(),
+      email: normalizedEmail,
       password: input.password,
       email_confirm: true,
     })
@@ -161,13 +188,13 @@ export async function POST(request: Request) {
       .insert({
         id: createdUserId,
         name: input.name.trim(),
-        email: input.email.trim(),
-        role: deriveRoleFromTitle(input.title),
-        title: input.title,
+        email: normalizedEmail,
+        role: deriveRoleFromTitles(input.titles),
+        titles: input.titles,
         phone: normalizeOptionalText(input.phone),
         gender: input.gender ?? null,
         remark: normalizeOptionalText(input.remark),
-        specialties: normalizeStaffSpecialtiesForTitle(input.title, input.specialties),
+        specialties: normalizeStaffSpecialtiesForTitles(input.titles, input.specialties),
       })
       .select(STAFF_PROFILE_SELECT)
       .maybeSingle()

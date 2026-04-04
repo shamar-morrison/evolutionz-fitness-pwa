@@ -5,12 +5,14 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  addStaffTitlesMock,
   createStaffMock,
   invalidateQueriesMock,
   onOpenChangeMock,
   toastMock,
   uploadStaffPhotoMock,
 } = vi.hoisted(() => ({
+  addStaffTitlesMock: vi.fn(),
   createStaffMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   onOpenChangeMock: vi.fn(),
@@ -29,6 +31,7 @@ vi.mock('@/hooks/use-toast', () => ({
 }))
 
 vi.mock('@/lib/staff-actions', () => ({
+  addStaffTitles: addStaffTitlesMock,
   createStaff: createStaffMock,
   uploadStaffPhoto: uploadStaffPhotoMock,
 }))
@@ -50,49 +53,56 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogTitle: ({ children }: React.ComponentProps<'h2'>) => <h2>{children}</h2>,
 }))
 
-vi.mock('@/components/staff-form-fields', async () => {
-  const actual = await vi.importActual<typeof import('@/components/staff-form-fields')>(
-    '@/components/staff-form-fields',
-  )
-
-  return {
-    ...actual,
-    createEmptyStaffFormState: () => ({
-      ...actual.createEmptyStaffFormState(),
-      title: 'Owner',
-    }),
-  }
-})
-
 import { AddStaffModal } from '@/components/add-staff-modal'
+import type { Profile } from '@/types'
 
-function createProfile() {
+function createProfile(overrides: Partial<Profile> = {}): Profile {
   return {
-    id: 'staff-1',
-    name: 'Jordan Trainer',
-    email: 'jordan@evolutionzfitness.com',
-    role: 'staff' as const,
-    title: 'Owner',
-    phone: null,
-    gender: null,
-    remark: null,
-    specialties: [],
-    photoUrl: null,
-    created_at: '2026-04-03T00:00:00.000Z',
+    id: overrides.id ?? 'staff-1',
+    name: overrides.name ?? 'Jordan Trainer',
+    email: overrides.email ?? 'jordan@evolutionzfitness.com',
+    role: overrides.role ?? 'staff',
+    titles: overrides.titles ?? ['Trainer'],
+    phone: overrides.phone ?? null,
+    gender: overrides.gender ?? null,
+    remark: overrides.remark ?? null,
+    specialties: overrides.specialties ?? [],
+    photoUrl: overrides.photoUrl ?? null,
+    created_at: overrides.created_at ?? '2026-04-03T00:00:00.000Z',
   }
 }
 
-function setInputValue(input: HTMLInputElement, value: string) {
-  const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    Object.getPrototypeOf(input),
+    'value',
+  )
   const setValue = descriptor?.set
 
   if (!setValue) {
-    throw new Error('HTMLInputElement value setter is unavailable.')
+    throw new Error('Input value setter is unavailable.')
   }
 
   setValue.call(input, value)
   input.dispatchEvent(new Event('input', { bubbles: true }))
   input.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+function getButton(container: HTMLDivElement, label: string) {
+  const buttons = Array.from(container.querySelectorAll('button'))
+  const button = buttons.find((candidate) => candidate.textContent?.trim() === label)
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`${label} button not found.`)
+  }
+
+  return button
+}
+
+async function clickButton(container: HTMLDivElement, label: string) {
+  await act(async () => {
+    getButton(container, label).dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
 }
 
 async function flushAsyncWork() {
@@ -126,7 +136,16 @@ describe('AddStaffModal', () => {
     vi.clearAllMocks()
   })
 
-  it('shows a destructive toast and blocks staff creation when the passwords do not match', async () => {
+  it('creates staff after progressing through the three steps', async () => {
+    createStaffMock.mockResolvedValue({
+      ok: true,
+      profile: createProfile({
+        role: 'admin',
+        titles: ['Owner', 'Trainer'],
+        specialties: ['HIIT'],
+      }),
+    })
+
     await act(async () => {
       root.render(<AddStaffModal open onOpenChange={onOpenChangeMock} />)
     })
@@ -134,8 +153,6 @@ describe('AddStaffModal', () => {
     const nameInput = container.querySelector('#staff-name')
     const emailInput = container.querySelector('#staff-email')
     const passwordInput = container.querySelector('#staff-password')
-    const confirmPasswordInput = container.querySelector('#staff-confirm-password')
-    const form = container.querySelector('form')
 
     if (!(nameInput instanceof HTMLInputElement)) {
       throw new Error('Name input not found.')
@@ -149,71 +166,18 @@ describe('AddStaffModal', () => {
       throw new Error('Password input not found.')
     }
 
-    if (!(confirmPasswordInput instanceof HTMLInputElement)) {
-      throw new Error('Confirm password input not found.')
-    }
-
-    if (!(form instanceof HTMLFormElement)) {
-      throw new Error('Add staff form not found.')
-    }
-
     await act(async () => {
       setInputValue(nameInput, 'Jordan Trainer')
       setInputValue(emailInput, 'jordan@evolutionzfitness.com')
       setInputValue(passwordInput, 'password123')
-      setInputValue(confirmPasswordInput, 'password124')
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
 
-    expect(toastMock).toHaveBeenCalledWith({
-      title: 'Passwords do not match',
-      description: 'Re-enter matching passwords before creating this staff account.',
-      variant: 'destructive',
-    })
-    expect(createStaffMock).not.toHaveBeenCalled()
-    expect(invalidateQueriesMock).not.toHaveBeenCalled()
-  })
-
-  it('creates staff with only the original password field when the confirmation matches', async () => {
-    createStaffMock.mockResolvedValue(createProfile())
-
-    await act(async () => {
-      root.render(<AddStaffModal open onOpenChange={onOpenChangeMock} />)
-    })
-
-    const nameInput = container.querySelector('#staff-name')
-    const emailInput = container.querySelector('#staff-email')
-    const passwordInput = container.querySelector('#staff-password')
-    const confirmPasswordInput = container.querySelector('#staff-confirm-password')
-    const form = container.querySelector('form')
-
-    if (!(nameInput instanceof HTMLInputElement)) {
-      throw new Error('Name input not found.')
-    }
-
-    if (!(emailInput instanceof HTMLInputElement)) {
-      throw new Error('Email input not found.')
-    }
-
-    if (!(passwordInput instanceof HTMLInputElement)) {
-      throw new Error('Password input not found.')
-    }
-
-    if (!(confirmPasswordInput instanceof HTMLInputElement)) {
-      throw new Error('Confirm password input not found.')
-    }
-
-    if (!(form instanceof HTMLFormElement)) {
-      throw new Error('Add staff form not found.')
-    }
-
-    await act(async () => {
-      setInputValue(nameInput, 'Jordan Trainer')
-      setInputValue(emailInput, 'jordan@evolutionzfitness.com')
-      setInputValue(passwordInput, 'password123')
-      setInputValue(confirmPasswordInput, 'password123')
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-    })
+    await clickButton(container, 'Next')
+    await clickButton(container, 'Owner')
+    await clickButton(container, 'Trainer')
+    await clickButton(container, 'HIIT')
+    await clickButton(container, 'Next')
+    await clickButton(container, 'Save Staff')
 
     await flushAsyncWork()
 
@@ -221,11 +185,79 @@ describe('AddStaffModal', () => {
       name: 'Jordan Trainer',
       email: 'jordan@evolutionzfitness.com',
       password: 'password123',
-      title: 'Owner',
+      titles: ['Owner', 'Trainer'],
+      specialties: ['HIIT'],
     })
-    expect(createStaffMock.mock.calls[0]?.[0]).not.toHaveProperty('confirmPassword')
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['staff'],
+    })
+    expect(uploadStaffPhotoMock).not.toHaveBeenCalled()
+  })
+
+  it('shows the duplicate-email confirmation flow and merges titles into the existing profile', async () => {
+    createStaffMock.mockResolvedValue({
+      ok: false,
+      code: 'EMAIL_EXISTS',
+      existingProfile: {
+        id: 'existing-1',
+        name: 'Jordan Existing',
+        titles: ['Assistant'],
+      },
+    })
+    addStaffTitlesMock.mockResolvedValue(
+      createProfile({
+        id: 'existing-1',
+        name: 'Jordan Existing',
+        titles: ['Trainer', 'Assistant'],
+        specialties: ['HIIT'],
+      }),
+    )
+
+    await act(async () => {
+      root.render(<AddStaffModal open onOpenChange={onOpenChangeMock} />)
+    })
+
+    const nameInput = container.querySelector('#staff-name')
+    const emailInput = container.querySelector('#staff-email')
+    const passwordInput = container.querySelector('#staff-password')
+
+    if (
+      !(nameInput instanceof HTMLInputElement) ||
+      !(emailInput instanceof HTMLInputElement) ||
+      !(passwordInput instanceof HTMLInputElement)
+    ) {
+      throw new Error('Step 1 inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(nameInput, 'Jordan Trainer')
+      setInputValue(emailInput, 'jordan@evolutionzfitness.com')
+      setInputValue(passwordInput, 'password123')
+    })
+
+    await clickButton(container, 'Next')
+    await clickButton(container, 'Trainer')
+    await clickButton(container, 'HIIT')
+    await clickButton(container, 'Next')
+    await clickButton(container, 'Save Staff')
+    await flushAsyncWork()
+
+    expect(container.textContent).toContain('A staff member with this email already exists')
+    expect(container.textContent).toContain('Jordan Existing')
+    expect(container.textContent).toContain('Assistant')
+
+    await clickButton(container, 'Confirm')
+    await flushAsyncWork()
+
+    expect(addStaffTitlesMock).toHaveBeenCalledWith('existing-1', {
+      titles: ['Trainer'],
+      specialties: ['HIIT'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['staff'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['staff', 'existing-1'],
     })
   })
 })

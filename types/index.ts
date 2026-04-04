@@ -79,7 +79,7 @@ export type Profile = {
   name: string
   email: string
   role: UserRole
-  title: string | null
+  titles: string[]
   phone: string | null
   gender: StaffGender | null
   remark: string | null

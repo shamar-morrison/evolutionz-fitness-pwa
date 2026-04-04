@@ -10,11 +10,10 @@ function createFormState(overrides: Partial<StaffFormState> = {}): StaffFormStat
     name: 'Jane Doe',
     email: 'jane@evolutionzfitness.com',
     password: 'password123',
-    confirmPassword: 'password123',
     phone: '876-555-0100',
     gender: '',
     remark: '',
-    title: 'Trainer',
+    titles: ['Trainer'],
     specialties: [],
     ...overrides,
   }
@@ -43,19 +42,24 @@ function StaffFormFieldsHarness({
         resetPasswordVisibilityKey={resetPasswordVisibilityKey}
       />
       <output data-testid="gender-state">{formData.gender || 'empty'}</output>
+      <output data-testid="titles-state">{JSON.stringify(formData.titles)}</output>
       <output data-testid="specialties-state">{JSON.stringify(formData.specialties)}</output>
     </>
   )
 }
 
-function getGenderState(container: HTMLDivElement) {
-  const output = container.querySelector('[data-testid="gender-state"]')
+function getTextOutput(container: HTMLDivElement, testId: string) {
+  const output = container.querySelector(`[data-testid="${testId}"]`)
 
   if (!(output instanceof HTMLOutputElement)) {
-    throw new Error('Gender state output not found.')
+    throw new Error(`${testId} output not found.`)
   }
 
   return output.textContent
+}
+
+function getArrayOutput(container: HTMLDivElement, testId: string) {
+  return JSON.parse(getTextOutput(container, testId) ?? '[]') as string[]
 }
 
 function getButton(container: HTMLDivElement, label: string) {
@@ -77,16 +81,6 @@ function getIconButton(container: HTMLDivElement, label: string) {
   }
 
   return button
-}
-
-function getSpecialtiesState(container: HTMLDivElement) {
-  const output = container.querySelector('[data-testid="specialties-state"]')
-
-  if (!(output instanceof HTMLOutputElement)) {
-    throw new Error('Specialties state output not found.')
-  }
-
-  return JSON.parse(output.textContent ?? '[]') as string[]
 }
 
 describe('StaffFormFields', () => {
@@ -129,25 +123,25 @@ describe('StaffFormFields', () => {
 
     expect(genderButtonsRow.className).toContain('grid-cols-2')
     expect(container.textContent).not.toContain('Other')
-    expect(getGenderState(container)).toBe('empty')
+    expect(getTextOutput(container, 'gender-state')).toBe('empty')
 
     await act(async () => {
       maleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(getGenderState(container)).toBe('male')
+    expect(getTextOutput(container, 'gender-state')).toBe('male')
 
     await act(async () => {
       maleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(getGenderState(container)).toBe('empty')
+    expect(getTextOutput(container, 'gender-state')).toBe('empty')
 
     await act(async () => {
       femaleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(getGenderState(container)).toBe('female')
+    expect(getTextOutput(container, 'gender-state')).toBe('female')
   })
 
   it('shows no selected button for a legacy other gender while preserving the raw value', async () => {
@@ -166,15 +160,14 @@ describe('StaffFormFields', () => {
     const maleButton = getButton(container, 'Male')
     const femaleButton = getButton(container, 'Female')
 
-    expect(getGenderState(container)).toBe('other')
+    expect(getTextOutput(container, 'gender-state')).toBe('other')
     expect(maleButton.className).not.toContain('bg-primary')
     expect(femaleButton.className).not.toContain('bg-primary')
     expect(container.textContent).not.toContain('Other')
-    expect(container.querySelector('#staff-test-confirm-password')).toBeNull()
     expect(container.querySelector('button[aria-label="Show password"]')).toBeNull()
   })
 
-  it('renders confirm password and toggles visibility for both add-mode password fields', async () => {
+  it('renders one add-mode password field and toggles visibility', async () => {
     await act(async () => {
       root.render(
         <StaffFormFieldsHarness initialFormState={createFormState()} mode="add" />,
@@ -182,18 +175,13 @@ describe('StaffFormFields', () => {
     })
 
     const passwordInput = container.querySelector('#staff-test-password')
-    const confirmPasswordInput = container.querySelector('#staff-test-confirm-password')
 
     if (!(passwordInput instanceof HTMLInputElement)) {
       throw new Error('Password input not found.')
     }
 
-    if (!(confirmPasswordInput instanceof HTMLInputElement)) {
-      throw new Error('Confirm password input not found.')
-    }
-
+    expect(container.querySelector('#staff-test-confirm-password')).toBeNull()
     expect(passwordInput.type).toBe('password')
-    expect(confirmPasswordInput.type).toBe('password')
 
     await act(async () => {
       getIconButton(container, 'Show password').dispatchEvent(
@@ -202,16 +190,34 @@ describe('StaffFormFields', () => {
     })
 
     expect(passwordInput.type).toBe('text')
-    expect(confirmPasswordInput.type).toBe('password')
+  })
 
+  it('renders titles as toggleable chips and keeps them deduplicated', async () => {
     await act(async () => {
-      getIconButton(container, 'Show confirm password').dispatchEvent(
-        new MouseEvent('click', { bubbles: true }),
+      root.render(
+        <StaffFormFieldsHarness
+          initialFormState={createFormState({ titles: ['Trainer'] })}
+          mode="add"
+        />,
       )
     })
 
-    expect(passwordInput.type).toBe('text')
-    expect(confirmPasswordInput.type).toBe('text')
+    const ownerButton = getButton(container, 'Owner')
+    const trainerButton = getButton(container, 'Trainer')
+
+    expect(getArrayOutput(container, 'titles-state')).toEqual(['Trainer'])
+
+    await act(async () => {
+      ownerButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(getArrayOutput(container, 'titles-state')).toEqual(['Owner', 'Trainer'])
+
+    await act(async () => {
+      trainerButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(getArrayOutput(container, 'titles-state')).toEqual(['Owner'])
   })
 
   it('renders trainer specialties as toggleable chips and updates the selected state', async () => {
@@ -225,33 +231,27 @@ describe('StaffFormFields', () => {
     const hiitButton = getButton(container, 'HIIT')
 
     expect(container.textContent).toContain('Specialties')
-    expect(getSpecialtiesState(container)).toEqual([])
+    expect(getArrayOutput(container, 'specialties-state')).toEqual([])
 
     await act(async () => {
       hiitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(getSpecialtiesState(container)).toEqual(['HIIT'])
+    expect(getArrayOutput(container, 'specialties-state')).toEqual(['HIIT'])
 
     await act(async () => {
       strengthButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(getSpecialtiesState(container)).toEqual(['Strength Training', 'HIIT'])
-
-    await act(async () => {
-      hiitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
-
-    expect(getSpecialtiesState(container)).toEqual(['Strength Training'])
+    expect(getArrayOutput(container, 'specialties-state')).toEqual(['Strength Training', 'HIIT'])
   })
 
-  it('hides the specialties field for non-trainer titles', async () => {
+  it('clears specialties immediately when trainer is deselected', async () => {
     await act(async () => {
       root.render(
         <StaffFormFieldsHarness
           initialFormState={createFormState({
-            title: 'Owner',
+            titles: ['Owner', 'Trainer'],
             specialties: ['Strength Training'],
           })}
           mode="edit"
@@ -259,7 +259,12 @@ describe('StaffFormFields', () => {
       )
     })
 
+    await act(async () => {
+      getButton(container, 'Trainer').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
     expect(container.textContent).not.toContain('Specialties')
-    expect(() => getButton(container, 'Strength Training')).toThrow('Strength Training button not found.')
+    expect(getArrayOutput(container, 'titles-state')).toEqual(['Owner'])
+    expect(getArrayOutput(container, 'specialties-state')).toEqual([])
   })
 })

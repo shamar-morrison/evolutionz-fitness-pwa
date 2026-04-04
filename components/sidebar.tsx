@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
 import { RoleGuard } from '@/components/role-guard'
 import { createClient } from '@/lib/supabase/client'
+import { formatStaffTitles } from '@/lib/staff'
 import {
   LayoutDashboard,
   Users,
@@ -111,7 +112,7 @@ export function Sidebar() {
   }
 
   const displayName = profile?.name ?? user?.email ?? 'Account'
-  const subtitle = profile?.title ?? user?.email ?? null
+  const subtitle = profile ? formatStaffTitles(profile.titles) || 'Signed in' : user?.email ?? null
 
   return (
     <aside className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground">

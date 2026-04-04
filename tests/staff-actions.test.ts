@@ -26,7 +26,7 @@ describe('staff actions', () => {
             name: 'Jordan Trainer',
             email: 'jordan@evolutionzfitness.com',
             role: 'staff',
-            title: 'Trainer',
+            titles: ['Trainer'],
             phone: '876-555-0100',
             gender: 'male',
             remark: 'Updated remark',
@@ -46,7 +46,7 @@ describe('staff actions', () => {
       phone: '876-555-0100',
       gender: 'male',
       remark: 'Updated remark',
-      title: 'Trainer',
+      titles: ['Trainer'],
       specialties: ['Strength Training', 'HIIT'],
     })
 
@@ -57,10 +57,10 @@ describe('staff actions', () => {
       phone: '876-555-0100',
       gender: 'male',
       remark: 'Updated remark',
-      title: 'Trainer',
+      titles: ['Trainer'],
       specialties: ['Strength Training', 'HIIT'],
     })
-    expect(profile.title).toBe('Trainer')
+    expect(profile.titles).toEqual(['Trainer'])
     expect(profile.email).toBe('jordan@evolutionzfitness.com')
     expect(profile.specialties).toEqual(['Strength Training', 'HIIT'])
   })
@@ -75,7 +75,7 @@ describe('staff actions', () => {
             name: 'Jordan Trainer',
             email: 'jordan@evolutionzfitness.com',
             role: 'staff',
-            title: 'Trainer',
+            titles: ['Trainer'],
             phone: '876-555-0100',
             gender: 'other',
             remark: 'Updated remark',
@@ -94,14 +94,14 @@ describe('staff actions', () => {
       name: 'Jordan Trainer',
       phone: '876-555-0100',
       remark: 'Updated remark',
-      title: 'Trainer',
+      titles: ['Trainer'],
     })
 
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({
       name: 'Jordan Trainer',
       phone: '876-555-0100',
       remark: 'Updated remark',
-      title: 'Trainer',
+      titles: ['Trainer'],
     })
   })
 })

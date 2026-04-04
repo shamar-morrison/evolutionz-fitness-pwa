@@ -17,9 +17,20 @@ import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { toast } from '@/hooks/use-toast'
 import { compressImage } from '@/lib/compress-image'
 import { queryKeys } from '@/lib/query-keys'
-import { isEditableStaffGender, normalizeTrainerSpecialties } from '@/lib/staff'
-import { createStaff, uploadStaffPhoto } from '@/lib/staff-actions'
-import { StaffFormFields, createEmptyStaffFormState } from '@/components/staff-form-fields'
+import {
+  formatStaffTitles,
+  hasStaffTitle,
+  isEditableStaffGender,
+  normalizeTrainerSpecialties,
+} from '@/lib/staff'
+import { addStaffTitles, createStaff, uploadStaffPhoto } from '@/lib/staff-actions'
+import {
+  StaffAdditionalInfoFields,
+  StaffIdentityFields,
+  StaffPhotoField,
+  StaffTitlesFields,
+  createEmptyStaffFormState,
+} from '@/components/staff-form-fields'
 import type { Profile } from '@/types'
 
 type AddStaffModalProps = {
@@ -37,27 +48,33 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
   const [formData, setFormData] = useState(() => createEmptyStaffFormState())
   const [photoFile, setPhotoFile] = useState<FileWithPreview | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [duplicateProfile, setDuplicateProfile] = useState<{
+    id: string
+    name: string
+    titles: string[]
+  } | null>(null)
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       setFormData(createEmptyStaffFormState())
       setPhotoFile(null)
       setIsSubmitting(false)
+      setStep(1)
+      setDuplicateProfile(null)
     }
 
     onOpenChange(nextOpen)
   }
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
-
+  const validateIdentityStep = () => {
     if (!formData.name.trim()) {
       toast({
         title: 'Full name required',
         description: 'Enter the staff member’s full name before saving.',
         variant: 'destructive',
       })
-      return
+      return false
     }
 
     if (!emailSchema.safeParse(formData.email).success) {
@@ -66,7 +83,7 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
         description: 'Enter a valid email address.',
         variant: 'destructive',
       })
-      return
+      return false
     }
 
     if (formData.password.length < 8) {
@@ -75,51 +92,73 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
         description: 'Passwords must be at least 8 characters long.',
         variant: 'destructive',
       })
-      return
+      return false
     }
 
-    if (!formData.confirmPassword) {
-      toast({
-        title: 'Confirm password required',
-        description: 'Re-enter the password to confirm it before creating this staff account.',
-        variant: 'destructive',
-      })
-      return
-    }
+    return true
+  }
 
-    if (formData.password !== formData.confirmPassword) {
-      toast({
-        title: 'Passwords do not match',
-        description: 'Re-enter matching passwords before creating this staff account.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    if (!formData.title) {
+  const validateTitlesStep = () => {
+    if (formData.titles.length === 0) {
       toast({
         title: 'Title required',
-        description: 'Choose a title before creating this staff account.',
+        description: 'Choose at least one title before continuing.',
         variant: 'destructive',
       })
+      return false
+    }
+
+    return true
+  }
+
+  const handleNextStep = () => {
+    if (step === 1) {
+      if (!validateIdentityStep()) {
+        return
+      }
+
+      setStep(2)
+      return
+    }
+
+    if (step === 2) {
+      if (!validateTitlesStep()) {
+        return
+      }
+
+      setStep(3)
+    }
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+
+    if (!validateIdentityStep() || !validateTitlesStep()) {
       return
     }
 
     setIsSubmitting(true)
 
     try {
-      const profile = await createStaff({
+      const result = await createStaff({
         name: formData.name.trim(),
         email: formData.email.trim(),
         password: formData.password,
         ...(formData.phone.trim() ? { phone: formData.phone.trim() } : {}),
         ...(isEditableStaffGender(formData.gender) ? { gender: formData.gender } : {}),
         ...(formData.remark.trim() ? { remark: formData.remark.trim() } : {}),
-        title: formData.title,
-        ...(formData.title === 'Trainer'
+        titles: formData.titles,
+        ...(hasStaffTitle(formData.titles, 'Trainer')
           ? { specialties: normalizeTrainerSpecialties(formData.specialties) }
           : {}),
       })
+
+      if (!result.ok) {
+        setDuplicateProfile(result.existingProfile)
+        return
+      }
+
+      const profile = result.profile
 
       let photoUploadError: string | null = null
 
@@ -149,7 +188,7 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
       } else {
         toast({
           title: 'Staff added',
-          description: `${profile.name} was added as ${profile.title ?? 'Staff'}.`,
+          description: `${profile.name} was added as ${formatStaffTitles(profile.titles) || 'Staff'}.`,
         })
       }
     } catch (error) {
@@ -164,56 +203,166 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
     }
   }
 
+  const handleConfirmDuplicate = async () => {
+    if (!duplicateProfile) {
+      return
+    }
+
+    setIsSubmitting(true)
+
+    try {
+      const profile = await addStaffTitles(duplicateProfile.id, {
+        titles: formData.titles,
+        ...(hasStaffTitle(formData.titles, 'Trainer')
+          ? { specialties: normalizeTrainerSpecialties(formData.specialties) }
+          : {}),
+      })
+
+      handleOpenChange(false)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.staff.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.staff.detail(duplicateProfile.id) }),
+      ])
+      onSuccess?.(profile)
+
+      toast({
+        title: 'Staff updated',
+        description: `${profile.name} now has ${formatStaffTitles(profile.titles) || 'staff access'}.`,
+      })
+    } catch (error) {
+      console.error('Failed to merge staff titles:', error)
+      toast({
+        title: 'Staff update failed',
+        description: error instanceof Error ? error.message : 'Failed to update staff.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Add Staff</DialogTitle>
+          <p className="text-sm font-medium text-muted-foreground">
+            {duplicateProfile ? 'Confirmation required' : `Step ${step} of 3`}
+          </p>
+          <DialogTitle>{duplicateProfile ? 'Existing Staff Account Found' : 'Add Staff'}</DialogTitle>
           <DialogDescription>
-            Create a new staff login and staff profile. Names, email addresses, and passwords are not editable after creation.
+            {duplicateProfile
+              ? 'Choose whether to add the selected titles to the existing account.'
+              : 'Create a new staff login and staff profile. Names, email addresses, and passwords are not editable after creation.'}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <StaffFormFields
-            idPrefix="staff"
-            mode="add"
-            formData={formData}
-            setFormData={setFormData}
-            setPhotoFile={setPhotoFile}
-            isSubmitting={isSubmitting}
-            resetPasswordVisibilityKey={open}
-          />
+        {duplicateProfile ? (
+          <div className="space-y-5">
+            <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+              <p>
+                A staff member with this email already exists: <span className="font-medium text-foreground">
+                  {duplicateProfile.name}
+                </span>{' '}
+                ({formatStaffTitles(duplicateProfile.titles) || 'No titles assigned'}).
+              </p>
+              <p className="mt-3">
+                Would you like to add{' '}
+                <span className="font-medium text-foreground">
+                  {formatStaffTitles(formData.titles) || 'the selected titles'}
+                </span>{' '}
+                to their account?
+              </p>
+            </div>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                isSubmitting ||
-                !formData.name.trim() ||
-                !formData.email.trim() ||
-                formData.password.length < 8 ||
-                !formData.confirmPassword ||
-                !formData.title
-              }
-            >
-              {isSubmitting ? 'Creating Staff...' : (
-                <>
-                  <UserPlus className="h-4 w-4" />
-                  Save Staff
-                </>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setDuplicateProfile(null)
+                  setStep(1)
+                }}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button type="button" onClick={() => void handleConfirmDuplicate()} disabled={isSubmitting}>
+                {isSubmitting ? 'Updating Staff...' : 'Confirm'}
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {step === 1 ? (
+              <div className="space-y-4">
+                <StaffIdentityFields
+                  idPrefix="staff"
+                  mode="add"
+                  formData={formData}
+                  setFormData={setFormData}
+                  isSubmitting={isSubmitting}
+                  resetPasswordVisibilityKey={open}
+                />
+                <div className="h-px bg-border" />
+                <StaffPhotoField setPhotoFile={setPhotoFile} />
+              </div>
+            ) : null}
+
+            {step === 2 ? (
+              <StaffTitlesFields
+                formData={formData}
+                setFormData={setFormData}
+                isSubmitting={isSubmitting}
+              />
+            ) : null}
+
+            {step === 3 ? (
+              <StaffAdditionalInfoFields
+                idPrefix="staff"
+                formData={formData}
+                setFormData={setFormData}
+                isSubmitting={isSubmitting}
+              />
+            ) : null}
+
+            <DialogFooter>
+              {step === 1 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleOpenChange(false)}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep((currentStep) => (currentStep === 3 ? 2 : 1))}
+                  disabled={isSubmitting}
+                >
+                  Back
+                </Button>
               )}
-            </Button>
-          </DialogFooter>
-        </form>
+
+              {step < 3 ? (
+                <Button type="button" onClick={handleNextStep} disabled={isSubmitting}>
+                  Next
+                </Button>
+              ) : (
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Creating Staff...' : (
+                    <>
+                      <UserPlus className="h-4 w-4" />
+                      Save Staff
+                    </>
+                  )}
+                </Button>
+              )}
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   )

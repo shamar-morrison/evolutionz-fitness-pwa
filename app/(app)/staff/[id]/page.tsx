@@ -16,7 +16,7 @@ import { useStaffProfile } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
 import { queryKeys } from '@/lib/query-keys'
 import { deleteStaff, deleteStaffPhoto } from '@/lib/staff-actions'
-import { formatStaffGenderLabel } from '@/lib/staff'
+import { formatStaffGenderLabel, formatStaffTitles, hasStaffTitle } from '@/lib/staff'
 import { useQueryClient } from '@tanstack/react-query'
 
 function formatCreatedAt(value: string) {
@@ -172,7 +172,15 @@ function StaffDetailPageContent() {
             <h2 className="mt-4 text-center text-xl font-bold">{profile.name}</h2>
 
             <div className="mt-3 flex flex-wrap justify-center gap-2">
-              <Badge variant="outline">{profile.title ?? 'No title assigned'}</Badge>
+              {profile.titles.length > 0 ? (
+                profile.titles.map((title) => (
+                  <Badge key={title} variant="outline">
+                    {title}
+                  </Badge>
+                ))
+              ) : (
+                <Badge variant="outline">No title assigned</Badge>
+              )}
               <Badge
                 className={
                   profile.role === 'admin'
@@ -225,8 +233,18 @@ function StaffDetailPageContent() {
                 <p className="font-medium">{profile.email}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Title</p>
-                <p className="font-medium">{profile.title ?? 'Not set'}</p>
+                <p className="text-sm text-muted-foreground">Titles</p>
+                {profile.titles.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {profile.titles.map((title) => (
+                      <Badge key={title} variant="outline">
+                        {title}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="font-medium">Not set</p>
+                )}
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Role</p>
@@ -244,7 +262,7 @@ function StaffDetailPageContent() {
                 <p className="text-sm text-muted-foreground">Remark</p>
                 <p className="font-medium">{profile.remark ?? 'Not set'}</p>
               </div>
-              {profile.title === 'Trainer' ? (
+              {hasStaffTitle(profile.titles, 'Trainer') ? (
                 <div className="space-y-1 sm:col-span-2">
                   <p className="text-sm text-muted-foreground">Specialties</p>
                   {profile.specialties.length > 0 ? (
@@ -264,6 +282,10 @@ function StaffDetailPageContent() {
                   )}
                 </div>
               ) : null}
+              <div className="space-y-1 sm:col-span-2">
+                <p className="text-sm text-muted-foreground">Summary</p>
+                <p className="font-medium">{formatStaffTitles(profile.titles) || 'Not set'}</p>
+              </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Created At</p>
                 <p className="font-medium">{formatCreatedAt(profile.created_at)}</p>

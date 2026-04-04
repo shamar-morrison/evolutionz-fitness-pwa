@@ -22,6 +22,7 @@ import { useStaff } from '@/hooks/use-staff'
 import {
   STAFF_TITLES,
   filterStaffByTitle,
+  formatStaffTitles,
   type StaffListFilter,
 } from '@/lib/staff'
 
@@ -123,16 +124,24 @@ function StaffPageContent() {
                     photoUrl={profile.photoUrl}
                     size="lg"
                     className="h-16 w-16 text-xl"
-                  />
+                      />
                   <div className="min-w-0 flex-1 space-y-3">
                     <div className="space-y-1">
                       <h2 className="truncate text-lg font-semibold">{profile.name}</h2>
                       <p className="text-sm text-muted-foreground">
-                        {profile.title ?? 'No title assigned'}
+                        {formatStaffTitles(profile.titles) || 'No title assigned'}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline">{profile.title ?? 'Unassigned'}</Badge>
+                      {profile.titles.length > 0 ? (
+                        profile.titles.map((title) => (
+                          <Badge key={title} variant="outline">
+                            {title}
+                          </Badge>
+                        ))
+                      ) : (
+                        <Badge variant="outline">Unassigned</Badge>
+                      )}
                       <Badge
                         className={
                           profile.role === 'admin'

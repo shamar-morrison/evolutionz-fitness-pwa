@@ -22,9 +22,10 @@ import { toast } from '@/hooks/use-toast'
 import { compressImage } from '@/lib/compress-image'
 import { queryKeys } from '@/lib/query-keys'
 import {
+  hasStaffTitle,
   isEditableStaffGender,
-  isStaffTitle,
-  normalizeStaffSpecialtiesForTitle,
+  normalizeStaffSpecialtiesForTitles,
+  normalizeStaffTitles,
 } from '@/lib/staff'
 import { updateStaff, uploadStaffPhoto, type UpdateStaffData } from '@/lib/staff-actions'
 import type { Profile } from '@/types'
@@ -42,8 +43,8 @@ function normalizeEditStaffFormState(formState: StaffFormState) {
     phone: formState.phone.trim(),
     gender: formState.gender,
     remark: formState.remark.trim(),
-    title: formState.title,
-    specialties: normalizeStaffSpecialtiesForTitle(formState.title, formState.specialties),
+    titles: normalizeStaffTitles(formState.titles),
+    specialties: normalizeStaffSpecialtiesForTitles(formState.titles, formState.specialties),
   }
 }
 
@@ -67,12 +68,11 @@ export function createInitialFormState(profile: Profile): StaffFormState {
     name: profile.name,
     email: profile.email,
     password: MASKED_PASSWORD_VALUE,
-    confirmPassword: '',
     phone: profile.phone ?? '',
     gender: profile.gender ?? '',
     remark: profile.remark ?? '',
-    title: isStaffTitle(profile.title) ? profile.title : '',
-    specialties: normalizeStaffSpecialtiesForTitle(profile.title, profile.specialties),
+    titles: normalizeStaffTitles(profile.titles),
+    specialties: normalizeStaffSpecialtiesForTitles(profile.titles, profile.specialties),
   }
 }
 
@@ -115,10 +115,10 @@ export function EditStaffModal({ profile, open, onOpenChange, onSuccess }: EditS
       return
     }
 
-    if (!formData.title) {
+    if (formData.titles.length === 0) {
       toast({
         title: 'Title required',
-        description: 'Choose a title before saving this staff profile.',
+        description: 'Choose at least one title before saving this staff profile.',
         variant: 'destructive',
       })
       return
@@ -132,9 +132,14 @@ export function EditStaffModal({ profile, open, onOpenChange, onSuccess }: EditS
         name: formData.name.trim(),
         phone: formData.phone.trim() || null,
         remark: formData.remark.trim() || null,
-        title: formData.title,
-        ...(formData.title === 'Trainer'
-          ? { specialties: normalizeStaffSpecialtiesForTitle(formData.title, formData.specialties) }
+        titles: normalizeStaffTitles(formData.titles),
+        ...(hasStaffTitle(formData.titles, 'Trainer')
+          ? {
+              specialties: normalizeStaffSpecialtiesForTitles(
+                formData.titles,
+                formData.specialties,
+              ),
+            }
           : {}),
         ...(hasGenderChanged
           ? { gender: isEditableStaffGender(formData.gender) ? formData.gender : null }
@@ -219,7 +224,7 @@ export function EditStaffModal({ profile, open, onOpenChange, onSuccess }: EditS
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || !formData.name.trim() || !formData.title || !hasChanges}
+              disabled={isSubmitting || !formData.name.trim() || formData.titles.length === 0 || !hasChanges}
             >
               {isSubmitting ? 'Saving Changes...' : (
                 <>

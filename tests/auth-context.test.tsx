@@ -32,7 +32,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     name: overrides.name ?? 'Kevin Morrison',
     email: overrides.email ?? 'kevin@evolutionzfitness.com',
     role: overrides.role ?? 'admin',
-    title: overrides.title ?? 'Owner',
+    titles: overrides.titles ?? ['Owner'],
     phone: overrides.phone ?? null,
     gender: overrides.gender ?? null,
     remark: overrides.remark ?? null,
@@ -115,7 +115,7 @@ function AuthHarness() {
           userId: user?.id ?? null,
           email: user?.email ?? null,
           name: profile?.name ?? null,
-          title: profile?.title ?? null,
+          titles: profile?.titles ?? [],
           phone: profile?.phone ?? null,
           gender: profile?.gender ?? null,
           remark: profile?.remark ?? null,
@@ -142,7 +142,7 @@ function readAuthState(container: HTMLDivElement) {
     userId: string | null
     email: string | null
     name: string | null
-    title: string | null
+    titles: string[]
     phone: string | null
     gender: Profile['gender'] | null
     remark: string | null
@@ -211,7 +211,7 @@ describe('AuthProvider', () => {
       userId: 'user-1',
       email: 'kevin@evolutionzfitness.com',
       name: 'Kevin Morrison',
-      title: 'Owner',
+      titles: ['Owner'],
       phone: null,
       gender: null,
       remark: null,
@@ -229,7 +229,7 @@ describe('AuthProvider', () => {
       name: 'Front Desk',
       email: 'staff@evolutionzfitness.com',
       role: 'staff',
-      title: 'Reception',
+      titles: ['Assistant'],
     })
     const adminProfile = createProfile()
     const supabase = createSupabaseBrowserClient({

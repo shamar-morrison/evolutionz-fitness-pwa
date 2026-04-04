@@ -5,9 +5,10 @@ import {
   STAFF_PROFILE_SELECT,
   STAFF_TITLES,
   TRAINER_SPECIALTIES,
-  deriveRoleFromTitle,
+  deriveRoleFromTitles,
+  hasStaffTitle,
   normalizeProfile,
-  normalizeStaffSpecialtiesForTitle,
+  normalizeStaffSpecialtiesForTitles,
   readStaffProfile,
   type StaffReadClient,
 } from '@/lib/staff'
@@ -50,7 +51,7 @@ type DeleteStaffAdminClient = StaffReadClient &
 type UpdateStaffValues = {
   name: string
   role: 'admin' | 'staff'
-  title: string
+  titles: string[]
   phone: string | null
   gender?: 'male' | 'female' | null
   remark: string | null
@@ -80,7 +81,7 @@ const updateStaffRequestSchema = z
     phone: z.string().trim().nullable().optional(),
     gender: z.enum(STAFF_EDITABLE_GENDERS).nullable().optional(),
     remark: z.string().trim().nullable().optional(),
-    title: z.enum(STAFF_TITLES),
+    titles: z.array(z.enum(STAFF_TITLES)).min(1, 'Select at least one title.'),
     specialties: z.array(z.enum(TRAINER_SPECIALTIES)).optional(),
   })
   .strict()
@@ -158,15 +159,15 @@ export async function PATCH(
       Object.prototype.hasOwnProperty.call(requestBody, 'specialties')
     const input = updateStaffRequestSchema.parse(requestBody)
 
-    if (authResult.user.id === id && input.title !== 'Owner') {
+    if (authResult.user.id === id && !hasStaffTitle(input.titles, 'Owner')) {
       return createErrorResponse(SELF_DEMOTION_ERROR, 403)
     }
 
     const supabase = getSupabaseAdminClient() as unknown as UpdateStaffAdminClient
     const updateValues: UpdateStaffValues = {
       name: input.name.trim(),
-      role: deriveRoleFromTitle(input.title),
-      title: input.title,
+      role: deriveRoleFromTitles(input.titles),
+      titles: input.titles,
       phone: normalizeOptionalText(input.phone),
       remark: normalizeOptionalText(input.remark),
     }
@@ -175,10 +176,13 @@ export async function PATCH(
       updateValues.gender = input.gender ?? null
     }
 
-    if (input.title !== 'Trainer') {
+    if (!hasStaffTitle(input.titles, 'Trainer')) {
       updateValues.specialties = []
     } else if (hasSpecialtiesField) {
-      updateValues.specialties = normalizeStaffSpecialtiesForTitle(input.title, input.specialties)
+      updateValues.specialties = normalizeStaffSpecialtiesForTitles(
+        input.titles,
+        input.specialties,
+      )
     }
 
     const { data, error } = await supabase

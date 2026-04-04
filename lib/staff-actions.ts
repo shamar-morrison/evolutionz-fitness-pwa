@@ -1,4 +1,5 @@
 import {
+  normalizeExistingStaffProfileSummary,
   normalizeProfile,
   type EditableStaffGender,
   type StaffTitle,
@@ -9,11 +10,22 @@ import type { Profile } from '@/types'
 type StaffMutationErrorResponse = {
   ok: false
   error: string
+  code?: string
 }
 
 type ProfileMutationSuccessResponse = {
   ok: true
   profile: Profile
+}
+
+type CreateStaffDuplicateEmailResponse = {
+  ok: false
+  code: 'EMAIL_EXISTS'
+  existingProfile: {
+    id: string
+    name: string
+    titles: string[]
+  }
 }
 
 type DeleteStaffSuccessResponse = {
@@ -33,7 +45,7 @@ export type CreateStaffData = {
   phone?: string
   gender?: EditableStaffGender
   remark?: string
-  title: StaffTitle
+  titles: StaffTitle[]
   specialties?: TrainerSpecialty[]
 }
 
@@ -42,9 +54,25 @@ export type UpdateStaffData = {
   phone?: string | null
   gender?: EditableStaffGender | null
   remark?: string | null
-  title: StaffTitle
+  titles: StaffTitle[]
   specialties?: TrainerSpecialty[]
 }
+
+export type AddStaffTitlesData = {
+  titles: StaffTitle[]
+  specialties?: TrainerSpecialty[]
+}
+
+export type CreateStaffResult =
+  | {
+      ok: true
+      profile: Profile
+    }
+  | {
+      ok: false
+      code: 'EMAIL_EXISTS'
+      existingProfile: NonNullable<ReturnType<typeof normalizeExistingStaffProfileSummary>>
+    }
 
 async function parseProfileMutationResponse(
   response: Response,
@@ -77,7 +105,7 @@ async function parseProfileMutationResponse(
   return profile
 }
 
-export async function createStaff(data: CreateStaffData): Promise<Profile> {
+export async function createStaff(data: CreateStaffData): Promise<CreateStaffResult> {
   const response = await fetch('/api/staff', {
     method: 'POST',
     headers: {
@@ -90,12 +118,69 @@ export async function createStaff(data: CreateStaffData): Promise<Profile> {
       ...(data.phone ? { phone: data.phone } : {}),
       ...(data.gender ? { gender: data.gender } : {}),
       ...(data.remark ? { remark: data.remark } : {}),
-      title: data.title,
+      titles: data.titles,
       ...('specialties' in data ? { specialties: data.specialties ?? [] } : {}),
     }),
   })
 
-  return parseProfileMutationResponse(response, 'Failed to create staff.')
+  let responseBody:
+    | ProfileMutationSuccessResponse
+    | StaffMutationErrorResponse
+    | CreateStaffDuplicateEmailResponse
+    | null = null
+
+  try {
+    responseBody = (await response.json()) as
+      | ProfileMutationSuccessResponse
+      | StaffMutationErrorResponse
+      | CreateStaffDuplicateEmailResponse
+  } catch {
+    responseBody = null
+  }
+
+  if (
+    response.status === 409 &&
+    responseBody &&
+    'code' in responseBody &&
+    responseBody.code === 'EMAIL_EXISTS' &&
+    'existingProfile' in responseBody
+  ) {
+    const existingProfile = normalizeExistingStaffProfileSummary(responseBody.existingProfile)
+
+    if (!existingProfile) {
+      throw new Error('Failed to read the existing staff profile response.')
+    }
+
+    return {
+      ok: false,
+      code: 'EMAIL_EXISTS',
+      existingProfile,
+    }
+  }
+
+  if (!response.ok || !responseBody || ('ok' in responseBody && responseBody.ok === false)) {
+    throw new Error(
+      responseBody &&
+        'ok' in responseBody &&
+        responseBody.ok === false &&
+        'error' in responseBody
+        ? responseBody.error
+        : 'Failed to create staff.',
+    )
+  }
+
+  const profile = normalizeProfile({
+    profile: responseBody.profile,
+  })
+
+  if (!profile) {
+    throw new Error('Failed to read the updated staff profile response.')
+  }
+
+  return {
+    ok: true,
+    profile,
+  }
 }
 
 export async function updateStaff(
@@ -112,12 +197,30 @@ export async function updateStaff(
       phone: data.phone ?? null,
       ...('gender' in data ? { gender: data.gender ?? null } : {}),
       remark: data.remark ?? null,
-      title: data.title,
+      titles: data.titles,
       ...('specialties' in data ? { specialties: data.specialties ?? [] } : {}),
     }),
   })
 
   return parseProfileMutationResponse(response, 'Failed to update staff.')
+}
+
+export async function addStaffTitles(
+  id: string,
+  data: AddStaffTitlesData,
+): Promise<Profile> {
+  const response = await fetch(`/api/staff/${encodeURIComponent(id)}/add-title`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      titles: data.titles,
+      ...('specialties' in data ? { specialties: data.specialties ?? [] } : {}),
+    }),
+  })
+
+  return parseProfileMutationResponse(response, 'Failed to add staff titles.')
 }
 
 export async function uploadStaffPhoto(
