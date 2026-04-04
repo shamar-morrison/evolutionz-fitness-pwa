@@ -78,6 +78,24 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
       return
     }
 
+    if (!formData.confirmPassword) {
+      toast({
+        title: 'Confirm password required',
+        description: 'Re-enter the password to confirm it before creating this staff account.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      toast({
+        title: 'Passwords do not match',
+        description: 'Re-enter matching passwords before creating this staff account.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     if (!formData.title) {
       toast({
         title: 'Title required',
@@ -164,6 +182,7 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
             setFormData={setFormData}
             setPhotoFile={setPhotoFile}
             isSubmitting={isSubmitting}
+            resetPasswordVisibilityKey={open}
           />
 
           <DialogFooter>
@@ -182,6 +201,7 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
                 !formData.name.trim() ||
                 !formData.email.trim() ||
                 formData.password.length < 8 ||
+                !formData.confirmPassword ||
                 !formData.title
               }
             >

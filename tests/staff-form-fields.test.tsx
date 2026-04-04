@@ -10,6 +10,7 @@ function createFormState(overrides: Partial<StaffFormState> = {}): StaffFormStat
     name: 'Jane Doe',
     email: 'jane@evolutionzfitness.com',
     password: 'password123',
+    confirmPassword: 'password123',
     phone: '876-555-0100',
     gender: '',
     remark: '',
@@ -22,9 +23,11 @@ function createFormState(overrides: Partial<StaffFormState> = {}): StaffFormStat
 function StaffFormFieldsHarness({
   initialFormState,
   mode,
+  resetPasswordVisibilityKey,
 }: {
   initialFormState: StaffFormState
   mode: 'add' | 'edit'
+  resetPasswordVisibilityKey?: boolean | number | string
 }) {
   const [formData, setFormData] = useState(initialFormState)
 
@@ -37,6 +40,7 @@ function StaffFormFieldsHarness({
         setFormData={setFormData}
         setPhotoFile={() => {}}
         isSubmitting={false}
+        resetPasswordVisibilityKey={resetPasswordVisibilityKey}
       />
       <output data-testid="gender-state">{formData.gender || 'empty'}</output>
       <output data-testid="specialties-state">{JSON.stringify(formData.specialties)}</output>
@@ -57,6 +61,16 @@ function getGenderState(container: HTMLDivElement) {
 function getButton(container: HTMLDivElement, label: string) {
   const buttons = Array.from(container.querySelectorAll('button'))
   const button = buttons.find((candidate) => candidate.textContent?.trim() === label)
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`${label} button not found.`)
+  }
+
+  return button
+}
+
+function getIconButton(container: HTMLDivElement, label: string) {
+  const button = container.querySelector(`button[aria-label="${label}"]`)
 
   if (!(button instanceof HTMLButtonElement)) {
     throw new Error(`${label} button not found.`)
@@ -156,6 +170,48 @@ describe('StaffFormFields', () => {
     expect(maleButton.className).not.toContain('bg-primary')
     expect(femaleButton.className).not.toContain('bg-primary')
     expect(container.textContent).not.toContain('Other')
+    expect(container.querySelector('#staff-test-confirm-password')).toBeNull()
+    expect(container.querySelector('button[aria-label="Show password"]')).toBeNull()
+  })
+
+  it('renders confirm password and toggles visibility for both add-mode password fields', async () => {
+    await act(async () => {
+      root.render(
+        <StaffFormFieldsHarness initialFormState={createFormState()} mode="add" />,
+      )
+    })
+
+    const passwordInput = container.querySelector('#staff-test-password')
+    const confirmPasswordInput = container.querySelector('#staff-test-confirm-password')
+
+    if (!(passwordInput instanceof HTMLInputElement)) {
+      throw new Error('Password input not found.')
+    }
+
+    if (!(confirmPasswordInput instanceof HTMLInputElement)) {
+      throw new Error('Confirm password input not found.')
+    }
+
+    expect(passwordInput.type).toBe('password')
+    expect(confirmPasswordInput.type).toBe('password')
+
+    await act(async () => {
+      getIconButton(container, 'Show password').dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      )
+    })
+
+    expect(passwordInput.type).toBe('text')
+    expect(confirmPasswordInput.type).toBe('password')
+
+    await act(async () => {
+      getIconButton(container, 'Show confirm password').dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      )
+    })
+
+    expect(passwordInput.type).toBe('text')
+    expect(confirmPasswordInput.type).toBe('text')
   })
 
   it('renders trainer specialties as toggleable chips and updates the selected state', async () => {

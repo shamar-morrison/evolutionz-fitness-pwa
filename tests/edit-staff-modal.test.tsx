@@ -13,6 +13,7 @@ function createFormState(overrides: Partial<StaffFormState> = {}): StaffFormStat
     name: 'Jane Doe',
     email: 'jane@evolutionzfitness.com',
     password: '••••••••',
+    confirmPassword: '',
     phone: '876-555-0100',
     gender: 'female',
     remark: 'Existing staff member',

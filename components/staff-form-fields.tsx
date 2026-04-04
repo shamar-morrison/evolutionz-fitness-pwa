@@ -1,7 +1,7 @@
 'use client'
 
-import type { Dispatch, SetStateAction } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { AlertTriangle, Eye, EyeOff } from 'lucide-react'
 import { Pattern } from '@/components/ui/file-upload'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -33,6 +33,7 @@ export type StaffFormState = {
   name: string
   email: string
   password: string
+  confirmPassword: string
   phone: string
   gender: StaffGender | ''
   remark: string
@@ -48,6 +49,7 @@ type StaffFormFieldsProps = {
   formData: StaffFormState
   setFormData: Dispatch<SetStateAction<StaffFormState>>
   setPhotoFile: (file: FileWithPreview | null) => void
+  resetPasswordVisibilityKey?: boolean | number | string
 }
 
 function ImmutableFieldHint() {
@@ -59,6 +61,7 @@ export function createEmptyStaffFormState(): StaffFormState {
     name: '',
     email: '',
     password: '',
+    confirmPassword: '',
     phone: '',
     gender: '',
     remark: '',
@@ -90,15 +93,24 @@ export function StaffFormFields({
   formData,
   setFormData,
   setPhotoFile,
+  resetPasswordVisibilityKey,
 }: StaffFormFieldsProps) {
   const isEditMode = mode === 'edit'
   const disabledFieldClassName = 'bg-muted/30 text-muted-foreground'
   const selectedGender = isEditableStaffGender(formData.gender) ? formData.gender : ''
   const selectedSpecialties = normalizeTrainerSpecialties(formData.specialties)
   const isTrainerTitle = formData.title === 'Trainer'
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
+  useEffect(() => {
+    setShowPassword(false)
+    setShowConfirmPassword(false)
+  }, [mode, resetPasswordVisibilityKey])
 
   return (
     <div className="grid gap-4 py-2">
+      {/* Row 1: Full Name — full width */}
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-name`}>Full Name</Label>
         <Input
@@ -115,63 +127,38 @@ export function StaffFormFields({
         />
       </div>
 
+      <div className="h-px bg-border" />
+
+      {/* Row 2: Title & Gender — 2 cols */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}-email`}>Email</Label>
-          <Input
-            id={`${idPrefix}-email`}
-            type="email"
-            value={formData.email}
-            onChange={(event) =>
+          <Label htmlFor={`${idPrefix}-title`}>Title</Label>
+          <Select
+            value={formData.title}
+            onValueChange={(value: StaffTitle) =>
               setFormData((currentFormData) => ({
                 ...currentFormData,
-                email: event.target.value,
+                title: value,
+                specialties:
+                  value === 'Trainer'
+                    ? normalizeTrainerSpecialties(currentFormData.specialties)
+                    : [],
               }))
             }
-            placeholder="Not editable"
-            required={!isEditMode}
-            disabled={isEditMode}
-            className={isEditMode ? disabledFieldClassName : undefined}
-          />
-          {isEditMode ? <ImmutableFieldHint /> : null}
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}-password`}>Password</Label>
-          <Input
-            id={`${idPrefix}-password`}
-            type={isEditMode ? 'text' : 'password'}
-            value={formData.password}
-            onChange={(event) =>
-              setFormData((currentFormData) => ({
-                ...currentFormData,
-                password: event.target.value,
-              }))
-            }
-            placeholder={isEditMode ? 'Not editable' : 'Minimum 8 characters'}
-            minLength={isEditMode ? undefined : 8}
-            required={!isEditMode}
-            disabled={isEditMode}
-            className={isEditMode ? disabledFieldClassName : undefined}
-          />
-          {isEditMode ? <ImmutableFieldHint /> : null}
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}-phone`}>Telephone Number</Label>
-          <Input
-            id={`${idPrefix}-phone`}
-            value={formData.phone}
-            onChange={(event) =>
-              setFormData((currentFormData) => ({
-                ...currentFormData,
-                phone: event.target.value,
-              }))
-            }
-            placeholder="Optional phone number"
-          />
+            disabled={isSubmitting}
+          >
+            <SelectTrigger id={`${idPrefix}-title`}>
+              <SelectValue placeholder="Select title" />
+            </SelectTrigger>
+            <SelectContent>
+              {STAFF_TITLES.map((title) => (
+                <SelectItem key={title} value={title}>
+                  {title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <OwnerTitleWarning title={formData.title} />
         </div>
         <div className="grid gap-2">
           <Label>Gender</Label>
@@ -197,36 +184,6 @@ export function StaffFormFields({
             ))}
           </div>
         </div>
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}-title`}>Title</Label>
-        <Select
-          value={formData.title}
-          onValueChange={(value: StaffTitle) =>
-            setFormData((currentFormData) => ({
-              ...currentFormData,
-              title: value,
-              specialties:
-                value === 'Trainer'
-                  ? normalizeTrainerSpecialties(currentFormData.specialties)
-                  : [],
-            }))
-          }
-          disabled={isSubmitting}
-        >
-          <SelectTrigger id={`${idPrefix}-title`}>
-            <SelectValue placeholder="Select title" />
-          </SelectTrigger>
-          <SelectContent>
-            {STAFF_TITLES.map((title) => (
-              <SelectItem key={title} value={title}>
-                {title}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <OwnerTitleWarning title={formData.title} />
       </div>
 
       {isTrainerTitle ? (
@@ -269,13 +226,128 @@ export function StaffFormFields({
         </div>
       ) : null}
 
-      <div className="grid gap-2">
-        <Label>Photo Upload</Label>
-        <div className="rounded-xl border border-dashed px-4 py-5">
-          <Pattern onFileChange={setPhotoFile} defaultAvatar={defaultPhotoUrl ?? undefined} />
+      <div className="h-px bg-border" />
+
+      {/* Row 3: Email & Phone — 2 cols */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-email`}>Email</Label>
+          <Input
+            id={`${idPrefix}-email`}
+            type="email"
+            value={formData.email}
+            onChange={(event) =>
+              setFormData((currentFormData) => ({
+                ...currentFormData,
+                email: event.target.value,
+              }))
+            }
+            placeholder="Not editable"
+            required={!isEditMode}
+            disabled={isEditMode}
+            className={isEditMode ? disabledFieldClassName : undefined}
+          />
+          {isEditMode ? <ImmutableFieldHint /> : null}
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-phone`}>Telephone Number</Label>
+          <Input
+            id={`${idPrefix}-phone`}
+            value={formData.phone}
+            onChange={(event) =>
+              setFormData((currentFormData) => ({
+                ...currentFormData,
+                phone: event.target.value,
+              }))
+            }
+            placeholder="Optional phone number"
+          />
         </div>
       </div>
 
+      <div className="h-px bg-border" />
+
+      {/* Row 4: Password & Confirm Password */}
+      <div className={isEditMode ? "grid gap-2" : "grid gap-4 sm:grid-cols-2"}>
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-password`}>Password</Label>
+          <div className="relative">
+            <Input
+              id={`${idPrefix}-password`}
+              type={isEditMode ? 'text' : showPassword ? 'text' : 'password'}
+              value={formData.password}
+              onChange={(event) =>
+                setFormData((currentFormData) => ({
+                  ...currentFormData,
+                  password: event.target.value,
+                }))
+              }
+              placeholder={isEditMode ? 'Not editable' : 'Minimum 8 characters'}
+              minLength={isEditMode ? undefined : 8}
+              required={!isEditMode}
+              disabled={isEditMode}
+              autoComplete={isEditMode ? undefined : 'new-password'}
+              className={isEditMode ? disabledFieldClassName : 'pr-12'}
+            />
+            {!isEditMode ? (
+              <button
+                type="button"
+                onClick={() => setShowPassword((currentValue) => !currentValue)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
+                disabled={isSubmitting}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            ) : null}
+          </div>
+          {isEditMode ? <ImmutableFieldHint /> : null}
+        </div>
+
+        {!isEditMode ? (
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}-confirm-password`}>Confirm Password</Label>
+            <div className="relative">
+              <Input
+                id={`${idPrefix}-confirm-password`}
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={formData.confirmPassword}
+                onChange={(event) =>
+                  setFormData((currentFormData) => ({
+                    ...currentFormData,
+                    confirmPassword: event.target.value,
+                  }))
+                }
+                placeholder="Re-enter password"
+                minLength={8}
+                required
+                autoComplete="new-password"
+                className="pr-12"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((currentValue) => !currentValue)}
+                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground focus:outline-none"
+                disabled={isSubmitting}
+              >
+                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="h-px bg-border" />
+
+      {/* Row 5: Avatar — centered */}
+      <div className="flex justify-center py-2">
+        <Pattern onFileChange={setPhotoFile} defaultAvatar={defaultPhotoUrl ?? undefined} />
+      </div>
+
+      <div className="h-px bg-border" />
+
+      {/* Row 6: Remark — full width */}
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-remark`}>Remark</Label>
         <Textarea
