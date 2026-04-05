@@ -55,7 +55,7 @@ describe('staff helpers', () => {
       root.render(<OwnerTitleWarning titles={['Owner']} />)
     })
 
-    expect(container.textContent).toContain('This title grants full admin access to the entire app.')
+    expect(container.textContent).toContain('The "Owner" title grants full access to the entire app.')
   })
 
   it('does not render the owner warning when the selected titles omit Owner', async () => {

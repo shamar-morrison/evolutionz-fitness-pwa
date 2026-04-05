@@ -91,7 +91,7 @@ export function OwnerTitleWarning({
     <Alert className="border-amber-300 bg-amber-50 text-amber-900">
       <AlertTriangle className="text-amber-700" />
       <AlertDescription className="text-amber-900">
-        This title grants full admin access to the entire app.
+        The "Owner" title grants full access to the entire app.
       </AlertDescription>
     </Alert>
   )
