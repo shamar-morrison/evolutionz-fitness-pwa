@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { formatAccessDate } from '@/lib/member-access-time'
 import { useMember } from '@/hooks/use-members'
 import { MemberAvatar } from '@/components/member-avatar'
+import { MemberPtSection } from '@/components/member-pt-section'
 import { StatusBadge } from '@/components/status-badge'
 import { CheckInHistory } from '@/components/check-in-history'
 import { EditMemberModal } from '@/components/edit-member-modal'
@@ -555,6 +556,10 @@ export default function MemberDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <RoleGuard role="admin">
+        <MemberPtSection memberId={memberId} />
+      </RoleGuard>
 
       <CheckInHistory memberId={memberId} />
 

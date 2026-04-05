@@ -13,6 +13,13 @@ export const queryKeys = {
     all: ['staff'] as const,
     detail: (id: string) => ['staff', id] as const,
   },
+  ptScheduling: {
+    assignments: ['pt-assignments'] as const,
+    assignment: (id: string) => ['pt-assignments', id] as const,
+    sessions: (filters?: Record<string, string>) => ['pt-sessions', filters ?? {}] as const,
+    memberAssignment: (memberId: string) => ['pt-assignments', 'member', memberId] as const,
+    trainerAssignments: (trainerId: string) => ['pt-assignments', 'trainer', trainerId] as const,
+  },
   cards: {
     available: ['cards', 'available'] as const,
   },

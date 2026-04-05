@@ -1,0 +1,818 @@
+import { z } from 'zod'
+import { normalizeTimeInputValue } from '@/lib/member-access-time'
+
+export const SESSION_STATUSES = ['scheduled', 'completed', 'missed', 'rescheduled'] as const
+export type SessionStatus = typeof SESSION_STATUSES[number]
+
+export const DAYS_OF_WEEK = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+] as const
+export type DayOfWeek = typeof DAYS_OF_WEEK[number]
+
+export const PT_ASSIGNMENT_STATUSES = ['active', 'inactive'] as const
+export type TrainerClientStatus = typeof PT_ASSIGNMENT_STATUSES[number]
+
+export const JAMAICA_TIME_ZONE = 'America/Jamaica'
+export const JAMAICA_OFFSET = '-05:00'
+
+export type TrainerClient = {
+  id: string
+  trainerId: string
+  memberId: string
+  status: 'active' | 'inactive'
+  ptFee: number
+  trainerPayout: number
+  sessionsPerWeek: number
+  scheduledDays: DayOfWeek[]
+  sessionTime: string
+  createdAt: string
+  updatedAt: string
+  trainerName?: string
+  trainerTitles?: string[]
+  memberName?: string
+  memberPhotoUrl?: string | null
+}
+
+export type PtSession = {
+  id: string
+  assignmentId: string
+  trainerId: string
+  memberId: string
+  scheduledAt: string
+  status: SessionStatus
+  isRecurring: boolean
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+  trainerName?: string
+  memberName?: string
+}
+
+export type PtSessionChangeType = 'reschedule' | 'cancellation' | 'status_change'
+
+export type PtSessionChange = {
+  id: string
+  sessionId: string
+  changedBy: string
+  changeType: PtSessionChangeType
+  oldValue: Record<string, unknown> | null
+  newValue: Record<string, unknown> | null
+  createdAt: string
+  changedByName?: string
+}
+
+export type PtSessionDetail = {
+  session: PtSession
+  changes: PtSessionChange[]
+}
+
+export type PtAssignmentFilters = {
+  trainerId?: string
+  memberId?: string
+  status?: TrainerClientStatus
+}
+
+export type PtSessionFilters = {
+  trainerId?: string
+  memberId?: string
+  assignmentId?: string
+  month?: string
+  status?: SessionStatus
+}
+
+export type CreatePtAssignmentData = {
+  trainerId: string
+  memberId: string
+  ptFee: number
+  trainerPayout: number
+  sessionsPerWeek: number
+  scheduledDays: DayOfWeek[]
+  sessionTime: string
+}
+
+export type UpdatePtAssignmentData = {
+  status?: TrainerClientStatus
+  ptFee?: number
+  trainerPayout?: number
+  sessionsPerWeek?: number
+  scheduledDays?: DayOfWeek[]
+  sessionTime?: string
+}
+
+export type GeneratePtSessionsRequest = {
+  month: number
+  year: number
+  override?: boolean
+}
+
+export type GeneratePtSessionsResult =
+  | {
+      ok: true
+      generated: number
+      skipped: number
+    }
+  | {
+      ok: false
+      code: 'WEEK_LIMIT_EXCEEDED'
+      weeks: string[]
+    }
+
+export type UpdatePtSessionData = {
+  status?: SessionStatus
+  scheduledAt?: string
+  notes?: string | null
+}
+
+const DATE_VALUE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/u
+const MONTH_VALUE_PATTERN = /^(\d{4})-(\d{2})$/u
+const LOCAL_DATE_TIME_PATTERN = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::(\d{2}))?$/u
+const OFFSET_DATE_TIME_PATTERN =
+  /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?)(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u
+
+const trainerClientSchema = z.object({
+  id: z.string().trim().min(1),
+  trainerId: z.string().trim().min(1),
+  memberId: z.string().trim().min(1),
+  status: z.enum(PT_ASSIGNMENT_STATUSES),
+  ptFee: z.number().int(),
+  trainerPayout: z.number().int(),
+  sessionsPerWeek: z.number().int().min(1).max(3),
+  scheduledDays: z.array(z.enum(DAYS_OF_WEEK)),
+  sessionTime: z.string().trim().min(1),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  trainerName: z.string().trim().min(1).optional(),
+  trainerTitles: z.array(z.string()).optional(),
+  memberName: z.string().trim().min(1).optional(),
+  memberPhotoUrl: z.string().trim().min(1).nullable().optional(),
+})
+
+const ptSessionSchema = z.object({
+  id: z.string().trim().min(1),
+  assignmentId: z.string().trim().min(1),
+  trainerId: z.string().trim().min(1),
+  memberId: z.string().trim().min(1),
+  scheduledAt: z.string().trim().min(1),
+  status: z.enum(SESSION_STATUSES),
+  isRecurring: z.boolean(),
+  notes: z.string().nullable(),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  trainerName: z.string().trim().min(1).optional(),
+  memberName: z.string().trim().min(1).optional(),
+})
+
+const ptSessionChangeSchema = z.object({
+  id: z.string().trim().min(1),
+  sessionId: z.string().trim().min(1),
+  changedBy: z.string().trim().min(1),
+  changeType: z.enum(['reschedule', 'cancellation', 'status_change']),
+  oldValue: z.record(z.unknown()).nullable(),
+  newValue: z.record(z.unknown()).nullable(),
+  createdAt: z.string().trim().min(1),
+  changedByName: z.string().trim().min(1).optional(),
+})
+
+const assignmentsResponseSchema = z.object({
+  assignments: z.array(trainerClientSchema).default([]),
+})
+
+const assignmentMutationResponseSchema = z.object({
+  ok: z.literal(true),
+  assignment: trainerClientSchema,
+})
+
+const sessionsResponseSchema = z.object({
+  sessions: z.array(ptSessionSchema).default([]),
+})
+
+const sessionMutationResponseSchema = z.object({
+  ok: z.literal(true),
+  session: ptSessionSchema,
+})
+
+const sessionDetailResponseSchema = z.object({
+  ok: z.literal(true),
+  session: ptSessionSchema,
+  changes: z.array(ptSessionChangeSchema).default([]),
+})
+
+const generateSessionsSuccessSchema = z.object({
+  ok: z.literal(true),
+  generated: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+})
+
+const generateSessionsWarningSchema = z.object({
+  ok: z.literal(false),
+  code: z.literal('WEEK_LIMIT_EXCEEDED'),
+  weeks: z.array(z.string()).default([]),
+})
+
+const errorResponseSchema = z.object({
+  ok: z.literal(false).optional(),
+  error: z.string().trim().min(1),
+  code: z.string().trim().optional(),
+})
+
+const sessionStatusBadgeClassNames: Record<SessionStatus, string> = {
+  scheduled: 'bg-slate-500/15 text-slate-700 hover:bg-slate-500/25',
+  completed: 'bg-green-500/15 text-green-700 hover:bg-green-500/25',
+  missed: 'bg-red-500/15 text-red-700 hover:bg-red-500/25',
+  rescheduled: 'bg-amber-500/15 text-amber-700 hover:bg-amber-500/25',
+}
+
+const sessionStatusLabels: Record<SessionStatus, string> = {
+  scheduled: 'Scheduled',
+  completed: 'Completed',
+  missed: 'Missed',
+  rescheduled: 'Rescheduled',
+}
+
+const dayToWeekdayIndex: Record<DayOfWeek, number> = {
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+  Friday: 5,
+  Saturday: 6,
+  Sunday: 0,
+}
+
+function normalizeText(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function buildSearchParams(filters: Record<string, string | undefined>) {
+  const searchParams = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) {
+      searchParams.set(key, value)
+    }
+  }
+
+  return searchParams
+}
+
+async function readJson(response: Response) {
+  try {
+    return (await response.json()) as unknown
+  } catch {
+    return null
+  }
+}
+
+function getErrorMessage(payload: unknown, fallback: string) {
+  const parsed = errorResponseSchema.safeParse(payload)
+
+  return parsed.success ? parsed.data.error : fallback
+}
+
+function getUtcDateFromDateValue(value: string) {
+  const match = DATE_VALUE_PATTERN.exec(value.trim())
+
+  if (!match) {
+    return null
+  }
+
+  const [, yearPart, monthPart, dayPart] = match
+  const year = Number(yearPart)
+  const monthIndex = Number(monthPart) - 1
+  const day = Number(dayPart)
+  const date = new Date(Date.UTC(year, monthIndex, day, 12, 0, 0, 0))
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== monthIndex ||
+    date.getUTCDate() !== day
+  ) {
+    return null
+  }
+
+  return date
+}
+
+function getDatePartsInTimeZone(
+  date: Date,
+  options: Intl.DateTimeFormatOptions,
+  locale = 'en-JM',
+) {
+  const formatter = new Intl.DateTimeFormat(locale, options)
+  const values = new Map<string, string>()
+
+  for (const part of formatter.formatToParts(date)) {
+    if (part.type === 'literal') {
+      continue
+    }
+
+    values.set(part.type, part.value)
+  }
+
+  return values
+}
+
+function getMonthName(month: number) {
+  return new Date(Date.UTC(2026, month - 1, 1)).toLocaleDateString('en-JM', {
+    timeZone: 'UTC',
+    month: 'long',
+  })
+}
+
+export function isDayOfWeek(value: string | null | undefined): value is DayOfWeek {
+  return DAYS_OF_WEEK.includes(value as DayOfWeek)
+}
+
+export function normalizeScheduledDays(value: unknown): DayOfWeek[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const uniqueDays = new Set(
+    value.filter((entry): entry is DayOfWeek => typeof entry === 'string' && isDayOfWeek(entry)),
+  )
+
+  return DAYS_OF_WEEK.filter((day) => uniqueDays.has(day))
+}
+
+export function normalizeSessionTimeValue(value: string) {
+  const normalizedTime = normalizeTimeInputValue(value)
+
+  return normalizedTime ? normalizedTime.slice(0, 5) : null
+}
+
+export function formatSessionTime(value: string) {
+  const normalizedTime = normalizeSessionTimeValue(value)
+
+  if (!normalizedTime) {
+    return value
+  }
+
+  const date = new Date(`2026-01-01T${normalizedTime}:00${JAMAICA_OFFSET}`)
+
+  if (Number.isNaN(date.getTime())) {
+    return normalizedTime
+  }
+
+  return date.toLocaleTimeString('en-JM', {
+    timeZone: JAMAICA_TIME_ZONE,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
+
+export function formatDayOfWeekShort(day: DayOfWeek) {
+  return day.slice(0, 3)
+}
+
+export function formatScheduleSummary(
+  scheduledDays: DayOfWeek[],
+  sessionTime: string,
+  sessionsPerWeek?: number,
+) {
+  const sortedDays = DAYS_OF_WEEK.filter((day) => scheduledDays.includes(day))
+  const daySummary = sortedDays.map((day) => formatDayOfWeekShort(day)).join(', ')
+  const frequencySummary =
+    typeof sessionsPerWeek === 'number' && sessionsPerWeek > 0 ? ` (${sessionsPerWeek}x/week)` : ''
+
+  return `${daySummary} at ${formatSessionTime(sessionTime)}${frequencySummary}`
+}
+
+export function formatJmdCurrency(value: number) {
+  return new Intl.NumberFormat('en-JM', {
+    style: 'currency',
+    currency: 'JMD',
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
+export function formatPtSessionStatusLabel(status: SessionStatus) {
+  return sessionStatusLabels[status]
+}
+
+export function getPtSessionStatusBadgeClassName(status: SessionStatus) {
+  return sessionStatusBadgeClassNames[status]
+}
+
+export function buildJamaicaScheduledAt(dateValue: string, timeValue: string) {
+  if (!getUtcDateFromDateValue(dateValue)) {
+    return null
+  }
+
+  const normalizedTime = normalizeTimeInputValue(timeValue)
+
+  if (!normalizedTime) {
+    return null
+  }
+
+  return `${dateValue}T${normalizedTime}${JAMAICA_OFFSET}`
+}
+
+export function buildJamaicaScheduledAtFromLocalInput(value: string) {
+  const normalizedValue = value.trim()
+
+  if (!normalizedValue) {
+    return null
+  }
+
+  const offsetMatch = OFFSET_DATE_TIME_PATTERN.exec(normalizedValue)
+
+  if (offsetMatch) {
+    const date = new Date(normalizedValue)
+    return Number.isNaN(date.getTime()) ? null : normalizedValue
+  }
+
+  const localMatch = LOCAL_DATE_TIME_PATTERN.exec(normalizedValue)
+
+  if (!localMatch) {
+    return null
+  }
+
+  const [, dateValue, timeValue, secondsPart = '00'] = localMatch
+
+  return buildJamaicaScheduledAt(dateValue, `${timeValue}:${secondsPart}`)
+}
+
+export function getJamaicaDateValue(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const parts = getDatePartsInTimeZone(
+    date,
+    {
+      timeZone: JAMAICA_TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    },
+    'en-US',
+  )
+  const year = parts.get('year')
+  const month = parts.get('month')
+  const day = parts.get('day')
+
+  if (!year || !month || !day) {
+    return null
+  }
+
+  return `${year}-${month}-${day}`
+}
+
+export function getMonthValueInJamaica(date = new Date()) {
+  const parts = getDatePartsInTimeZone(
+    date,
+    {
+      timeZone: JAMAICA_TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+    },
+    'en-US',
+  )
+  const year = parts.get('year')
+  const month = parts.get('month')
+
+  if (!year || !month) {
+    throw new Error('Failed to read the current Jamaica month.')
+  }
+
+  return `${year}-${month}`
+}
+
+export function parseMonthValue(value: string) {
+  const match = MONTH_VALUE_PATTERN.exec(value.trim())
+
+  if (!match) {
+    return null
+  }
+
+  const [, yearPart, monthPart] = match
+  const year = Number(yearPart)
+  const month = Number(monthPart)
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    return null
+  }
+
+  return { year, month }
+}
+
+export function getMonthLabel(month: number, year: number) {
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
+    return ''
+  }
+
+  return `${getMonthName(month)} ${year}`
+}
+
+export function getMonthDateValues(month: number, year: number) {
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
+    return []
+  }
+
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const values: string[] = []
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    values.push(`${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
+  }
+
+  return values
+}
+
+export function getScheduledDateValuesForMonth(
+  month: number,
+  year: number,
+  scheduledDays: DayOfWeek[],
+) {
+  const matchingWeekdays = new Set(scheduledDays.map((day) => dayToWeekdayIndex[day]))
+
+  return getMonthDateValues(month, year).filter((dateValue) => {
+    const date = getUtcDateFromDateValue(dateValue)
+
+    return date ? matchingWeekdays.has(date.getUTCDay()) : false
+  })
+}
+
+export function getIsoWeekKey(dateValue: string) {
+  const date = getUtcDateFromDateValue(dateValue)
+
+  if (!date) {
+    return null
+  }
+
+  const adjustedDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+  const weekday = adjustedDate.getUTCDay() || 7
+  adjustedDate.setUTCDate(adjustedDate.getUTCDate() + 4 - weekday)
+
+  const isoYear = adjustedDate.getUTCFullYear()
+  const yearStart = new Date(Date.UTC(isoYear, 0, 1))
+  const diffDays = Math.floor((adjustedDate.getTime() - yearStart.getTime()) / 86_400_000)
+  const isoWeek = Math.ceil((diffDays + 1) / 7)
+
+  return `${isoYear}-W${String(isoWeek).padStart(2, '0')}`
+}
+
+export function getMonthRange(month: number, year: number) {
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
+    return null
+  }
+
+  const nextMonth = month === 12 ? 1 : month + 1
+  const nextYear = month === 12 ? year + 1 : year
+
+  return {
+    startInclusive: `${year}-${String(month).padStart(2, '0')}-01T00:00:00${JAMAICA_OFFSET}`,
+    endExclusive: `${nextYear}-${String(nextMonth).padStart(2, '0')}-01T00:00:00${JAMAICA_OFFSET}`,
+  }
+}
+
+export function formatPtSessionDateTime(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('en-JM', {
+    timeZone: JAMAICA_TIME_ZONE,
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date)
+}
+
+export function formatPtSessionDate(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('en-JM', {
+    timeZone: JAMAICA_TIME_ZONE,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date)
+}
+
+export function formatPtSessionDateTimeInputValue(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  const parts = getDatePartsInTimeZone(
+    date,
+    {
+      timeZone: JAMAICA_TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    },
+    'en-US',
+  )
+  const year = parts.get('year')
+  const month = parts.get('month')
+  const day = parts.get('day')
+  const hour = parts.get('hour')
+  const minute = parts.get('minute')
+
+  if (!year || !month || !day || !hour || !minute) {
+    return ''
+  }
+
+  return `${year}-${month}-${day}T${hour}:${minute}`
+}
+
+export async function fetchPtAssignments(filters: PtAssignmentFilters = {}) {
+  const searchParams = buildSearchParams(filters)
+  const response = await fetch(
+    `/api/pt/assignments${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+  )
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to load PT assignments.'))
+  }
+
+  const parsed = assignmentsResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to load PT assignments.')
+  }
+
+  return parsed.data.assignments
+}
+
+export async function createPtAssignment(data: CreatePtAssignmentData) {
+  const response = await fetch('/api/pt/assignments', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to create the trainer assignment.'))
+  }
+
+  const parsed = assignmentMutationResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to create the trainer assignment.')
+  }
+
+  return parsed.data.assignment
+}
+
+export async function updatePtAssignment(id: string, data: UpdatePtAssignmentData) {
+  const response = await fetch(`/api/pt/assignments/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to update the trainer assignment.'))
+  }
+
+  const parsed = assignmentMutationResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to update the trainer assignment.')
+  }
+
+  return parsed.data.assignment
+}
+
+export async function generatePtAssignmentSessions(
+  assignmentId: string,
+  data: GeneratePtSessionsRequest,
+): Promise<GeneratePtSessionsResult> {
+  const response = await fetch(
+    `/api/pt/assignments/${encodeURIComponent(assignmentId)}/generate-sessions`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    },
+  )
+  const payload = await readJson(response)
+  const warning = generateSessionsWarningSchema.safeParse(payload)
+
+  if (warning.success) {
+    return warning.data
+  }
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to generate PT sessions.'))
+  }
+
+  const parsed = generateSessionsSuccessSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to generate PT sessions.')
+  }
+
+  return parsed.data
+}
+
+export async function fetchPtSessions(filters: PtSessionFilters = {}) {
+  const searchParams = buildSearchParams(filters)
+  const response = await fetch(
+    `/api/pt/sessions${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+  )
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to load PT sessions.'))
+  }
+
+  const parsed = sessionsResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to load PT sessions.')
+  }
+
+  return parsed.data.sessions
+}
+
+export async function updatePtSession(id: string, data: UpdatePtSessionData) {
+  const response = await fetch(`/api/pt/sessions/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to update the PT session.'))
+  }
+
+  const parsed = sessionMutationResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to update the PT session.')
+  }
+
+  return parsed.data.session
+}
+
+export async function fetchPtSessionDetail(id: string): Promise<PtSessionDetail> {
+  const response = await fetch(`/api/pt/sessions/${encodeURIComponent(id)}`, {
+    method: 'GET',
+    cache: 'no-store',
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to load the PT session details.'))
+  }
+
+  const parsed = sessionDetailResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to load the PT session details.')
+  }
+
+  return {
+    session: parsed.data.session,
+    changes: parsed.data.changes,
+  }
+}

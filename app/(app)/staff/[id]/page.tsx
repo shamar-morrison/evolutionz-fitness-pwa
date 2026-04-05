@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EditStaffModal } from '@/components/edit-staff-modal'
 import { MemberAvatar } from '@/components/member-avatar'
 import { RoleGuard } from '@/components/role-guard'
+import { TrainerClientsSection } from '@/components/trainer-clients-section'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -280,6 +281,10 @@ function StaffDetailPageContent() {
           </CardContent>
         </Card>
       </div>
+
+      {hasStaffTitle(profile.titles, 'Trainer') ? (
+        <TrainerClientsSection trainerId={profile.id} />
+      ) : null}
 
       <ConfirmDialog
         open={activeDialog === 'delete-photo'}

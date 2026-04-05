@@ -11,6 +11,7 @@ import { formatStaffTitles } from '@/lib/staff'
 import {
   LayoutDashboard,
   Users,
+  CalendarDays,
   DoorOpen,
   LogOut,
   Check,
@@ -50,6 +51,7 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/members', label: 'Members', icon: Users },
   { href: '/staff', label: 'Staff', icon: Users, adminOnly: true },
+  { href: '/schedule', label: 'Schedule', icon: CalendarDays, adminOnly: true },
 ]
 
 export function Sidebar() {
