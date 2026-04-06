@@ -13,7 +13,11 @@ type RoleGuardProps = {
 export function RoleGuard({ role, children, fallback = null }: RoleGuardProps) {
   const { role: currentRole, loading } = useAuth()
 
-  if (loading || !currentRole) {
+  if (loading) {
+    return null
+  }
+
+  if (!currentRole) {
     return fallback
   }
 

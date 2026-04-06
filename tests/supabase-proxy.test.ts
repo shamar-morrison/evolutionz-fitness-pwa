@@ -9,6 +9,14 @@ vi.mock('@supabase/ssr', () => ({
   createServerClient: createServerClientMock,
 }))
 
+const { readStaffProfileMock } = vi.hoisted(() => ({
+  readStaffProfileMock: vi.fn(),
+}))
+
+vi.mock('@/lib/staff', () => ({
+  readStaffProfile: readStaffProfileMock,
+}))
+
 import { config } from '@/proxy'
 import { updateSession } from '@/lib/supabase/proxy'
 
@@ -38,6 +46,7 @@ describe('updateSession', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    readStaffProfileMock.mockReset()
     delete process.env.NEXT_PUBLIC_SUPABASE_URL
     delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
   })
@@ -64,11 +73,31 @@ describe('updateSession', () => {
       id: 'user-1',
       email: 'admin@evolutionzfitness.com',
     })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'user-1',
+      role: 'admin',
+    })
 
     const response = await updateSession(createRequest('/login'))
 
     expect(response.status).toBe(307)
     expect(response.headers.get('location')).toBe('http://localhost/dashboard')
+  })
+
+  it('redirects authenticated staff /login requests to /trainer/schedule', async () => {
+    mockSupabaseUser({
+      id: 'user-2',
+      email: 'trainer@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'user-2',
+      role: 'staff',
+    })
+
+    const response = await updateSession(createRequest('/login'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/trainer/schedule')
   })
 
   it('allows authenticated non-login page requests through', async () => {

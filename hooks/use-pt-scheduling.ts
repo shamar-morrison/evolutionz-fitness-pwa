@@ -2,13 +2,18 @@
 
 import { useQuery } from '@tanstack/react-query'
 import {
+  fetchRescheduleRequests,
+  fetchSessionUpdateRequests,
   fetchPtAssignments,
   fetchPtPaymentsReport,
   fetchPtSessionDetail,
   fetchPtSessions,
+  type ApprovalRequestStatus,
   type PtAssignmentFilters,
   type PtPaymentsReport,
   type PtSessionFilters,
+  type RescheduleRequest,
+  type SessionUpdateRequest,
 } from '@/lib/pt-scheduling'
 import { queryKeys } from '@/lib/query-keys'
 
@@ -137,6 +142,50 @@ export function usePtPaymentsReport(startDate: string, endDate: string) {
     report: (query.data ?? null) as PtPaymentsReport | null,
     isLoading: query.isFetching && !query.data,
     isFetching: query.isFetching,
+    error: query.error ?? null,
+    refetch: () => query.refetch(),
+  }
+}
+
+export function useRescheduleRequests(
+  status?: ApprovalRequestStatus,
+  options: { enabled?: boolean } = {},
+) {
+  const query = useQuery({
+    queryKey:
+      status === 'pending'
+        ? queryKeys.rescheduleRequests.pending
+        : [...queryKeys.rescheduleRequests.all, status ?? 'all'] as const,
+    queryFn: () => fetchRescheduleRequests(status),
+    enabled: options.enabled ?? true,
+    staleTime: TWO_MINUTES_MS,
+  })
+
+  return {
+    requests: (query.data ?? []) as RescheduleRequest[],
+    isLoading: query.isLoading,
+    error: query.error ?? null,
+    refetch: () => query.refetch(),
+  }
+}
+
+export function useSessionUpdateRequests(
+  status?: ApprovalRequestStatus,
+  options: { enabled?: boolean } = {},
+) {
+  const query = useQuery({
+    queryKey:
+      status === 'pending'
+        ? queryKeys.sessionUpdateRequests.pending
+        : [...queryKeys.sessionUpdateRequests.all, status ?? 'all'] as const,
+    queryFn: () => fetchSessionUpdateRequests(status),
+    enabled: options.enabled ?? true,
+    staleTime: TWO_MINUTES_MS,
+  })
+
+  return {
+    requests: (query.data ?? []) as SessionUpdateRequest[],
+    isLoading: query.isLoading,
     error: query.error ?? null,
     refetch: () => query.refetch(),
   }

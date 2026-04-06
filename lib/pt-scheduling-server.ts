@@ -3,6 +3,7 @@ import {
   type MemberPhotoStorageClient,
 } from '@/lib/member-photo-storage'
 import {
+  type ApprovalRequestStatus,
   calculateAttendanceRate,
   DAYS_OF_WEEK,
   getDateRangeBoundsInJamaica,
@@ -14,6 +15,8 @@ import {
   normalizeSessionTimeValue,
   type PtAssignmentFilters,
   type PtPaymentsReport,
+  type RescheduleRequest,
+  type SessionUpdateRequest,
   type PtSession,
   type PtSessionChange,
   type PtSessionDetail,
@@ -35,6 +38,10 @@ const PT_SESSION_SELECT =
 const PT_PAYMENT_SESSION_SELECT = 'assignment_id, status'
 const PT_SESSION_CHANGE_SELECT =
   'id, session_id, changed_by, change_type, old_value, new_value, created_at'
+const PT_RESCHEDULE_REQUEST_SELECT =
+  'id, session_id, requested_by, proposed_at, note, status, reviewed_by, review_note, reviewed_at, created_at, updated_at'
+const PT_SESSION_UPDATE_REQUEST_SELECT =
+  'id, session_id, requested_by, requested_status, note, status, reviewed_by, review_note, reviewed_at, created_at, updated_at'
 
 type PtSchedulingAdminClient = MemberPhotoStorageClient & {
   from(table: string): any
@@ -63,6 +70,34 @@ type PtSessionRow = {
   status: PtSession['status']
   is_recurring: boolean
   notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+type PtRescheduleRequestRow = {
+  id: string
+  session_id: string
+  requested_by: string
+  proposed_at: string
+  note: string | null
+  status: ApprovalRequestStatus
+  reviewed_by: string | null
+  review_note: string | null
+  reviewed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+type PtSessionUpdateRequestRow = {
+  id: string
+  session_id: string
+  requested_by: string
+  requested_status: 'completed' | 'missed'
+  note: string | null
+  status: ApprovalRequestStatus
+  reviewed_by: string | null
+  review_note: string | null
+  reviewed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -101,6 +136,13 @@ type MemberSummaryRow = {
   id: string
   name: string
   photo_url: string | null
+}
+
+type RequestSessionRow = {
+  id: string
+  trainer_id: string
+  member_id: string
+  scheduled_at: string
 }
 
 type PtPaymentAssignmentRow = {
@@ -324,6 +366,7 @@ async function hydratePtSessions(
         updatedAt: row.updated_at,
         trainerName: normalizeText(trainerById.get(row.trainer_id)?.name) || undefined,
         memberName: normalizeText(memberById.get(row.member_id)?.name) || undefined,
+        memberPhotoUrl: memberById.get(row.member_id)?.photo_url ?? null,
       }
     }),
   )
@@ -364,6 +407,114 @@ async function loadTrainingPlanByAssignmentId(
       normalizeTrainingPlan(trainingPlanByAssignmentId.get(assignmentId) ?? []),
     ]),
   )
+}
+
+async function loadRequestSessions(
+  supabase: PtSchedulingAdminClient,
+  sessionIds: string[],
+) {
+  if (sessionIds.length === 0) {
+    return new Map<string, RequestSessionRow>()
+  }
+
+  const { data, error } = await supabase
+    .from('pt_sessions')
+    .select('id, trainer_id, member_id, scheduled_at')
+    .in('id', sessionIds)
+
+  if (error) {
+    throw new Error(`Failed to read PT request sessions: ${error.message}`)
+  }
+
+  return new Map(((data ?? []) as RequestSessionRow[]).map((row) => [row.id, row]))
+}
+
+async function hydrateRescheduleRequests(
+  supabase: PtSchedulingAdminClient,
+  rows: PtRescheduleRequestRow[],
+) {
+  const sessionIds = Array.from(new Set(rows.map((row) => row.session_id)))
+  const sessionsById = await loadRequestSessions(supabase, sessionIds)
+  const profileIds = Array.from(
+    new Set(rows.flatMap((row) => [row.requested_by, row.reviewed_by].filter(Boolean) as string[])),
+  )
+  const trainerIds = Array.from(
+    new Set(Array.from(sessionsById.values()).map((session) => session.trainer_id)),
+  )
+  const memberIds = Array.from(
+    new Set(Array.from(sessionsById.values()).map((session) => session.member_id)),
+  )
+  const [profileById, trainerById, memberById] = await Promise.all([
+    loadTrainerSummaries(supabase, profileIds),
+    loadTrainerSummaries(supabase, trainerIds),
+    loadMemberNames(supabase, memberIds),
+  ])
+
+  return rows.map((row) => {
+    const session = sessionsById.get(row.session_id)
+
+    return {
+      id: row.id,
+      sessionId: row.session_id,
+      requestedBy: row.requested_by,
+      requestedByName: normalizeText(profileById.get(row.requested_by)?.name) || 'Unknown trainer',
+      proposedAt: row.proposed_at,
+      note: normalizeNullableText(row.note),
+      status: row.status,
+      reviewedBy: row.reviewed_by,
+      reviewNote: normalizeNullableText(row.review_note),
+      reviewedAt: row.reviewed_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      sessionScheduledAt: session?.scheduled_at,
+      memberName: normalizeText(memberById.get(session?.member_id ?? '')?.name) || undefined,
+      trainerName: normalizeText(trainerById.get(session?.trainer_id ?? '')?.name) || undefined,
+    } satisfies RescheduleRequest
+  })
+}
+
+async function hydrateSessionUpdateRequests(
+  supabase: PtSchedulingAdminClient,
+  rows: PtSessionUpdateRequestRow[],
+) {
+  const sessionIds = Array.from(new Set(rows.map((row) => row.session_id)))
+  const sessionsById = await loadRequestSessions(supabase, sessionIds)
+  const profileIds = Array.from(
+    new Set(rows.flatMap((row) => [row.requested_by, row.reviewed_by].filter(Boolean) as string[])),
+  )
+  const trainerIds = Array.from(
+    new Set(Array.from(sessionsById.values()).map((session) => session.trainer_id)),
+  )
+  const memberIds = Array.from(
+    new Set(Array.from(sessionsById.values()).map((session) => session.member_id)),
+  )
+  const [profileById, trainerById, memberById] = await Promise.all([
+    loadTrainerSummaries(supabase, profileIds),
+    loadTrainerSummaries(supabase, trainerIds),
+    loadMemberNames(supabase, memberIds),
+  ])
+
+  return rows.map((row) => {
+    const session = sessionsById.get(row.session_id)
+
+    return {
+      id: row.id,
+      sessionId: row.session_id,
+      requestedBy: row.requested_by,
+      requestedByName: normalizeText(profileById.get(row.requested_by)?.name) || 'Unknown trainer',
+      requestedStatus: row.requested_status,
+      note: normalizeNullableText(row.note),
+      status: row.status,
+      reviewedBy: row.reviewed_by,
+      reviewNote: normalizeNullableText(row.review_note),
+      reviewedAt: row.reviewed_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      sessionScheduledAt: session?.scheduled_at,
+      memberName: normalizeText(memberById.get(session?.member_id ?? '')?.name) || undefined,
+      trainerName: normalizeText(trainerById.get(session?.trainer_id ?? '')?.name) || undefined,
+    } satisfies SessionUpdateRequest
+  })
 }
 
 export async function readTrainerClientRowById(
@@ -711,4 +862,98 @@ export async function readPtSessionDetail(
     session,
     changes,
   }
+}
+
+export async function readPtRescheduleRequestRowById(
+  supabase: PtSchedulingAdminClient,
+  id: string,
+) {
+  const { data, error } = await supabase
+    .from('pt_reschedule_requests')
+    .select(PT_RESCHEDULE_REQUEST_SELECT)
+    .eq('id', id)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to read the PT reschedule request ${id}: ${error.message}`)
+  }
+
+  return (data as PtRescheduleRequestRow | null) ?? null
+}
+
+export async function readPtRescheduleRequests(
+  supabase: PtSchedulingAdminClient,
+  filters: { sessionId?: string; status?: ApprovalRequestStatus; id?: string } = {},
+) {
+  let query = supabase
+    .from('pt_reschedule_requests')
+    .select(PT_RESCHEDULE_REQUEST_SELECT)
+    .order('created_at', { ascending: false })
+
+  if (filters.id) {
+    query = query.eq('id', filters.id)
+  }
+
+  if (filters.sessionId) {
+    query = query.eq('session_id', filters.sessionId)
+  }
+
+  if (filters.status) {
+    query = query.eq('status', filters.status)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    throw new Error(`Failed to read PT reschedule requests: ${error.message}`)
+  }
+
+  return hydrateRescheduleRequests(supabase, (data ?? []) as PtRescheduleRequestRow[])
+}
+
+export async function readPtSessionUpdateRequestRowById(
+  supabase: PtSchedulingAdminClient,
+  id: string,
+) {
+  const { data, error } = await supabase
+    .from('pt_session_update_requests')
+    .select(PT_SESSION_UPDATE_REQUEST_SELECT)
+    .eq('id', id)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to read the PT session update request ${id}: ${error.message}`)
+  }
+
+  return (data as PtSessionUpdateRequestRow | null) ?? null
+}
+
+export async function readPtSessionUpdateRequests(
+  supabase: PtSchedulingAdminClient,
+  filters: { sessionId?: string; status?: ApprovalRequestStatus; id?: string } = {},
+) {
+  let query = supabase
+    .from('pt_session_update_requests')
+    .select(PT_SESSION_UPDATE_REQUEST_SELECT)
+    .order('created_at', { ascending: false })
+
+  if (filters.id) {
+    query = query.eq('id', filters.id)
+  }
+
+  if (filters.sessionId) {
+    query = query.eq('session_id', filters.sessionId)
+  }
+
+  if (filters.status) {
+    query = query.eq('status', filters.status)
+  }
+
+  const { data, error } = await query
+
+  if (error) {
+    throw new Error(`Failed to read PT session update requests: ${error.message}`)
+  }
+
+  return hydrateSessionUpdateRequests(supabase, (data ?? []) as PtSessionUpdateRequestRow[])
 }

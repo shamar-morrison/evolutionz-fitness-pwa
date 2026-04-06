@@ -8,7 +8,7 @@ import {
   type CreatePtAssignmentData,
 } from '@/lib/pt-scheduling'
 import { readTrainerClientById, readTrainerClients } from '@/lib/pt-scheduling-server'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAdminUser, requireAuthenticatedProfile } from '@/lib/server-auth'
 import { hasStaffTitle, readStaffProfile } from '@/lib/staff'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -93,7 +93,7 @@ function validateTrainingPlan(
 
 export async function GET(request: Request) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
@@ -105,8 +105,18 @@ export async function GET(request: Request) {
       memberId: searchParams.get('memberId') ?? undefined,
       status: searchParams.get('status') ?? undefined,
     })
+    const nextFilters = { ...filters }
+
+    if (authResult.profile.role !== 'admin') {
+      if (filters.trainerId && filters.trainerId !== authResult.profile.id) {
+        return createErrorResponse('Forbidden', 403)
+      }
+
+      nextFilters.trainerId = authResult.profile.id
+    }
+
     const supabase = getSupabaseAdminClient() as any
-    const assignments = await readTrainerClients(supabase, filters)
+    const assignments = await readTrainerClients(supabase, nextFilters)
 
     return NextResponse.json({
       assignments,

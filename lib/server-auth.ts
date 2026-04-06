@@ -38,7 +38,7 @@ export async function requireAuthenticatedUser(): Promise<AuthFailure | AuthSucc
   return { user }
 }
 
-export async function requireAdminUser(): Promise<AuthFailure | AdminAuthSuccess> {
+export async function requireAuthenticatedProfile(): Promise<AuthFailure | AdminAuthSuccess> {
   const authResult = await requireAuthenticatedUser()
 
   if ('response' in authResult) {
@@ -47,7 +47,7 @@ export async function requireAdminUser(): Promise<AuthFailure | AdminAuthSuccess
 
   const profile = await readProfile(authResult.user.id)
 
-  if (!profile || profile.role !== 'admin') {
+  if (!profile) {
     return {
       response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
     }
@@ -56,5 +56,24 @@ export async function requireAdminUser(): Promise<AuthFailure | AdminAuthSuccess
   return {
     user: authResult.user,
     profile,
+  }
+}
+
+export async function requireAdminUser(): Promise<AuthFailure | AdminAuthSuccess> {
+  const authResult = await requireAuthenticatedProfile()
+
+  if ('response' in authResult) {
+    return authResult
+  }
+
+  if (authResult.profile.role !== 'admin') {
+    return {
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+    }
+  }
+
+  return {
+    user: authResult.user,
+    profile: authResult.profile,
   }
 }

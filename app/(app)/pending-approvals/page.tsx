@@ -1,0 +1,531 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { ClipboardCheck } from 'lucide-react'
+import { RedirectOnMount } from '@/components/redirect-on-mount'
+import { RoleGuard } from '@/components/role-guard'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  useRescheduleRequests,
+  useSessionUpdateRequests,
+} from '@/hooks/use-pt-scheduling'
+import { toast } from '@/hooks/use-toast'
+import {
+  formatPtSessionDateTime,
+  formatPtSessionDateTimeInputValue,
+  formatPtSessionStatusLabel,
+  reviewRescheduleRequest,
+  reviewSessionUpdateRequest,
+  type RescheduleRequest,
+  type SessionUpdateRequest,
+} from '@/lib/pt-scheduling'
+import { queryKeys } from '@/lib/query-keys'
+
+type PendingApprovalsTab = 'reschedule-requests' | 'session-updates'
+
+function getInitialTab(value: string | null): PendingApprovalsTab {
+  return value === 'session-updates' ? 'session-updates' : 'reschedule-requests'
+}
+
+function PageContent() {
+  const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<PendingApprovalsTab>(() =>
+    getInitialTab(searchParams.get('tab')),
+  )
+  const [selectedRescheduleRequest, setSelectedRescheduleRequest] = useState<RescheduleRequest | null>(
+    null,
+  )
+  const [selectedSessionUpdateRequest, setSelectedSessionUpdateRequest] =
+    useState<SessionUpdateRequest | null>(null)
+  const [approvedTime, setApprovedTime] = useState('')
+  const [reviewNote, setReviewNote] = useState('')
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+  const rescheduleRequestsQuery = useRescheduleRequests()
+  const sessionUpdateRequestsQuery = useSessionUpdateRequests('pending')
+
+  useEffect(() => {
+    setActiveTab(getInitialTab(searchParams.get('tab')))
+  }, [searchParams])
+
+  const pendingRescheduleRequests = useMemo(
+    () => rescheduleRequestsQuery.requests.filter((request) => request.status === 'pending'),
+    [rescheduleRequestsQuery.requests],
+  )
+  const approvedRescheduleRequests = useMemo(
+    () => rescheduleRequestsQuery.requests.filter((request) => request.status === 'approved'),
+    [rescheduleRequestsQuery.requests],
+  )
+  const deniedRescheduleRequests = useMemo(
+    () => rescheduleRequestsQuery.requests.filter((request) => request.status === 'denied'),
+    [rescheduleRequestsQuery.requests],
+  )
+
+  const updateTab = (tab: PendingApprovalsTab) => {
+    setActiveTab(tab)
+    const nextSearchParams = new URLSearchParams(searchParams.toString())
+    nextSearchParams.set('tab', tab)
+    router.replace(`${pathname}?${nextSearchParams.toString()}`)
+  }
+
+  const invalidateApprovalQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.rescheduleRequests.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.sessionUpdateRequests.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.rescheduleRequests.pending }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.sessionUpdateRequests.pending }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.ptScheduling.sessions({}),
+        exact: false,
+      }),
+    ])
+  }
+
+  const handleOpenRescheduleReview = (request: RescheduleRequest) => {
+    setSelectedRescheduleRequest(request)
+    setApprovedTime(formatPtSessionDateTimeInputValue(request.proposedAt))
+    setReviewNote(request.reviewNote ?? '')
+  }
+
+  const handleReviewRescheduleRequest = async (status: 'approved' | 'denied') => {
+    if (!selectedRescheduleRequest) {
+      return
+    }
+
+    setIsSubmittingReview(true)
+
+    try {
+      await reviewRescheduleRequest(selectedRescheduleRequest.id, {
+        status,
+        proposedAt: status === 'approved' ? approvedTime : undefined,
+        reviewNote: reviewNote.trim() || null,
+      })
+      await invalidateApprovalQueries()
+      setSelectedRescheduleRequest(null)
+      toast({
+        title: status === 'approved' ? 'Reschedule approved' : 'Reschedule denied',
+      })
+    } catch (error) {
+      toast({
+        title: 'Review failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to review the reschedule request.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSubmittingReview(false)
+    }
+  }
+
+  const handleOpenSessionUpdateReview = (request: SessionUpdateRequest) => {
+    setSelectedSessionUpdateRequest(request)
+    setReviewNote(request.reviewNote ?? '')
+  }
+
+  const handleReviewSessionUpdateRequest = async (status: 'approved' | 'denied') => {
+    if (!selectedSessionUpdateRequest) {
+      return
+    }
+
+    setIsSubmittingReview(true)
+
+    try {
+      await reviewSessionUpdateRequest(selectedSessionUpdateRequest.id, {
+        status,
+        reviewNote: reviewNote.trim() || null,
+      })
+      await invalidateApprovalQueries()
+      setSelectedSessionUpdateRequest(null)
+      toast({
+        title: status === 'approved' ? 'Session update approved' : 'Session update denied',
+      })
+    } catch (error) {
+      toast({
+        title: 'Review failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to review the session update request.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSubmittingReview(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Pending Approvals</h1>
+          <p className="text-sm text-muted-foreground">
+            Review trainer reschedule requests and session status update requests.
+          </p>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={(value) => updateTab(value as PendingApprovalsTab)}>
+          <TabsList>
+            <TabsTrigger value="reschedule-requests">Reschedule Requests</TabsTrigger>
+            <TabsTrigger value="session-updates">Session Updates</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="reschedule-requests" className="space-y-4">
+            {rescheduleRequestsQuery.isLoading ? (
+              <>
+                <Skeleton className="h-28 w-full" />
+                <Skeleton className="h-28 w-full" />
+              </>
+            ) : rescheduleRequestsQuery.error ? (
+              <Card>
+                <CardContent className="p-6">
+                  <p className="text-sm text-destructive">
+                    {rescheduleRequestsQuery.error instanceof Error
+                      ? rescheduleRequestsQuery.error.message
+                      : 'Failed to load reschedule requests.'}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <ApprovalGroup
+                  title="Pending"
+                  emptyLabel="No pending reschedule requests."
+                  requests={pendingRescheduleRequests}
+                  onReview={handleOpenRescheduleReview}
+                />
+                <ApprovalGroup
+                  title="Approved"
+                  emptyLabel="No approved reschedule requests."
+                  requests={approvedRescheduleRequests}
+                />
+                <ApprovalGroup
+                  title="Denied"
+                  emptyLabel="No denied reschedule requests."
+                  requests={deniedRescheduleRequests}
+                />
+              </>
+            )}
+          </TabsContent>
+
+          <TabsContent value="session-updates" className="space-y-4">
+            {sessionUpdateRequestsQuery.isLoading ? (
+              <>
+                <Skeleton className="h-28 w-full" />
+                <Skeleton className="h-28 w-full" />
+              </>
+            ) : sessionUpdateRequestsQuery.error ? (
+              <Card>
+                <CardContent className="p-6">
+                  <p className="text-sm text-destructive">
+                    {sessionUpdateRequestsQuery.error instanceof Error
+                      ? sessionUpdateRequestsQuery.error.message
+                      : 'Failed to load session update requests.'}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : sessionUpdateRequestsQuery.requests.length === 0 ? (
+              <Card>
+                <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                  No pending session updates.
+                </CardContent>
+              </Card>
+            ) : (
+              sessionUpdateRequestsQuery.requests.map((request) => (
+                <Card key={request.id}>
+                  <CardContent className="flex flex-col gap-4 p-5 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-lg font-semibold">
+                          {request.trainerName ?? request.requestedByName}
+                        </p>
+                        <span className="text-muted-foreground">→</span>
+                        <p className="text-lg font-semibold">{request.memberName ?? 'Unknown member'}</p>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {request.sessionScheduledAt
+                          ? formatPtSessionDateTime(request.sessionScheduledAt)
+                          : 'Session time unavailable'}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary">
+                          {formatPtSessionStatusLabel(request.requestedStatus)}
+                        </Badge>
+                        <Badge variant="outline">Pending</Badge>
+                      </div>
+                      <p className="text-sm">{request.note ?? 'No note'}</p>
+                    </div>
+
+                    <Button type="button" variant="outline" onClick={() => handleOpenSessionUpdateReview(request)}>
+                      Review
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      <Dialog
+        open={Boolean(selectedRescheduleRequest)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedRescheduleRequest(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Review Reschedule Request</DialogTitle>
+            <DialogDescription>
+              Review the trainer&apos;s proposed time and approve or deny the request.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedRescheduleRequest ? (
+            <div className="space-y-4">
+              <ReadOnlyField label="Trainer" value={selectedRescheduleRequest.trainerName ?? selectedRescheduleRequest.requestedByName} />
+              <ReadOnlyField label="Member" value={selectedRescheduleRequest.memberName ?? 'Unknown member'} />
+              <ReadOnlyField
+                label="Original time"
+                value={
+                  selectedRescheduleRequest.sessionScheduledAt
+                    ? formatPtSessionDateTime(selectedRescheduleRequest.sessionScheduledAt)
+                    : 'Unavailable'
+                }
+              />
+              <ReadOnlyField
+                label="Proposed time"
+                value={formatPtSessionDateTime(selectedRescheduleRequest.proposedAt)}
+              />
+              <ReadOnlyField label="Trainer note" value={selectedRescheduleRequest.note ?? 'No note'} />
+
+              <div className="space-y-2">
+                <Label htmlFor="approved-time">Approved time</Label>
+                <Input
+                  id="approved-time"
+                  type="datetime-local"
+                  value={approvedTime}
+                  onChange={(event) => setApprovedTime(event.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="review-note">Reason / Note</Label>
+                <Textarea
+                  id="review-note"
+                  value={reviewNote}
+                  onChange={(event) => setReviewNote(event.target.value)}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSelectedRescheduleRequest(null)}
+              disabled={isSubmittingReview}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleReviewRescheduleRequest('denied')}
+              disabled={isSubmittingReview}
+            >
+              Deny
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleReviewRescheduleRequest('approved')}
+              disabled={isSubmittingReview || !approvedTime}
+            >
+              Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(selectedSessionUpdateRequest)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedSessionUpdateRequest(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Review Session Update</DialogTitle>
+            <DialogDescription>
+              Approve or deny the trainer&apos;s requested session status change.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedSessionUpdateRequest ? (
+            <div className="space-y-4">
+              <ReadOnlyField
+                label="Trainer"
+                value={
+                  selectedSessionUpdateRequest.trainerName ??
+                  selectedSessionUpdateRequest.requestedByName
+                }
+              />
+              <ReadOnlyField
+                label="Member"
+                value={selectedSessionUpdateRequest.memberName ?? 'Unknown member'}
+              />
+              <ReadOnlyField
+                label="Session time"
+                value={
+                  selectedSessionUpdateRequest.sessionScheduledAt
+                    ? formatPtSessionDateTime(selectedSessionUpdateRequest.sessionScheduledAt)
+                    : 'Unavailable'
+                }
+              />
+              <ReadOnlyField
+                label="Requested status"
+                value={formatPtSessionStatusLabel(selectedSessionUpdateRequest.requestedStatus)}
+              />
+              <ReadOnlyField
+                label="Trainer note"
+                value={selectedSessionUpdateRequest.note ?? 'No note'}
+              />
+
+              <div className="space-y-2">
+                <Label htmlFor="session-update-review-note">Reason / Note</Label>
+                <Textarea
+                  id="session-update-review-note"
+                  value={reviewNote}
+                  onChange={(event) => setReviewNote(event.target.value)}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSelectedSessionUpdateRequest(null)}
+              disabled={isSubmittingReview}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleReviewSessionUpdateRequest('denied')}
+              disabled={isSubmittingReview}
+            >
+              Deny
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleReviewSessionUpdateRequest('approved')}
+              disabled={isSubmittingReview}
+            >
+              Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function ApprovalGroup({
+  title,
+  emptyLabel,
+  requests,
+  onReview,
+}: {
+  title: string
+  emptyLabel: string
+  requests: RescheduleRequest[]
+  onReview?: (request: RescheduleRequest) => void
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">{title}</h2>
+      </div>
+
+      {requests.length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-sm text-muted-foreground">{emptyLabel}</CardContent>
+        </Card>
+      ) : (
+        requests.map((request) => (
+          <Card key={request.id}>
+            <CardContent className="flex flex-col gap-4 p-5 xl:flex-row xl:items-center xl:justify-between">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-lg font-semibold">
+                    {request.trainerName ?? request.requestedByName}
+                  </p>
+                  <span className="text-muted-foreground">→</span>
+                  <p className="text-lg font-semibold">{request.memberName ?? 'Unknown member'}</p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {request.sessionScheduledAt
+                    ? formatPtSessionDateTime(request.sessionScheduledAt)
+                    : 'Session time unavailable'}{' '}
+                  → {formatPtSessionDateTime(request.proposedAt)}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">{request.status}</Badge>
+                </div>
+                <p className="text-sm">{request.note ?? 'No note'}</p>
+              </div>
+
+              {request.status === 'pending' && onReview ? (
+                <Button type="button" variant="outline" onClick={() => onReview(request)}>
+                  Review
+                </Button>
+              ) : null}
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </section>
+  )
+}
+
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="text-sm font-medium">{value}</p>
+    </div>
+  )
+}
+
+export default function PendingApprovalsPage() {
+  return (
+    <RoleGuard role="admin" fallback={<RedirectOnMount href="/trainer/schedule" />}>
+      <PageContent />
+    </RoleGuard>
+  )
+}

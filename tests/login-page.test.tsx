@@ -8,14 +8,20 @@ const {
   createClientMock,
   pushMock,
   refreshMock,
+  readStaffProfileMock,
 } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
   pushMock: vi.fn(),
   refreshMock: vi.fn(),
+  readStaffProfileMock: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: createClientMock,
+}))
+
+vi.mock('@/lib/staff', () => ({
+  readStaffProfile: readStaffProfileMock,
 }))
 
 vi.mock('next/navigation', () => ({
@@ -95,12 +101,19 @@ describe('LoginPage', () => {
     vi.restoreAllMocks()
   })
 
-  it('signs in and redirects to /dashboard with a loading state while the request is in flight', async () => {
+  it('signs in and redirects staff to /trainer/schedule with a loading state while the request is in flight', async () => {
     const supabase = createSupabaseBrowserClient()
-    const pendingSignIn = createDeferred<{ error: null }>()
+    const pendingSignIn = createDeferred<{
+      data: { user: { id: string } }
+      error: null
+    }>()
 
     supabase.auth.signInWithPassword.mockReturnValue(pendingSignIn.promise)
     createClientMock.mockReturnValue(supabase)
+    readStaffProfileMock.mockResolvedValue({
+      id: 'trainer-1',
+      role: 'staff',
+    })
 
     await act(async () => {
       root.render(<LoginPage />)
@@ -141,14 +154,66 @@ describe('LoginPage', () => {
     expect(submitButton.disabled).toBe(true)
 
     await act(async () => {
-      pendingSignIn.resolve({ error: null })
+      pendingSignIn.resolve({
+        data: {
+          user: { id: 'trainer-1' },
+        },
+        error: null,
+      })
+    })
+
+    await flushAsyncWork()
+
+    expect(readStaffProfileMock).toHaveBeenCalledWith(supabase, 'trainer-1')
+    expect(pushMock).toHaveBeenCalledWith('/trainer/schedule')
+    expect(refreshMock).toHaveBeenCalledOnce()
+    expect(container.textContent).not.toContain('Unable to sign in')
+  })
+
+  it('redirects admins to /dashboard after sign-in', async () => {
+    const supabase = createSupabaseBrowserClient()
+
+    supabase.auth.signInWithPassword.mockResolvedValue({
+      data: {
+        user: { id: 'admin-1' },
+      },
+      error: null,
+    })
+    createClientMock.mockReturnValue(supabase)
+    readStaffProfileMock.mockResolvedValue({
+      id: 'admin-1',
+      role: 'admin',
+    })
+
+    await act(async () => {
+      root.render(<LoginPage />)
+    })
+
+    const emailInput = container.querySelector('#email')
+    const passwordInput = container.querySelector('#password')
+    const form = container.querySelector('form')
+
+    if (!(emailInput instanceof HTMLInputElement)) {
+      throw new Error('Email input not found.')
+    }
+
+    if (!(passwordInput instanceof HTMLInputElement)) {
+      throw new Error('Password input not found.')
+    }
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('Login form not found.')
+    }
+
+    await act(async () => {
+      setInputValue(emailInput, 'admin@evolutionzfitness.com')
+      setInputValue(passwordInput, 'secret-password')
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
 
     await flushAsyncWork()
 
     expect(pushMock).toHaveBeenCalledWith('/dashboard')
-    expect(refreshMock).toHaveBeenCalledOnce()
-    expect(container.textContent).not.toContain('Unable to sign in')
   })
 
   it('shows a generic error when Supabase rejects the credentials', async () => {
@@ -156,6 +221,9 @@ describe('LoginPage', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     supabase.auth.signInWithPassword.mockResolvedValue({
+      data: {
+        user: null,
+      },
       error: {
         message: 'Invalid login credentials',
       },

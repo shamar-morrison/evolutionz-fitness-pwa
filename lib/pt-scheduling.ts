@@ -94,6 +94,7 @@ export type PtSession = {
   updatedAt: string
   trainerName?: string
   memberName?: string
+  memberPhotoUrl?: string | null
 }
 
 export type PtSessionChangeType = 'reschedule' | 'cancellation' | 'status_change'
@@ -112,6 +113,60 @@ export type PtSessionChange = {
 export type PtSessionDetail = {
   session: PtSession
   changes: PtSessionChange[]
+}
+
+export type ApprovalRequestStatus = 'pending' | 'approved' | 'denied'
+
+export type RescheduleRequest = {
+  id: string
+  sessionId: string
+  requestedBy: string
+  requestedByName: string
+  proposedAt: string
+  note: string | null
+  status: ApprovalRequestStatus
+  reviewedBy: string | null
+  reviewNote: string | null
+  reviewedAt: string | null
+  createdAt: string
+  updatedAt: string
+  sessionScheduledAt?: string
+  memberName?: string
+  trainerName?: string
+}
+
+export type SessionUpdateRequest = {
+  id: string
+  sessionId: string
+  requestedBy: string
+  requestedByName: string
+  requestedStatus: 'completed' | 'missed'
+  note: string | null
+  status: ApprovalRequestStatus
+  reviewedBy: string | null
+  reviewNote: string | null
+  reviewedAt: string | null
+  createdAt: string
+  updatedAt: string
+  sessionScheduledAt?: string
+  memberName?: string
+  trainerName?: string
+}
+
+export type Notification = {
+  id: string
+  recipientId: string
+  type:
+    | 'reschedule_request'
+    | 'reschedule_approved'
+    | 'reschedule_denied'
+    | 'client_assigned'
+    | 'status_change_request'
+  title: string
+  body: string
+  read: boolean
+  metadata: Record<string, unknown> | null
+  createdAt: string
 }
 
 export type PtPaymentsReportSummary = {
@@ -203,6 +258,27 @@ export type UpdatePtSessionData = {
   notes?: string | null
 }
 
+export type CreateRescheduleRequestData = {
+  proposedAt: string
+  note?: string | null
+}
+
+export type ReviewRescheduleRequestData = {
+  status: 'approved' | 'denied'
+  proposedAt?: string
+  reviewNote?: string | null
+}
+
+export type MarkPtSessionData = {
+  status: 'completed' | 'missed'
+  note?: string | null
+}
+
+export type ReviewSessionUpdateRequestData = {
+  status: 'approved' | 'denied'
+  reviewNote?: string | null
+}
+
 const DATE_VALUE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/u
 const MONTH_VALUE_PATTERN = /^(\d{4})-(\d{2})$/u
 const LOCAL_DATE_TIME_PATTERN = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::(\d{2}))?$/u
@@ -250,6 +326,7 @@ const ptSessionSchema = z.object({
   updatedAt: z.string().trim().min(1),
   trainerName: z.string().trim().min(1).optional(),
   memberName: z.string().trim().min(1).optional(),
+  memberPhotoUrl: z.string().trim().min(1).nullable().optional(),
 })
 
 const ptSessionChangeSchema = z.object({
@@ -291,6 +368,87 @@ const sessionDetailResponseSchema = z.object({
   session: ptSessionSchema,
   changes: z.array(ptSessionChangeSchema).default([]),
 })
+
+const rescheduleRequestSchema = z.object({
+  id: z.string().trim().min(1),
+  sessionId: z.string().trim().min(1),
+  requestedBy: z.string().trim().min(1),
+  requestedByName: z.string().trim().min(1),
+  proposedAt: z.string().trim().min(1),
+  note: z.string().nullable(),
+  status: z.enum(['pending', 'approved', 'denied']),
+  reviewedBy: z.string().trim().min(1).nullable(),
+  reviewNote: z.string().nullable(),
+  reviewedAt: z.string().trim().min(1).nullable(),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  sessionScheduledAt: z.string().trim().min(1).optional(),
+  memberName: z.string().trim().min(1).optional(),
+  trainerName: z.string().trim().min(1).optional(),
+})
+
+const sessionUpdateRequestSchema = z.object({
+  id: z.string().trim().min(1),
+  sessionId: z.string().trim().min(1),
+  requestedBy: z.string().trim().min(1),
+  requestedByName: z.string().trim().min(1),
+  requestedStatus: z.enum(['completed', 'missed']),
+  note: z.string().nullable(),
+  status: z.enum(['pending', 'approved', 'denied']),
+  reviewedBy: z.string().trim().min(1).nullable(),
+  reviewNote: z.string().nullable(),
+  reviewedAt: z.string().trim().min(1).nullable(),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+  sessionScheduledAt: z.string().trim().min(1).optional(),
+  memberName: z.string().trim().min(1).optional(),
+  trainerName: z.string().trim().min(1).optional(),
+})
+
+const notificationSchema = z.object({
+  id: z.string().trim().min(1),
+  recipientId: z.string().trim().min(1),
+  type: z.enum([
+    'reschedule_request',
+    'reschedule_approved',
+    'reschedule_denied',
+    'client_assigned',
+    'status_change_request',
+  ]),
+  title: z.string().trim().min(1),
+  body: z.string().trim().min(1),
+  read: z.boolean(),
+  metadata: z.record(z.unknown()).nullable(),
+  createdAt: z.string().trim().min(1),
+})
+
+const rescheduleRequestsResponseSchema = z.object({
+  requests: z.array(rescheduleRequestSchema).default([]),
+})
+
+const rescheduleRequestMutationResponseSchema = z.object({
+  ok: z.literal(true),
+  request: rescheduleRequestSchema,
+})
+
+const sessionUpdateRequestsResponseSchema = z.object({
+  requests: z.array(sessionUpdateRequestSchema).default([]),
+})
+
+const sessionUpdateRequestMutationResponseSchema = z.object({
+  ok: z.literal(true),
+  request: sessionUpdateRequestSchema,
+})
+
+const markPtSessionResponseSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+  }),
+  z.object({
+    ok: z.literal(true),
+    pending: z.literal(true),
+  }),
+])
 
 const ptPaymentsReportResponseSchema = z.object({
   summary: z.object({
@@ -1129,4 +1287,161 @@ export async function fetchPtSessionDetail(id: string): Promise<PtSessionDetail>
     session: parsed.data.session,
     changes: parsed.data.changes,
   }
+}
+
+export async function createPtRescheduleRequest(id: string, data: CreateRescheduleRequestData) {
+  const response = await fetch(`/api/pt/sessions/${encodeURIComponent(id)}/reschedule-request`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to create the reschedule request.'))
+  }
+
+  const parsed = rescheduleRequestMutationResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to create the reschedule request.')
+  }
+
+  return parsed.data.request
+}
+
+export async function fetchRescheduleRequests(status?: ApprovalRequestStatus) {
+  const searchParams = buildSearchParams({
+    status,
+  })
+  const response = await fetch(
+    `/api/pt/reschedule-requests${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+  )
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to load reschedule requests.'))
+  }
+
+  const parsed = rescheduleRequestsResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to load reschedule requests.')
+  }
+
+  return parsed.data.requests
+}
+
+export async function reviewRescheduleRequest(id: string, data: ReviewRescheduleRequestData) {
+  const response = await fetch(`/api/pt/reschedule-requests/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to review the reschedule request.'))
+  }
+
+  const parsed = rescheduleRequestMutationResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to review the reschedule request.')
+  }
+
+  return parsed.data.request
+}
+
+export async function markPtSession(id: string, data: MarkPtSessionData) {
+  const response = await fetch(`/api/pt/sessions/${encodeURIComponent(id)}/mark`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to update the PT session status.'))
+  }
+
+  const parsed = markPtSessionResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to update the PT session status.')
+  }
+
+  return parsed.data
+}
+
+export async function fetchSessionUpdateRequests(status?: ApprovalRequestStatus) {
+  const searchParams = buildSearchParams({
+    status,
+  })
+  const response = await fetch(
+    `/api/pt/session-update-requests${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+  )
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to load session update requests.'))
+  }
+
+  const parsed = sessionUpdateRequestsResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to load session update requests.')
+  }
+
+  return parsed.data.requests
+}
+
+export async function reviewSessionUpdateRequest(
+  id: string,
+  data: ReviewSessionUpdateRequestData,
+) {
+  const response = await fetch(`/api/pt/session-update-requests/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to review the session update request.'))
+  }
+
+  const parsed = sessionUpdateRequestMutationResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to review the session update request.')
+  }
+
+  return parsed.data.request
+}
+
+export function normalizeNotification(input: unknown): Notification | null {
+  const parsed = notificationSchema.safeParse(input)
+
+  if (!parsed.success) {
+    return null
+  }
+
+  return parsed.data
 }

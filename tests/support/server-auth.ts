@@ -26,11 +26,24 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
 }
 
 export const requireAuthenticatedUserMock = vi.fn()
+export const requireAuthenticatedProfileMock = vi.fn()
 export const requireAdminUserMock = vi.fn()
 
 export function mockAuthenticatedUser(overrides: Partial<{ id: string; email: string }> = {}) {
   requireAuthenticatedUserMock.mockResolvedValue({
     user: createUser(overrides),
+  })
+}
+
+export function mockAuthenticatedProfile(
+  overrides: {
+    user?: Partial<{ id: string; email: string }>
+    profile?: Partial<Profile>
+  } = {},
+) {
+  requireAuthenticatedProfileMock.mockResolvedValue({
+    user: createUser(overrides.user),
+    profile: createProfile(overrides.profile),
   })
 }
 
@@ -50,12 +63,18 @@ export function mockUnauthorized() {
   requireAuthenticatedUserMock.mockResolvedValue({
     response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
   })
+  requireAuthenticatedProfileMock.mockResolvedValue({
+    response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+  })
   requireAdminUserMock.mockResolvedValue({
     response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
   })
 }
 
 export function mockForbidden() {
+  requireAuthenticatedProfileMock.mockResolvedValue({
+    response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+  })
   requireAdminUserMock.mockResolvedValue({
     response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
   })
@@ -63,8 +82,10 @@ export function mockForbidden() {
 
 export function resetServerAuthMocks() {
   requireAuthenticatedUserMock.mockReset()
+  requireAuthenticatedProfileMock.mockReset()
   requireAdminUserMock.mockReset()
   mockAuthenticatedUser()
+  mockAuthenticatedProfile()
   mockAdminUser()
 }
 

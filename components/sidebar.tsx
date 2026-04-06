@@ -6,12 +6,17 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
 import { RoleGuard } from '@/components/role-guard'
+import {
+  useRescheduleRequests,
+  useSessionUpdateRequests,
+} from '@/hooks/use-pt-scheduling'
 import { createClient } from '@/lib/supabase/client'
 import { formatStaffTitles } from '@/lib/staff'
 import {
   LayoutDashboard,
   Users,
   CalendarDays,
+  ClipboardCheck,
   BarChart3,
   DoorOpen,
   LogOut,
@@ -48,20 +53,35 @@ async function unlockDoor() {
   }
 }
 
-const navItems = [
+const adminNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/members', label: 'Members', icon: Users },
-  { href: '/staff', label: 'Staff', icon: Users, adminOnly: true },
-  { href: '/schedule', label: 'Schedule', icon: CalendarDays, adminOnly: true },
-  { href: '/reports', label: 'Reports', icon: BarChart3, adminOnly: true },
-]
+  { href: '/staff', label: 'Staff', icon: Users },
+  { href: '/schedule', label: 'Schedule', icon: CalendarDays },
+  { href: '/pending-approvals', label: 'Pending Approvals', icon: ClipboardCheck },
+  { href: '/reports', label: 'Reports', icon: BarChart3 },
+] as const
+
+const trainerNavItems = [
+  { href: '/trainer/schedule', label: 'My Schedule', icon: CalendarDays },
+  { href: '/trainer/clients', label: 'My Clients', icon: Users },
+] as const
 
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, profile, loading } = useAuth()
+  const { user, profile, role, loading } = useAuth()
   const [unlockState, setUnlockState] = useState<'idle' | 'unlocking' | 'unlocked'>('idle')
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const pendingRescheduleRequests = useRescheduleRequests('pending', {
+    enabled: role === 'admin',
+  })
+  const pendingSessionUpdateRequests = useSessionUpdateRequests('pending', {
+    enabled: role === 'admin',
+  })
+  const pendingApprovalsCount =
+    pendingRescheduleRequests.requests.length + pendingSessionUpdateRequests.requests.length
+  const navItems = role === 'staff' ? trainerNavItems : adminNavItems
 
   const handleUnlock = async () => {
     setUnlockState('unlocking')
@@ -132,31 +152,29 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
-          const navLink = (
+
+          return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                'flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                 isActive
                   ? 'bg-primary text-primary-foreground'
-                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
               )}
             >
-              <item.icon className="h-5 w-5" />
-              {item.label}
+              <span className="flex items-center gap-3">
+                <item.icon className="h-5 w-5" />
+                {item.label}
+              </span>
+              {item.href === '/pending-approvals' && pendingApprovalsCount > 0 ? (
+                <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  {pendingApprovalsCount > 9 ? '9+' : pendingApprovalsCount}
+                </span>
+              ) : null}
             </Link>
           )
-
-          if (item.adminOnly) {
-            return (
-              <RoleGuard key={item.href} role="admin">
-                {navLink}
-              </RoleGuard>
-            )
-          }
-
-          return navLink
         })}
       </nav>
 

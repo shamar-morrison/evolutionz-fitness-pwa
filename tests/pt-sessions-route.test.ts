@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resetServerAuthMocks } from '@/tests/support/server-auth'
+import {
+  mockAuthenticatedProfile,
+  resetServerAuthMocks,
+} from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -13,6 +16,7 @@ vi.mock('@/lib/server-auth', async () => {
   const mod = await import('@/tests/support/server-auth')
 
   return {
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
     requireAdminUser: mod.requireAdminUserMock,
   }
 })
@@ -145,5 +149,50 @@ describe('GET /api/pt/sessions', () => {
         },
       ]),
     )
+  })
+
+  it('forces trainerId to the authenticated staff profile when staff omit the filter', async () => {
+    const { client, operations } = createPtSessionsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAuthenticatedProfile({
+      profile: {
+        id: '33333333-3333-4333-8333-333333333333',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await GET(new Request('http://localhost/api/pt/sessions'))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ sessions: [] })
+    expect(operations).toContainEqual({
+      type: 'eq',
+      column: 'trainer_id',
+      value: '33333333-3333-4333-8333-333333333333',
+    })
+  })
+
+  it('rejects staff requests for another trainerId', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: '33333333-3333-4333-8333-333333333333',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await GET(
+      new Request(
+        'http://localhost/api/pt/sessions?trainerId=44444444-4444-4444-8444-444444444444',
+      ),
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
   })
 })

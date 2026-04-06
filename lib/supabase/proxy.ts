@@ -1,5 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
+import { readStaffProfile } from '@/lib/staff'
 
 function getSupabaseUrl() {
   const value = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL
@@ -68,11 +70,12 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && request.nextUrl.pathname === '/login') {
-    const dashboardUrl = request.nextUrl.clone()
-    dashboardUrl.pathname = '/dashboard'
-    dashboardUrl.search = ''
+    const profile = await readStaffProfile(supabase as any, user.id)
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = getAuthenticatedHomePath(profile?.role)
+    redirectUrl.search = ''
 
-    return copyCookies(response, NextResponse.redirect(dashboardUrl))
+    return copyCookies(response, NextResponse.redirect(redirectUrl))
   }
 
   return response

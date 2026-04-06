@@ -1,5 +1,7 @@
 'use client'
 
+import { RedirectOnMount } from '@/components/redirect-on-mount'
+import { RoleGuard } from '@/components/role-guard'
 import { useDashboardStats } from '@/hooks/use-dashboard-stats'
 import {
   ExpiringThisWeekCard,
@@ -11,6 +13,14 @@ import { Users, UserX, Clock3 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function DashboardPage() {
+  return (
+    <RoleGuard role="admin" fallback={<RedirectOnMount href="/trainer/schedule" />}>
+      <DashboardPageContent />
+    </RoleGuard>
+  )
+}
+
+function DashboardPageContent() {
   const { data: stats, isLoading: isStatsLoading, error: statsError } = useDashboardStats()
 
   if (statsError) {

@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
+import { readStaffProfile } from '@/lib/staff'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,7 +28,7 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
@@ -35,7 +37,9 @@ export default function LoginPage() {
         throw signInError
       }
 
-      router.push('/dashboard')
+      const profile = data.user ? await readStaffProfile(supabase as any, data.user.id) : null
+
+      router.push(getAuthenticatedHomePath(profile?.role))
       router.refresh()
     } catch (error) {
       console.error('Failed to sign in:', error)

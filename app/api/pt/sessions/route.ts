@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { PT_SESSION_FILTER_STATUSES } from '@/lib/pt-scheduling'
 import { readPtSessions } from '@/lib/pt-scheduling-server'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAuthenticatedProfile } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const sessionFiltersSchema = z.object({
@@ -26,7 +26,7 @@ function createErrorResponse(error: string, status: number) {
 
 export async function GET(request: Request) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
@@ -41,8 +41,18 @@ export async function GET(request: Request) {
       status: searchParams.get('status') ?? undefined,
       past: searchParams.get('past') ?? undefined,
     })
+    const nextFilters = { ...filters }
+
+    if (authResult.profile.role !== 'admin') {
+      if (filters.trainerId && filters.trainerId !== authResult.profile.id) {
+        return createErrorResponse('Forbidden', 403)
+      }
+
+      nextFilters.trainerId = authResult.profile.id
+    }
+
     const supabase = getSupabaseAdminClient() as any
-    const sessions = await readPtSessions(supabase, filters)
+    const sessions = await readPtSessions(supabase, nextFilters)
 
     return NextResponse.json({
       sessions,

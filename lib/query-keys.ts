@@ -21,6 +21,18 @@ export const queryKeys = {
     memberAssignment: (memberId: string) => ['pt-assignments', 'member', memberId] as const,
     trainerAssignments: (trainerId: string) => ['pt-assignments', 'trainer', trainerId] as const,
   },
+  notifications: {
+    all: (profileId: string) => ['notifications', profileId] as const,
+    unreadCount: (profileId: string) => ['notifications', profileId, 'unread-count'] as const,
+  },
+  rescheduleRequests: {
+    all: ['reschedule-requests'] as const,
+    pending: ['reschedule-requests', 'pending'] as const,
+  },
+  sessionUpdateRequests: {
+    all: ['session-update-requests'] as const,
+    pending: ['session-update-requests', 'pending'] as const,
+  },
   reports: {
     ptPayments: (startDate: string, endDate: string) =>
       ['reports', 'pt-payments', startDate, endDate] as const,
