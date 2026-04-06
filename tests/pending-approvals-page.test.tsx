@@ -6,12 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   invalidateQueriesMock,
-  replaceMock,
   useRescheduleRequestsMock,
   useSessionUpdateRequestsMock,
 } = vi.hoisted(() => ({
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
-  replaceMock: vi.fn(),
   useRescheduleRequestsMock: vi.fn(),
   useSessionUpdateRequestsMock: vi.fn(),
 }))
@@ -20,14 +18,6 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({
     invalidateQueries: invalidateQueriesMock,
   }),
-}))
-
-vi.mock('next/navigation', () => ({
-  usePathname: () => '/pending-approvals',
-  useRouter: () => ({
-    replace: replaceMock,
-  }),
-  useSearchParams: () => new URLSearchParams('tab=reschedule-requests'),
 }))
 
 vi.mock('@/hooks/use-pt-scheduling', () => ({
@@ -56,14 +46,8 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogTitle: ({ children }: React.ComponentProps<'h2'>) => <h2>{children}</h2>,
 }))
 
-vi.mock('@/components/ui/tabs', () => ({
-  Tabs: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  TabsContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
-  TabsList: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
-  TabsTrigger: ({ children }: React.ComponentProps<'button'>) => <button type="button">{children}</button>,
-}))
-
-import PendingApprovalsPage from '@/app/(app)/pending-approvals/page'
+import PendingRescheduleRequestsPage from '@/app/(app)/pending-approvals/reschedule-requests/page'
+import PendingSessionUpdatesPage from '@/app/(app)/pending-approvals/session-updates/page'
 
 describe('PendingApprovalsPage', () => {
   let container: HTMLDivElement
@@ -121,15 +105,25 @@ describe('PendingApprovalsPage', () => {
     vi.clearAllMocks()
   })
 
-  it('renders both approval tabs with their pending request content', async () => {
+  it('renders the reschedule requests page content', async () => {
     await act(async () => {
-      root.render(<PendingApprovalsPage />)
+      root.render(<PendingRescheduleRequestsPage />)
     })
 
     expect(container.textContent).toContain('Pending Approvals')
     expect(container.textContent).toContain('Reschedule Requests')
-    expect(container.textContent).toContain('Session Updates')
     expect(container.textContent).toContain('Move to Saturday.')
+    expect(container.textContent).toContain('Jordan Trainer')
+    expect(container.textContent).toContain('Client One')
+  })
+
+  it('renders the session updates page content', async () => {
+    await act(async () => {
+      root.render(<PendingSessionUpdatesPage />)
+    })
+
+    expect(container.textContent).toContain('Pending Approvals')
+    expect(container.textContent).toContain('Session Updates')
     expect(container.textContent).toContain('Client completed the workout.')
     expect(container.textContent).toContain('Jordan Trainer')
     expect(container.textContent).toContain('Client One')

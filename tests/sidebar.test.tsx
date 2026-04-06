@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   authState,
+  pathnameState,
   pushMock,
   refreshMock,
   signOutMock,
@@ -22,6 +23,9 @@ const {
     },
     role: 'admin' as 'admin' | 'staff',
     loading: false,
+  },
+  pathnameState: {
+    value: '/pending-approvals/session-updates',
   },
   pushMock: vi.fn(),
   refreshMock: vi.fn(),
@@ -43,7 +47,7 @@ vi.mock('next/link', () => ({
 }))
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/pending-approvals',
+  usePathname: () => pathnameState.value,
   useRouter: () => ({
     push: pushMock,
     refresh: refreshMock,
@@ -67,7 +71,8 @@ vi.mock('@/lib/supabase/client', () => ({
   }),
 }))
 
-import { Sidebar } from '@/components/sidebar'
+import { AppSidebar } from '@/components/app-sidebar'
+import { SidebarProvider } from '@/components/ui/sidebar'
 
 describe('Sidebar', () => {
   let container: HTMLDivElement
@@ -76,6 +81,19 @@ describe('Sidebar', () => {
   beforeEach(() => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches: false,
+        media: '(max-width: 767px)',
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -104,6 +122,7 @@ describe('Sidebar', () => {
   })
 
   it('shows the trainer-only navigation for staff users', async () => {
+    pathnameState.value = '/trainer/schedule'
     authState.role = 'staff'
     authState.profile = {
       id: 'trainer-1',
@@ -114,7 +133,11 @@ describe('Sidebar', () => {
     authState.user = { id: 'trainer-1', email: 'trainer@evolutionzfitness.com' }
 
     await act(async () => {
-      root.render(<Sidebar />)
+      root.render(
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>,
+      )
     })
 
     expect(container.textContent).toContain('My Schedule')
@@ -124,6 +147,7 @@ describe('Sidebar', () => {
   })
 
   it('shows the admin navigation and caps the pending approvals badge at 9+', async () => {
+    pathnameState.value = '/pending-approvals/session-updates'
     authState.role = 'admin'
     authState.profile = {
       id: 'user-1',
@@ -133,7 +157,7 @@ describe('Sidebar', () => {
     }
     authState.user = { id: 'user-1', email: 'admin@evolutionzfitness.com' }
     useRescheduleRequestsMock.mockReturnValue({
-      requests: new Array(6).fill(null).map((_, index) => ({ id: `reschedule-${index}` })),
+      requests: new Array(11).fill(null).map((_, index) => ({ id: `reschedule-${index}` })),
       isLoading: false,
       error: null,
     })
@@ -144,11 +168,28 @@ describe('Sidebar', () => {
     })
 
     await act(async () => {
-      root.render(<Sidebar />)
+      root.render(
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>,
+      )
     })
 
     expect(container.textContent).toContain('Dashboard')
     expect(container.textContent).toContain('Pending Approvals')
-    expect(container.textContent).toContain('9+')
+    expect(container.textContent).toContain('Reschedule Requests')
+    expect(container.textContent).toContain('Session Updates')
+
+    const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
+
+    expect(links).toContain('/pending-approvals/reschedule-requests')
+    expect(links).toContain('/pending-approvals/session-updates')
+
+    const badges = Array.from(container.querySelectorAll('[data-sidebar="menu-badge"]')).map(
+      (badge) => badge.textContent?.trim(),
+    )
+
+    expect(badges).toContain('9+')
+    expect(badges).toContain('5')
   })
 })

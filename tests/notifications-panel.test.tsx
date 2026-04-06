@@ -106,7 +106,7 @@ describe('NotificationsPanel', () => {
     expect(container.textContent).toContain('9+')
   })
 
-  it('routes status change review notifications to the session updates tab and marks them as read', async () => {
+  it('routes status change review notifications to the session updates page and marks them as read', async () => {
     useNotificationsMock.mockReturnValue({
       notifications: [
         {
@@ -139,6 +139,6 @@ describe('NotificationsPanel', () => {
     })
 
     expect(markNotificationAsReadMock).toHaveBeenCalledWith('user-1', 'notification-1')
-    expect(pushMock).toHaveBeenCalledWith('/pending-approvals?tab=session-updates')
+    expect(pushMock).toHaveBeenCalledWith('/pending-approvals/session-updates')
   })
 })

@@ -25,11 +25,11 @@ import {
 
 function getReviewHref(type: string) {
   if (type === 'reschedule_request') {
-    return '/pending-approvals?tab=reschedule-requests'
+    return '/pending-approvals/reschedule-requests'
   }
 
   if (type === 'status_change_request') {
-    return '/pending-approvals?tab=session-updates'
+    return '/pending-approvals/session-updates'
   }
 
   return null
