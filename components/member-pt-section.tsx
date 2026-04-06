@@ -50,7 +50,10 @@ async function invalidatePtQueries(
           queryKey: queryKeys.ptScheduling.trainerAssignments(trainerId),
         })
       : Promise.resolve(),
-    queryClient.invalidateQueries({ queryKey: queryKeys.ptScheduling.sessions({}) }),
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.ptScheduling.sessions({}),
+      exact: false,
+    }),
   ])
 }
 
@@ -137,7 +140,10 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
           variant: 'destructive',
         })
       } else {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.ptScheduling.sessions({}) })
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.ptScheduling.sessions({}),
+          exact: false,
+        })
         toast({
           title: 'Sessions generated',
           description: `${result.generated} session${result.generated === 1 ? '' : 's'} generated and ${result.skipped} skipped for ${getMonthLabel(currentMonth.month, currentMonth.year)}.`,

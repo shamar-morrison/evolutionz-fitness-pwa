@@ -44,6 +44,7 @@ import {
   SESSION_STATUSES,
   type SessionStatus,
 } from '@/lib/pt-scheduling'
+import { queryKeys } from '@/lib/query-keys'
 import { hasStaffTitle } from '@/lib/staff'
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
@@ -213,7 +214,10 @@ function SchedulePageContent() {
         return
       }
 
-      await queryClient.invalidateQueries({ queryKey: ['pt-sessions'] })
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.ptScheduling.sessions({}),
+        exact: false,
+      })
       setShowGenerateDialog(false)
       setGenerateAssignmentId(null)
       setPendingOverride(null)

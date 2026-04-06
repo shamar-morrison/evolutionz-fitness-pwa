@@ -34,6 +34,7 @@ import {
   type PtSessionChange,
   type SessionStatus,
 } from '@/lib/pt-scheduling'
+import { queryKeys } from '@/lib/query-keys'
 
 type PtSessionDialogProps = {
   sessionId: string | null
@@ -140,7 +141,10 @@ export function PtSessionDialog({ sessionId, open, onOpenChange }: PtSessionDial
         notes: formData.notes.trim() || null,
       })
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['pt-sessions'] }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.ptScheduling.sessions({}),
+          exact: false,
+        }),
         queryClient.invalidateQueries({ queryKey: ['pt-sessions', 'detail', sessionId] }),
       ])
       handleOpenChange(false)
