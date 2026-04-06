@@ -42,6 +42,7 @@ import {
   getPtSessionStatusBadgeClassName,
   parseMonthValue,
   SESSION_STATUSES,
+  type PtSessionFilterStatus,
   type SessionStatus,
 } from '@/lib/pt-scheduling'
 import { queryKeys } from '@/lib/query-keys'
@@ -143,7 +144,7 @@ function SchedulePageContent() {
   const queryClient = useQueryClient()
   const [monthValue, setMonthValue] = useState(() => getMonthValueInJamaica())
   const [trainerFilter, setTrainerFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState<'all' | SessionStatus>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | PtSessionFilterStatus>('active')
   const [showGenerateDialog, setShowGenerateDialog] = useState(false)
   const [generateAssignmentId, setGenerateAssignmentId] = useState<string | null>(null)
   const [generateMonthValue, setGenerateMonthValue] = useState(() => getMonthValueInJamaica())
@@ -294,11 +295,15 @@ function SchedulePageContent() {
 
             <div className="space-y-2">
               <Label htmlFor="schedule-status-filter">Status</Label>
-              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | SessionStatus)}>
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => setStatusFilter(value as 'all' | PtSessionFilterStatus)}
+              >
                 <SelectTrigger id="schedule-status-filter">
                   <SelectValue placeholder="All statuses" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="active">Non-cancelled</SelectItem>
                   <SelectItem value="all">All statuses</SelectItem>
                   {SESSION_STATUSES.map((status) => (
                     <SelectItem key={status} value={status}>

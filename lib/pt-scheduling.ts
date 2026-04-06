@@ -3,6 +3,8 @@ import { normalizeTimeInputValue } from '@/lib/member-access-time'
 
 export const SESSION_STATUSES = ['scheduled', 'completed', 'missed', 'rescheduled', 'cancelled'] as const
 export type SessionStatus = typeof SESSION_STATUSES[number]
+export const PT_SESSION_FILTER_STATUSES = ['active', ...SESSION_STATUSES] as const
+export type PtSessionFilterStatus = typeof PT_SESSION_FILTER_STATUSES[number]
 
 export const DAYS_OF_WEEK = [
   'Monday',
@@ -122,7 +124,8 @@ export type PtSessionFilters = {
   memberId?: string
   assignmentId?: string
   month?: string
-  status?: SessionStatus
+  status?: PtSessionFilterStatus
+  past?: 'true'
 }
 
 export type CreatePtAssignmentData = {

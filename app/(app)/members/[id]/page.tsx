@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { formatAccessDate } from '@/lib/member-access-time'
 import { useMember } from '@/hooks/use-members'
 import { MemberAvatar } from '@/components/member-avatar'
+import { MemberPtAttendance } from '@/components/member-pt-attendance'
 import { MemberPtSection } from '@/components/member-pt-section'
 import { StatusBadge } from '@/components/status-badge'
 import { CheckInHistory } from '@/components/check-in-history'
@@ -17,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -487,81 +489,109 @@ export default function MemberDetailPage() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center gap-2">
-            <User className="h-5 w-5 text-muted-foreground" />
-            <CardTitle>Member Information</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Card ID</p>
-                <p className="font-mono font-medium">{member.cardNo ?? 'Unassigned'}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Hik Person ID</p>
-                <p className="font-mono font-medium">{member.employeeNo}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Placeholder Slot</p>
-                <p className="font-medium">{member.slotPlaceholderName ?? 'Not recorded'}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Membership Type</p>
-                <p className="font-medium">{member.type}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Gender</p>
-                <p className="font-medium">{member.gender ?? 'Not set'}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Email</p>
-                <p className="font-medium">{member.email ?? 'Not set'}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Phone</p>
-                <p className="font-medium">{member.phone ?? 'Not set'}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Remark</p>
-                <p className="font-medium">{member.remark ?? 'Not set'}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Status</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge status={member.status} />
-                  {member.deviceAccessState === 'released' ? (
-                    <Badge className="bg-slate-500/15 text-slate-700 hover:bg-slate-500/25">
-                      Slot Released
-                    </Badge>
-                  ) : null}
-                </div>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Start Date</p>
-                <p className="font-medium">{formatAccessDate(member.beginTime, 'long')}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">End Date</p>
-                <p className="font-medium">{formatAccessDate(member.endTime, 'long')}</p>
-              </div>
-            </div>
+        <Tabs defaultValue="info" className="lg:col-span-2 gap-4">
+          <div className="overflow-x-auto pb-1">
+            <TabsList className="h-auto min-w-max flex-wrap justify-start gap-1 bg-muted/60 p-1">
+              <TabsTrigger value="info" className="px-3 py-1.5">
+                Info
+              </TabsTrigger>
+              <TabsTrigger value="checkin" className="px-3 py-1.5">
+                Check-in History
+              </TabsTrigger>
+              <RoleGuard role="admin">
+                <TabsTrigger value="pt-attendance" className="px-3 py-1.5">
+                  PT Attendance
+                </TabsTrigger>
+              </RoleGuard>
+            </TabsList>
+          </div>
 
-            {member.deviceAccessState === 'released' ? (
-              <div className="mt-6 rounded-lg border border-slate-500/30 bg-slate-500/10 p-4 text-sm text-slate-900">
-                This member&apos;s Hik slot has been released back to the available pool as{' '}
-                {member.slotPlaceholderName ?? member.employeeNo}.
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
+          <TabsContent value="info">
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2">
+                <User className="h-5 w-5 text-muted-foreground" />
+                <CardTitle>Member Information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Card ID</p>
+                    <p className="font-mono font-medium">{member.cardNo ?? 'Unassigned'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Hik Person ID</p>
+                    <p className="font-mono font-medium">{member.employeeNo}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Placeholder Slot</p>
+                    <p className="font-medium">{member.slotPlaceholderName ?? 'Not recorded'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Membership Type</p>
+                    <p className="font-medium">{member.type}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Gender</p>
+                    <p className="font-medium">{member.gender ?? 'Not set'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Email</p>
+                    <p className="font-medium">{member.email ?? 'Not set'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Phone</p>
+                    <p className="font-medium">{member.phone ?? 'Not set'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Remark</p>
+                    <p className="font-medium">{member.remark ?? 'Not set'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Status</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={member.status} />
+                      {member.deviceAccessState === 'released' ? (
+                        <Badge className="bg-slate-500/15 text-slate-700 hover:bg-slate-500/25">
+                          Slot Released
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Start Date</p>
+                    <p className="font-medium">{formatAccessDate(member.beginTime, 'long')}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">End Date</p>
+                    <p className="font-medium">{formatAccessDate(member.endTime, 'long')}</p>
+                  </div>
+                </div>
+
+                {member.deviceAccessState === 'released' ? (
+                  <div className="mt-6 rounded-lg border border-slate-500/30 bg-slate-500/10 p-4 text-sm text-slate-900">
+                    This member&apos;s Hik slot has been released back to the available pool as{' '}
+                    {member.slotPlaceholderName ?? member.employeeNo}.
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="checkin">
+            <CheckInHistory memberId={memberId} />
+          </TabsContent>
+
+          <RoleGuard role="admin">
+            <TabsContent value="pt-attendance">
+              <MemberPtAttendance memberId={memberId} />
+            </TabsContent>
+          </RoleGuard>
+        </Tabs>
       </div>
 
       <RoleGuard role="admin">
         <MemberPtSection memberId={memberId} />
       </RoleGuard>
-
-      <CheckInHistory memberId={memberId} />
 
       <AssignCardModal
         member={member}

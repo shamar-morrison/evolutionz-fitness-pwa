@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { SESSION_STATUSES } from '@/lib/pt-scheduling'
+import { PT_SESSION_FILTER_STATUSES } from '@/lib/pt-scheduling'
 import { readPtSessions } from '@/lib/pt-scheduling-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -10,7 +10,8 @@ const sessionFiltersSchema = z.object({
   memberId: z.string().uuid().optional(),
   assignmentId: z.string().uuid().optional(),
   month: z.string().regex(/^\d{4}-\d{2}$/u, 'Month filters must use YYYY-MM format.').optional(),
-  status: z.enum(SESSION_STATUSES).optional(),
+  status: z.enum(PT_SESSION_FILTER_STATUSES).optional(),
+  past: z.literal('true').optional(),
 })
 
 function createErrorResponse(error: string, status: number) {
@@ -38,6 +39,7 @@ export async function GET(request: Request) {
       assignmentId: searchParams.get('assignmentId') ?? undefined,
       month: searchParams.get('month') ?? undefined,
       status: searchParams.get('status') ?? undefined,
+      past: searchParams.get('past') ?? undefined,
     })
     const supabase = getSupabaseAdminClient() as any
     const sessions = await readPtSessions(supabase, filters)

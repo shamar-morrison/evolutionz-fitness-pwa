@@ -14,6 +14,8 @@ import {
   type PtSessionChange,
   type PtSessionDetail,
   type PtSessionFilters,
+  SESSION_STATUSES,
+  type SessionStatus,
   type TrainerClient,
   type TrainerClientStatus,
 } from '@/lib/pt-scheduling'
@@ -421,8 +423,28 @@ export async function readPtSessions(
     query = query.eq('assignment_id', filters.assignmentId)
   }
 
-  if (filters.status) {
-    query = query.eq('status', filters.status)
+  const allowedStatuses = new Set<SessionStatus>(SESSION_STATUSES)
+
+  if (filters.status === 'active') {
+    allowedStatuses.delete('cancelled')
+  } else if (filters.status) {
+    allowedStatuses.clear()
+    allowedStatuses.add(filters.status)
+  }
+
+  if (filters.past === 'true') {
+    query = query.lt('scheduled_at', new Date().toISOString())
+    allowedStatuses.delete('scheduled')
+  }
+
+  if (allowedStatuses.size === 0) {
+    return []
+  }
+
+  if (allowedStatuses.size === 1) {
+    query = query.eq('status', Array.from(allowedStatuses)[0])
+  } else if (allowedStatuses.size < SESSION_STATUSES.length) {
+    query = query.in('status', Array.from(allowedStatuses))
   }
 
   if (filters.month) {

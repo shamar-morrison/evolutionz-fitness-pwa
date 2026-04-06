@@ -242,6 +242,18 @@ describe('SchedulePage', () => {
     vi.clearAllMocks()
   })
 
+  it('loads the schedule with the non-cancelled PT status preset by default', async () => {
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    expect(usePtSessionsMock).toHaveBeenCalledWith({
+      month: '2026-04',
+      trainerId: undefined,
+      status: 'active',
+    })
+  })
+
   it('invalidates all PT session list queries after generating sessions from the schedule page', async () => {
     generatePtAssignmentSessionsMock.mockResolvedValue({
       ok: true,

@@ -36,6 +36,10 @@ function toSessionQueryKeyFilters(filters: PtSessionFilters = {}) {
     nextFilters.status = filters.status
   }
 
+  if (filters.past) {
+    nextFilters.past = filters.past
+  }
+
   return nextFilters
 }
 
