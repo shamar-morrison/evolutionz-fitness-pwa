@@ -270,51 +270,45 @@ function SchedulePageContent() {
           </div>
         </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-2">
-            <CalendarDays className="h-5 w-5 text-muted-foreground" />
-            <CardTitle>Filters</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="schedule-trainer-filter">Trainer</Label>
-              <Select value={trainerFilter} onValueChange={setTrainerFilter}>
-                <SelectTrigger id="schedule-trainer-filter">
-                  <SelectValue placeholder="All trainers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All trainers</SelectItem>
-                  {trainerOptions.map((trainer) => (
-                    <SelectItem key={trainer.id} value={trainer.id}>
-                      {trainer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="schedule-trainer-filter">Trainer</Label>
+            <Select value={trainerFilter} onValueChange={setTrainerFilter}>
+              <SelectTrigger id="schedule-trainer-filter" className="w-[200px]">
+                <SelectValue placeholder="All trainers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All trainers</SelectItem>
+                {trainerOptions.map((trainer) => (
+                  <SelectItem key={trainer.id} value={trainer.id}>
+                    {trainer.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="schedule-status-filter">Status</Label>
-              <Select
-                value={statusFilter}
-                onValueChange={(value) => setStatusFilter(value as 'all' | PtSessionFilterStatus)}
-              >
-                <SelectTrigger id="schedule-status-filter">
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Non-cancelled</SelectItem>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  {SESSION_STATUSES.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {formatPtSessionStatusLabel(status)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+          <div className="space-y-2">
+            <Label htmlFor="schedule-status-filter">Status</Label>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value as 'all' | PtSessionFilterStatus)}
+            >
+              <SelectTrigger id="schedule-status-filter" className="w-[200px]">
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Non-cancelled</SelectItem>
+                <SelectItem value="all">All statuses</SelectItem>
+                {SESSION_STATUSES.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {formatPtSessionStatusLabel(status)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
         <Card>
           <CardContent className="p-0">
