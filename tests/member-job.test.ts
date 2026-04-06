@@ -18,13 +18,15 @@ import {
   resetAccessSlotJobRequestSchema,
 } from '@/lib/member-job'
 
+const FIXED_NOW = new Date('2026-03-30T14:15:16.000Z')
+
 describe('member job payload mapping', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
   it('builds the bridge-native add_user, assign_slot, and add_card payloads', () => {
-    const now = new Date('2026-03-30T14:15:16')
+    const now = FIXED_NOW
 
     expect(
       buildAddUserPayload(
@@ -74,7 +76,7 @@ describe('member job payload mapping', () => {
   })
 
   it('builds reset slot payloads with the far-future supported expiry', () => {
-    const now = new Date('2026-03-30T14:15:16')
+    const now = FIXED_NOW
 
     expect(
       buildResetSlotPayload(
@@ -94,7 +96,7 @@ describe('member job payload mapping', () => {
   })
 
   it('builds slot-backed preview members using the existing Hik person and card ids', () => {
-    const now = new Date('2026-03-30T14:15:16')
+    const now = FIXED_NOW
 
     expect(
       buildSlotBackedMemberPreview(
@@ -137,7 +139,7 @@ describe('member job payload mapping', () => {
   })
 
   it('builds card-backed preview members without reusable slot metadata', () => {
-    const now = new Date('2026-03-30T14:15:16')
+    const now = FIXED_NOW
 
     expect(
       buildMemberPreview(
@@ -180,9 +182,9 @@ describe('member job payload mapping', () => {
   })
 
   it('generates a stable short numeric Hik person id fallback', () => {
-    const employeeNo = generateEmployeeNo(new Date('2026-03-30T14:15:16'))
+    const employeeNo = generateEmployeeNo(FIXED_NOW)
 
-    expect(employeeNo).toBe('898116000')
+    expect(employeeNo).toBe('880116000')
     expect(employeeNo).toMatch(/^\d{1,9}$/)
   })
 

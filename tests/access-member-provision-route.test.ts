@@ -21,9 +21,10 @@ vi.mock('@/lib/server-auth', async () => {
 
 import { POST } from '@/app/api/access/members/provision/route'
 
-const FIXED_NOW = new Date('2026-03-30T14:15:16')
+const FIXED_NOW = new Date('2026-03-30T14:15:16.000Z')
+const PAST_END_TIME_VALIDATION_NOW = new Date('2026-03-30T17:00:01.000Z')
 const EXPECTED_INCREMENTED_EMPLOYEE_NO = '912'
-const EXPECTED_FALLBACK_EMPLOYEE_NO = '898116000'
+const EXPECTED_FALLBACK_EMPLOYEE_NO = '880116000'
 const DEFAULT_MEMBER_ROWS = [
   { employee_no: '611' },
   { employee_no: '00000911' },
@@ -433,7 +434,7 @@ describe('POST /api/access/members/provision', () => {
 
   it('returns 400 and queues no jobs when the selected end time is already in the past', async () => {
     vi.useFakeTimers()
-    vi.setSystemTime(FIXED_NOW)
+    vi.setSystemTime(PAST_END_TIME_VALIDATION_NOW)
 
     const { client, insertedJobs, cardUpdates, insertedMembers } = createProvisioningAdminClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
