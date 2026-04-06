@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { normalizeTimeInputValue } from '@/lib/member-access-time'
 
-export const SESSION_STATUSES = ['scheduled', 'completed', 'missed', 'rescheduled'] as const
+export const SESSION_STATUSES = ['scheduled', 'completed', 'missed', 'rescheduled', 'cancelled'] as const
 export type SessionStatus = typeof SESSION_STATUSES[number]
 
 export const DAYS_OF_WEEK = [
@@ -27,10 +27,10 @@ export type TrainerClient = {
   memberId: string
   status: 'active' | 'inactive'
   ptFee: number
-  trainerPayout: number
   sessionsPerWeek: number
   scheduledDays: DayOfWeek[]
   sessionTime: string
+  notes: string | null
   createdAt: string
   updatedAt: string
   trainerName?: string
@@ -90,19 +90,19 @@ export type CreatePtAssignmentData = {
   trainerId: string
   memberId: string
   ptFee: number
-  trainerPayout: number
   sessionsPerWeek: number
   scheduledDays: DayOfWeek[]
   sessionTime: string
+  notes?: string | null
 }
 
 export type UpdatePtAssignmentData = {
   status?: TrainerClientStatus
   ptFee?: number
-  trainerPayout?: number
   sessionsPerWeek?: number
   scheduledDays?: DayOfWeek[]
   sessionTime?: string
+  notes?: string | null
 }
 
 export type GeneratePtSessionsRequest = {
@@ -141,10 +141,10 @@ const trainerClientSchema = z.object({
   memberId: z.string().trim().min(1),
   status: z.enum(PT_ASSIGNMENT_STATUSES),
   ptFee: z.number().int(),
-  trainerPayout: z.number().int(),
   sessionsPerWeek: z.number().int().min(1).max(3),
   scheduledDays: z.array(z.enum(DAYS_OF_WEEK)),
   sessionTime: z.string().trim().min(1),
+  notes: z.string().nullable(),
   createdAt: z.string().trim().min(1),
   updatedAt: z.string().trim().min(1),
   trainerName: z.string().trim().min(1).optional(),
@@ -188,6 +188,11 @@ const assignmentMutationResponseSchema = z.object({
   assignment: trainerClientSchema,
 })
 
+const assignmentDeleteResponseSchema = z.object({
+  ok: z.literal(true),
+  cancelledSessions: z.number().int().nonnegative(),
+})
+
 const sessionsResponseSchema = z.object({
   sessions: z.array(ptSessionSchema).default([]),
 })
@@ -226,6 +231,7 @@ const sessionStatusBadgeClassNames: Record<SessionStatus, string> = {
   completed: 'bg-green-500/15 text-green-700 hover:bg-green-500/25',
   missed: 'bg-red-500/15 text-red-700 hover:bg-red-500/25',
   rescheduled: 'bg-amber-500/15 text-amber-700 hover:bg-amber-500/25',
+  cancelled: 'bg-zinc-500/15 text-zinc-700 hover:bg-zinc-500/25',
 }
 
 const sessionStatusLabels: Record<SessionStatus, string> = {
@@ -233,6 +239,7 @@ const sessionStatusLabels: Record<SessionStatus, string> = {
   completed: 'Completed',
   missed: 'Missed',
   rescheduled: 'Rescheduled',
+  cancelled: 'Cancelled',
 }
 
 const dayToWeekdayIndex: Record<DayOfWeek, number> = {
@@ -711,6 +718,32 @@ export async function updatePtAssignment(id: string, data: UpdatePtAssignmentDat
   }
 
   return parsed.data.assignment
+}
+
+export async function deletePtAssignment(
+  id: string,
+  data: { cancelFutureSessions: boolean },
+): Promise<{ ok: true; cancelledSessions: number }> {
+  const response = await fetch(`/api/pt/assignments/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to remove the trainer assignment.'))
+  }
+
+  const parsed = assignmentDeleteResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to remove the trainer assignment.')
+  }
+
+  return parsed.data
 }
 
 export async function generatePtAssignmentSessions(

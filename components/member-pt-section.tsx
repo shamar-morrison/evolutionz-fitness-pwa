@@ -8,18 +8,26 @@ import { PtAssignmentDialog } from '@/components/pt-assignment-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePtAssignments, useMemberPtAssignment } from '@/hooks/use-pt-scheduling'
 import { useStaff } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
 import {
+  deletePtAssignment,
   formatJmdCurrency,
   formatScheduleSummary,
   generatePtAssignmentSessions,
   getMonthLabel,
   getMonthValueInJamaica,
   parseMonthValue,
-  updatePtAssignment,
   type TrainerClient,
 } from '@/lib/pt-scheduling'
 import { queryKeys } from '@/lib/query-keys'
@@ -42,7 +50,7 @@ async function invalidatePtQueries(
           queryKey: queryKeys.ptScheduling.trainerAssignments(trainerId),
         })
       : Promise.resolve(),
-    queryClient.invalidateQueries({ queryKey: ['pt-sessions'] }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.ptScheduling.sessions({}) }),
   ])
 }
 
@@ -77,7 +85,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
     }
   }
 
-  const handleRemoveAssignment = async () => {
+  const handleRemoveAssignment = async (cancelFutureSessions: boolean) => {
     if (!assignment) {
       return
     }
@@ -85,14 +93,16 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
     setIsRemoving(true)
 
     try {
-      await updatePtAssignment(assignment.id, {
-        status: 'inactive',
+      const result = await deletePtAssignment(assignment.id, {
+        cancelFutureSessions,
       })
       setShowRemoveDialog(false)
       await invalidatePtQueries(queryClient, memberId, assignment.trainerId)
       toast({
         title: 'Assignment removed',
-        description: 'The trainer assignment was marked inactive. Existing sessions were left unchanged.',
+        description: cancelFutureSessions
+          ? `The trainer assignment was marked inactive and ${result.cancelledSessions} future session${result.cancelledSessions === 1 ? '' : 's'} were cancelled.`
+          : 'The trainer assignment was marked inactive. Existing sessions were left unchanged.',
       })
     } catch (error) {
       toast({
@@ -127,7 +137,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
           variant: 'destructive',
         })
       } else {
-        await queryClient.invalidateQueries({ queryKey: ['pt-sessions'] })
+        await queryClient.invalidateQueries({ queryKey: queryKeys.ptScheduling.sessions({}) })
         toast({
           title: 'Sessions generated',
           description: `${result.generated} session${result.generated === 1 ? '' : 's'} generated and ${result.skipped} skipped for ${getMonthLabel(currentMonth.month, currentMonth.year)}.`,
@@ -214,10 +224,12 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
                   <p className="text-muted-foreground text-sm">PT Fee</p>
                   <p className="font-medium">{formatJmdCurrency(assignment.ptFee)}</p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-muted-foreground text-sm">Trainer Payout</p>
-                  <p className="font-medium">{formatJmdCurrency(assignment.trainerPayout)}</p>
-                </div>
+                {assignment.notes ? (
+                  <div className="space-y-1 sm:col-span-2">
+                    <p className="text-muted-foreground text-sm">Notes</p>
+                    <p className="whitespace-pre-wrap font-medium">{assignment.notes}</p>
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex flex-wrap gap-3">
@@ -262,18 +274,42 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
         onSaved={handleAssignmentSaved}
       />
 
-      <ConfirmDialog
-        open={showRemoveDialog}
-        onOpenChange={setShowRemoveDialog}
-        title="Remove trainer assignment?"
-        description="This will mark the assignment inactive. Existing PT sessions will remain in place."
-        confirmLabel="Remove Assignment"
-        cancelLabel="Cancel"
-        onConfirm={() => void handleRemoveAssignment()}
-        onCancel={() => setShowRemoveDialog(false)}
-        isLoading={isRemoving}
-        variant="destructive"
-      />
+      <Dialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Remove trainer assignment?</DialogTitle>
+            <DialogDescription>
+              Choose whether to keep the member&apos;s existing PT sessions or cancel all future scheduled sessions when the assignment is marked inactive.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleRemoveAssignment(false)}
+              disabled={isRemoving}
+            >
+              Keep existing sessions
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleRemoveAssignment(true)}
+              disabled={isRemoving}
+            >
+              Remove assignment and cancel all future sessions
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setShowRemoveDialog(false)}
+              disabled={isRemoving}
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={Boolean(pendingGenerateAssignment)}

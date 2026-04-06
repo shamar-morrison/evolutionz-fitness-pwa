@@ -22,10 +22,10 @@ const createAssignmentSchema = z
     trainerId: z.string().uuid(),
     memberId: z.string().uuid(),
     ptFee: z.number().int().min(0, 'PT fee must be zero or greater.'),
-    trainerPayout: z.number().int().min(0, 'Trainer payout must be zero or greater.'),
     sessionsPerWeek: z.number().int().min(1).max(3),
     scheduledDays: z.array(z.enum(DAYS_OF_WEEK)),
     sessionTime: z.string().trim().regex(/^\d{2}:\d{2}$/u, 'Session time must use HH:MM format.'),
+    notes: z.string().trim().nullable().optional(),
   })
   .strict()
 
@@ -37,6 +37,12 @@ function createErrorResponse(error: string, status: number) {
     },
     { status },
   )
+}
+
+function normalizeOptionalNotes(notes: string | null | undefined) {
+  const normalizedNotes = typeof notes === 'string' ? notes.trim() : ''
+
+  return normalizedNotes || null
 }
 
 function validateScheduledDays(
@@ -159,10 +165,10 @@ export async function POST(request: Request) {
         trainer_id: input.trainerId,
         member_id: input.memberId,
         pt_fee: input.ptFee,
-        trainer_payout: input.trainerPayout,
         sessions_per_week: input.sessionsPerWeek,
         scheduled_days: input.scheduledDays,
         session_time: normalizedSessionTime,
+        notes: normalizeOptionalNotes(input.notes),
       })
       .select('id')
       .maybeSingle()

@@ -13,10 +13,16 @@ const updateAssignmentSchema = z
   .object({
     status: z.enum(PT_ASSIGNMENT_STATUSES).optional(),
     ptFee: z.number().int().min(0, 'PT fee must be zero or greater.').optional(),
-    trainerPayout: z.number().int().min(0, 'Trainer payout must be zero or greater.').optional(),
     sessionsPerWeek: z.number().int().min(1).max(3).optional(),
     scheduledDays: z.array(z.enum(DAYS_OF_WEEK)).optional(),
     sessionTime: z.string().trim().regex(/^\d{2}:\d{2}$/u, 'Session time must use HH:MM format.').optional(),
+    notes: z.string().trim().nullable().optional(),
+  })
+  .strict()
+
+const deleteAssignmentSchema = z
+  .object({
+    cancelFutureSessions: z.boolean(),
   })
   .strict()
 
@@ -28,6 +34,12 @@ function createErrorResponse(error: string, status: number) {
     },
     { status },
   )
+}
+
+function normalizeOptionalNotes(notes: string | null | undefined) {
+  const normalizedNotes = typeof notes === 'string' ? notes.trim() : ''
+
+  return normalizedNotes || null
 }
 
 function validateScheduledDays(scheduledDays: string[], sessionsPerWeek: number) {
@@ -106,10 +118,6 @@ export async function PATCH(
       updateValues.pt_fee = input.ptFee
     }
 
-    if (typeof input.trainerPayout === 'number') {
-      updateValues.trainer_payout = input.trainerPayout
-    }
-
     if (typeof input.sessionsPerWeek === 'number') {
       updateValues.sessions_per_week = input.sessionsPerWeek
     }
@@ -126,6 +134,10 @@ export async function PATCH(
       }
 
       updateValues.session_time = normalizedSessionTime
+    }
+
+    if (typeof input.notes !== 'undefined') {
+      updateValues.notes = normalizeOptionalNotes(input.notes)
     }
 
     const { data: updatedAssignment, error: updateError } = await supabase
@@ -164,6 +176,86 @@ export async function PATCH(
 
     return createErrorResponse(
       error instanceof Error ? error.message : 'Unexpected server error while updating the PT assignment.',
+      500,
+    )
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
+    const { id } = await params
+    const requestBody = await request.json()
+    const input = deleteAssignmentSchema.parse(requestBody)
+    const supabase = getSupabaseAdminClient() as any
+    const existingAssignment = await readTrainerClientRowById(supabase, id)
+
+    if (!existingAssignment) {
+      return createErrorResponse('PT assignment not found.', 404)
+    }
+
+    const { data: updatedAssignment, error: assignmentError } = await supabase
+      .from('trainer_clients')
+      .update({
+        status: 'inactive',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select('id')
+      .maybeSingle()
+
+    if (assignmentError) {
+      throw new Error(`Failed to remove the PT assignment: ${assignmentError.message}`)
+    }
+
+    if (!updatedAssignment) {
+      return createErrorResponse('PT assignment not found.', 404)
+    }
+
+    let cancelledSessions = 0
+
+    if (input.cancelFutureSessions) {
+      const { data: cancelledRows, error: sessionError } = await supabase
+        .from('pt_sessions')
+        .update({
+          status: 'cancelled',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('assignment_id', id)
+        .eq('status', 'scheduled')
+        .gt('scheduled_at', new Date().toISOString())
+        .select('id')
+
+      if (sessionError) {
+        throw new Error(`Failed to cancel future PT sessions: ${sessionError.message}`)
+      }
+
+      cancelledSessions = Array.isArray(cancelledRows) ? cancelledRows.length : 0
+    }
+
+    return NextResponse.json({
+      ok: true,
+      cancelledSessions,
+    })
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return createErrorResponse('Invalid JSON body.', 400)
+    }
+
+    if (error instanceof Error && error.name === 'ZodError') {
+      return createErrorResponse(error.message, 400)
+    }
+
+    return createErrorResponse(
+      error instanceof Error ? error.message : 'Unexpected server error while removing the PT assignment.',
       500,
     )
   }

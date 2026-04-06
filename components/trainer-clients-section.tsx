@@ -79,9 +79,7 @@ export function TrainerClientsSection({ trainerId }: TrainerClientsSectionProps)
                     <p className="text-muted-foreground text-sm">
                       {formatScheduleSummary(assignment.scheduledDays, assignment.sessionTime)}
                     </p>
-                    <p className="text-sm">
-                      {formatJmdCurrency(assignment.ptFee)} / {formatJmdCurrency(assignment.trainerPayout)}
-                    </p>
+                    <p className="text-sm">{formatJmdCurrency(assignment.ptFee)}</p>
                   </div>
                 </div>
                 <Button asChild variant="outline">

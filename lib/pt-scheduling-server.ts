@@ -17,7 +17,7 @@ import {
 } from '@/lib/pt-scheduling'
 
 const TRAINER_CLIENT_SELECT =
-  'id, trainer_id, member_id, status, pt_fee, trainer_payout, sessions_per_week, scheduled_days, session_time, created_at, updated_at'
+  'id, trainer_id, member_id, status, pt_fee, sessions_per_week, scheduled_days, session_time, notes, created_at, updated_at'
 const PT_SESSION_SELECT =
   'id, assignment_id, trainer_id, member_id, scheduled_at, status, is_recurring, notes, created_at, updated_at'
 const PT_SESSION_CHANGE_SELECT =
@@ -33,10 +33,10 @@ type TrainerClientRow = {
   member_id: string
   status: TrainerClientStatus
   pt_fee: number
-  trainer_payout: number
   sessions_per_week: number
   scheduled_days: string[] | null
   session_time: string
+  notes: string | null
   created_at: string
   updated_at: string
 }
@@ -209,10 +209,10 @@ async function hydrateTrainerClients(
         memberId: row.member_id,
         status: row.status,
         ptFee: row.pt_fee,
-        trainerPayout: row.trainer_payout,
         sessionsPerWeek: row.sessions_per_week,
         scheduledDays: normalizeScheduledDays(row.scheduled_days),
         sessionTime: normalizeSessionTimeValue(row.session_time) ?? normalizeText(row.session_time),
+        notes: normalizeNullableText(row.notes),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         trainerName: normalizeText(trainer?.name) || undefined,

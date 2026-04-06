@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildJamaicaScheduledAt,
   buildJamaicaScheduledAtFromLocalInput,
+  formatPtSessionStatusLabel,
+  getPtSessionStatusBadgeClassName,
   getIsoWeekKey,
   getMonthRange,
   getScheduledDateValuesForMonth,
@@ -52,5 +54,10 @@ describe('PT scheduling helpers', () => {
       startInclusive: '2026-04-01T00:00:00-05:00',
       endExclusive: '2026-05-01T00:00:00-05:00',
     })
+  })
+
+  it('formats the cancelled session status with a muted badge style', () => {
+    expect(formatPtSessionStatusLabel('cancelled')).toBe('Cancelled')
+    expect(getPtSessionStatusBadgeClassName('cancelled')).toContain('text-zinc-700')
   })
 })

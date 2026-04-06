@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/hooks/use-toast'
 import {
   createPtAssignment,
@@ -52,7 +53,7 @@ type FormState = {
   scheduledDays: DayOfWeek[]
   sessionTime: string
   ptFee: string
-  trainerPayout: string
+  notes: string
 }
 
 function createInitialFormState(assignment?: TrainerClient | null): FormState {
@@ -62,7 +63,7 @@ function createInitialFormState(assignment?: TrainerClient | null): FormState {
     scheduledDays: assignment ? normalizeScheduledDays(assignment.scheduledDays) : [],
     sessionTime: assignment?.sessionTime ?? '07:00',
     ptFee: assignment ? String(assignment.ptFee) : '',
-    trainerPayout: assignment ? String(assignment.trainerPayout) : '',
+    notes: assignment?.notes ?? '',
   }
 }
 
@@ -73,7 +74,7 @@ function normalizeFormState(formState: FormState) {
     scheduledDays: normalizeScheduledDays(formState.scheduledDays),
     sessionTime: normalizeSessionTimeValue(formState.sessionTime) ?? '',
     ptFee: formState.ptFee.trim(),
-    trainerPayout: formState.trainerPayout.trim(),
+    notes: formState.notes.trim(),
   }
 }
 
@@ -97,6 +98,10 @@ export function PtAssignmentDialog({
     () => trainers.find((trainer) => trainer.id === formData.trainerId) ?? null,
     [formData.trainerId, trainers],
   )
+  const scheduledDaysError =
+    formData.scheduledDays.length === formData.sessionsPerWeek
+      ? null
+      : `Select exactly ${formData.sessionsPerWeek} day${formData.sessionsPerWeek === 1 ? '' : 's'}.`
 
   useEffect(() => {
     setFormData(initialFormState)
@@ -113,28 +118,27 @@ export function PtAssignmentDialog({
   }
 
   const handleDayToggle = (day: DayOfWeek) => {
-    setFormData((current) => {
-      if (current.scheduledDays.includes(day)) {
-        return {
-          ...current,
-          scheduledDays: current.scheduledDays.filter((value) => value !== day),
-        }
-      }
-
-      if (current.scheduledDays.length >= current.sessionsPerWeek) {
-        toast({
-          title: 'Too many days selected',
-          description: 'Remove one of the selected days before choosing another.',
-          variant: 'destructive',
-        })
-        return current
-      }
-
-      return {
+    if (formData.scheduledDays.includes(day)) {
+      setFormData((current) => ({
         ...current,
-        scheduledDays: normalizeScheduledDays([...current.scheduledDays, day]),
-      }
-    })
+        scheduledDays: current.scheduledDays.filter((value) => value !== day),
+      }))
+      return
+    }
+
+    if (formData.scheduledDays.length >= formData.sessionsPerWeek) {
+      toast({
+        title: 'Too many days selected',
+        description: `Select exactly ${formData.sessionsPerWeek} day${formData.sessionsPerWeek === 1 ? '' : 's'}.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setFormData((current) => ({
+      ...current,
+      scheduledDays: normalizeScheduledDays([...current.scheduledDays, day]),
+    }))
   }
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -160,31 +164,16 @@ export function PtAssignmentDialog({
       return
     }
 
-    if (formData.scheduledDays.length !== formData.sessionsPerWeek) {
-      toast({
-        title: 'Schedule mismatch',
-        description: 'Select the same number of days as the sessions per week value.',
-        variant: 'destructive',
-      })
+    if (scheduledDaysError) {
       return
     }
 
     const ptFee = Number(formData.ptFee)
-    const trainerPayout = Number(formData.trainerPayout)
 
     if (!Number.isInteger(ptFee) || ptFee < 0) {
       toast({
         title: 'Invalid PT fee',
         description: 'Enter a whole-number PT fee in JMD.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    if (!Number.isInteger(trainerPayout) || trainerPayout < 0) {
-      toast({
-        title: 'Invalid trainer payout',
-        description: 'Enter a whole-number trainer payout in JMD.',
         variant: 'destructive',
       })
       return
@@ -199,17 +188,17 @@ export function PtAssignmentDialog({
               trainerId: formData.trainerId,
               memberId,
               ptFee,
-              trainerPayout,
               sessionsPerWeek: formData.sessionsPerWeek,
               scheduledDays: normalizeScheduledDays(formData.scheduledDays),
               sessionTime: normalizedSessionTime,
+              notes: formData.notes.trim() || null,
             })
           : await updatePtAssignment(assignment?.id ?? '', {
               ptFee,
-              trainerPayout,
               sessionsPerWeek: formData.sessionsPerWeek,
               scheduledDays: normalizeScheduledDays(formData.scheduledDays),
               sessionTime: normalizedSessionTime,
+              notes: formData.notes.trim() || null,
             })
 
       handleOpenChange(false)
@@ -245,7 +234,7 @@ export function PtAssignmentDialog({
           <DialogDescription>
             {mode === 'create'
               ? 'Create a new personal training assignment for this member.'
-              : 'Update the trainer schedule, pricing, and payout details for this member.'}
+              : 'Update the trainer schedule, pricing, and notes for this member.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -353,49 +342,45 @@ export function PtAssignmentDialog({
                 )
               })}
             </div>
-            <p className="text-muted-foreground text-xs">
+            <p className={scheduledDaysError ? 'text-destructive text-xs' : 'text-muted-foreground text-xs'}>
               Select exactly {formData.sessionsPerWeek} day{formData.sessionsPerWeek === 1 ? '' : 's'}.
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-pt-fee`}>PT Fee (JMD)</Label>
-              <Input
-                id={`${mode}-pt-fee`}
-                type="number"
-                min={0}
-                step={1}
-                value={formData.ptFee}
-                onChange={(event) =>
-                  setFormData((current) => ({
-                    ...current,
-                    ptFee: event.target.value,
-                  }))
-                }
-                disabled={isSubmitting}
-                required
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor={`${mode}-pt-fee`}>PT Fee (JMD)</Label>
+            <Input
+              id={`${mode}-pt-fee`}
+              type="number"
+              min={0}
+              step={1}
+              value={formData.ptFee}
+              onChange={(event) =>
+                setFormData((current) => ({
+                  ...current,
+                  ptFee: event.target.value,
+                }))
+              }
+              disabled={isSubmitting}
+              required
+            />
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor={`${mode}-pt-payout`}>Trainer Payout (JMD)</Label>
-              <Input
-                id={`${mode}-pt-payout`}
-                type="number"
-                min={0}
-                step={1}
-                value={formData.trainerPayout}
-                onChange={(event) =>
-                  setFormData((current) => ({
-                    ...current,
-                    trainerPayout: event.target.value,
-                  }))
-                }
-                disabled={isSubmitting}
-                required
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor={`${mode}-pt-notes`}>Notes</Label>
+            <Textarea
+              id={`${mode}-pt-notes`}
+              value={formData.notes}
+              onChange={(event) =>
+                setFormData((current) => ({
+                  ...current,
+                  notes: event.target.value,
+                }))
+              }
+              placeholder="e.g. client injuries, physical limitations, special instructions"
+              disabled={isSubmitting}
+              rows={4}
+            />
           </div>
 
           <DialogFooter>
@@ -411,6 +396,7 @@ export function PtAssignmentDialog({
               type="submit"
               disabled={
                 isSubmitting ||
+                Boolean(scheduledDaysError) ||
                 (mode === 'edit' && !hasChanges) ||
                 (mode === 'create' && trainers.length === 0)
               }
