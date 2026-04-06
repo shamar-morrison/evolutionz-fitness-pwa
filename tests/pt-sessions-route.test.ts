@@ -68,6 +68,194 @@ function createPtSessionsClient() {
   }
 }
 
+function createHydratedPtSessionsClient() {
+  return {
+    client: {
+      from(table: string) {
+        if (table === 'pt_sessions') {
+          return {
+            select(columns: string) {
+              expect(columns).toContain('id')
+
+              return {
+                order() {
+                  return this
+                },
+                then(resolve: (value: { data: Array<Record<string, unknown>>; error: null }) => void) {
+                  resolve({
+                    data: [
+                      {
+                        id: 'session-1',
+                        assignment_id: 'assignment-1',
+                        trainer_id: 'trainer-1',
+                        member_id: 'member-1',
+                        scheduled_at: '2026-04-10T10:00:00.000Z',
+                        status: 'scheduled',
+                        is_recurring: false,
+                        notes: null,
+                        created_at: '2026-04-01T00:00:00.000Z',
+                        updated_at: '2026-04-01T00:00:00.000Z',
+                      },
+                    ],
+                    error: null,
+                  })
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'pt_reschedule_requests') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('session_id')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('session_id')
+                  expect(values).toEqual(['session-1'])
+
+                  return {
+                    eq(nextColumn: string, nextValue: string) {
+                      expect(nextColumn).toBe('status')
+                      expect(nextValue).toBe('pending')
+
+                      return Promise.resolve({
+                        data: [{ session_id: 'session-1' }],
+                        error: null,
+                      })
+                    },
+                  }
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'pt_session_update_requests') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('session_id')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('session_id')
+                  expect(values).toEqual(['session-1'])
+
+                  return {
+                    eq(nextColumn: string, nextValue: string) {
+                      expect(nextColumn).toBe('status')
+                      expect(nextValue).toBe('pending')
+
+                      return Promise.resolve({
+                        data: [{ session_id: 'session-1' }],
+                        error: null,
+                      })
+                    },
+                  }
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'profiles') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('id, name, titles')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('id')
+                  expect(values).toEqual(['trainer-1'])
+
+                  return Promise.resolve({
+                    data: [
+                      {
+                        id: 'trainer-1',
+                        name: 'Jordan Trainer',
+                        titles: ['Trainer'],
+                      },
+                    ],
+                    error: null,
+                  })
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'members') {
+          return {
+            select(columns: string) {
+              if (columns === 'id, name, photo_url') {
+                return {
+                  in(column: string, values: string[]) {
+                    expect(column).toBe('id')
+                    expect(values).toEqual(['member-1'])
+
+                    return Promise.resolve({
+                      data: [
+                        {
+                          id: 'member-1',
+                          name: 'Client One',
+                          photo_url: null,
+                        },
+                      ],
+                      error: null,
+                    })
+                  },
+                }
+              }
+
+              expect(columns).toBe('id, name')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('id')
+                  expect(values).toEqual(['member-1'])
+
+                  return Promise.resolve({
+                    data: [
+                      {
+                        id: 'member-1',
+                        name: 'Client One',
+                      },
+                    ],
+                    error: null,
+                  })
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'training_plan_days') {
+          return {
+            select(columns: string) {
+              expect(columns).toContain('assignment_id')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('assignment_id')
+                  expect(values).toEqual(['assignment-1'])
+
+                  return Promise.resolve({
+                    data: [],
+                    error: null,
+                  })
+                },
+              }
+            },
+          }
+        }
+
+        throw new Error(`Unexpected table ${table}`)
+      },
+    },
+  }
+}
+
 describe('GET /api/pt/sessions', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -194,5 +382,24 @@ describe('GET /api/pt/sessions', () => {
       error: 'Forbidden',
     })
     expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('includes pendingRequestType on hydrated session responses', async () => {
+    const { client } = createHydratedPtSessionsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(new Request('http://localhost/api/pt/sessions'))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      sessions: [
+        expect.objectContaining({
+          id: 'session-1',
+          memberName: 'Client One',
+          trainerName: 'Jordan Trainer',
+          pendingRequestType: 'reschedule',
+        }),
+      ],
+    })
   })
 })

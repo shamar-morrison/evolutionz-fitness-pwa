@@ -142,6 +142,7 @@ describe('Sidebar', () => {
 
     expect(container.textContent).toContain('My Schedule')
     expect(container.textContent).toContain('My Clients')
+    expect(container.textContent).toContain('My Requests')
     expect(container.textContent).not.toContain('Dashboard')
     expect(container.textContent).not.toContain('Pending Approvals')
   })

@@ -92,6 +92,7 @@ function createDetail(overrides: Partial<PtSessionDetail> = {}): PtSessionDetail
       updatedAt: '2026-04-05T00:00:00.000Z',
       trainerName: 'Jordan Trainer',
       memberName: 'Member One',
+      pendingRequestType: null,
       ...(overrides.session ?? {}),
     },
     changes: overrides.changes ?? [],

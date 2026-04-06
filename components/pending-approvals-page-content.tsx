@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ClipboardCheck } from 'lucide-react'
+import { RescheduleDateTimePicker } from '@/components/reschedule-date-time-picker'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -14,9 +15,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import {
   useRescheduleRequests,
@@ -24,6 +25,7 @@ import {
 } from '@/hooks/use-pt-scheduling'
 import { toast } from '@/hooks/use-toast'
 import {
+  type ApprovalRequestStatus,
   formatPtSessionDateTime,
   formatPtSessionDateTimeInputValue,
   formatPtSessionStatusLabel,
@@ -48,6 +50,18 @@ const pageContent = {
   },
 } as const
 
+const rescheduleTabLabels: Record<ApprovalRequestStatus, string> = {
+  pending: 'Pending',
+  approved: 'Approved',
+  denied: 'Denied',
+}
+
+const rescheduleEmptyLabels: Record<ApprovalRequestStatus, string> = {
+  pending: 'No pending reschedule requests.',
+  approved: 'No approved reschedule requests.',
+  denied: 'No denied reschedule requests.',
+}
+
 export function PendingApprovalsPageContent({
   view,
 }: {
@@ -60,28 +74,22 @@ export function PendingApprovalsPageContent({
   const [selectedSessionUpdateRequest, setSelectedSessionUpdateRequest] =
     useState<SessionUpdateRequest | null>(null)
   const [approvedTime, setApprovedTime] = useState('')
+  const [approvedTimeValidationMessage, setApprovedTimeValidationMessage] =
+    useState<string | null>(null)
   const [reviewNote, setReviewNote] = useState('')
   const [isSubmittingReview, setIsSubmittingReview] = useState(false)
-  const rescheduleRequestsQuery = useRescheduleRequests(undefined, {
-    enabled: view === 'reschedule-requests',
-  })
+  const [activeRescheduleStatus, setActiveRescheduleStatus] =
+    useState<ApprovalRequestStatus>('pending')
+  const rescheduleRequestsQuery = useRescheduleRequests(
+    view === 'reschedule-requests' ? activeRescheduleStatus : undefined,
+    {
+      enabled: view === 'reschedule-requests',
+    },
+  )
   const sessionUpdateRequestsQuery = useSessionUpdateRequests('pending', {
     enabled: view === 'session-updates',
   })
   const content = pageContent[view]
-
-  const pendingRescheduleRequests = useMemo(
-    () => rescheduleRequestsQuery.requests.filter((request) => request.status === 'pending'),
-    [rescheduleRequestsQuery.requests],
-  )
-  const approvedRescheduleRequests = useMemo(
-    () => rescheduleRequestsQuery.requests.filter((request) => request.status === 'approved'),
-    [rescheduleRequestsQuery.requests],
-  )
-  const deniedRescheduleRequests = useMemo(
-    () => rescheduleRequestsQuery.requests.filter((request) => request.status === 'denied'),
-    [rescheduleRequestsQuery.requests],
-  )
 
   const invalidateApprovalQueries = async () => {
     await Promise.all([
@@ -99,11 +107,15 @@ export function PendingApprovalsPageContent({
   const handleOpenRescheduleReview = (request: RescheduleRequest) => {
     setSelectedRescheduleRequest(request)
     setApprovedTime(formatPtSessionDateTimeInputValue(request.proposedAt))
+    setApprovedTimeValidationMessage(null)
     setReviewNote(request.reviewNote ?? '')
   }
 
   const handleReviewRescheduleRequest = async (status: 'approved' | 'denied') => {
-    if (!selectedRescheduleRequest) {
+    if (
+      !selectedRescheduleRequest ||
+      (status === 'approved' && (!approvedTime || approvedTimeValidationMessage))
+    ) {
       return
     }
 
@@ -176,41 +188,47 @@ export function PendingApprovalsPageContent({
         </div>
 
         {view === 'reschedule-requests' ? (
-          rescheduleRequestsQuery.isLoading ? (
-            <>
-              <Skeleton className="h-28 w-full" />
-              <Skeleton className="h-28 w-full" />
-            </>
-          ) : rescheduleRequestsQuery.error ? (
-            <Card>
-              <CardContent className="p-6">
-                <p className="text-sm text-destructive">
-                  {rescheduleRequestsQuery.error instanceof Error
-                    ? rescheduleRequestsQuery.error.message
-                    : 'Failed to load reschedule requests.'}
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <ApprovalGroup
-                title="Pending"
-                emptyLabel="No pending reschedule requests."
-                requests={pendingRescheduleRequests}
-                onReview={handleOpenRescheduleReview}
-              />
-              <ApprovalGroup
-                title="Approved"
-                emptyLabel="No approved reschedule requests."
-                requests={approvedRescheduleRequests}
-              />
-              <ApprovalGroup
-                title="Denied"
-                emptyLabel="No denied reschedule requests."
-                requests={deniedRescheduleRequests}
-              />
-            </>
-          )
+          <Tabs
+            value={activeRescheduleStatus}
+            onValueChange={(value) => setActiveRescheduleStatus(value as ApprovalRequestStatus)}
+            className="space-y-4"
+          >
+            <TabsList>
+              <TabsTrigger value="pending">Pending</TabsTrigger>
+              <TabsTrigger value="approved">Approved</TabsTrigger>
+              <TabsTrigger value="denied">Denied</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value={activeRescheduleStatus} className="space-y-4">
+              {rescheduleRequestsQuery.isLoading ? (
+                <>
+                  <Skeleton className="h-28 w-full" />
+                  <Skeleton className="h-28 w-full" />
+                </>
+              ) : rescheduleRequestsQuery.error ? (
+                <Card>
+                  <CardContent className="p-6">
+                    <p className="text-sm text-destructive">
+                      {rescheduleRequestsQuery.error instanceof Error
+                        ? rescheduleRequestsQuery.error.message
+                        : 'Failed to load reschedule requests.'}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <ApprovalGroup
+                  title={rescheduleTabLabels[activeRescheduleStatus]}
+                  emptyLabel={rescheduleEmptyLabels[activeRescheduleStatus]}
+                  requests={rescheduleRequestsQuery.requests}
+                  onReview={
+                    activeRescheduleStatus === 'pending'
+                      ? handleOpenRescheduleReview
+                      : undefined
+                  }
+                />
+              )}
+            </TabsContent>
+          </Tabs>
         ) : sessionUpdateRequestsQuery.isLoading ? (
           <>
             <Skeleton className="h-28 w-full" />
@@ -279,6 +297,7 @@ export function PendingApprovalsPageContent({
           onOpenChange={(open) => {
             if (!open) {
               setSelectedRescheduleRequest(null)
+              setApprovedTimeValidationMessage(null)
             }
           }}
         >
@@ -322,11 +341,13 @@ export function PendingApprovalsPageContent({
 
                 <div className="space-y-2">
                   <Label htmlFor="approved-time">Approved time</Label>
-                  <Input
+                  <RescheduleDateTimePicker
+                    key={selectedRescheduleRequest.id}
                     id="approved-time"
-                    type="datetime-local"
                     value={approvedTime}
-                    onChange={(event) => setApprovedTime(event.target.value)}
+                    onValueChange={setApprovedTime}
+                    onValidationChange={setApprovedTimeValidationMessage}
+                    placeholder="Select an approved date and time"
                   />
                 </div>
 
@@ -361,7 +382,11 @@ export function PendingApprovalsPageContent({
               <Button
                 type="button"
                 onClick={() => void handleReviewRescheduleRequest('approved')}
-                disabled={isSubmittingReview || !approvedTime}
+                disabled={
+                  isSubmittingReview ||
+                  !approvedTime ||
+                  Boolean(approvedTimeValidationMessage)
+                }
               >
                 Approve
               </Button>

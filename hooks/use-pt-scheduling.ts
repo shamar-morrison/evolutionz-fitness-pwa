@@ -156,7 +156,7 @@ export function useRescheduleRequests(
       status === 'pending'
         ? queryKeys.rescheduleRequests.pending
         : [...queryKeys.rescheduleRequests.all, status ?? 'all'] as const,
-    queryFn: () => fetchRescheduleRequests(status),
+    queryFn: () => fetchRescheduleRequests({ status }),
     enabled: options.enabled ?? true,
     staleTime: TWO_MINUTES_MS,
   })
@@ -178,7 +178,7 @@ export function useSessionUpdateRequests(
       status === 'pending'
         ? queryKeys.sessionUpdateRequests.pending
         : [...queryKeys.sessionUpdateRequests.all, status ?? 'all'] as const,
-    queryFn: () => fetchSessionUpdateRequests(status),
+    queryFn: () => fetchSessionUpdateRequests({ status }),
     enabled: options.enabled ?? true,
     staleTime: TWO_MINUTES_MS,
   })
@@ -186,6 +186,41 @@ export function useSessionUpdateRequests(
   return {
     requests: (query.data ?? []) as SessionUpdateRequest[],
     isLoading: query.isLoading,
+    error: query.error ?? null,
+    refetch: () => query.refetch(),
+  }
+}
+
+export function useMyRescheduleRequests(profileId: string, options: { enabled?: boolean } = {}) {
+  const query = useQuery({
+    queryKey: queryKeys.rescheduleRequests.mine(profileId),
+    queryFn: () => fetchRescheduleRequests({ requestedBy: 'me' }),
+    enabled: Boolean(profileId) && (options.enabled ?? true),
+    staleTime: TWO_MINUTES_MS,
+  })
+
+  return {
+    requests: (query.data ?? []) as RescheduleRequest[],
+    isLoading: Boolean(profileId) && (options.enabled ?? true) ? query.isLoading : false,
+    error: query.error ?? null,
+    refetch: () => query.refetch(),
+  }
+}
+
+export function useMySessionUpdateRequests(
+  profileId: string,
+  options: { enabled?: boolean } = {},
+) {
+  const query = useQuery({
+    queryKey: queryKeys.sessionUpdateRequests.mine(profileId),
+    queryFn: () => fetchSessionUpdateRequests({ requestedBy: 'me' }),
+    enabled: Boolean(profileId) && (options.enabled ?? true),
+    staleTime: TWO_MINUTES_MS,
+  })
+
+  return {
+    requests: (query.data ?? []) as SessionUpdateRequest[],
+    isLoading: Boolean(profileId) && (options.enabled ?? true) ? query.isLoading : false,
     error: query.error ?? null,
     refetch: () => query.refetch(),
   }

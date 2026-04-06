@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { readPtRescheduleRequests } from '@/lib/pt-scheduling-server'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAuthenticatedProfile } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const requestFiltersSchema = z.object({
   status: z.enum(['pending', 'approved', 'denied']).optional(),
+  requestedBy: z.literal('me').optional(),
 })
 
 function createErrorResponse(error: string, status: number) {
@@ -20,7 +21,7 @@ function createErrorResponse(error: string, status: number) {
 
 export async function GET(request: Request) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
@@ -29,9 +30,24 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const filters = requestFiltersSchema.parse({
       status: searchParams.get('status') ?? undefined,
+      requestedBy: searchParams.get('requestedBy') ?? undefined,
     })
+    const requestedBy =
+      filters.requestedBy === 'me'
+        ? authResult.profile.id
+        : authResult.profile.role === 'admin'
+          ? undefined
+          : null
+
+    if (authResult.profile.role !== 'admin' && requestedBy === null) {
+      return createErrorResponse('Forbidden', 403)
+    }
+
     const supabase = getSupabaseAdminClient() as any
-    const requests = await readPtRescheduleRequests(supabase, filters)
+    const requests = await readPtRescheduleRequests(supabase, {
+      status: filters.status,
+      requestedBy: requestedBy ?? undefined,
+    })
 
     return NextResponse.json({
       requests,

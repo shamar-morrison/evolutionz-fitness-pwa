@@ -28,10 +28,12 @@ export const queryKeys = {
   rescheduleRequests: {
     all: ['reschedule-requests'] as const,
     pending: ['reschedule-requests', 'pending'] as const,
+    mine: (profileId: string) => ['reschedule-requests', 'mine', profileId] as const,
   },
   sessionUpdateRequests: {
     all: ['session-update-requests'] as const,
     pending: ['session-update-requests', 'pending'] as const,
+    mine: (profileId: string) => ['session-update-requests', 'mine', profileId] as const,
   },
   reports: {
     ptPayments: (startDate: string, endDate: string) =>

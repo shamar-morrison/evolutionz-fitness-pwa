@@ -94,13 +94,53 @@ function createRescheduleRow(overrides: Partial<Record<string, unknown>> = {}) {
   }
 }
 
-function createPostClient() {
+function createPostClient(
+  options: {
+    pendingReschedule?: boolean
+    pendingStatusChange?: boolean
+  } = {},
+) {
   const insertValues: Array<Record<string, unknown>> = []
 
   return {
     insertValues,
     client: {
       from(table: string) {
+        if (table === 'pt_session_update_requests') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('id')
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('session_id')
+                  expect(value).toBe('session-1')
+
+                  return {
+                    eq(nextColumn: string, nextValue: string) {
+                      expect(nextColumn).toBe('status')
+                      expect(nextValue).toBe('pending')
+
+                      return {
+                        limit(limitValue: number) {
+                          expect(limitValue).toBe(1)
+
+                          return {
+                            maybeSingle: vi.fn().mockResolvedValue({
+                              data: options.pendingStatusChange ? { id: 'update-1' } : null,
+                              error: null,
+                            }),
+                          }
+                        },
+                      }
+                    },
+                  }
+                },
+              }
+            },
+          }
+        }
+
         expect(table).toBe('pt_reschedule_requests')
 
         return {
@@ -123,7 +163,7 @@ function createPostClient() {
 
                         return {
                           maybeSingle: vi.fn().mockResolvedValue({
-                            data: null,
+                            data: options.pendingReschedule ? { id: 'request-1' } : null,
                             error: null,
                           }),
                         }
@@ -301,17 +341,135 @@ describe('PT reschedule request routes', () => {
     })
   })
 
-  it('passes the optional status filter through the admin reschedule request list route', async () => {
+  it('rejects a trainer reschedule request when the proposed time is in the past', async () => {
+    const { client, insertValues } = createPostClient()
+
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-04-12T10:00:00.000Z').getTime())
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    buildJamaicaScheduledAtFromLocalInputMock.mockReturnValue('2026-04-12T09:00:00.000Z')
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'trainer-1',
+        name: 'Jordan Trainer',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/sessions/session-1/reschedule-request', {
+        method: 'POST',
+        body: JSON.stringify({
+          proposedAt: '2026-04-12T04:00',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'session-1' }) },
+    )
+
+    expect(response.status).toBe(400)
+    expect(insertValues).toEqual([])
+    expect(readPtSessionRowByIdMock).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Proposed date and time must be in the future.',
+    })
+  })
+
+  it('rejects a trainer reschedule request when a pending session update request already exists', async () => {
+    const { client, insertValues } = createPostClient({ pendingStatusChange: true })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    buildJamaicaScheduledAtFromLocalInputMock.mockReturnValue('2026-04-12T10:00:00.000Z')
+    readPtSessionRowByIdMock.mockResolvedValue(createSessionRow())
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'trainer-1',
+        name: 'Jordan Trainer',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/sessions/session-1/reschedule-request', {
+        method: 'POST',
+        body: JSON.stringify({
+          proposedAt: '2026-04-12T10:00',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'session-1' }) },
+    )
+
+    expect(response.status).toBe(400)
+    expect(insertValues).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'A pending request already exists for this session.',
+    })
+  })
+
+  it('passes status and requestedBy=me through the reschedule request list route for staff', async () => {
     getSupabaseAdminClientMock.mockReturnValue({})
     readPtRescheduleRequestsMock.mockResolvedValue([])
-    mockAdminUser()
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'trainer-1',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
 
     const response = await GET(
-      new Request('http://localhost/api/pt/reschedule-requests?status=pending'),
+      new Request('http://localhost/api/pt/reschedule-requests?status=pending&requestedBy=me'),
     )
 
     expect(response.status).toBe(200)
-    expect(readPtRescheduleRequestsMock).toHaveBeenCalledWith({}, { status: 'pending' })
+    expect(readPtRescheduleRequestsMock).toHaveBeenCalledWith({}, {
+      status: 'pending',
+      requestedBy: 'trainer-1',
+    })
+    await expect(response.json()).resolves.toEqual({ requests: [] })
+  })
+
+  it('forbids staff reschedule list requests without requestedBy=me', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'trainer-1',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await GET(new Request('http://localhost/api/pt/reschedule-requests'))
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(readPtRescheduleRequestsMock).not.toHaveBeenCalled()
+  })
+
+  it('passes the requestedBy=me filter through the admin reschedule request list route', async () => {
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readPtRescheduleRequestsMock.mockResolvedValue([])
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await GET(
+      new Request('http://localhost/api/pt/reschedule-requests?status=pending&requestedBy=me'),
+    )
+
+    expect(response.status).toBe(200)
+    expect(readPtRescheduleRequestsMock).toHaveBeenCalledWith({}, {
+      status: 'pending',
+      requestedBy: 'admin-1',
+    })
     await expect(response.json()).resolves.toEqual({ requests: [] })
   })
 

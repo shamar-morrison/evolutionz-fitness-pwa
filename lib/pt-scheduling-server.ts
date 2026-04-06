@@ -92,7 +92,7 @@ type PtSessionUpdateRequestRow = {
   id: string
   session_id: string
   requested_by: string
-  requested_status: 'completed' | 'missed'
+  requested_status: SessionUpdateRequest['requestedStatus']
   note: string | null
   status: ApprovalRequestStatus
   reviewed_by: string | null
@@ -143,6 +143,10 @@ type RequestSessionRow = {
   trainer_id: string
   member_id: string
   scheduled_at: string
+}
+
+type PendingRequestRow = {
+  session_id: string
 }
 
 type PtPaymentAssignmentRow = {
@@ -337,11 +341,14 @@ async function hydratePtSessions(
   const trainerIds = Array.from(new Set(rows.map((row) => row.trainer_id)))
   const memberIds = Array.from(new Set(rows.map((row) => row.member_id)))
   const assignmentIds = Array.from(new Set(rows.map((row) => row.assignment_id)))
-  const [trainerById, memberById, trainingPlanByAssignmentId] = await Promise.all([
-    loadTrainerSummaries(supabase, trainerIds),
-    loadMemberSummaries(supabase, memberIds),
-    loadTrainingPlanByAssignmentId(supabase, assignmentIds),
-  ])
+  const sessionIds = rows.map((row) => row.id)
+  const [trainerById, memberById, trainingPlanByAssignmentId, pendingRequestTypeBySessionId] =
+    await Promise.all([
+      loadTrainerSummaries(supabase, trainerIds),
+      loadMemberSummaries(supabase, memberIds),
+      loadTrainingPlanByAssignmentId(supabase, assignmentIds),
+      loadPendingRequestTypeBySessionId(supabase, sessionIds),
+    ])
 
   return sortSessions(
     rows.map((row) => {
@@ -367,6 +374,7 @@ async function hydratePtSessions(
         trainerName: normalizeText(trainerById.get(row.trainer_id)?.name) || undefined,
         memberName: normalizeText(memberById.get(row.member_id)?.name) || undefined,
         memberPhotoUrl: memberById.get(row.member_id)?.photo_url ?? null,
+        pendingRequestType: pendingRequestTypeBySessionId.get(row.id) ?? null,
       }
     }),
   )
@@ -427,6 +435,54 @@ async function loadRequestSessions(
   }
 
   return new Map(((data ?? []) as RequestSessionRow[]).map((row) => [row.id, row]))
+}
+
+async function loadPendingRequestTypeBySessionId(
+  supabase: PtSchedulingAdminClient,
+  sessionIds: string[],
+) {
+  if (sessionIds.length === 0) {
+    return new Map<string, PtSession['pendingRequestType']>()
+  }
+
+  const [rescheduleResult, sessionUpdateResult] = await Promise.all([
+    supabase
+      .from('pt_reschedule_requests')
+      .select('session_id')
+      .in('session_id', sessionIds)
+      .eq('status', 'pending'),
+    supabase
+      .from('pt_session_update_requests')
+      .select('session_id')
+      .in('session_id', sessionIds)
+      .eq('status', 'pending'),
+  ])
+
+  if (rescheduleResult.error) {
+    throw new Error(
+      `Failed to read pending PT reschedule requests: ${rescheduleResult.error.message}`,
+    )
+  }
+
+  if (sessionUpdateResult.error) {
+    throw new Error(
+      `Failed to read pending PT session update requests: ${sessionUpdateResult.error.message}`,
+    )
+  }
+
+  const pendingRequestTypeBySessionId = new Map<string, PtSession['pendingRequestType']>()
+
+  for (const row of (rescheduleResult.data ?? []) as PendingRequestRow[]) {
+    pendingRequestTypeBySessionId.set(row.session_id, 'reschedule')
+  }
+
+  for (const row of (sessionUpdateResult.data ?? []) as PendingRequestRow[]) {
+    if (!pendingRequestTypeBySessionId.has(row.session_id)) {
+      pendingRequestTypeBySessionId.set(row.session_id, 'status_change')
+    }
+  }
+
+  return pendingRequestTypeBySessionId
 }
 
 async function hydrateRescheduleRequests(
@@ -883,7 +939,12 @@ export async function readPtRescheduleRequestRowById(
 
 export async function readPtRescheduleRequests(
   supabase: PtSchedulingAdminClient,
-  filters: { sessionId?: string; status?: ApprovalRequestStatus; id?: string } = {},
+  filters: {
+    sessionId?: string
+    status?: ApprovalRequestStatus
+    id?: string
+    requestedBy?: string
+  } = {},
 ) {
   let query = supabase
     .from('pt_reschedule_requests')
@@ -900,6 +961,10 @@ export async function readPtRescheduleRequests(
 
   if (filters.status) {
     query = query.eq('status', filters.status)
+  }
+
+  if (filters.requestedBy) {
+    query = query.eq('requested_by', filters.requestedBy)
   }
 
   const { data, error } = await query
@@ -930,7 +995,12 @@ export async function readPtSessionUpdateRequestRowById(
 
 export async function readPtSessionUpdateRequests(
   supabase: PtSchedulingAdminClient,
-  filters: { sessionId?: string; status?: ApprovalRequestStatus; id?: string } = {},
+  filters: {
+    sessionId?: string
+    status?: ApprovalRequestStatus
+    id?: string
+    requestedBy?: string
+  } = {},
 ) {
   let query = supabase
     .from('pt_session_update_requests')
@@ -947,6 +1017,10 @@ export async function readPtSessionUpdateRequests(
 
   if (filters.status) {
     query = query.eq('status', filters.status)
+  }
+
+  if (filters.requestedBy) {
+    query = query.eq('requested_by', filters.requestedBy)
   }
 
   const { data, error } = await query

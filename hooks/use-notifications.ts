@@ -142,10 +142,38 @@ export function useNotifications(profileId: string) {
             void queryClient.invalidateQueries({ queryKey: queryKeys.rescheduleRequests.pending })
           }
 
+          if (
+            notificationType === 'reschedule_request' ||
+            notificationType === 'reschedule_approved' ||
+            notificationType === 'reschedule_denied'
+          ) {
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.rescheduleRequests.mine(profileId),
+            })
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.ptScheduling.sessions({}),
+              exact: false,
+            })
+          }
+
           if (notificationType === 'status_change_request') {
             void queryClient.invalidateQueries({ queryKey: queryKeys.sessionUpdateRequests.all })
             void queryClient.invalidateQueries({
               queryKey: queryKeys.sessionUpdateRequests.pending,
+            })
+          }
+
+          if (
+            notificationType === 'status_change_request' ||
+            notificationType === 'status_change_approved' ||
+            notificationType === 'status_change_denied'
+          ) {
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.sessionUpdateRequests.mine(profileId),
+            })
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.ptScheduling.sessions({}),
+              exact: false,
             })
           }
         },

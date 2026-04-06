@@ -83,7 +83,8 @@ export async function PATCH(
       const { error: auditError } = await supabase.from('pt_session_changes').insert({
         session_id: session.id,
         changed_by: authResult.profile.id,
-        change_type: 'status_change',
+        change_type:
+          existingRequest.requested_status === 'cancelled' ? 'cancellation' : 'status_change',
         old_value: {
           status: session.status,
         },
@@ -115,9 +116,15 @@ export async function PATCH(
     await insertNotifications(supabase, [
       {
         recipientId: session.trainer_id,
-        type: 'status_change_request',
+        type: input.status === 'approved' ? 'status_change_approved' : 'status_change_denied',
         title:
-          input.status === 'approved' ? 'Session Update Approved' : 'Session Update Denied',
+          existingRequest.requested_status === 'cancelled'
+            ? input.status === 'approved'
+              ? 'Cancellation Approved'
+              : 'Cancellation Denied'
+            : input.status === 'approved'
+              ? 'Session Update Approved'
+              : 'Session Update Denied',
         body:
           input.status === 'approved'
             ? `Your request to mark the session on ${formatPtSessionDateTime(

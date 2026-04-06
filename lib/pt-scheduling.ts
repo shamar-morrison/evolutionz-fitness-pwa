@@ -80,6 +80,9 @@ export type TrainerClient = {
   memberPhotoUrl?: string | null
 }
 
+export type PendingRequestType = 'reschedule' | 'status_change'
+export type SessionUpdateRequestedStatus = 'completed' | 'missed' | 'cancelled'
+
 export type PtSession = {
   id: string
   assignmentId: string
@@ -95,6 +98,7 @@ export type PtSession = {
   trainerName?: string
   memberName?: string
   memberPhotoUrl?: string | null
+  pendingRequestType: PendingRequestType | null
 }
 
 export type PtSessionChangeType = 'reschedule' | 'cancellation' | 'status_change'
@@ -140,7 +144,7 @@ export type SessionUpdateRequest = {
   sessionId: string
   requestedBy: string
   requestedByName: string
-  requestedStatus: 'completed' | 'missed'
+  requestedStatus: SessionUpdateRequestedStatus
   note: string | null
   status: ApprovalRequestStatus
   reviewedBy: string | null
@@ -162,6 +166,8 @@ export type Notification = {
     | 'reschedule_denied'
     | 'client_assigned'
     | 'status_change_request'
+    | 'status_change_approved'
+    | 'status_change_denied'
   title: string
   body: string
   read: boolean
@@ -269,9 +275,21 @@ export type ReviewRescheduleRequestData = {
   reviewNote?: string | null
 }
 
-export type MarkPtSessionData = {
-  status: 'completed' | 'missed'
-  note?: string | null
+export type MarkPtSessionData =
+  | {
+      requestedStatus: SessionUpdateRequestedStatus
+      status?: SessionUpdateRequestedStatus
+      note?: string | null
+    }
+  | {
+      status: SessionUpdateRequestedStatus
+      requestedStatus?: SessionUpdateRequestedStatus
+      note?: string | null
+    }
+
+export type ApprovalRequestFilters = {
+  status?: ApprovalRequestStatus
+  requestedBy?: 'me'
 }
 
 export type ReviewSessionUpdateRequestData = {
@@ -327,6 +345,7 @@ const ptSessionSchema = z.object({
   trainerName: z.string().trim().min(1).optional(),
   memberName: z.string().trim().min(1).optional(),
   memberPhotoUrl: z.string().trim().min(1).nullable().optional(),
+  pendingRequestType: z.enum(['reschedule', 'status_change']).nullable(),
 })
 
 const ptSessionChangeSchema = z.object({
@@ -392,7 +411,7 @@ const sessionUpdateRequestSchema = z.object({
   sessionId: z.string().trim().min(1),
   requestedBy: z.string().trim().min(1),
   requestedByName: z.string().trim().min(1),
-  requestedStatus: z.enum(['completed', 'missed']),
+  requestedStatus: z.enum(['completed', 'missed', 'cancelled']),
   note: z.string().nullable(),
   status: z.enum(['pending', 'approved', 'denied']),
   reviewedBy: z.string().trim().min(1).nullable(),
@@ -414,6 +433,8 @@ const notificationSchema = z.object({
     'reschedule_denied',
     'client_assigned',
     'status_change_request',
+    'status_change_approved',
+    'status_change_denied',
   ]),
   title: z.string().trim().min(1),
   body: z.string().trim().min(1),
@@ -1312,9 +1333,10 @@ export async function createPtRescheduleRequest(id: string, data: CreateReschedu
   return parsed.data.request
 }
 
-export async function fetchRescheduleRequests(status?: ApprovalRequestStatus) {
+export async function fetchRescheduleRequests(filters: ApprovalRequestFilters = {}) {
   const searchParams = buildSearchParams({
-    status,
+    status: filters.status,
+    requestedBy: filters.requestedBy,
   })
   const response = await fetch(
     `/api/pt/reschedule-requests${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`,
@@ -1384,9 +1406,10 @@ export async function markPtSession(id: string, data: MarkPtSessionData) {
   return parsed.data
 }
 
-export async function fetchSessionUpdateRequests(status?: ApprovalRequestStatus) {
+export async function fetchSessionUpdateRequests(filters: ApprovalRequestFilters = {}) {
   const searchParams = buildSearchParams({
-    status,
+    status: filters.status,
+    requestedBy: filters.requestedBy,
   })
   const response = await fetch(
     `/api/pt/session-update-requests${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`,

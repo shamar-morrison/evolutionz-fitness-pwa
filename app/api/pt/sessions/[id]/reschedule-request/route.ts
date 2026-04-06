@@ -39,6 +39,42 @@ function normalizeOptionalNotes(notes: string | null | undefined) {
   return normalizedNotes || null
 }
 
+async function readPendingRequestConflict(
+  supabase: any,
+  sessionId: string,
+) {
+  const [pendingRescheduleResult, pendingStatusChangeResult] = await Promise.all([
+    supabase
+      .from('pt_reschedule_requests')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('status', 'pending')
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('pt_session_update_requests')
+      .select('id')
+      .eq('session_id', sessionId)
+      .eq('status', 'pending')
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  if (pendingRescheduleResult.error) {
+    throw new Error(
+      `Failed to check pending reschedule requests: ${pendingRescheduleResult.error.message}`,
+    )
+  }
+
+  if (pendingStatusChangeResult.error) {
+    throw new Error(
+      `Failed to check pending session update requests: ${pendingStatusChangeResult.error.message}`,
+    )
+  }
+
+  return pendingRescheduleResult.data ?? pendingStatusChangeResult.data ?? null
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -81,20 +117,10 @@ export async function POST(
       return createErrorResponse('Only scheduled sessions can be rescheduled.', 400)
     }
 
-    const { data: pendingRequest, error: pendingRequestError } = await supabase
-      .from('pt_reschedule_requests')
-      .select('id')
-      .eq('session_id', session.id)
-      .eq('status', 'pending')
-      .limit(1)
-      .maybeSingle()
-
-    if (pendingRequestError) {
-      throw new Error(`Failed to check pending reschedule requests: ${pendingRequestError.message}`)
-    }
+    const pendingRequest = await readPendingRequestConflict(supabase, session.id)
 
     if (pendingRequest) {
-      return createErrorResponse('A pending reschedule request already exists for this session.', 400)
+      return createErrorResponse('A pending request already exists for this session.', 400)
     }
 
     const { data: insertedRequest, error: insertError } = await supabase

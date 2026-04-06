@@ -8,6 +8,7 @@ import {
   BarChart3,
   CalendarDays,
   Check,
+  ClipboardList,
   ClipboardCheck,
   DoorOpen,
   LayoutDashboard,
@@ -99,6 +100,7 @@ const adminApprovalItems: NavItem[] = [
 const trainerNavItems: NavItem[] = [
   { href: '/trainer/schedule', label: 'My Schedule', icon: CalendarDays },
   { href: '/trainer/clients', label: 'My Clients', icon: Users },
+  { href: '/trainer/requests', label: 'My Requests', icon: ClipboardList },
 ]
 
 function getInitials(name: string) {
@@ -180,7 +182,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-      <SidebarHeader className="border-b border-sidebar-border p-3">
+      <SidebarHeader className="p-3">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild size="lg" tooltip="Evolutionz Fitness">

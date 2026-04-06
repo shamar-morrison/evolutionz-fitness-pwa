@@ -91,13 +91,53 @@ function createSessionUpdateRow(overrides: Partial<Record<string, unknown>> = {}
   }
 }
 
-function createMarkPostClient() {
+function createMarkPostClient(
+  options: {
+    pendingStatusChange?: boolean
+    pendingReschedule?: boolean
+  } = {},
+) {
   const insertValues: Array<Record<string, unknown>> = []
 
   return {
     insertValues,
     client: {
       from(table: string) {
+        if (table === 'pt_reschedule_requests') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('id')
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('session_id')
+                  expect(value).toBe('session-1')
+
+                  return {
+                    eq(nextColumn: string, nextValue: string) {
+                      expect(nextColumn).toBe('status')
+                      expect(nextValue).toBe('pending')
+
+                      return {
+                        limit(limitValue: number) {
+                          expect(limitValue).toBe(1)
+
+                          return {
+                            maybeSingle: vi.fn().mockResolvedValue({
+                              data: options.pendingReschedule ? { id: 'request-1' } : null,
+                              error: null,
+                            }),
+                          }
+                        },
+                      }
+                    },
+                  }
+                },
+              }
+            },
+          }
+        }
+
         expect(table).toBe('pt_session_update_requests')
 
         return {
@@ -120,7 +160,7 @@ function createMarkPostClient() {
 
                         return {
                           maybeSingle: vi.fn().mockResolvedValue({
-                            data: null,
+                            data: options.pendingStatusChange ? { id: 'update-pending' } : null,
                             error: null,
                           }),
                         }
@@ -148,6 +188,48 @@ function createMarkPostClient() {
             }
           },
         }
+      },
+    },
+  }
+}
+
+function createAdminDirectMarkClient() {
+  const updates: Array<{ table: string; values: Record<string, unknown> }> = []
+  const changeInserts: Array<Record<string, unknown>> = []
+
+  return {
+    updates,
+    changeInserts,
+    client: {
+      from(table: string) {
+        if (table === 'pt_sessions') {
+          return {
+            update(values: Record<string, unknown>) {
+              updates.push({ table, values })
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('id')
+                  expect(value).toBe('session-1')
+
+                  return Promise.resolve({ error: null })
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'pt_session_changes') {
+          return {
+            insert(values: Record<string, unknown>) {
+              changeInserts.push(values)
+
+              return Promise.resolve({ error: null })
+            },
+          }
+        }
+
+        throw new Error(`Unexpected table ${table}`)
       },
     },
   }
@@ -288,17 +370,151 @@ describe('PT session update request routes', () => {
     })
   })
 
-  it('passes the optional status filter through the admin session update list route', async () => {
-    getSupabaseAdminClientMock.mockReturnValue({})
-    readPtSessionUpdateRequestsMock.mockResolvedValue([])
-    mockAdminUser()
+  it('creates a cancelled trainer session update request from requestedStatus', async () => {
+    const { client, insertValues } = createMarkPostClient()
 
-    const response = await GET(
-      new Request('http://localhost/api/pt/session-update-requests?status=pending'),
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readPtSessionRowByIdMock.mockResolvedValue(createSessionRow())
+    readPtSessionsMock.mockResolvedValue([{ memberName: 'Client One' }])
+    readAdminNotificationRecipientsMock.mockResolvedValue([{ id: 'admin-1' }])
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'trainer-1',
+        name: 'Jordan Trainer',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/sessions/session-1/mark', {
+        method: 'POST',
+        body: JSON.stringify({
+          requestedStatus: 'cancelled',
+          note: 'Member called in sick.',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'session-1' }) },
     )
 
     expect(response.status).toBe(200)
-    expect(readPtSessionUpdateRequestsMock).toHaveBeenCalledWith({}, { status: 'pending' })
+    expect(insertValues).toEqual([
+      {
+        session_id: 'session-1',
+        requested_by: 'trainer-1',
+        requested_status: 'cancelled',
+        note: 'Member called in sick.',
+      },
+    ])
+    expect(insertNotificationsMock).toHaveBeenCalledWith(client, [
+      expect.objectContaining({
+        recipientId: 'admin-1',
+        type: 'status_change_request',
+        metadata: expect.objectContaining({
+          requestedStatus: 'cancelled',
+        }),
+      }),
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      pending: true,
+    })
+  })
+
+  it('rejects a trainer session update request when a pending reschedule request already exists', async () => {
+    const { client, insertValues } = createMarkPostClient({ pendingReschedule: true })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readPtSessionRowByIdMock.mockResolvedValue(createSessionRow())
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'trainer-1',
+        name: 'Jordan Trainer',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/sessions/session-1/mark', {
+        method: 'POST',
+        body: JSON.stringify({
+          requestedStatus: 'completed',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'session-1' }) },
+    )
+
+    expect(response.status).toBe(400)
+    expect(insertValues).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'A pending request already exists for this session.',
+    })
+  })
+
+  it('passes status and requestedBy=me through the session update list route for staff', async () => {
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readPtSessionUpdateRequestsMock.mockResolvedValue([])
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'trainer-1',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await GET(
+      new Request('http://localhost/api/pt/session-update-requests?status=pending&requestedBy=me'),
+    )
+
+    expect(response.status).toBe(200)
+    expect(readPtSessionUpdateRequestsMock).toHaveBeenCalledWith({}, {
+      status: 'pending',
+      requestedBy: 'trainer-1',
+    })
+    await expect(response.json()).resolves.toEqual({ requests: [] })
+  })
+
+  it('forbids staff session update list requests without requestedBy=me', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'trainer-1',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await GET(new Request('http://localhost/api/pt/session-update-requests'))
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(readPtSessionUpdateRequestsMock).not.toHaveBeenCalled()
+  })
+
+  it('passes the requestedBy=me filter through the admin session update list route', async () => {
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readPtSessionUpdateRequestsMock.mockResolvedValue([])
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await GET(
+      new Request('http://localhost/api/pt/session-update-requests?status=pending&requestedBy=me'),
+    )
+
+    expect(response.status).toBe(200)
+    expect(readPtSessionUpdateRequestsMock).toHaveBeenCalledWith({}, {
+      status: 'pending',
+      requestedBy: 'admin-1',
+    })
     await expect(response.json()).resolves.toEqual({ requests: [] })
   })
 
@@ -362,7 +578,7 @@ describe('PT session update request routes', () => {
     expect(insertNotificationsMock).toHaveBeenCalledWith(client, [
       expect.objectContaining({
         recipientId: 'trainer-1',
-        type: 'status_change_request',
+        type: 'status_change_approved',
         metadata: expect.objectContaining({
           sessionId: 'session-1',
           requestId: 'update-1',
@@ -378,6 +594,98 @@ describe('PT session update request routes', () => {
         id: 'update-1',
         status: 'approved',
       },
+    })
+  })
+
+  it('notifies the trainer with status_change_denied when a session update request is denied', async () => {
+    const { client } = createReviewClient()
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readPtSessionUpdateRequestRowByIdMock.mockResolvedValue(createSessionUpdateRow())
+    readPtSessionRowByIdMock.mockResolvedValue(createSessionRow())
+    readPtSessionUpdateRequestsMock.mockResolvedValue([
+      {
+        id: 'update-1',
+        status: 'denied',
+      },
+    ])
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/session-update-requests/update-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'denied',
+          reviewNote: 'Attendance could not be verified.',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'update-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    expect(insertNotificationsMock).toHaveBeenCalledWith(client, [
+      expect.objectContaining({
+        recipientId: 'trainer-1',
+        type: 'status_change_denied',
+        metadata: expect.objectContaining({
+          status: 'denied',
+          reviewNote: 'Attendance could not be verified.',
+        }),
+      }),
+    ])
+  })
+
+  it('directly cancels the PT session for admin callers and records a cancellation audit entry', async () => {
+    const { client, updates, changeInserts } = createAdminDirectMarkClient()
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readPtSessionRowByIdMock.mockResolvedValue(createSessionRow())
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-1',
+        name: 'Admin User',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/sessions/session-1/mark', {
+        method: 'POST',
+        body: JSON.stringify({
+          requestedStatus: 'cancelled',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'session-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    expect(updates).toEqual([
+      {
+        table: 'pt_sessions',
+        values: expect.objectContaining({
+          status: 'cancelled',
+        }),
+      },
+    ])
+    expect(changeInserts).toEqual([
+      expect.objectContaining({
+        session_id: 'session-1',
+        changed_by: 'admin-1',
+        change_type: 'cancellation',
+        new_value: {
+          status: 'cancelled',
+        },
+      }),
+    ])
+    expect(insertNotificationsMock).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
     })
   })
 })

@@ -185,6 +185,7 @@ function createSession(index: number, overrides: Partial<PtSession> = {}): PtSes
     updatedAt: overrides.updatedAt ?? `2026-03-${day}T00:00:00.000Z`,
     trainerName: overrides.trainerName ?? `Trainer ${String(index).padStart(2, '0')}`,
     memberName: overrides.memberName ?? 'Marcus Brown',
+    pendingRequestType: overrides.pendingRequestType ?? null,
   }
 }
 
