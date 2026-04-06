@@ -3,29 +3,36 @@ import {
   type MemberPhotoStorageClient,
 } from '@/lib/member-photo-storage'
 import {
+  calculateAttendanceRate,
   DAYS_OF_WEEK,
+  getDateRangeBoundsInJamaica,
   getJamaicaDayOfWeek,
+  JAMAICA_OFFSET,
   getMonthRange,
   normalizeTrainingPlan,
   normalizeScheduledDays,
   normalizeSessionTimeValue,
   type PtAssignmentFilters,
+  type PtPaymentsReport,
   type PtSession,
   type PtSessionChange,
   type PtSessionDetail,
   type PtSessionFilters,
   SESSION_STATUSES,
   type SessionStatus,
+  TRAINER_PAYOUT_PER_CLIENT_JMD,
   type TrainerClient,
   type TrainerClientStatus,
 } from '@/lib/pt-scheduling'
 
 const TRAINER_CLIENT_SELECT =
   'id, trainer_id, member_id, status, pt_fee, sessions_per_week, scheduled_days, session_time, notes, created_at, updated_at'
+const PT_PAYMENT_ASSIGNMENT_SELECT = 'id, trainer_id, member_id, pt_fee, created_at'
 const TRAINING_PLAN_DAY_SELECT =
   'id, assignment_id, day_of_week, training_type_name, created_at, updated_at'
 const PT_SESSION_SELECT =
   'id, assignment_id, trainer_id, member_id, scheduled_at, status, is_recurring, notes, created_at, updated_at'
+const PT_PAYMENT_SESSION_SELECT = 'assignment_id, status'
 const PT_SESSION_CHANGE_SELECT =
   'id, session_id, changed_by, change_type, old_value, new_value, created_at'
 
@@ -85,10 +92,28 @@ type TrainerSummaryRow = {
   titles: string[] | null
 }
 
+type MemberNameRow = {
+  id: string
+  name: string
+}
+
 type MemberSummaryRow = {
   id: string
   name: string
   photo_url: string | null
+}
+
+type PtPaymentAssignmentRow = {
+  id: string
+  trainer_id: string
+  member_id: string
+  pt_fee: number
+  created_at: string
+}
+
+type PtPaymentSessionRow = {
+  assignment_id: string
+  status: PtSession['status']
 }
 
 function normalizeText(value: unknown) {
@@ -200,6 +225,26 @@ async function loadMemberSummaries(
   )
 
   return new Map(hydratedMembers.map((member) => [member.id, member]))
+}
+
+async function loadMemberNames(
+  supabase: PtSchedulingAdminClient,
+  ids: string[],
+) {
+  if (ids.length === 0) {
+    return new Map<string, MemberNameRow>()
+  }
+
+  const { data, error } = await supabase
+    .from('members')
+    .select('id, name')
+    .in('id', ids)
+
+  if (error) {
+    throw new Error(`Failed to read PT member names: ${error.message}`)
+  }
+
+  return new Map(((data ?? []) as MemberNameRow[]).map((member) => [member.id, member]))
 }
 
 async function hydrateTrainerClients(
@@ -379,6 +424,147 @@ export async function readTrainerClientById(
   const assignments = await readTrainerClients(supabase, { id })
 
   return assignments[0] ?? null
+}
+
+export async function readPtPaymentsReport(
+  supabase: PtSchedulingAdminClient,
+  filters: {
+    startDate: string
+    endDate: string
+  },
+): Promise<PtPaymentsReport> {
+  const sessionRange = getDateRangeBoundsInJamaica(filters.startDate, filters.endDate)
+
+  if (!sessionRange) {
+    throw new Error('PT payment report dates must use valid YYYY-MM-DD values.')
+  }
+
+  const assignmentCutoff = `${filters.endDate}T23:59:59.999${JAMAICA_OFFSET}`
+  const { data: assignmentData, error: assignmentError } = await supabase
+    .from('trainer_clients')
+    .select(PT_PAYMENT_ASSIGNMENT_SELECT)
+    .eq('status', 'active')
+    .lte('created_at', assignmentCutoff)
+
+  if (assignmentError) {
+    throw new Error(`Failed to read PT payment assignments: ${assignmentError.message}`)
+  }
+
+  const assignments = (assignmentData ?? []) as PtPaymentAssignmentRow[]
+
+  if (assignments.length === 0) {
+    return {
+      summary: {
+        totalAssignments: 0,
+        totalSessionsCompleted: 0,
+        totalPayout: 0,
+      },
+      trainers: [],
+    }
+  }
+
+  const trainerIds = Array.from(new Set(assignments.map((assignment) => assignment.trainer_id)))
+  const memberIds = Array.from(new Set(assignments.map((assignment) => assignment.member_id)))
+  const assignmentIds = assignments.map((assignment) => assignment.id)
+  const [trainerById, memberById, sessionsResult] = await Promise.all([
+    loadTrainerSummaries(supabase, trainerIds),
+    loadMemberNames(supabase, memberIds),
+    (async () => {
+      const { data, error } = await supabase
+        .from('pt_sessions')
+        .select(PT_PAYMENT_SESSION_SELECT)
+        .in('assignment_id', assignmentIds)
+        .gte('scheduled_at', sessionRange.startInclusive)
+        .lt('scheduled_at', sessionRange.endExclusive)
+
+      if (error) {
+        throw new Error(`Failed to read PT payment sessions: ${error.message}`)
+      }
+
+      return (data ?? []) as PtPaymentSessionRow[]
+    })(),
+  ])
+
+  const attendanceByAssignmentId = new Map<
+    string,
+    {
+      completed: number
+      missed: number
+    }
+  >()
+
+  for (const session of sessionsResult) {
+    const currentCounts = attendanceByAssignmentId.get(session.assignment_id) ?? {
+      completed: 0,
+      missed: 0,
+    }
+
+    if (session.status === 'completed') {
+      currentCounts.completed += 1
+    } else if (session.status === 'missed') {
+      currentCounts.missed += 1
+    }
+
+    attendanceByAssignmentId.set(session.assignment_id, currentCounts)
+  }
+
+  const trainersById = new Map<string, PtPaymentsReport['trainers'][number]>()
+
+  for (const assignment of assignments) {
+    const existingTrainer = trainersById.get(assignment.trainer_id)
+    const trainerSummary = trainerById.get(assignment.trainer_id)
+    const memberSummary = memberById.get(assignment.member_id)
+    const attendance = attendanceByAssignmentId.get(assignment.id) ?? {
+      completed: 0,
+      missed: 0,
+    }
+
+    const trainer =
+      existingTrainer ??
+      ({
+        trainerId: assignment.trainer_id,
+        trainerName: normalizeText(trainerSummary?.name) || 'Unknown trainer',
+        trainerTitles: Array.isArray(trainerSummary?.titles) ? trainerSummary.titles : [],
+        activeClients: 0,
+        monthlyPayout: 0,
+        clients: [],
+      } satisfies PtPaymentsReport['trainers'][number])
+
+    trainer.activeClients += 1
+    trainer.clients.push({
+      memberId: assignment.member_id,
+      memberName: normalizeText(memberSummary?.name) || 'Unknown member',
+      ptFee: assignment.pt_fee,
+      sessionsCompleted: attendance.completed,
+      sessionsMissed: attendance.missed,
+      attendanceRate: calculateAttendanceRate(attendance.completed, attendance.missed),
+    })
+    trainersById.set(assignment.trainer_id, trainer)
+  }
+
+  const trainers = Array.from(trainersById.values())
+    .map((trainer) => ({
+      ...trainer,
+      monthlyPayout: trainer.activeClients * TRAINER_PAYOUT_PER_CLIENT_JMD,
+      clients: [...trainer.clients].sort((left, right) => left.memberName.localeCompare(right.memberName)),
+    }))
+    .sort((left, right) => left.trainerName.localeCompare(right.trainerName))
+
+  const totalSessionsCompleted = trainers.reduce(
+    (sum, trainer) =>
+      sum + trainer.clients.reduce((trainerSum, client) => trainerSum + client.sessionsCompleted, 0),
+    0,
+  )
+  const totalPayout = trainers.reduce((sum, trainer) => sum + trainer.monthlyPayout, 0)
+
+  return {
+    summary: {
+      totalAssignments: assignments.length,
+      totalSessionsCompleted,
+      totalPayout,
+    },
+    trainers,
+  }
 }
 
 export async function readPtSessionRowById(

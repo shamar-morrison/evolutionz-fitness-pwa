@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Users,
   CalendarDays,
+  BarChart3,
   DoorOpen,
   LogOut,
   Check,
@@ -52,6 +53,7 @@ const navItems = [
   { href: '/members', label: 'Members', icon: Users },
   { href: '/staff', label: 'Staff', icon: Users, adminOnly: true },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays, adminOnly: true },
+  { href: '/reports', label: 'Reports', icon: BarChart3, adminOnly: true },
 ]
 
 export function Sidebar() {

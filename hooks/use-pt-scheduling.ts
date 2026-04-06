@@ -3,9 +3,11 @@
 import { useQuery } from '@tanstack/react-query'
 import {
   fetchPtAssignments,
+  fetchPtPaymentsReport,
   fetchPtSessionDetail,
   fetchPtSessions,
   type PtAssignmentFilters,
+  type PtPaymentsReport,
   type PtSessionFilters,
 } from '@/lib/pt-scheduling'
 import { queryKeys } from '@/lib/query-keys'
@@ -118,6 +120,23 @@ export function usePtSessionDetail(id: string, enabled = true) {
   return {
     detail: query.data ?? null,
     isLoading: enabled && Boolean(id) ? query.isLoading : false,
+    error: query.error ?? null,
+    refetch: () => query.refetch(),
+  }
+}
+
+export function usePtPaymentsReport(startDate: string, endDate: string) {
+  const query = useQuery({
+    queryKey: queryKeys.reports.ptPayments(startDate, endDate),
+    queryFn: () => fetchPtPaymentsReport(startDate, endDate),
+    enabled: Boolean(startDate) && Boolean(endDate),
+    staleTime: FIVE_MINUTES_MS,
+  })
+
+  return {
+    report: (query.data ?? null) as PtPaymentsReport | null,
+    isLoading: query.isFetching && !query.data,
+    isFetching: query.isFetching,
     error: query.error ?? null,
     refetch: () => query.refetch(),
   }

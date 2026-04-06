@@ -39,6 +39,7 @@ export type TrainerClientStatus = typeof PT_ASSIGNMENT_STATUSES[number]
 
 export const JAMAICA_TIME_ZONE = 'America/Jamaica'
 export const JAMAICA_OFFSET = '-05:00'
+export const TRAINER_PAYOUT_PER_CLIENT_JMD = 10500
 
 export type TrainingPlanDay = {
   id: string
@@ -111,6 +112,35 @@ export type PtSessionChange = {
 export type PtSessionDetail = {
   session: PtSession
   changes: PtSessionChange[]
+}
+
+export type PtPaymentsReportSummary = {
+  totalAssignments: number
+  totalSessionsCompleted: number
+  totalPayout: number
+}
+
+export type PtPaymentsReportClient = {
+  memberId: string
+  memberName: string
+  ptFee: number
+  sessionsCompleted: number
+  sessionsMissed: number
+  attendanceRate: number
+}
+
+export type PtPaymentsReportTrainer = {
+  trainerId: string
+  trainerName: string
+  trainerTitles: string[]
+  activeClients: number
+  monthlyPayout: number
+  clients: PtPaymentsReportClient[]
+}
+
+export type PtPaymentsReport = {
+  summary: PtPaymentsReportSummary
+  trainers: PtPaymentsReportTrainer[]
 }
 
 export type PtAssignmentFilters = {
@@ -262,6 +292,37 @@ const sessionDetailResponseSchema = z.object({
   changes: z.array(ptSessionChangeSchema).default([]),
 })
 
+const ptPaymentsReportResponseSchema = z.object({
+  summary: z.object({
+    totalAssignments: z.number().int().nonnegative(),
+    totalSessionsCompleted: z.number().int().nonnegative(),
+    totalPayout: z.number().int().nonnegative(),
+  }),
+  trainers: z
+    .array(
+      z.object({
+        trainerId: z.string().trim().min(1),
+        trainerName: z.string().trim().min(1),
+        trainerTitles: z.array(z.string()).default([]),
+        activeClients: z.number().int().nonnegative(),
+        monthlyPayout: z.number().int().nonnegative(),
+        clients: z
+          .array(
+            z.object({
+              memberId: z.string().trim().min(1),
+              memberName: z.string().trim().min(1),
+              ptFee: z.number().int().nonnegative(),
+              sessionsCompleted: z.number().int().nonnegative(),
+              sessionsMissed: z.number().int().nonnegative(),
+              attendanceRate: z.number().int().min(0).max(100),
+            }),
+          )
+          .default([]),
+      }),
+    )
+    .default([]),
+})
+
 const generateSessionsSuccessSchema = z.object({
   ok: z.literal(true),
   generated: z.number().int().nonnegative(),
@@ -387,6 +448,10 @@ function getMonthName(month: number) {
     timeZone: 'UTC',
     month: 'long',
   })
+}
+
+export function isDateValue(value: string) {
+  return Boolean(getUtcDateFromDateValue(value))
 }
 
 export function isDayOfWeek(value: string | null | undefined): value is DayOfWeek {
@@ -527,6 +592,16 @@ export function formatJmdCurrency(value: number) {
   }).format(value)
 }
 
+export function calculateAttendanceRate(completedCount: number, missedCount: number) {
+  const trackedTotal = completedCount + missedCount
+
+  if (trackedTotal === 0) {
+    return 0
+  }
+
+  return Math.round((completedCount / trackedTotal) * 100)
+}
+
 export function formatPtSessionStatusLabel(status: SessionStatus) {
   return sessionStatusLabels[status]
 }
@@ -640,6 +715,20 @@ export function parseMonthValue(value: string) {
   return { year, month }
 }
 
+export function shiftDateValue(value: string, offsetDays: number) {
+  const date = getUtcDateFromDateValue(value)
+
+  if (!date) {
+    return null
+  }
+
+  date.setUTCDate(date.getUTCDate() + offsetDays)
+
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(
+    date.getUTCDate(),
+  ).padStart(2, '0')}`
+}
+
 export function getMonthLabel(month: number, year: number) {
   if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year)) {
     return ''
@@ -661,6 +750,28 @@ export function getMonthDateValues(month: number, year: number) {
   }
 
   return values
+}
+
+export function getCurrentMonthDateRangeInJamaica(date = new Date()) {
+  const monthValue = getMonthValueInJamaica(date)
+  const parts = parseMonthValue(monthValue)
+
+  if (!parts) {
+    throw new Error('Failed to resolve the current Jamaica month range.')
+  }
+
+  const dateValues = getMonthDateValues(parts.month, parts.year)
+  const startDate = dateValues[0]
+  const endDate = dateValues[dateValues.length - 1]
+
+  if (!startDate || !endDate) {
+    throw new Error('Failed to resolve the current Jamaica month range.')
+  }
+
+  return {
+    startDate,
+    endDate,
+  }
 }
 
 export function getScheduledDateValuesForMonth(
@@ -707,6 +818,23 @@ export function getMonthRange(month: number, year: number) {
   return {
     startInclusive: `${year}-${String(month).padStart(2, '0')}-01T00:00:00${JAMAICA_OFFSET}`,
     endExclusive: `${nextYear}-${String(nextMonth).padStart(2, '0')}-01T00:00:00${JAMAICA_OFFSET}`,
+  }
+}
+
+export function getDateRangeBoundsInJamaica(startDate: string, endDate: string) {
+  if (!isDateValue(startDate) || !isDateValue(endDate) || startDate > endDate) {
+    return null
+  }
+
+  const endExclusiveDate = shiftDateValue(endDate, 1)
+
+  if (!endExclusiveDate) {
+    return null
+  }
+
+  return {
+    startInclusive: `${startDate}T00:00:00${JAMAICA_OFFSET}`,
+    endExclusive: `${endExclusiveDate}T00:00:00${JAMAICA_OFFSET}`,
   }
 }
 
@@ -928,6 +1056,33 @@ export async function fetchPtSessions(filters: PtSessionFilters = {}) {
   }
 
   return parsed.data.sessions
+}
+
+export async function fetchPtPaymentsReport(
+  startDate: string,
+  endDate: string,
+): Promise<PtPaymentsReport> {
+  const searchParams = buildSearchParams({
+    startDate,
+    endDate,
+  })
+  const response = await fetch(`/api/reports/pt-payments?${searchParams.toString()}`, {
+    method: 'GET',
+    cache: 'no-store',
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to load the PT payments report.'))
+  }
+
+  const parsed = ptPaymentsReportResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to load the PT payments report.')
+  }
+
+  return parsed.data
 }
 
 export async function updatePtSession(id: string, data: UpdatePtSessionData) {

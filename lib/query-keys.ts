@@ -21,6 +21,10 @@ export const queryKeys = {
     memberAssignment: (memberId: string) => ['pt-assignments', 'member', memberId] as const,
     trainerAssignments: (trainerId: string) => ['pt-assignments', 'trainer', trainerId] as const,
   },
+  reports: {
+    ptPayments: (startDate: string, endDate: string) =>
+      ['reports', 'pt-payments', startDate, endDate] as const,
+  },
   cards: {
     available: ['cards', 'available'] as const,
   },
