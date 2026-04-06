@@ -27,6 +27,7 @@ import {
   generatePtAssignmentSessions,
   getMonthLabel,
   getMonthValueInJamaica,
+  normalizeTrainingPlan,
   parseMonthValue,
   type TrainerClient,
 } from '@/lib/pt-scheduling'
@@ -40,10 +41,14 @@ type MemberPtSectionProps = {
 async function invalidatePtQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   memberId: string,
+  assignmentId?: string,
   trainerId?: string,
 ) {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.ptScheduling.assignments }),
+    assignmentId
+      ? queryClient.invalidateQueries({ queryKey: queryKeys.ptScheduling.assignment(assignmentId) })
+      : Promise.resolve(),
     queryClient.invalidateQueries({ queryKey: queryKeys.ptScheduling.memberAssignment(memberId) }),
     trainerId
       ? queryClient.invalidateQueries({
@@ -81,7 +86,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
   }, [allAssignmentsQuery.data, staff])
 
   const handleAssignmentSaved = async (nextAssignment: TrainerClient, mode: 'create' | 'edit') => {
-    await invalidatePtQueries(queryClient, memberId, nextAssignment.trainerId)
+    await invalidatePtQueries(queryClient, memberId, nextAssignment.id, nextAssignment.trainerId)
 
     if (mode === 'create') {
       setPendingGenerateAssignment(nextAssignment)
@@ -100,7 +105,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
         cancelFutureSessions,
       })
       setShowRemoveDialog(false)
-      await invalidatePtQueries(queryClient, memberId, assignment.trainerId)
+      await invalidatePtQueries(queryClient, memberId, assignment.id, assignment.trainerId)
       toast({
         title: 'Assignment removed',
         description: cancelFutureSessions
@@ -225,6 +230,20 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
                       assignment.sessionsPerWeek,
                     )}
                   </p>
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <p className="text-muted-foreground text-sm">Training Plan</p>
+                  {normalizeTrainingPlan(assignment.trainingPlan).length > 0 ? (
+                    <ul className="space-y-1 font-medium">
+                      {normalizeTrainingPlan(assignment.trainingPlan).map((entry) => (
+                        <li key={entry.day}>
+                          {entry.day} &rarr; {entry.trainingTypeName}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="font-medium">Not set</p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground text-sm">PT Fee</p>

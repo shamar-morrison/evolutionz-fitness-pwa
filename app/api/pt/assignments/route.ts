@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { normalizeTimeInputValue } from '@/lib/member-access-time'
 import {
   DAYS_OF_WEEK,
+  normalizeAssignmentTrainingPlan,
   PT_ASSIGNMENT_STATUSES,
   type CreatePtAssignmentData,
 } from '@/lib/pt-scheduling'
@@ -24,6 +25,16 @@ const createAssignmentSchema = z
     ptFee: z.number().int().min(0, 'PT fee must be zero or greater.'),
     sessionsPerWeek: z.number().int().min(1).max(3),
     scheduledDays: z.array(z.enum(DAYS_OF_WEEK)),
+    trainingPlan: z
+      .array(
+        z
+          .object({
+            day: z.enum(DAYS_OF_WEEK),
+            trainingTypeName: z.string().trim().min(1, 'Training type is required.'),
+          })
+          .strict(),
+      )
+      .optional(),
     sessionTime: z.string().trim().regex(/^\d{2}:\d{2}$/u, 'Session time must use HH:MM format.'),
     notes: z.string().trim().nullable().optional(),
   })
@@ -56,6 +67,25 @@ function validateScheduledDays(
 
   if (uniqueDays.length !== input.sessionsPerWeek) {
     return 'Scheduled days must match the selected sessions per week.'
+  }
+
+  return null
+}
+
+function validateTrainingPlan(
+  trainingPlan: CreatePtAssignmentData['trainingPlan'] | undefined,
+  scheduledDays: CreatePtAssignmentData['scheduledDays'],
+) {
+  const normalizedTrainingPlan = normalizeAssignmentTrainingPlan(trainingPlan ?? [])
+
+  if (normalizedTrainingPlan.length !== (trainingPlan ?? []).length) {
+    return 'Training plan days must be unique and use valid training types.'
+  }
+
+  for (const entry of normalizedTrainingPlan) {
+    if (!scheduledDays.includes(entry.day)) {
+      return `Training plan day ${entry.day} must also be selected in scheduled days.`
+    }
   }
 
   return null
@@ -107,6 +137,13 @@ export async function POST(request: Request) {
 
     if (scheduledDaysError) {
       return createErrorResponse(scheduledDaysError, 400)
+    }
+
+    const normalizedTrainingPlan = normalizeAssignmentTrainingPlan(input.trainingPlan ?? [])
+    const trainingPlanError = validateTrainingPlan(input.trainingPlan, input.scheduledDays)
+
+    if (trainingPlanError) {
+      return createErrorResponse(trainingPlanError, 400)
     }
 
     const normalizedSessionTime = normalizeTimeInputValue(input.sessionTime)
@@ -181,6 +218,31 @@ export async function POST(request: Request) {
 
     if (!assignmentId) {
       throw new Error('Failed to create the PT assignment: missing assignment id in response.')
+    }
+
+    if (normalizedTrainingPlan.length > 0) {
+      const { error: trainingPlanError } = await supabase.from('training_plan_days').insert(
+        normalizedTrainingPlan.map((entry) => ({
+          assignment_id: assignmentId,
+          day_of_week: entry.day,
+          training_type_name: entry.trainingTypeName,
+        })),
+      )
+
+      if (trainingPlanError) {
+        const { error: rollbackError } = await supabase
+          .from('trainer_clients')
+          .delete()
+          .eq('id', assignmentId)
+
+        if (rollbackError) {
+          throw new Error(
+            `Failed to create the PT assignment training plan: ${trainingPlanError.message}. Rollback also failed: ${rollbackError.message}`,
+          )
+        }
+
+        throw new Error(`Failed to create the PT assignment training plan: ${trainingPlanError.message}`)
+      }
     }
 
     const assignment = await readTrainerClientById(supabase, assignmentId)

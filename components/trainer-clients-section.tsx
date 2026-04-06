@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTrainerPtAssignments } from '@/hooks/use-pt-scheduling'
-import { formatJmdCurrency, formatScheduleSummary } from '@/lib/pt-scheduling'
+import { formatJmdCurrency, formatScheduleSummary, normalizeTrainingPlan } from '@/lib/pt-scheduling'
 
 type TrainerClientsSectionProps = {
   trainerId: string
@@ -79,6 +79,20 @@ export function TrainerClientsSection({ trainerId }: TrainerClientsSectionProps)
                     <p className="text-muted-foreground text-sm">
                       {formatScheduleSummary(assignment.scheduledDays, assignment.sessionTime)}
                     </p>
+                    <div className="text-sm">
+                      <p className="text-muted-foreground">Training Plan</p>
+                      {normalizeTrainingPlan(assignment.trainingPlan).length > 0 ? (
+                        <ul className="space-y-1">
+                          {normalizeTrainingPlan(assignment.trainingPlan).map((entry) => (
+                            <li key={entry.day}>
+                              {entry.day} &rarr; {entry.trainingTypeName}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>Not set</p>
+                      )}
+                    </div>
                     <p className="text-sm">{formatJmdCurrency(assignment.ptFee)}</p>
                   </div>
                 </div>

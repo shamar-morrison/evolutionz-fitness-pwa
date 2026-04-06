@@ -27,8 +27,11 @@ import { toast } from '@/hooks/use-toast'
 import {
   createPtAssignment,
   DAYS_OF_WEEK,
+  normalizeAssignmentTrainingPlan,
   normalizeScheduledDays,
   normalizeSessionTimeValue,
+  normalizeTrainingPlan,
+  PREDEFINED_TRAINING_TYPES,
   updatePtAssignment,
   type DayOfWeek,
   type TrainerClient,
@@ -51,16 +54,90 @@ type FormState = {
   trainerId: string
   sessionsPerWeek: number
   scheduledDays: DayOfWeek[]
+  trainingPlanByDay: Partial<Record<DayOfWeek, { mode: 'predefined' | 'custom'; trainingTypeName: string }>>
   sessionTime: string
   ptFee: string
   notes: string
 }
 
+const TRAINING_TYPE_UNSELECTED_VALUE = '__unset__'
+const TRAINING_TYPE_CUSTOM_VALUE = '__custom__'
+
+function buildTrainingPlanState(
+  scheduledDays: DayOfWeek[],
+  trainingPlan: TrainerClient['trainingPlan'] = [],
+): FormState['trainingPlanByDay'] {
+  const normalizedTrainingPlan = normalizeTrainingPlan(trainingPlan)
+  const trainingPlanByDay: FormState['trainingPlanByDay'] = {}
+
+  for (const day of normalizeScheduledDays(scheduledDays)) {
+    const trainingPlanEntry = normalizedTrainingPlan.find((entry) => entry.day === day)
+
+    trainingPlanByDay[day] = {
+      mode: trainingPlanEntry?.isCustom ? 'custom' : 'predefined',
+      trainingTypeName: trainingPlanEntry?.trainingTypeName ?? '',
+    }
+  }
+
+  return trainingPlanByDay
+}
+
+function syncTrainingPlanState(
+  scheduledDays: DayOfWeek[],
+  trainingPlanByDay: FormState['trainingPlanByDay'],
+) {
+  const nextTrainingPlanByDay: FormState['trainingPlanByDay'] = {}
+
+  for (const day of normalizeScheduledDays(scheduledDays)) {
+    nextTrainingPlanByDay[day] = trainingPlanByDay[day] ?? {
+      mode: 'predefined',
+      trainingTypeName: '',
+    }
+  }
+
+  return nextTrainingPlanByDay
+}
+
+function getTrainingPlanPayload(formState: FormState) {
+  return normalizeAssignmentTrainingPlan(
+    normalizeScheduledDays(formState.scheduledDays).flatMap((day) => {
+      const trainingPlanEntry = formState.trainingPlanByDay[day]
+      const trainingTypeName = trainingPlanEntry?.trainingTypeName.trim() ?? ''
+
+      return trainingTypeName
+        ? [
+            {
+              day,
+              trainingTypeName,
+            },
+          ]
+        : []
+    }),
+  )
+}
+
+function getTrainingPlanErrors(formState: FormState) {
+  const errors: Partial<Record<DayOfWeek, string>> = {}
+
+  for (const day of normalizeScheduledDays(formState.scheduledDays)) {
+    const trainingPlanEntry = formState.trainingPlanByDay[day]
+
+    if (trainingPlanEntry?.mode === 'custom' && !trainingPlanEntry.trainingTypeName.trim()) {
+      errors[day] = 'Enter a custom training type.'
+    }
+  }
+
+  return errors
+}
+
 function createInitialFormState(assignment?: TrainerClient | null): FormState {
+  const scheduledDays = assignment ? normalizeScheduledDays(assignment.scheduledDays) : []
+
   return {
     trainerId: assignment?.trainerId ?? '',
     sessionsPerWeek: assignment?.sessionsPerWeek ?? 3,
-    scheduledDays: assignment ? normalizeScheduledDays(assignment.scheduledDays) : [],
+    scheduledDays,
+    trainingPlanByDay: buildTrainingPlanState(scheduledDays, assignment?.trainingPlan ?? []),
     sessionTime: assignment?.sessionTime ?? '07:00',
     ptFee: assignment ? String(assignment.ptFee) : '',
     notes: assignment?.notes ?? '',
@@ -72,6 +149,7 @@ function normalizeFormState(formState: FormState) {
     trainerId: formState.trainerId,
     sessionsPerWeek: formState.sessionsPerWeek,
     scheduledDays: normalizeScheduledDays(formState.scheduledDays),
+    trainingPlan: getTrainingPlanPayload(formState),
     sessionTime: normalizeSessionTimeValue(formState.sessionTime) ?? '',
     ptFee: formState.ptFee.trim(),
     notes: formState.notes.trim(),
@@ -90,6 +168,7 @@ export function PtAssignmentDialog({
   const initialFormState = useMemo(() => createInitialFormState(assignment), [assignment])
   const [formData, setFormData] = useState<FormState>(initialFormState)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showValidationErrors, setShowValidationErrors] = useState(false)
   const hasChanges = useMemo(
     () => JSON.stringify(normalizeFormState(formData)) !== JSON.stringify(normalizeFormState(initialFormState)),
     [formData, initialFormState],
@@ -102,16 +181,19 @@ export function PtAssignmentDialog({
     formData.scheduledDays.length === formData.sessionsPerWeek
       ? null
       : `Select exactly ${formData.sessionsPerWeek} day${formData.sessionsPerWeek === 1 ? '' : 's'}.`
+  const trainingPlanErrors = useMemo(() => getTrainingPlanErrors(formData), [formData])
 
   useEffect(() => {
     setFormData(initialFormState)
     setIsSubmitting(false)
+    setShowValidationErrors(false)
   }, [initialFormState, open])
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       setFormData(initialFormState)
       setIsSubmitting(false)
+      setShowValidationErrors(false)
     }
 
     onOpenChange(nextOpen)
@@ -122,6 +204,10 @@ export function PtAssignmentDialog({
       setFormData((current) => ({
         ...current,
         scheduledDays: current.scheduledDays.filter((value) => value !== day),
+        trainingPlanByDay: syncTrainingPlanState(
+          current.scheduledDays.filter((value) => value !== day),
+          current.trainingPlanByDay,
+        ),
       }))
       return
     }
@@ -138,11 +224,16 @@ export function PtAssignmentDialog({
     setFormData((current) => ({
       ...current,
       scheduledDays: normalizeScheduledDays([...current.scheduledDays, day]),
+      trainingPlanByDay: syncTrainingPlanState(
+        normalizeScheduledDays([...current.scheduledDays, day]),
+        current.trainingPlanByDay,
+      ),
     }))
   }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
+    setShowValidationErrors(true)
 
     if (mode === 'create' && !formData.trainerId) {
       toast({
@@ -168,6 +259,10 @@ export function PtAssignmentDialog({
       return
     }
 
+    if (Object.keys(trainingPlanErrors).length > 0) {
+      return
+    }
+
     const ptFee = Number(formData.ptFee)
 
     if (!Number.isInteger(ptFee) || ptFee < 0) {
@@ -190,6 +285,7 @@ export function PtAssignmentDialog({
               ptFee,
               sessionsPerWeek: formData.sessionsPerWeek,
               scheduledDays: normalizeScheduledDays(formData.scheduledDays),
+              trainingPlan: getTrainingPlanPayload(formData),
               sessionTime: normalizedSessionTime,
               notes: formData.notes.trim() || null,
             })
@@ -197,6 +293,7 @@ export function PtAssignmentDialog({
               ptFee,
               sessionsPerWeek: formData.sessionsPerWeek,
               scheduledDays: normalizeScheduledDays(formData.scheduledDays),
+              trainingPlan: getTrainingPlanPayload(formData),
               sessionTime: normalizedSessionTime,
               notes: formData.notes.trim() || null,
             })
@@ -283,11 +380,13 @@ export function PtAssignmentDialog({
                 onValueChange={(value) =>
                   setFormData((current) => {
                     const sessionsPerWeek = Number(value)
+                    const scheduledDays = current.scheduledDays.slice(0, sessionsPerWeek)
 
                     return {
                       ...current,
                       sessionsPerWeek,
-                      scheduledDays: current.scheduledDays.slice(0, sessionsPerWeek),
+                      scheduledDays,
+                      trainingPlanByDay: syncTrainingPlanState(scheduledDays, current.trainingPlanByDay),
                     }
                   })
                 }
@@ -346,6 +445,114 @@ export function PtAssignmentDialog({
               Select exactly {formData.sessionsPerWeek} day{formData.sessionsPerWeek === 1 ? '' : 's'}.
             </p>
           </div>
+
+          {formData.scheduledDays.length > 0 ? (
+            <div className="space-y-3">
+              <Label>Training Plan</Label>
+              <div className="space-y-3 rounded-md border p-4">
+                {normalizeScheduledDays(formData.scheduledDays).map((day) => {
+                  const trainingPlanEntry = formData.trainingPlanByDay[day] ?? {
+                    mode: 'predefined' as const,
+                    trainingTypeName: '',
+                  }
+                  const trainingPlanError = showValidationErrors ? trainingPlanErrors[day] : undefined
+
+                  return (
+                    <div key={day} className="space-y-2">
+                      <div className="grid gap-3 sm:grid-cols-[120px_minmax(0,1fr)] sm:items-center">
+                        <div className="text-sm font-medium">{day}</div>
+                        {trainingPlanEntry.mode === 'custom' ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              value={trainingPlanEntry.trainingTypeName}
+                              onChange={(event) =>
+                                setFormData((current) => ({
+                                  ...current,
+                                  trainingPlanByDay: {
+                                    ...current.trainingPlanByDay,
+                                    [day]: {
+                                      mode: 'custom',
+                                      trainingTypeName: event.target.value,
+                                    },
+                                  },
+                                }))
+                              }
+                              placeholder="Enter custom training type"
+                              disabled={isSubmitting}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="px-3"
+                              onClick={() =>
+                                setFormData((current) => ({
+                                  ...current,
+                                  trainingPlanByDay: {
+                                    ...current.trainingPlanByDay,
+                                    [day]: {
+                                      mode: 'predefined',
+                                      trainingTypeName: '',
+                                    },
+                                  },
+                                }))
+                              }
+                              disabled={isSubmitting}
+                              aria-label={`Use predefined training types for ${day}`}
+                            >
+                              &times;
+                            </Button>
+                          </div>
+                        ) : (
+                          <Select
+                            value={trainingPlanEntry.trainingTypeName || TRAINING_TYPE_UNSELECTED_VALUE}
+                            onValueChange={(value) =>
+                              setFormData((current) => ({
+                                ...current,
+                                trainingPlanByDay: {
+                                  ...current.trainingPlanByDay,
+                                  [day]:
+                                    value === TRAINING_TYPE_CUSTOM_VALUE
+                                      ? {
+                                          mode: 'custom',
+                                          trainingTypeName: '',
+                                        }
+                                      : {
+                                          mode: 'predefined',
+                                          trainingTypeName:
+                                            value === TRAINING_TYPE_UNSELECTED_VALUE ? '' : value,
+                                        },
+                                },
+                              }))
+                            }
+                            disabled={isSubmitting}
+                          >
+                            <SelectTrigger aria-label={`${day} training type`}>
+                              <SelectValue placeholder="Select training type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={TRAINING_TYPE_UNSELECTED_VALUE}>
+                                Select training type
+                              </SelectItem>
+                              {PREDEFINED_TRAINING_TYPES.map((trainingType) => (
+                                <SelectItem key={trainingType} value={trainingType}>
+                                  {trainingType}
+                                </SelectItem>
+                              ))}
+                              <SelectItem value={TRAINING_TYPE_CUSTOM_VALUE}>Other (custom)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                      {trainingPlanError ? (
+                        <p className="text-destructive text-xs sm:pl-[132px]">{trainingPlanError}</p>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label htmlFor={`${mode}-pt-fee`}>PT Fee (JMD)</Label>

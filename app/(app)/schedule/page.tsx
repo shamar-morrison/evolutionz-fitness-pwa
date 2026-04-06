@@ -371,6 +371,11 @@ function SchedulePageContent() {
                               {session.trainerName ?? 'Unknown trainer'}
                             </span>
                             <span className="text-xs">{formatPtSessionTime(session.scheduledAt)}</span>
+                            {session.trainingTypeName ? (
+                              <span className="text-muted-foreground truncate text-xs">
+                                {session.trainingTypeName}
+                              </span>
+                            ) : null}
                             <Badge
                               variant="secondary"
                               className={getPtSessionStatusBadgeClassName(session.status)}

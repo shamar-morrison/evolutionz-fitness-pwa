@@ -157,6 +157,7 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     ptFee: overrides.ptFee ?? 14000,
     sessionsPerWeek: overrides.sessionsPerWeek ?? 1,
     scheduledDays: overrides.scheduledDays ?? ['Monday'],
+    trainingPlan: overrides.trainingPlan ?? [],
     sessionTime: overrides.sessionTime ?? '07:00',
     notes: overrides.notes ?? null,
     createdAt: overrides.createdAt ?? '2026-04-03T00:00:00.000Z',
@@ -275,5 +276,35 @@ describe('SchedulePage', () => {
       queryKey: queryKeys.ptScheduling.sessions({}),
       exact: false,
     })
+  })
+
+  it('renders training types on session cards when available', async () => {
+    usePtSessionsMock.mockReturnValue({
+      sessions: [
+        {
+          id: 'session-1',
+          assignmentId: 'assignment-1',
+          trainerId: 'trainer-1',
+          memberId: 'member-1',
+          scheduledAt: '2026-04-06T07:00:00-05:00',
+          status: 'scheduled',
+          isRecurring: true,
+          notes: null,
+          trainingTypeName: 'Legs',
+          createdAt: '2026-04-05T00:00:00.000Z',
+          updatedAt: '2026-04-05T00:00:00.000Z',
+          trainerName: 'Jordan Trainer',
+          memberName: 'Member One',
+        },
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    expect(container.textContent).toContain('Legs')
   })
 })

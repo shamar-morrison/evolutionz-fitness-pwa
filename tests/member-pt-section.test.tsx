@@ -29,6 +29,7 @@ const {
     ptFee: 12000,
     sessionsPerWeek: 1,
     scheduledDays: ['Monday'],
+    trainingPlan: [],
     sessionTime: '07:00',
     notes: null,
     createdAt: '2026-04-05T00:00:00.000Z',
@@ -166,6 +167,7 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     ptFee: overrides.ptFee ?? 14000,
     sessionsPerWeek: overrides.sessionsPerWeek ?? 1,
     scheduledDays: overrides.scheduledDays ?? ['Monday'],
+    trainingPlan: overrides.trainingPlan ?? [],
     sessionTime: overrides.sessionTime ?? '07:00',
     notes: overrides.notes ?? null,
     createdAt: overrides.createdAt ?? '2026-04-03T00:00:00.000Z',
@@ -299,6 +301,49 @@ describe('MemberPtSection', () => {
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: queryKeys.ptScheduling.sessions({}),
       exact: false,
+    })
+  })
+
+  it('renders the training plan summary and assignment detail cache invalidation target', async () => {
+    const assignment = createAssignment({
+      trainingPlan: [
+        {
+          day: 'Monday',
+          trainingTypeName: 'Legs',
+          isCustom: false,
+        },
+        {
+          day: 'Wednesday',
+          trainingTypeName: 'Chest',
+          isCustom: false,
+        },
+      ],
+    })
+
+    useMemberPtAssignmentMock.mockReturnValue({
+      assignment,
+      isLoading: false,
+      error: null,
+    })
+    usePtAssignmentsMock.mockReturnValue({
+      data: [assignment],
+      isLoading: false,
+    })
+
+    await act(async () => {
+      root.render(<MemberPtSection memberId="member-1" />)
+    })
+
+    expect(container.textContent).toContain('Training Plan')
+    expect(container.textContent).toContain('Monday → Legs')
+    expect(container.textContent).toContain('Wednesday → Chest')
+
+    await clickButton(container, 'Edit Assignment')
+    await clickButton(container, 'Save Assignment')
+    await flushAsyncWork()
+
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: queryKeys.ptScheduling.assignment('assignment-new'),
     })
   })
 })

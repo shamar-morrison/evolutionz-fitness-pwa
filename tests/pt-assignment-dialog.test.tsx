@@ -69,6 +69,81 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogTitle: ({ children }: React.ComponentProps<'h2'>) => <h2>{children}</h2>,
 }))
 
+vi.mock('@/components/ui/select', () => ({
+  Select: ({
+    children,
+    value,
+    onValueChange,
+    disabled,
+  }: {
+    children: React.ReactNode
+    value?: string
+    onValueChange?: (value: string) => void
+    disabled?: boolean
+  }) => {
+    const items = Array.isArray(children) ? children : [children]
+    const content = items.find(
+      (child) =>
+        typeof child === 'object' &&
+        child &&
+        'type' in child &&
+        typeof child.type === 'function' &&
+        child.type.name === 'SelectContent',
+    ) as
+      | {
+          props?: {
+            children?: React.ReactNode
+          }
+        }
+      | undefined
+    const trigger = items.find(
+      (child) =>
+        typeof child === 'object' &&
+        child &&
+        'type' in child &&
+        typeof child.type === 'function' &&
+        child.type.name === 'SelectTrigger',
+    ) as
+      | {
+          props?: {
+            'aria-label'?: string
+          }
+        }
+      | undefined
+    const options = Array.isArray(content?.props?.children)
+      ? content.props.children
+      : content?.props?.children
+        ? [content.props.children]
+        : []
+
+    return (
+      <select
+        aria-label={trigger?.props?.['aria-label'] ?? 'Training type'}
+        value={value ?? ''}
+        onChange={(event) => onValueChange?.(event.target.value)}
+        disabled={disabled}
+      >
+        {options.map((option) =>
+          typeof option === 'object' &&
+          option &&
+          'type' in option &&
+          typeof option.type === 'function' &&
+          option.type.name === 'SelectItem' &&
+          'props' in option ? (
+            <option key={(option.props as { value: string }).value} value={(option.props as { value: string }).value}>
+              {(option.props as { children: React.ReactNode }).children}
+            </option>
+          ) : null,
+        )}
+      </select>
+    )
+  },
+  SelectContent: ({ children }: React.ComponentProps<'div'>) => <>{children}</>,
+  SelectItem: ({ children }: React.ComponentProps<'div'> & { value: string }) => <>{children}</>,
+  SelectTrigger: ({ children }: React.ComponentProps<'button'>) => <>{children}</>,
+  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
+}))
+
 vi.mock('@/lib/pt-scheduling', async () => {
   const actual = await vi.importActual<typeof import('@/lib/pt-scheduling')>('@/lib/pt-scheduling')
 
@@ -108,6 +183,7 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     ptFee: overrides.ptFee ?? 14000,
     sessionsPerWeek: overrides.sessionsPerWeek ?? 1,
     scheduledDays: overrides.scheduledDays ?? ['Monday'],
+    trainingPlan: overrides.trainingPlan ?? [],
     sessionTime: overrides.sessionTime ?? '07:00',
     notes: overrides.notes ?? null,
     createdAt: overrides.createdAt ?? '2026-04-03T00:00:00.000Z',
@@ -144,6 +220,10 @@ function getButton(container: HTMLDivElement, label: string) {
   }
 
   return button
+}
+
+function getTrainingTypeSelects(container: HTMLDivElement) {
+  return Array.from(container.querySelectorAll('select')).slice(2)
 }
 
 async function clickButton(container: HTMLDivElement, label: string) {
@@ -249,6 +329,7 @@ describe('PtAssignmentDialog', () => {
       createAssignment({
         sessionsPerWeek: 3,
         scheduledDays: ['Monday', 'Wednesday', 'Friday'],
+        trainingPlan: [],
         notes: 'Client has a prior knee injury.',
       }),
     )
@@ -295,10 +376,215 @@ describe('PtAssignmentDialog', () => {
       ptFee: 15000,
       sessionsPerWeek: 3,
       scheduledDays: ['Monday', 'Wednesday', 'Friday'],
+      trainingPlan: [],
       sessionTime: '07:00',
       notes: 'Client has a prior knee injury.',
     })
     expect(createPtAssignmentMock).toHaveBeenCalledTimes(1)
     expect('trainerPayout' in createPtAssignmentMock.mock.calls[0][0]).toBe(false)
+  })
+
+  it('blocks submission when a custom training type is selected but left empty', async () => {
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="create"
+          memberId="22222222-2222-2222-2222-222222222222"
+          trainers={[createTrainer()]}
+        />,
+      )
+    })
+
+    const trainerSelect = container.querySelector('select[aria-label="Trainer"]')
+    const ptFeeInput = container.querySelector('#create-pt-fee')
+    if (!(trainerSelect instanceof HTMLSelectElement) || !(ptFeeInput instanceof HTMLInputElement)) {
+      throw new Error('Assignment form inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(trainerSelect, '11111111-1111-1111-1111-111111111111')
+      setInputValue(ptFeeInput, '15000')
+    })
+
+    await clickButton(container, 'Monday')
+    await clickButton(container, 'Wednesday')
+    await clickButton(container, 'Friday')
+
+    const mondayTrainingTypeSelect = getTrainingTypeSelects(container)[0]
+
+    if (!(mondayTrainingTypeSelect instanceof HTMLSelectElement)) {
+      throw new Error('Monday training type select not found.')
+    }
+
+    await act(async () => {
+      setInputValue(mondayTrainingTypeSelect, '__custom__')
+    })
+
+    await clickButton(container, 'Assign Trainer')
+    await flushAsyncWork()
+
+    expect(createPtAssignmentMock).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('Enter a custom training type.')
+  })
+
+  it('removes a deselected day from the submitted training plan entries', async () => {
+    createPtAssignmentMock.mockResolvedValue(
+      createAssignment({
+        sessionsPerWeek: 3,
+        scheduledDays: ['Monday', 'Wednesday', 'Thursday'],
+        trainingPlan: [
+          {
+            day: 'Monday',
+            trainingTypeName: 'Legs',
+            isCustom: false,
+          },
+          {
+            day: 'Thursday',
+            trainingTypeName: 'Agility',
+            isCustom: true,
+          },
+        ],
+      }),
+    )
+
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="create"
+          memberId="22222222-2222-2222-2222-222222222222"
+          trainers={[createTrainer()]}
+        />,
+      )
+    })
+
+    const trainerSelect = container.querySelector('select[aria-label="Trainer"]')
+    const ptFeeInput = container.querySelector('#create-pt-fee')
+
+    if (!(trainerSelect instanceof HTMLSelectElement) || !(ptFeeInput instanceof HTMLInputElement)) {
+      throw new Error('Assignment form inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(trainerSelect, '11111111-1111-1111-1111-111111111111')
+      setInputValue(ptFeeInput, '15000')
+    })
+
+    await clickButton(container, 'Monday')
+    await clickButton(container, 'Wednesday')
+    await clickButton(container, 'Friday')
+
+    const [mondayTrainingTypeSelect, , fridayTrainingTypeSelect] = getTrainingTypeSelects(container)
+
+    if (
+      !(mondayTrainingTypeSelect instanceof HTMLSelectElement) ||
+      !(fridayTrainingTypeSelect instanceof HTMLSelectElement)
+    ) {
+      throw new Error('Training type selects not found.')
+    }
+
+    await act(async () => {
+      setInputValue(mondayTrainingTypeSelect, 'Legs')
+      setInputValue(fridayTrainingTypeSelect, '__custom__')
+    })
+
+    const customTrainingTypeInput = container.querySelector('input[placeholder="Enter custom training type"]')
+
+    if (!(customTrainingTypeInput instanceof HTMLInputElement)) {
+      throw new Error('Custom training type input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(customTrainingTypeInput, 'Agility')
+    })
+
+    await clickButton(container, 'Friday')
+    await clickButton(container, 'Thursday')
+
+    const [, , thursdayTrainingTypeSelect] = getTrainingTypeSelects(container)
+
+    if (!(thursdayTrainingTypeSelect instanceof HTMLSelectElement)) {
+      throw new Error('Thursday training type select not found.')
+    }
+
+    await act(async () => {
+      setInputValue(thursdayTrainingTypeSelect, '__custom__')
+    })
+
+    const replacementCustomTrainingTypeInput = container.querySelector(
+      'input[placeholder="Enter custom training type"]',
+    )
+
+    if (!(replacementCustomTrainingTypeInput instanceof HTMLInputElement)) {
+      throw new Error('Replacement custom training type input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(replacementCustomTrainingTypeInput, 'Agility')
+    })
+
+    const [refreshedMondayTrainingTypeSelect] = getTrainingTypeSelects(container)
+
+    if (!(refreshedMondayTrainingTypeSelect instanceof HTMLSelectElement)) {
+      throw new Error('Refreshed Monday training type select not found.')
+    }
+
+    await act(async () => {
+      setInputValue(refreshedMondayTrainingTypeSelect, 'Legs')
+    })
+
+    await clickButton(container, 'Assign Trainer')
+    await flushAsyncWork()
+
+    expect(createPtAssignmentMock).toHaveBeenCalledWith({
+      trainerId: '11111111-1111-1111-1111-111111111111',
+      memberId: '22222222-2222-2222-2222-222222222222',
+      ptFee: 15000,
+      sessionsPerWeek: 3,
+      scheduledDays: ['Monday', 'Wednesday', 'Thursday'],
+      trainingPlan: [
+        {
+          day: 'Thursday',
+          trainingTypeName: 'Agility',
+        },
+      ],
+      sessionTime: '07:00',
+      notes: null,
+    })
+  })
+
+  it('prefills existing custom training plan entries in edit mode', async () => {
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="edit"
+          memberId="22222222-2222-2222-2222-222222222222"
+          assignment={createAssignment({
+            trainingPlan: [
+              {
+                day: 'Monday',
+                trainingTypeName: 'Plyometrics',
+                isCustom: true,
+              },
+            ],
+          })}
+          trainers={[createTrainer()]}
+        />,
+      )
+    })
+
+    const customTrainingTypeInput = container.querySelector('input[placeholder="Enter custom training type"]')
+
+    if (!(customTrainingTypeInput instanceof HTMLInputElement)) {
+      throw new Error('Custom training type input not found.')
+    }
+
+    expect(customTrainingTypeInput.value).toBe('Plyometrics')
+    expect(getTrainingTypeSelects(container)).toHaveLength(0)
   })
 })

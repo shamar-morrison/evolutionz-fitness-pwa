@@ -15,11 +15,48 @@ export const DAYS_OF_WEEK = [
 ] as const
 export type DayOfWeek = typeof DAYS_OF_WEEK[number]
 
+export const PREDEFINED_TRAINING_TYPES = [
+  'Cardio',
+  'Strength',
+  'Lower Body',
+  'Upper Body',
+  'Legs',
+  'Chest',
+  'Back',
+  'Shoulders',
+  'Arms',
+  'Core',
+  'HIIT',
+  'Flexibility & Mobility',
+  'Recovery',
+  'Full Body',
+] as const
+
 export const PT_ASSIGNMENT_STATUSES = ['active', 'inactive'] as const
 export type TrainerClientStatus = typeof PT_ASSIGNMENT_STATUSES[number]
 
 export const JAMAICA_TIME_ZONE = 'America/Jamaica'
 export const JAMAICA_OFFSET = '-05:00'
+
+export type TrainingPlanDay = {
+  id: string
+  assignmentId: string
+  dayOfWeek: DayOfWeek
+  trainingTypeName: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type DayTrainingPlan = {
+  day: DayOfWeek
+  trainingTypeName: string
+  isCustom: boolean
+}
+
+export type AssignmentTrainingPlanInput = {
+  day: DayOfWeek
+  trainingTypeName: string
+}
 
 export type TrainerClient = {
   id: string
@@ -31,6 +68,7 @@ export type TrainerClient = {
   scheduledDays: DayOfWeek[]
   sessionTime: string
   notes: string | null
+  trainingPlan: DayTrainingPlan[]
   createdAt: string
   updatedAt: string
   trainerName?: string
@@ -48,6 +86,7 @@ export type PtSession = {
   status: SessionStatus
   isRecurring: boolean
   notes: string | null
+  trainingTypeName: string | null
   createdAt: string
   updatedAt: string
   trainerName?: string
@@ -92,6 +131,7 @@ export type CreatePtAssignmentData = {
   ptFee: number
   sessionsPerWeek: number
   scheduledDays: DayOfWeek[]
+  trainingPlan?: AssignmentTrainingPlanInput[]
   sessionTime: string
   notes?: string | null
 }
@@ -101,6 +141,7 @@ export type UpdatePtAssignmentData = {
   ptFee?: number
   sessionsPerWeek?: number
   scheduledDays?: DayOfWeek[]
+  trainingPlan?: AssignmentTrainingPlanInput[]
   sessionTime?: string
   notes?: string | null
 }
@@ -145,6 +186,15 @@ const trainerClientSchema = z.object({
   scheduledDays: z.array(z.enum(DAYS_OF_WEEK)),
   sessionTime: z.string().trim().min(1),
   notes: z.string().nullable(),
+  trainingPlan: z
+    .array(
+      z.object({
+        day: z.enum(DAYS_OF_WEEK),
+        trainingTypeName: z.string().trim().min(1),
+        isCustom: z.boolean(),
+      }),
+    )
+    .default([]),
   createdAt: z.string().trim().min(1),
   updatedAt: z.string().trim().min(1),
   trainerName: z.string().trim().min(1).optional(),
@@ -162,6 +212,7 @@ const ptSessionSchema = z.object({
   status: z.enum(SESSION_STATUSES),
   isRecurring: z.boolean(),
   notes: z.string().nullable(),
+  trainingTypeName: z.string().trim().min(1).nullable(),
   createdAt: z.string().trim().min(1),
   updatedAt: z.string().trim().min(1),
   trainerName: z.string().trim().min(1).optional(),
@@ -225,6 +276,8 @@ const errorResponseSchema = z.object({
   error: z.string().trim().min(1),
   code: z.string().trim().optional(),
 })
+
+const predefinedTrainingTypeSet = new Set<string>(PREDEFINED_TRAINING_TYPES)
 
 const sessionStatusBadgeClassNames: Record<SessionStatus, string> = {
   scheduled: 'bg-slate-500/15 text-slate-700 hover:bg-slate-500/25',
@@ -349,6 +402,61 @@ export function normalizeScheduledDays(value: unknown): DayOfWeek[] {
   return DAYS_OF_WEEK.filter((day) => uniqueDays.has(day))
 }
 
+export function isPredefinedTrainingType(value: string) {
+  return predefinedTrainingTypeSet.has(value.trim())
+}
+
+export function normalizeTrainingPlan(value: unknown): DayTrainingPlan[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const trainingTypeByDay = new Map<DayOfWeek, string>()
+
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      continue
+    }
+
+    const day = 'day' in entry && isDayOfWeek(entry.day as string) ? (entry.day as DayOfWeek) : null
+    const trainingTypeName =
+      'trainingTypeName' in entry && typeof entry.trainingTypeName === 'string'
+        ? entry.trainingTypeName.trim()
+        : ''
+
+    if (!day || !trainingTypeName) {
+      continue
+    }
+
+    trainingTypeByDay.set(day, trainingTypeName)
+  }
+
+  return DAYS_OF_WEEK.flatMap((day) => {
+    const trainingTypeName = trainingTypeByDay.get(day)
+
+    return trainingTypeName
+      ? [
+          {
+            day,
+            trainingTypeName,
+            isCustom: !isPredefinedTrainingType(trainingTypeName),
+          },
+        ]
+      : []
+  })
+}
+
+export function normalizeAssignmentTrainingPlan(value: unknown): AssignmentTrainingPlanInput[] {
+  return normalizeTrainingPlan(value).map(({ day, trainingTypeName }) => ({
+    day,
+    trainingTypeName,
+  }))
+}
+
+export function getTrainingTypeForDay(trainingPlan: DayTrainingPlan[], day: DayOfWeek) {
+  return normalizeTrainingPlan(trainingPlan).find((entry) => entry.day === day)?.trainingTypeName ?? null
+}
+
 export function normalizeSessionTimeValue(value: string) {
   const normalizedTime = normalizeTimeInputValue(value)
 
@@ -378,6 +486,21 @@ export function formatSessionTime(value: string) {
 
 export function formatDayOfWeekShort(day: DayOfWeek) {
   return day.slice(0, 3)
+}
+
+export function getJamaicaDayOfWeek(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  const day = new Intl.DateTimeFormat('en-US', {
+    timeZone: JAMAICA_TIME_ZONE,
+    weekday: 'long',
+  }).format(date)
+
+  return isDayOfWeek(day) ? day : null
 }
 
 export function formatScheduleSummary(

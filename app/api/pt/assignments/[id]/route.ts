@@ -3,7 +3,9 @@ import { z } from 'zod'
 import { normalizeTimeInputValue } from '@/lib/member-access-time'
 import {
   DAYS_OF_WEEK,
+  normalizeAssignmentTrainingPlan,
   PT_ASSIGNMENT_STATUSES,
+  type AssignmentTrainingPlanInput,
 } from '@/lib/pt-scheduling'
 import { readTrainerClientById, readTrainerClientRowById } from '@/lib/pt-scheduling-server'
 import { requireAdminUser } from '@/lib/server-auth'
@@ -15,6 +17,16 @@ const updateAssignmentSchema = z
     ptFee: z.number().int().min(0, 'PT fee must be zero or greater.').optional(),
     sessionsPerWeek: z.number().int().min(1).max(3).optional(),
     scheduledDays: z.array(z.enum(DAYS_OF_WEEK)).optional(),
+    trainingPlan: z
+      .array(
+        z
+          .object({
+            day: z.enum(DAYS_OF_WEEK),
+            trainingTypeName: z.string().trim().min(1, 'Training type is required.'),
+          })
+          .strict(),
+      )
+      .optional(),
     sessionTime: z.string().trim().regex(/^\d{2}:\d{2}$/u, 'Session time must use HH:MM format.').optional(),
     notes: z.string().trim().nullable().optional(),
   })
@@ -56,6 +68,56 @@ function validateScheduledDays(scheduledDays: string[], sessionsPerWeek: number)
   return null
 }
 
+function validateTrainingPlan(
+  trainingPlan: AssignmentTrainingPlanInput[] | undefined,
+  scheduledDays: string[],
+) {
+  const normalizedTrainingPlan = normalizeAssignmentTrainingPlan(trainingPlan ?? [])
+
+  if (normalizedTrainingPlan.length !== (trainingPlan ?? []).length) {
+    return 'Training plan days must be unique and use valid training types.'
+  }
+
+  for (const entry of normalizedTrainingPlan) {
+    if (!scheduledDays.includes(entry.day)) {
+      return `Training plan day ${entry.day} must also be selected in scheduled days.`
+    }
+  }
+
+  return null
+}
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
+    const { id } = await params
+    const supabase = getSupabaseAdminClient() as any
+    const assignment = await readTrainerClientById(supabase, id)
+
+    if (!assignment) {
+      return createErrorResponse('PT assignment not found.', 404)
+    }
+
+    return NextResponse.json({
+      ok: true,
+      assignment,
+    })
+  } catch (error) {
+    return createErrorResponse(
+      error instanceof Error ? error.message : 'Unexpected server error while loading the PT assignment.',
+      500,
+    )
+  }
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -80,9 +142,18 @@ export async function PATCH(
     const nextSessionsPerWeek = input.sessionsPerWeek ?? existingAssignment.sessions_per_week
     const nextScheduledDays = input.scheduledDays ?? existingAssignment.scheduled_days ?? []
     const scheduledDaysError = validateScheduledDays(nextScheduledDays, nextSessionsPerWeek)
+    const normalizedTrainingPlan = normalizeAssignmentTrainingPlan(input.trainingPlan ?? [])
+    const trainingPlanError =
+      typeof input.trainingPlan === 'undefined'
+        ? null
+        : validateTrainingPlan(input.trainingPlan, nextScheduledDays)
 
     if (scheduledDaysError) {
       return createErrorResponse(scheduledDaysError, 400)
+    }
+
+    if (trainingPlanError) {
+      return createErrorResponse(trainingPlanError, 400)
     }
 
     const nextStatus = input.status ?? existingAssignment.status
@@ -153,6 +224,33 @@ export async function PATCH(
 
     if (!updatedAssignment) {
       return createErrorResponse('PT assignment not found.', 404)
+    }
+
+    if (typeof input.trainingPlan !== 'undefined') {
+      const { error: deleteTrainingPlanError } = await supabase
+        .from('training_plan_days')
+        .delete()
+        .eq('assignment_id', id)
+
+      if (deleteTrainingPlanError) {
+        throw new Error(`Failed to replace the PT training plan: ${deleteTrainingPlanError.message}`)
+      }
+
+      if (normalizedTrainingPlan.length > 0) {
+        const { error: insertTrainingPlanError } = await supabase
+          .from('training_plan_days')
+          .insert(
+            normalizedTrainingPlan.map((entry) => ({
+              assignment_id: id,
+              day_of_week: entry.day,
+              training_type_name: entry.trainingTypeName,
+            })),
+          )
+
+        if (insertTrainingPlanError) {
+          throw new Error(`Failed to replace the PT training plan: ${insertTrainingPlanError.message}`)
+        }
+      }
     }
 
     const assignment = await readTrainerClientById(supabase, id)

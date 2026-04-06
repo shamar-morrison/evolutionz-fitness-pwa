@@ -4,7 +4,9 @@ import {
 } from '@/lib/member-photo-storage'
 import {
   DAYS_OF_WEEK,
+  getJamaicaDayOfWeek,
   getMonthRange,
+  normalizeTrainingPlan,
   normalizeScheduledDays,
   normalizeSessionTimeValue,
   type PtAssignmentFilters,
@@ -18,6 +20,8 @@ import {
 
 const TRAINER_CLIENT_SELECT =
   'id, trainer_id, member_id, status, pt_fee, sessions_per_week, scheduled_days, session_time, notes, created_at, updated_at'
+const TRAINING_PLAN_DAY_SELECT =
+  'id, assignment_id, day_of_week, training_type_name, created_at, updated_at'
 const PT_SESSION_SELECT =
   'id, assignment_id, trainer_id, member_id, scheduled_at, status, is_recurring, notes, created_at, updated_at'
 const PT_SESSION_CHANGE_SELECT =
@@ -50,6 +54,15 @@ type PtSessionRow = {
   status: PtSession['status']
   is_recurring: boolean
   notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+type TrainingPlanDayRow = {
+  id: string
+  assignment_id: string
+  day_of_week: string
+  training_type_name: string
   created_at: string
   updated_at: string
 }
@@ -193,15 +206,18 @@ async function hydrateTrainerClients(
 ) {
   const trainerIds = Array.from(new Set(rows.map((row) => row.trainer_id)))
   const memberIds = Array.from(new Set(rows.map((row) => row.member_id)))
-  const [trainerById, memberById] = await Promise.all([
+  const assignmentIds = rows.map((row) => row.id)
+  const [trainerById, memberById, trainingPlanByAssignmentId] = await Promise.all([
     loadTrainerSummaries(supabase, trainerIds),
     loadMemberSummaries(supabase, memberIds),
+    loadTrainingPlanByAssignmentId(supabase, assignmentIds),
   ])
 
   return sortAssignments(
     rows.map((row) => {
       const trainer = trainerById.get(row.trainer_id)
       const member = memberById.get(row.member_id)
+      const trainingPlan = trainingPlanByAssignmentId.get(row.id) ?? []
 
       return {
         id: row.id,
@@ -213,6 +229,7 @@ async function hydrateTrainerClients(
         scheduledDays: normalizeScheduledDays(row.scheduled_days),
         sessionTime: normalizeSessionTimeValue(row.session_time) ?? normalizeText(row.session_time),
         notes: normalizeNullableText(row.notes),
+        trainingPlan,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         trainerName: normalizeText(trainer?.name) || undefined,
@@ -230,26 +247,75 @@ async function hydratePtSessions(
 ) {
   const trainerIds = Array.from(new Set(rows.map((row) => row.trainer_id)))
   const memberIds = Array.from(new Set(rows.map((row) => row.member_id)))
-  const [trainerById, memberById] = await Promise.all([
+  const assignmentIds = Array.from(new Set(rows.map((row) => row.assignment_id)))
+  const [trainerById, memberById, trainingPlanByAssignmentId] = await Promise.all([
     loadTrainerSummaries(supabase, trainerIds),
     loadMemberSummaries(supabase, memberIds),
+    loadTrainingPlanByAssignmentId(supabase, assignmentIds),
   ])
 
   return sortSessions(
-    rows.map((row) => ({
-      id: row.id,
-      assignmentId: row.assignment_id,
-      trainerId: row.trainer_id,
-      memberId: row.member_id,
-      scheduledAt: row.scheduled_at,
-      status: row.status,
-      isRecurring: row.is_recurring,
-      notes: normalizeNullableText(row.notes),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      trainerName: normalizeText(trainerById.get(row.trainer_id)?.name) || undefined,
-      memberName: normalizeText(memberById.get(row.member_id)?.name) || undefined,
-    })),
+    rows.map((row) => {
+      const trainingDay = getJamaicaDayOfWeek(row.scheduled_at)
+      const trainingTypeName = trainingDay
+        ? (trainingPlanByAssignmentId.get(row.assignment_id) ?? []).find(
+            (entry) => entry.day === trainingDay,
+          )?.trainingTypeName ?? null
+        : null
+
+      return {
+        id: row.id,
+        assignmentId: row.assignment_id,
+        trainerId: row.trainer_id,
+        memberId: row.member_id,
+        scheduledAt: row.scheduled_at,
+        status: row.status,
+        isRecurring: row.is_recurring,
+        notes: normalizeNullableText(row.notes),
+        trainingTypeName,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        trainerName: normalizeText(trainerById.get(row.trainer_id)?.name) || undefined,
+        memberName: normalizeText(memberById.get(row.member_id)?.name) || undefined,
+      }
+    }),
+  )
+}
+
+async function loadTrainingPlanByAssignmentId(
+  supabase: PtSchedulingAdminClient,
+  assignmentIds: string[],
+) {
+  if (assignmentIds.length === 0) {
+    return new Map<string, TrainerClient['trainingPlan']>()
+  }
+
+  const { data, error } = await supabase
+    .from('training_plan_days')
+    .select(TRAINING_PLAN_DAY_SELECT)
+    .in('assignment_id', assignmentIds)
+
+  if (error) {
+    throw new Error(`Failed to read training plans: ${error.message}`)
+  }
+
+  const trainingPlanRows = (data ?? []) as TrainingPlanDayRow[]
+  const trainingPlanByAssignmentId = new Map<string, Array<{ day: string; trainingTypeName: string }>>()
+
+  for (const row of trainingPlanRows) {
+    const existingEntries = trainingPlanByAssignmentId.get(row.assignment_id) ?? []
+    existingEntries.push({
+      day: row.day_of_week,
+      trainingTypeName: row.training_type_name,
+    })
+    trainingPlanByAssignmentId.set(row.assignment_id, existingEntries)
+  }
+
+  return new Map(
+    assignmentIds.map((assignmentId) => [
+      assignmentId,
+      normalizeTrainingPlan(trainingPlanByAssignmentId.get(assignmentId) ?? []),
+    ]),
   )
 }
 
