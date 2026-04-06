@@ -1,0 +1,197 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { resetServerAuthMocks } from '@/tests/support/server-auth'
+
+const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
+  getSupabaseAdminClientMock: vi.fn(),
+}))
+
+vi.mock('@/lib/supabase-admin', () => ({
+  getSupabaseAdminClient: getSupabaseAdminClientMock,
+}))
+
+vi.mock('@/lib/server-auth', async () => {
+  const mod = await import('@/tests/support/server-auth')
+
+  return {
+    requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
+    requireAdminUser: mod.requireAdminUserMock,
+  }
+})
+
+import { GET } from '@/app/api/dashboard/stats/route'
+
+type QuerySignature = 'active' | 'expired' | 'expiringSoon'
+
+type RecordedQuery = {
+  signature: QuerySignature
+  filters: {
+    eq: Array<[string, string]>
+    gte: Array<[string, string]>
+    lt: Array<[string, string]>
+  }
+}
+
+function createDashboardStatsAdminClient({
+  counts = {},
+  errorFor = null,
+}: {
+  counts?: Partial<Record<QuerySignature, number | null>>
+  errorFor?: QuerySignature | null
+} = {}) {
+  const queries: RecordedQuery[] = []
+
+  return {
+    queries,
+    from(table: string) {
+      if (table !== 'members') {
+        throw new Error(`Unexpected table: ${table}`)
+      }
+
+      return {
+        select(columns: string, options: { count: 'exact'; head: true }) {
+          expect(columns).toBe('id')
+          expect(options).toEqual({ count: 'exact', head: true })
+
+          const filters: RecordedQuery['filters'] = {
+            eq: [],
+            gte: [],
+            lt: [],
+          }
+
+          const builder = {
+            eq(column: string, value: string) {
+              filters.eq.push([column, value])
+              return builder
+            },
+            gte(column: string, value: string) {
+              filters.gte.push([column, value])
+              return builder
+            },
+            lt(column: string, value: string) {
+              filters.lt.push([column, value])
+              return builder
+            },
+            then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
+              const signature = getQuerySignature(filters)
+              queries.push({
+                signature,
+                filters: {
+                  eq: [...filters.eq],
+                  gte: [...filters.gte],
+                  lt: [...filters.lt],
+                },
+              })
+
+              const result =
+                errorFor === signature
+                  ? {
+                      count: null,
+                      error: { message: 'select exploded' },
+                    }
+                  : {
+                      count: counts[signature] ?? null,
+                      error: null,
+                    }
+
+              return Promise.resolve(result).then(onFulfilled, onRejected)
+            },
+          }
+
+          return builder
+        },
+      }
+    },
+  }
+}
+
+function getQuerySignature(filters: RecordedQuery['filters']): QuerySignature {
+  const statusFilter = filters.eq.find(([column]) => column === 'status')?.[1]
+  const hasExpiringWindow =
+    filters.gte.some(([column]) => column === 'end_time') &&
+    filters.lt.some(([column]) => column === 'end_time')
+
+  if (statusFilter === 'Expired') {
+    return 'expired'
+  }
+
+  if (statusFilter === 'Active' && hasExpiringWindow) {
+    return 'expiringSoon'
+  }
+
+  return 'active'
+}
+
+describe('GET /api/dashboard/stats', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+    getSupabaseAdminClientMock.mockReset()
+    resetServerAuthMocks()
+  })
+
+  it('returns aggregated member counts and applies the 7-day expiring window', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-02T10:15:30.000Z'))
+
+    const supabase = createDashboardStatsAdminClient({
+      counts: {
+        active: 247,
+        expired: 38,
+        expiringSoon: 12,
+      },
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(supabase)
+
+    const response = await GET()
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      activeMembers: 247,
+      expiredMembers: 38,
+      expiringSoon: 12,
+    })
+
+    expect(supabase.queries).toHaveLength(3)
+
+    const activeQuery = supabase.queries.find((query) => query.signature === 'active')
+    const expiredQuery = supabase.queries.find((query) => query.signature === 'expired')
+    const expiringSoonQuery = supabase.queries.find((query) => query.signature === 'expiringSoon')
+
+    expect(activeQuery?.filters.eq).toEqual([['status', 'Active']])
+    expect(expiredQuery?.filters.eq).toEqual([['status', 'Expired']])
+    expect(expiringSoonQuery?.filters.eq).toEqual([['status', 'Active']])
+    expect(expiringSoonQuery?.filters.gte).toEqual([['end_time', '2026-04-02T00:00:00-05:00']])
+    expect(expiringSoonQuery?.filters.lt).toEqual([['end_time', '2026-04-10T00:00:00-05:00']])
+  })
+
+  it('coerces null Supabase counts to zero', async () => {
+    const supabase = createDashboardStatsAdminClient()
+
+    getSupabaseAdminClientMock.mockReturnValue(supabase)
+
+    const response = await GET()
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      activeMembers: 0,
+      expiredMembers: 0,
+      expiringSoon: 0,
+    })
+  })
+
+  it('returns 500 when any count query fails', async () => {
+    getSupabaseAdminClientMock.mockReturnValue(
+      createDashboardStatsAdminClient({
+        errorFor: 'expired',
+      }),
+    )
+
+    const response = await GET()
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to read expired member count: select exploded',
+    })
+  })
+})

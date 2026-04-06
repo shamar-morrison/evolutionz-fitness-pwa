@@ -24,6 +24,19 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Environment Variables
+
+Supabase auth and the App Router proxy require the following environment variables:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
+Apply the SQL migration in [`supabase/migrations/add_auth_and_profiles.sql`](./supabase/migrations/add_auth_and_profiles.sql) before signing in. Staff accounts are created manually in the Supabase dashboard and must have a matching `profiles` row.
+
 ## Learn More
 
 To learn more, take a look at the following resources:

@@ -1,16 +1,29 @@
 'use client'
 
-import { useDashboard } from '@/hooks/use-dashboard'
+import { RedirectOnMount } from '@/components/redirect-on-mount'
+import { RoleGuard } from '@/components/role-guard'
+import { useDashboardStats } from '@/hooks/use-dashboard-stats'
+import {
+  ExpiringThisWeekCard,
+  RecentlyAddedMembersCard,
+} from '@/components/dashboard-member-panels'
 import { StatCard } from '@/components/stat-card'
-import { RecentActivity } from '@/components/recent-activity'
 import { QuickActions } from '@/components/quick-actions'
-import { Users, UserX, UserCheck } from 'lucide-react'
+import { Users, UserX, Clock3 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function DashboardPage() {
-  const { data, isLoading, error } = useDashboard()
+  return (
+    <RoleGuard role="admin" fallback={<RedirectOnMount href="/trainer/schedule" />}>
+      <DashboardPageContent />
+    </RoleGuard>
+  )
+}
 
-  if (error) {
+function DashboardPageContent() {
+  const { data: stats, isLoading: isStatsLoading, error: statsError } = useDashboardStats()
+
+  if (statsError) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
         <p className="text-destructive">Failed to load dashboard data</p>
@@ -29,7 +42,7 @@ export default function DashboardPage() {
 
       {/* Stats Row */}
       <div className="grid gap-4 md:grid-cols-3">
-        {isLoading ? (
+        {isStatsLoading ? (
           <>
             <Skeleton className="h-28" />
             <Skeleton className="h-28" />
@@ -39,20 +52,20 @@ export default function DashboardPage() {
           <>
             <StatCard
               title="Active Members"
-              value={data?.stats.activeMembers ?? 0}
+              value={stats.activeMembers}
               icon={Users}
               variant="success"
             />
             <StatCard
               title="Expired Members"
-              value={data?.stats.expiredMembers ?? 0}
+              value={stats.expiredMembers}
               icon={UserX}
               variant="destructive"
             />
             <StatCard
-              title="Check-Ins Today"
-              value={data?.stats.checkInsToday ?? 0}
-              icon={UserCheck}
+              title="Expiring Soon (7 days)"
+              value={stats.expiringSoon}
+              icon={Clock3}
               variant="warning"
             />
           </>
@@ -65,12 +78,10 @@ export default function DashboardPage() {
         <QuickActions />
       </div>
 
-      {/* Recent Activity */}
-      {isLoading ? (
-        <Skeleton className="h-96" />
-      ) : (
-        <RecentActivity events={data?.recentActivity ?? []} />
-      )}
+      <div className="grid gap-4 md:grid-cols-2">
+        <RecentlyAddedMembersCard />
+        <ExpiringThisWeekCard />
+      </div>
     </div>
   )
 }
