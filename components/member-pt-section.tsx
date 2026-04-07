@@ -38,6 +38,8 @@ type MemberPtSectionProps = {
   memberId: string
 }
 
+type RemovalAction = 'keep' | 'cancel-future'
+
 async function invalidatePtQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   memberId: string,
@@ -81,8 +83,9 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false)
   const [showRemoveDialog, setShowRemoveDialog] = useState(false)
   const [pendingGenerateAssignment, setPendingGenerateAssignment] = useState<TrainerClient | null>(null)
-  const [isRemoving, setIsRemoving] = useState(false)
+  const [removalAction, setRemovalAction] = useState<RemovalAction | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const isRemoving = removalAction !== null
   const availableTrainers = useMemo(() => {
     const unavailableTrainerIds = new Set(
       (allAssignmentsQuery.data ?? []).map((existingAssignment) => existingAssignment.trainerId),
@@ -110,7 +113,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
       return
     }
 
-    setIsRemoving(true)
+    setRemovalAction(cancelFutureSessions ? 'cancel-future' : 'keep')
 
     try {
       const result = await deletePtAssignment(assignment.id, {
@@ -132,7 +135,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
         variant: 'destructive',
       })
     } finally {
-      setIsRemoving(false)
+      setRemovalAction(null)
     }
   }
 
@@ -311,7 +314,16 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
         onSaved={handleAssignmentSaved}
       />
 
-      <Dialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
+      <Dialog
+        open={showRemoveDialog}
+        onOpenChange={(open) => {
+          setShowRemoveDialog(open)
+
+          if (!open) {
+            setRemovalAction(null)
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[560px]" isLoading={isRemoving}>
           <DialogHeader>
             <DialogTitle>Remove trainer assignment?</DialogTitle>
@@ -325,7 +337,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
               variant="outline"
               onClick={() => void handleRemoveAssignment(false)}
               disabled={isRemoving}
-              loading={isRemoving}
+              loading={removalAction === 'keep'}
             >
               Keep existing sessions
             </Button>
@@ -334,7 +346,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
               variant="destructive"
               onClick={() => void handleRemoveAssignment(true)}
               disabled={isRemoving}
-              loading={isRemoving}
+              loading={removalAction === 'cancel-future'}
             >
               Remove assignment and cancel all future sessions
             </Button>

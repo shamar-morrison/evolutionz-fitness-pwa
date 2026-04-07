@@ -63,6 +63,8 @@ const rescheduleEmptyLabels: Record<ApprovalRequestStatus, string> = {
   denied: 'No denied reschedule requests.',
 }
 
+type ReviewAction = 'approved' | 'denied'
+
 export function PendingApprovalsPageContent({
   view,
 }: {
@@ -79,9 +81,10 @@ export function PendingApprovalsPageContent({
   const [approvedTimeValidationMessage, setApprovedTimeValidationMessage] =
     useState<string | null>(null)
   const [reviewNote, setReviewNote] = useState('')
-  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+  const [submittingReviewAction, setSubmittingReviewAction] = useState<ReviewAction | null>(null)
   const [activeRescheduleStatus, setActiveRescheduleStatus] =
     useState<ApprovalRequestStatus>('pending')
+  const isSubmittingReview = submittingReviewAction !== null
   const rescheduleRequestsQuery = useRescheduleRequests(
     view === 'reschedule-requests' ? activeRescheduleStatus : undefined,
     {
@@ -127,9 +130,10 @@ export function PendingApprovalsPageContent({
     setApprovedTime(formatPtSessionDateTimeInputValue(request.proposedAt))
     setApprovedTimeValidationMessage(null)
     setReviewNote(request.reviewNote ?? '')
+    setSubmittingReviewAction(null)
   }
 
-  const handleReviewRescheduleRequest = async (status: 'approved' | 'denied') => {
+  const handleReviewRescheduleRequest = async (status: ReviewAction) => {
     if (
       !selectedRescheduleRequest ||
       (status === 'approved' && (!approvedTime || approvedTimeValidationMessage))
@@ -137,7 +141,7 @@ export function PendingApprovalsPageContent({
       return
     }
 
-    setIsSubmittingReview(true)
+    setSubmittingReviewAction(status)
 
     try {
       await reviewRescheduleRequest(selectedRescheduleRequest.id, {
@@ -158,21 +162,22 @@ export function PendingApprovalsPageContent({
         variant: 'destructive',
       })
     } finally {
-      setIsSubmittingReview(false)
+      setSubmittingReviewAction(null)
     }
   }
 
   const handleOpenSessionUpdateReview = (request: SessionUpdateRequest) => {
     setSelectedSessionUpdateRequest(request)
     setReviewNote(request.reviewNote ?? '')
+    setSubmittingReviewAction(null)
   }
 
-  const handleReviewSessionUpdateRequest = async (status: 'approved' | 'denied') => {
+  const handleReviewSessionUpdateRequest = async (status: ReviewAction) => {
     if (!selectedSessionUpdateRequest) {
       return
     }
 
-    setIsSubmittingReview(true)
+    setSubmittingReviewAction(status)
 
     try {
       await reviewSessionUpdateRequest(selectedSessionUpdateRequest.id, {
@@ -192,7 +197,7 @@ export function PendingApprovalsPageContent({
         variant: 'destructive',
       })
     } finally {
-      setIsSubmittingReview(false)
+      setSubmittingReviewAction(null)
     }
   }
 
@@ -316,6 +321,7 @@ export function PendingApprovalsPageContent({
             if (!open) {
               setSelectedRescheduleRequest(null)
               setApprovedTimeValidationMessage(null)
+              setSubmittingReviewAction(null)
             }
           }}
         >
@@ -394,7 +400,7 @@ export function PendingApprovalsPageContent({
                 variant="outline"
                 onClick={() => void handleReviewRescheduleRequest('denied')}
                 disabled={isSubmittingReview}
-                loading={isSubmittingReview}
+                loading={submittingReviewAction === 'denied'}
               >
                 Deny
               </Button>
@@ -406,7 +412,7 @@ export function PendingApprovalsPageContent({
                   !approvedTime ||
                   Boolean(approvedTimeValidationMessage)
                 }
-                loading={isSubmittingReview}
+                loading={submittingReviewAction === 'approved'}
               >
                 Approve
               </Button>
@@ -419,6 +425,7 @@ export function PendingApprovalsPageContent({
           onOpenChange={(open) => {
             if (!open) {
               setSelectedSessionUpdateRequest(null)
+              setSubmittingReviewAction(null)
             }
           }}
         >
@@ -485,7 +492,7 @@ export function PendingApprovalsPageContent({
                 variant="outline"
                 onClick={() => void handleReviewSessionUpdateRequest('denied')}
                 disabled={isSubmittingReview}
-                loading={isSubmittingReview}
+                loading={submittingReviewAction === 'denied'}
               >
                 Deny
               </Button>
@@ -493,7 +500,7 @@ export function PendingApprovalsPageContent({
                 type="button"
                 onClick={() => void handleReviewSessionUpdateRequest('approved')}
                 disabled={isSubmittingReview}
-                loading={isSubmittingReview}
+                loading={submittingReviewAction === 'approved'}
               >
                 Approve
               </Button>

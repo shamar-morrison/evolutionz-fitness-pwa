@@ -7,12 +7,14 @@ import { queryKeys } from '@/lib/query-keys'
 
 const {
   invalidateQueriesMock,
+  reviewRescheduleRequestMock,
   reviewSessionUpdateRequestMock,
   toastMock,
   useRescheduleRequestsMock,
   useSessionUpdateRequestsMock,
 } = vi.hoisted(() => ({
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
+  reviewRescheduleRequestMock: vi.fn(),
   reviewSessionUpdateRequestMock: vi.fn(),
   toastMock: vi.fn(),
   useRescheduleRequestsMock: vi.fn(),
@@ -50,6 +52,7 @@ vi.mock('@/lib/pt-scheduling', async () => {
 
   return {
     ...actual,
+    reviewRescheduleRequest: reviewRescheduleRequestMock,
     reviewSessionUpdateRequest: reviewSessionUpdateRequestMock,
   }
 })
@@ -105,6 +108,18 @@ async function flushAsyncWork() {
   })
 }
 
+function getButton(container: HTMLDivElement, label: string) {
+  const button = Array.from(container.querySelectorAll('button')).find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`${label} button not found.`)
+  }
+
+  return button
+}
+
 describe('PendingApprovalsPageContent loading wiring', () => {
   let container: HTMLDivElement
   let root: Root
@@ -116,7 +131,28 @@ describe('PendingApprovalsPageContent loading wiring', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     useRescheduleRequestsMock.mockReturnValue({
-      requests: [],
+      requests: [
+        {
+          id: 'reschedule-1',
+          sessionId: 'session-1',
+          trainerId: 'trainer-1',
+          trainerName: 'Jordan Trainer',
+          requestedById: 'trainer-1',
+          requestedByName: 'Jordan Trainer',
+          memberId: 'member-1',
+          memberName: 'Client One',
+          sessionScheduledAt: '2026-04-10T10:00:00.000Z',
+          proposedAt: '2026-04-11T10:00:00.000Z',
+          note: 'Client asked for a later time.',
+          reviewNote: null,
+          status: 'pending',
+          reviewedById: null,
+          reviewedByName: null,
+          reviewedAt: null,
+          createdAt: '2026-04-09T10:00:00.000Z',
+          updatedAt: '2026-04-09T10:00:00.000Z',
+        },
+      ],
       isLoading: false,
       error: null,
     })
@@ -150,7 +186,7 @@ describe('PendingApprovalsPageContent loading wiring', () => {
     vi.clearAllMocks()
   })
 
-  it('uses the shared review state for DialogContent and both action buttons', async () => {
+  it('shows loading only on the clicked session update review action', async () => {
     const deferred = createDeferred<void>()
     reviewSessionUpdateRequestMock.mockReturnValue(deferred.promise)
 
@@ -158,25 +194,13 @@ describe('PendingApprovalsPageContent loading wiring', () => {
       root.render(<PendingApprovalsPageContent view="session-updates" />)
     })
 
-    const reviewButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent?.trim() === 'Review',
-    )
-
-    if (!(reviewButton instanceof HTMLButtonElement)) {
-      throw new Error('Review button not found.')
-    }
-
     await act(async () => {
-      reviewButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      getButton(container, 'Review').dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    const approveButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent?.trim() === 'Approve',
-    )
-
-    if (!(approveButton instanceof HTMLButtonElement)) {
-      throw new Error('Approve button not found.')
-    }
+    const approveButton = getButton(container, 'Approve')
+    const denyButton = getButton(container, 'Deny')
+    const cancelButton = getButton(container, 'Cancel')
 
     await act(async () => {
       approveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -184,11 +208,45 @@ describe('PendingApprovalsPageContent loading wiring', () => {
     })
 
     expect(container.querySelector('[data-is-loading="true"]')).not.toBeNull()
+    expect(approveButton.getAttribute('data-loading')).toBe('true')
+    expect(denyButton.getAttribute('data-loading')).toBe('false')
+    expect(cancelButton.getAttribute('data-loading')).toBe('false')
+    expect(approveButton.disabled).toBe(true)
+    expect(denyButton.disabled).toBe(true)
+    expect(cancelButton.disabled).toBe(true)
 
-    const loadingButtons = Array.from(container.querySelectorAll('button[data-loading="true"]'))
+    deferred.resolve()
+    await flushAsyncWork()
+  })
 
-    expect(loadingButtons).toHaveLength(2)
-    expect(loadingButtons.map((button) => button.textContent?.trim())).toEqual(['Deny', 'Approve'])
+  it('shows loading only on the clicked reschedule review action', async () => {
+    const deferred = createDeferred<void>()
+    reviewRescheduleRequestMock.mockReturnValue(deferred.promise)
+
+    await act(async () => {
+      root.render(<PendingApprovalsPageContent view="reschedule-requests" />)
+    })
+
+    await act(async () => {
+      getButton(container, 'Review').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const denyButton = getButton(container, 'Deny')
+    const approveButton = getButton(container, 'Approve')
+    const cancelButton = getButton(container, 'Cancel')
+
+    await act(async () => {
+      denyButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-is-loading="true"]')).not.toBeNull()
+    expect(denyButton.getAttribute('data-loading')).toBe('true')
+    expect(approveButton.getAttribute('data-loading')).toBe('false')
+    expect(cancelButton.getAttribute('data-loading')).toBe('false')
+    expect(denyButton.disabled).toBe(true)
+    expect(approveButton.disabled).toBe(true)
+    expect(cancelButton.disabled).toBe(true)
 
     deferred.resolve()
     await flushAsyncWork()
@@ -201,25 +259,11 @@ describe('PendingApprovalsPageContent loading wiring', () => {
       root.render(<PendingApprovalsPageContent view="session-updates" />)
     })
 
-    const reviewButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent?.trim() === 'Review',
-    )
-
-    if (!(reviewButton instanceof HTMLButtonElement)) {
-      throw new Error('Review button not found.')
-    }
-
     await act(async () => {
-      reviewButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      getButton(container, 'Review').dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    const approveButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent?.trim() === 'Approve',
-    )
-
-    if (!(approveButton instanceof HTMLButtonElement)) {
-      throw new Error('Approve button not found.')
-    }
+    const approveButton = getButton(container, 'Approve')
 
     await act(async () => {
       approveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
