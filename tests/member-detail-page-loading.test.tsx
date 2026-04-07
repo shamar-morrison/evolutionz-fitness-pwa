@@ -26,7 +26,10 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'member-1' }),
-  useRouter: () => ({
+}))
+
+vi.mock('@/hooks/use-progress-router', () => ({
+  useProgressRouter: () => ({
     push: vi.fn(),
     replace: replaceMock,
   }),
