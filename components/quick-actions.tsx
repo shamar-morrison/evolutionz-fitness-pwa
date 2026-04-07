@@ -16,18 +16,6 @@ export function QuickActions() {
           </Link>
         </Button>
       </RoleGuard>
-      <Button asChild variant="outline">
-        <Link href="/check-in">
-          <UserCheck className="mr-2 h-4 w-4" />
-          Check In
-        </Link>
-      </Button>
-      <Button asChild variant="outline">
-        <Link href="/billing?action=new">
-          <Receipt className="mr-2 h-4 w-4" />
-          New Receipt
-        </Link>
-      </Button>
     </div>
   )
 }

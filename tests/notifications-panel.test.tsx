@@ -9,12 +9,14 @@ const {
   markAllNotificationsAsReadMock,
   markNotificationAsReadMock,
   pushMock,
+  useIsMobileMock,
   useNotificationsMock,
 } = vi.hoisted(() => ({
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   markAllNotificationsAsReadMock: vi.fn().mockResolvedValue(undefined),
   markNotificationAsReadMock: vi.fn().mockResolvedValue(undefined),
   pushMock: vi.fn(),
+  useIsMobileMock: vi.fn(),
   useNotificationsMock: vi.fn(),
 }))
 
@@ -48,17 +50,28 @@ vi.mock('@/hooks/use-notifications', () => ({
   useNotifications: useNotificationsMock,
 }))
 
+vi.mock('@/hooks/use-mobile', () => ({
+  useIsMobile: useIsMobileMock,
+}))
+
 vi.mock('@/hooks/use-toast', () => ({
   toast: vi.fn(),
 }))
 
-vi.mock('@/components/ui/sheet', () => ({
-  Sheet: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SheetContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
-  SheetDescription: ({ children }: React.ComponentProps<'p'>) => <p>{children}</p>,
-  SheetHeader: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
-  SheetTitle: ({ children }: React.ComponentProps<'h2'>) => <h2>{children}</h2>,
-  SheetTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+vi.mock('@/components/ui/drawer', () => ({
+  Drawer: ({
+    children,
+    direction,
+  }: {
+    children: React.ReactNode
+    direction?: string
+  }) => <div data-direction={direction}>{children}</div>,
+  DrawerClose: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DrawerContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  DrawerDescription: ({ children }: React.ComponentProps<'p'>) => <p>{children}</p>,
+  DrawerHeader: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  DrawerTitle: ({ children }: React.ComponentProps<'h2'>) => <h2>{children}</h2>,
+  DrawerTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
 import { NotificationsPanel } from '@/components/notifications-panel'
@@ -73,6 +86,7 @@ describe('NotificationsPanel', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    useIsMobileMock.mockReturnValue(false)
     useNotificationsMock.mockReturnValue({
       notifications: [],
       unreadCount: 0,
@@ -104,6 +118,7 @@ describe('NotificationsPanel', () => {
     })
 
     expect(container.textContent).toContain('9+')
+    expect(container.querySelector('[data-direction="right"]')).not.toBeNull()
   })
 
   it('routes status change review notifications to the session updates page and marks them as read', async () => {
@@ -140,5 +155,43 @@ describe('NotificationsPanel', () => {
 
     expect(markNotificationAsReadMock).toHaveBeenCalledWith('user-1', 'notification-1')
     expect(pushMock).toHaveBeenCalledWith('/pending-approvals/session-updates')
+  })
+
+  it('uses a bottom drawer on mobile and marks all notifications as read', async () => {
+    useIsMobileMock.mockReturnValue(true)
+    useNotificationsMock.mockReturnValue({
+      notifications: [
+        {
+          id: 'notification-1',
+          type: 'reschedule_request',
+          title: 'Reschedule Request',
+          body: 'Jordan Trainer requested a reschedule.',
+          read: false,
+          createdAt: '2026-04-06T10:00:00.000Z',
+        },
+      ],
+      unreadCount: 2,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<NotificationsPanel />)
+    })
+
+    const markAllButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Mark all as read',
+    )
+
+    if (!(markAllButton instanceof HTMLButtonElement)) {
+      throw new Error('Mark all button not found.')
+    }
+
+    await act(async () => {
+      markAllButton.click()
+    })
+
+    expect(container.querySelector('[data-direction="bottom"]')).not.toBeNull()
+    expect(markAllNotificationsAsReadMock).toHaveBeenCalledWith('user-1')
+    expect(invalidateQueriesMock).toHaveBeenCalledTimes(2)
   })
 })

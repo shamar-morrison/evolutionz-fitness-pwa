@@ -332,7 +332,7 @@ function ReportsPageContent() {
             <div className="space-y-6">
               <div className="grid gap-4 lg:grid-cols-3">
                 <Card>
-                  <CardContent className="p-6">
+                  <CardContent>
                     <p className="text-sm text-muted-foreground">
                       Total active trainer-client assignments
                     </p>
@@ -340,7 +340,7 @@ function ReportsPageContent() {
                   </CardContent>
                 </Card>
                 <Card>
-                  <CardContent className="p-6">
+                  <CardContent>
                     <p className="text-sm text-muted-foreground">Total sessions completed</p>
                     <p className="mt-2 text-3xl font-semibold">
                       {report.summary.totalSessionsCompleted}
@@ -348,7 +348,7 @@ function ReportsPageContent() {
                   </CardContent>
                 </Card>
                 <Card>
-                  <CardContent className="p-6">
+                  <CardContent>
                     <p className="text-sm text-muted-foreground">Total payout</p>
                     <p className="mt-2 text-3xl font-semibold">
                       {formatJmdCurrency(report.summary.totalPayout)}

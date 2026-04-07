@@ -229,7 +229,7 @@ export function AppSidebar() {
 
         {role === 'admin' ? (
           <SidebarGroup>
-            <SidebarGroupLabel>Pending Approvals</SidebarGroupLabel>
+            <SidebarGroupLabel>Notifications</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {adminApprovalItems.map((item) => {

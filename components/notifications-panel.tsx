@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { Bell, CheckCheck } from 'lucide-react'
+import { Bell, CheckCheck, X } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import {
@@ -10,18 +10,20 @@ import {
   markNotificationAsRead,
   useNotifications,
 } from '@/hooks/use-notifications'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { toast } from '@/hooks/use-toast'
 import { queryKeys } from '@/lib/query-keys'
 import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet'
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer'
 
 function getReviewHref(type: string) {
   if (type === 'reschedule_request') {
@@ -39,6 +41,7 @@ export function NotificationsPanel() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { profile, loading } = useAuth()
+  const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
   const [busyNotificationId, setBusyNotificationId] = useState<string | null>(null)
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false)
@@ -103,8 +106,8 @@ export function NotificationsPanel() {
   }
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
+    <Drawer open={open} onOpenChange={setOpen} direction={isMobile ? 'bottom' : 'right'}>
+      <DrawerTrigger asChild>
         <Button
           type="button"
           variant="outline"
@@ -119,96 +122,125 @@ export function NotificationsPanel() {
             </span>
           ) : null}
         </Button>
-      </SheetTrigger>
-      <SheetContent className="w-full sm:max-w-lg">
-        <SheetHeader>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <SheetTitle>Notifications</SheetTitle>
-              <SheetDescription>Recent updates for your PT workflow and assignments.</SheetDescription>
+      </DrawerTrigger>
+      <DrawerContent
+        className={
+          isMobile
+            ? 'max-h-[85vh] w-full overflow-hidden rounded-t-3xl p-0'
+            : 'h-full w-full overflow-hidden p-0 sm:max-w-lg'
+        }
+      >
+        <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
+          <DrawerHeader className="gap-4 px-4 py-4 sm:px-5 !text-left">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <DrawerTitle className="text-base">Notifications</DrawerTitle>
+                <DrawerDescription>
+                  Recent updates for your PT workflow and assignments.
+                </DrawerDescription>
+              </div>
+              <DrawerClose asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="-mr-2 shrink-0 rounded-full"
+                  aria-label="Close notifications"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </DrawerClose>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void handleMarkAllRead()}
-              disabled={isMarkingAllRead || unreadCount === 0}
-            >
-              <CheckCheck className="h-4 w-4" />
-              Mark all as read
-            </Button>
-          </div>
-        </SheetHeader>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleMarkAllRead()}
+                disabled={isMarkingAllRead || unreadCount === 0}
+              >
+                <CheckCheck className="h-4 w-4" />
+                Mark all as read
+              </Button>
+            </div>
+          </DrawerHeader>
+        </div>
 
-        <div className="mt-6 space-y-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 sm:px-5 sm:pb-6">
           {error ? (
             <p className="text-sm text-destructive">
               {error instanceof Error ? error.message : 'Failed to load notifications.'}
             </p>
           ) : notifications.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
               No notifications yet.
             </div>
           ) : (
-            notifications.map((notification) => {
-              const reviewHref = getReviewHref(notification.type)
-              const handleSelect = () =>
-                void handleNotificationClick(notification.id, notification.read)
+            <div className="space-y-3">
+              {notifications.map((notification) => {
+                const reviewHref = getReviewHref(notification.type)
+                const handleSelect = () =>
+                  void handleNotificationClick(notification.id, notification.read)
 
-              return (
-                <div
-                  key={notification.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={handleSelect}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      handleSelect()
-                    }
-                  }}
-                  className={`w-full rounded-xl border p-4 text-left transition-colors ${
-                    notification.read ? 'bg-background' : 'bg-amber-50/70'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <p className={`text-sm ${notification.read ? 'font-medium' : 'font-semibold'}`}>
-                        {notification.title}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{notification.body}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-                      </p>
+                return (
+                  <div
+                    key={notification.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={handleSelect}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        handleSelect()
+                      }
+                    }}
+                    className={`w-full rounded-2xl border px-4 py-4 text-left shadow-sm transition-colors ${
+                      notification.read ? 'bg-background' : 'bg-amber-50/70'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1.5">
+                        <p
+                          className={`text-sm ${notification.read ? 'font-medium' : 'font-semibold'}`}
+                        >
+                          {notification.title}
+                        </p>
+                        <p className="text-sm leading-6 text-muted-foreground">
+                          {notification.body}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                        </p>
+                      </div>
+                      {!notification.read && busyNotificationId !== notification.id ? (
+                        <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-red-600" />
+                      ) : null}
                     </div>
-                    {!notification.read && busyNotificationId !== notification.id ? (
-                      <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-red-600" />
+
+                    {reviewHref ? (
+                      <div className="mt-4">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={async (event) => {
+                            event.stopPropagation()
+                            await handleNotificationClick(notification.id, notification.read)
+                            setOpen(false)
+                            router.push(reviewHref)
+                          }}
+                        >
+                          Review
+                        </Button>
+                      </div>
                     ) : null}
                   </div>
-
-                  {reviewHref ? (
-                    <div className="mt-3">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={async (event) => {
-                          event.stopPropagation()
-                          await handleNotificationClick(notification.id, notification.read)
-                          setOpen(false)
-                          router.push(reviewHref)
-                        }}
-                      >
-                        Review
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              )
-            })
+                )
+              })}
+            </div>
           )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </DrawerContent>
+    </Drawer>
   )
 }
