@@ -24,10 +24,22 @@ const DELETE_USER_TIMEOUT_ERROR = 'Delete user request timed out after 10 second
 const DELETE_MEMBER_DEVICE_WARNING =
   'The member was deleted, but the device user may need to be manually removed from iVMS.'
 
-type QueryResult<T> = PromiseLike<{
+type QueryResult<
+  T,
+  TError extends {
+    message: string
+  } = {
+    message: string
+  },
+> = PromiseLike<{
   data: T | null
-  error: { message: string } | null
+  error: TError | null
 }>
+
+type CardCleanupError = {
+  message: string
+  code?: string | null
+}
 
 type DeleteMemberRow = {
   id: string
@@ -60,12 +72,12 @@ type DeleteMemberAdminClient = MemberPhotoStorageClient &
       }): {
         eq(column: 'card_no', value: string): {
           select(columns: 'card_no'): {
-            maybeSingle(): QueryResult<{ card_no: string }>
+            maybeSingle(): QueryResult<{ card_no: string }, CardCleanupError>
           }
         }
       }
     }
-    from(table: string): unknown
+    from(table: string): any
   }
 
 function createErrorResponse(error: string, status: number) {
@@ -282,7 +294,7 @@ export async function DELETE(
     }
 
     if (hasAssignedCard) {
-      const { data: clearedCard, error: clearedCardError } = await supabase
+      const { error: clearedCardError } = await supabase
         .from('cards')
         .update({
           status: 'available',
@@ -294,16 +306,111 @@ export async function DELETE(
         .maybeSingle()
 
       if (clearedCardError) {
-        throw new Error(`Failed to clear card ${cardNo}: ${clearedCardError.message}`)
-      }
-
-      if (!clearedCard) {
-        throw new Error(`Failed to clear card ${cardNo}: missing updated row.`)
+        if (clearedCardError.code !== 'PGRST116') {
+          throw new Error(`Failed to clear card ${cardNo}: ${clearedCardError.message}`)
+        }
       }
     }
 
     if (hasPhoto) {
       await deleteMemberPhotoObject(supabase, buildMemberPhotoPath(id))
+    }
+
+    const { data: ptSessionRows, error: ptSessionRowsError } = await supabase
+      .from('pt_sessions')
+      .select('id')
+      .eq('member_id', id)
+
+    if (ptSessionRowsError) {
+      throw new Error(`Failed to read PT sessions for member ${id}: ${ptSessionRowsError.message}`)
+    }
+
+    const ptSessionIds = Array.isArray(ptSessionRows)
+      ? ptSessionRows
+          .map((row) => row?.id)
+          .filter((sessionId): sessionId is string => typeof sessionId === 'string')
+      : []
+
+    if (ptSessionIds.length > 0) {
+      const { error: ptSessionChangesError } = await supabase
+        .from('pt_session_changes')
+        .delete()
+        .in('session_id', ptSessionIds)
+
+      if (ptSessionChangesError) {
+        throw new Error(
+          `Failed to delete PT session changes for member ${id}: ${ptSessionChangesError.message}`,
+        )
+      }
+
+      const { error: ptRescheduleRequestsError } = await supabase
+        .from('pt_reschedule_requests')
+        .delete()
+        .in('session_id', ptSessionIds)
+
+      if (ptRescheduleRequestsError) {
+        throw new Error(
+          `Failed to delete PT reschedule requests for member ${id}: ${ptRescheduleRequestsError.message}`,
+        )
+      }
+
+      const { error: ptSessionUpdateRequestsError } = await supabase
+        .from('pt_session_update_requests')
+        .delete()
+        .in('session_id', ptSessionIds)
+
+      if (ptSessionUpdateRequestsError) {
+        throw new Error(
+          `Failed to delete PT session update requests for member ${id}: ${ptSessionUpdateRequestsError.message}`,
+        )
+      }
+    }
+
+    const { error: ptSessionsDeleteError } = await supabase.from('pt_sessions').delete().eq('member_id', id)
+
+    if (ptSessionsDeleteError) {
+      throw new Error(`Failed to delete PT sessions for member ${id}: ${ptSessionsDeleteError.message}`)
+    }
+
+    const { data: trainerClientRows, error: trainerClientRowsError } = await supabase
+      .from('trainer_clients')
+      .select('id')
+      .eq('member_id', id)
+
+    if (trainerClientRowsError) {
+      throw new Error(
+        `Failed to read PT trainer assignments for member ${id}: ${trainerClientRowsError.message}`,
+      )
+    }
+
+    const trainerClientIds = Array.isArray(trainerClientRows)
+      ? trainerClientRows
+          .map((row) => row?.id)
+          .filter((assignmentId): assignmentId is string => typeof assignmentId === 'string')
+      : []
+
+    if (trainerClientIds.length > 0) {
+      const { error: trainingPlanDaysError } = await supabase
+        .from('training_plan_days')
+        .delete()
+        .in('assignment_id', trainerClientIds)
+
+      if (trainingPlanDaysError) {
+        throw new Error(
+          `Failed to delete PT training plan days for member ${id}: ${trainingPlanDaysError.message}`,
+        )
+      }
+    }
+
+    const { error: trainerClientsDeleteError } = await supabase
+      .from('trainer_clients')
+      .delete()
+      .eq('member_id', id)
+
+    if (trainerClientsDeleteError) {
+      throw new Error(
+        `Failed to delete PT trainer assignments for member ${id}: ${trainerClientsDeleteError.message}`,
+      )
     }
 
     const { data: deletedMember, error: deletedMemberError } = await supabase

@@ -36,6 +36,15 @@ type JobPollResult = QueryResult<{
   error: string | null
 }>
 
+type IdRow = {
+  id: string
+}
+
+type MutationResult = {
+  data: unknown
+  error: { message: string } | null
+}
+
 function buildDeleteMemberRow(overrides: Partial<{
   id: string
   employee_no: string | null
@@ -54,10 +63,38 @@ function buildDeleteMemberRow(overrides: Partial<{
 function createDeleteAdminClient({
   memberRow = buildDeleteMemberRow(),
   memberReadResult,
+  ptSessionRows = [],
+  ptSessionReadResult,
+  trainerClientRows = [],
+  trainerClientReadResult,
   cardUpdateResult = {
     data: { card_no: '0102857149' },
     error: null,
   } satisfies QueryResult<{ card_no: string }>,
+  ptSessionChangesDeleteResult = {
+    data: null,
+    error: null,
+  } satisfies MutationResult,
+  ptRescheduleRequestsDeleteResult = {
+    data: null,
+    error: null,
+  } satisfies MutationResult,
+  ptSessionUpdateRequestsDeleteResult = {
+    data: null,
+    error: null,
+  } satisfies MutationResult,
+  ptSessionsDeleteResult = {
+    data: null,
+    error: null,
+  } satisfies MutationResult,
+  trainingPlanDaysDeleteResult = {
+    data: null,
+    error: null,
+  } satisfies MutationResult,
+  trainerClientsDeleteResult = {
+    data: null,
+    error: null,
+  } satisfies MutationResult,
   removeResult = {
     data: [],
     error: null,
@@ -94,7 +131,17 @@ function createDeleteAdminClient({
     card_no: string | null
     photo_url: string | null
   }>
+  ptSessionRows?: IdRow[]
+  ptSessionReadResult?: QueryResult<IdRow[]>
+  trainerClientRows?: IdRow[]
+  trainerClientReadResult?: QueryResult<IdRow[]>
   cardUpdateResult?: QueryResult<{ card_no: string }>
+  ptSessionChangesDeleteResult?: MutationResult
+  ptRescheduleRequestsDeleteResult?: MutationResult
+  ptSessionUpdateRequestsDeleteResult?: MutationResult
+  ptSessionsDeleteResult?: MutationResult
+  trainingPlanDaysDeleteResult?: MutationResult
+  trainerClientsDeleteResult?: MutationResult
   removeResult?: { data: unknown; error: { message: string } | null }
   deleteResult?: QueryResult<{ id: string }>
   insertResult?: QueryResult<{ id: string }>
@@ -112,6 +159,8 @@ function createDeleteAdminClient({
     filters: Array<{ column: 'card_no'; value: string }>
   }> = []
   let pollIndex = 0
+  const ptSessionIds = ptSessionRows.map((row) => row.id)
+  const trainerClientIds = trainerClientRows.map((row) => row.id)
 
   return {
     client: {
@@ -193,6 +242,138 @@ function createDeleteAdminClient({
                       }
                     },
                   }
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'pt_sessions') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('id')
+              operations.push('read-pt-sessions')
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('member_id')
+                  expect(value).toBe('member-1')
+
+                  return Promise.resolve(
+                    ptSessionReadResult ?? {
+                      data: ptSessionRows,
+                      error: null,
+                    },
+                  )
+                },
+              }
+            },
+            delete() {
+              operations.push('delete-pt-sessions')
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('member_id')
+                  expect(value).toBe('member-1')
+                  return Promise.resolve(ptSessionsDeleteResult)
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'pt_session_changes') {
+          return {
+            delete() {
+              operations.push('delete-pt-session-changes')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('session_id')
+                  expect(values).toEqual(ptSessionIds)
+                  return Promise.resolve(ptSessionChangesDeleteResult)
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'pt_reschedule_requests') {
+          return {
+            delete() {
+              operations.push('delete-pt-reschedule-requests')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('session_id')
+                  expect(values).toEqual(ptSessionIds)
+                  return Promise.resolve(ptRescheduleRequestsDeleteResult)
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'pt_session_update_requests') {
+          return {
+            delete() {
+              operations.push('delete-pt-session-update-requests')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('session_id')
+                  expect(values).toEqual(ptSessionIds)
+                  return Promise.resolve(ptSessionUpdateRequestsDeleteResult)
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'trainer_clients') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('id')
+              operations.push('read-trainer-clients')
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('member_id')
+                  expect(value).toBe('member-1')
+
+                  return Promise.resolve(
+                    trainerClientReadResult ?? {
+                      data: trainerClientRows,
+                      error: null,
+                    },
+                  )
+                },
+              }
+            },
+            delete() {
+              operations.push('delete-trainer-clients')
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('member_id')
+                  expect(value).toBe('member-1')
+                  return Promise.resolve(trainerClientsDeleteResult)
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'training_plan_days') {
+          return {
+            delete() {
+              operations.push('delete-training-plan-days')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('assignment_id')
+                  expect(values).toEqual(trainerClientIds)
+                  return Promise.resolve(trainingPlanDaysDeleteResult)
                 },
               }
             },
@@ -344,7 +525,14 @@ describe('DELETE /api/members/[id]', () => {
     })
 
     expect(response.status).toBe(200)
-    expect(operations).toEqual(['read-member', 'delete-member'])
+    expect(operations).toEqual([
+      'read-member',
+      'read-pt-sessions',
+      'delete-pt-sessions',
+      'read-trainer-clients',
+      'delete-trainer-clients',
+      'delete-member',
+    ])
     expect(cardUpdateCalls).toEqual([])
     expect(removeCalls).toEqual([])
     expect(insertedJobs).toEqual([])
@@ -360,6 +548,8 @@ describe('DELETE /api/members/[id]', () => {
           card_no: '0102857149',
           photo_url: 'member-1.jpg',
         }),
+        ptSessionRows: [{ id: 'session-1' }, { id: 'session-2' }],
+        trainerClientRows: [{ id: 'assignment-1' }],
       })
     getSupabaseAdminClientMock.mockReturnValue(client)
 
@@ -374,6 +564,14 @@ describe('DELETE /api/members/[id]', () => {
       'read-member',
       'update-card',
       'delete-photo',
+      'read-pt-sessions',
+      'delete-pt-session-changes',
+      'delete-pt-reschedule-requests',
+      'delete-pt-session-update-requests',
+      'delete-pt-sessions',
+      'read-trainer-clients',
+      'delete-training-plan-days',
+      'delete-trainer-clients',
       'delete-member',
       'insert-job',
       'poll-job',
@@ -474,11 +672,48 @@ describe('DELETE /api/members/[id]', () => {
     })
 
     expect(response.status).toBe(500)
-    expect(operations).toEqual(['read-member', 'delete-member'])
+    expect(operations).toEqual([
+      'read-member',
+      'read-pt-sessions',
+      'delete-pt-sessions',
+      'read-trainer-clients',
+      'delete-trainer-clients',
+      'delete-member',
+    ])
     expect(insertedJobs).toEqual([])
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Failed to delete member member-1: Delete failed.',
+    })
+  })
+
+  it('returns an error when PT reschedule cleanup fails and skips later cleanup', async () => {
+    const { client, operations, insertedJobs } = createDeleteAdminClient({
+      ptSessionRows: [{ id: 'session-1' }],
+      ptRescheduleRequestsDeleteResult: {
+        data: null,
+        error: { message: 'Delete failed.' },
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await DELETE(new Request('http://localhost/api/members/member-1', {
+      method: 'DELETE',
+    }), {
+      params: Promise.resolve({ id: 'member-1' }),
+    })
+
+    expect(response.status).toBe(500)
+    expect(operations).toEqual([
+      'read-member',
+      'read-pt-sessions',
+      'delete-pt-session-changes',
+      'delete-pt-reschedule-requests',
+    ])
+    expect(insertedJobs).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Failed to delete PT reschedule requests for member member-1: Delete failed.',
     })
   })
 
@@ -512,6 +747,10 @@ describe('DELETE /api/members/[id]', () => {
     expect(operations).toEqual([
       'read-member',
       'update-card',
+      'read-pt-sessions',
+      'delete-pt-sessions',
+      'read-trainer-clients',
+      'delete-trainer-clients',
       'delete-member',
       'insert-job',
       'poll-job',

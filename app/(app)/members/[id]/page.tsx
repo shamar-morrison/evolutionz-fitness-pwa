@@ -19,17 +19,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   deleteMember,
@@ -67,6 +56,7 @@ export default function MemberDetailPage() {
     | 'unassign'
     | 'report-lost'
     | 'recover-card'
+    | 'release-slot'
     | 'delete-photo'
     | 'delete-member'
   >(null)
@@ -186,9 +176,12 @@ export default function MemberDetailPage() {
 
   const handleReleaseSlot = async () => {
     if (!member) return
+
     setIsActionLoading(true)
+
     try {
       await releaseMemberSlot(member)
+      setActiveDialog(null)
       toast({
         title: 'Slot released',
         description: `${buildMemberDisplayName(member.name, member.cardCode)}'s Hik slot was returned to the available pool.`,
@@ -455,36 +448,15 @@ export default function MemberDetailPage() {
                 ) : null}
 
                 {member.slotPlaceholderName ? (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="destructive"
-                        className="w-full"
-                        disabled={isActionLoading || member.deviceAccessState === 'released'}
-                      >
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        Release Slot
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Release Hik Slot?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will restore slot {member.slotPlaceholderName} on the Hik device and
-                          make it available for reassignment.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={handleReleaseSlot}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          Release Slot
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => setActiveDialog('release-slot')}
+                    disabled={isActionLoading || member.deviceAccessState === 'released'}
+                  >
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Release Slot
+                  </Button>
                 ) : null}
               </RoleGuard>
             </div>
@@ -662,6 +634,19 @@ export default function MemberDetailPage() {
         onConfirm={() => void handleRecoverCard()}
         onCancel={() => setActiveDialog(null)}
         isLoading={isActionLoading}
+      />
+
+      <ConfirmDialog
+        open={activeDialog === 'release-slot'}
+        onOpenChange={(open) => setActiveDialog(open ? 'release-slot' : null)}
+        title="Release Hik Slot?"
+        description={`This will restore slot ${member.slotPlaceholderName} on the Hik device and make it available for reassignment.`}
+        confirmLabel="Release Slot"
+        cancelLabel="Cancel"
+        onConfirm={() => void handleReleaseSlot()}
+        onCancel={() => setActiveDialog(null)}
+        isLoading={isActionLoading}
+        variant="destructive"
       />
 
       <ConfirmDialog
