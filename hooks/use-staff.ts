@@ -6,16 +6,19 @@ import { queryKeys } from '@/lib/query-keys'
 
 const STAFF_QUERY_STALE_TIME_MS = 60 * 60 * 5000 // 5 hours
 
-export function useStaff(options: { archived?: boolean } = {}) {
+export function useStaff(options: { archived?: boolean; enabled?: boolean } = {}) {
+  const enabled = options.enabled ?? true
+
   const staffQuery = useQuery({
     queryKey: options.archived ? queryKeys.staff.archived : queryKeys.staff.all,
     queryFn: () => fetchStaff(options),
+    enabled,
     staleTime: STAFF_QUERY_STALE_TIME_MS,
   })
 
   return {
     staff: staffQuery.data ?? [],
-    isLoading: staffQuery.isLoading,
+    isLoading: enabled ? staffQuery.isLoading : false,
     error: staffQuery.error ?? null,
     refetch: () => staffQuery.refetch(),
   }

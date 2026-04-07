@@ -29,22 +29,12 @@ import {
 
 const staffTabs: StaffListFilter[] = ['All', ...STAFF_TITLES]
 
-function StaffPageLoading() {
+function StaffListLoading() {
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <Skeleton className="h-9 w-24" />
-          <Skeleton className="h-5 w-72" />
-        </div>
-        <Skeleton className="h-10 w-28" />
-      </div>
-      <Skeleton className="h-10 w-full max-w-3xl" />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <Skeleton key={index} className="h-36 w-full" />
-        ))}
-      </div>
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" data-testid="staff-list-loading">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <Skeleton key={index} className="h-36 w-full" />
+      ))}
     </div>
   )
 }
@@ -54,7 +44,7 @@ function StaffPageContent() {
   const [activeTab, setActiveTab] = useState<StaffListFilter>('All')
   const [showAddModal, setShowAddModal] = useState(false)
   const activeStaffQuery = useStaff()
-  const archivedStaffQuery = useStaff({ archived: true })
+  const archivedStaffQuery = useStaff({ archived: true, enabled: activeView === 'archived' })
   const staff = activeView === 'archived' ? archivedStaffQuery.staff : activeStaffQuery.staff
   const isLoading = activeView === 'archived' ? archivedStaffQuery.isLoading : activeStaffQuery.isLoading
   const error = activeView === 'archived' ? archivedStaffQuery.error : activeStaffQuery.error
@@ -63,18 +53,6 @@ function StaffPageContent() {
     () => filterStaffByTitle(staff, activeTab),
     [activeTab, staff],
   )
-
-  if (error) {
-    return (
-      <div className="flex h-[50vh] items-center justify-center">
-        <p className="text-destructive">Failed to load staff</p>
-      </div>
-    )
-  }
-
-  if (isLoading) {
-    return <StaffPageLoading />
-  }
 
   return (
     <div className="space-y-6">
@@ -120,7 +98,13 @@ function StaffPageContent() {
         </div>
       </Tabs>
 
-      {filteredStaff.length === 0 ? (
+      {error ? (
+        <div className="flex min-h-56 items-center justify-center rounded-lg border">
+          <p className="text-destructive">Failed to load staff</p>
+        </div>
+      ) : isLoading ? (
+        <StaffListLoading />
+      ) : filteredStaff.length === 0 ? (
         <Empty className="border">
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -135,8 +119,8 @@ function StaffPageContent() {
                   ? 'Archived staff accounts will appear here for admin reference.'
                   : `No archived staff members currently use the ${activeTab} title.`
                 : activeTab === 'All'
-                ? 'Create the first staff account to start managing access.'
-                : `No staff members currently use the ${activeTab} title.`}
+                  ? 'Create the first staff account to start managing access.'
+                  : `No staff members currently use the ${activeTab} title.`}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -151,7 +135,7 @@ function StaffPageContent() {
                     photoUrl={profile.photoUrl}
                     size="lg"
                     className="h-16 w-16 text-xl"
-                      />
+                  />
                   <div className="min-w-0 flex-1 space-y-3">
                     <div className="space-y-1">
                       <h2 className="truncate text-lg font-semibold">{profile.name}</h2>
