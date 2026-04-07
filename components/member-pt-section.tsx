@@ -42,23 +42,32 @@ async function invalidatePtQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   memberId: string,
   assignmentId?: string,
-  trainerId?: string,
+  trainerIds: ReadonlyArray<string | null | undefined> = [],
 ) {
+  const affectedTrainerIds = Array.from(
+    new Set(
+      trainerIds.filter((trainerId): trainerId is string => typeof trainerId === 'string'),
+    ),
+  )
+
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.ptScheduling.assignments }),
     assignmentId
       ? queryClient.invalidateQueries({ queryKey: queryKeys.ptScheduling.assignment(assignmentId) })
       : Promise.resolve(),
     queryClient.invalidateQueries({ queryKey: queryKeys.ptScheduling.memberAssignment(memberId) }),
-    trainerId
-      ? queryClient.invalidateQueries({
-          queryKey: queryKeys.ptScheduling.trainerAssignments(trainerId),
-        })
-      : Promise.resolve(),
     queryClient.invalidateQueries({
       queryKey: queryKeys.ptScheduling.sessions({}),
       exact: false,
     }),
+    ...affectedTrainerIds.flatMap((trainerId) => [
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.ptScheduling.trainerAssignments(trainerId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.staff.detail(trainerId),
+      }),
+    ]),
   ])
 }
 
@@ -86,7 +95,10 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
   }, [allAssignmentsQuery.data, staff])
 
   const handleAssignmentSaved = async (nextAssignment: TrainerClient, mode: 'create' | 'edit') => {
-    await invalidatePtQueries(queryClient, memberId, nextAssignment.id, nextAssignment.trainerId)
+    await invalidatePtQueries(queryClient, memberId, nextAssignment.id, [
+      assignment?.trainerId,
+      nextAssignment.trainerId,
+    ])
 
     if (mode === 'create') {
       setPendingGenerateAssignment(nextAssignment)
@@ -105,7 +117,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
         cancelFutureSessions,
       })
       setShowRemoveDialog(false)
-      await invalidatePtQueries(queryClient, memberId, assignment.id, assignment.trainerId)
+      await invalidatePtQueries(queryClient, memberId, assignment.id, [assignment.trainerId])
       toast({
         title: 'Assignment removed',
         description: cancelFutureSessions

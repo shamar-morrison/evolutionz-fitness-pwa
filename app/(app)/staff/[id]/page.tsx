@@ -3,7 +3,7 @@
 import { format } from 'date-fns'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Archive, ArrowLeft, Pencil, Trash2, User } from 'lucide-react'
+import { AlertCircle, Archive, ArrowLeft, Pencil, Trash2, User } from 'lucide-react'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EditStaffModal } from '@/components/edit-staff-modal'
 import { MemberAvatar } from '@/components/member-avatar'
@@ -12,13 +12,22 @@ import { TrainerClientsSection } from '@/components/trainer-clients-section'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useStaffProfile } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
 import { queryKeys } from '@/lib/query-keys'
 import { archiveStaff, deleteStaff, deleteStaffPhoto } from '@/lib/staff-actions'
-import { formatStaffGenderLabel, formatStaffTitles, hasStaffTitle } from '@/lib/staff'
+import { formatStaffGenderLabel, hasStaffTitle } from '@/lib/staff'
 import { useQueryClient } from '@tanstack/react-query'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 function formatCreatedAt(value: string) {
   const date = new Date(value)
@@ -39,7 +48,9 @@ function StaffDetailPageContent() {
   const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
-  const [activeDialog, setActiveDialog] = useState<null | 'archive-staff' | 'delete-photo' | 'delete-staff'>(null)
+  const [activeDialog, setActiveDialog] = useState<
+    null | 'archive-blocked' | 'archive-staff' | 'delete-photo' | 'delete-staff'
+  >(null)
 
   useEffect(() => {
     setAvatarPhotoUrl(profile?.photoUrl ?? null)
@@ -180,11 +191,22 @@ function StaffDetailPageContent() {
             icon: Archive,
             label: 'Archive Staff',
           }
-  const isRemovalBlocked = !isArchived && removal?.mode === 'blocked'
-  const blockedRemovalMessage =
+  const blockedArchiveMessage =
     removal && removal.activeAssignments > 0
-      ? `This trainer still has ${removal.activeAssignments} active PT assignment${removal.activeAssignments === 1 ? '' : 's'}. Reassign or inactivate them before removing this staff account.`
+      ? `This trainer still has ${removal.activeAssignments} active PT assignment${removal.activeAssignments === 1 ? '' : 's'}. Reassign or inactivate them before archiving this staff account.`
       : null
+  const handleRemovalActionClick = () => {
+    if (!removalAction) {
+      return
+    }
+
+    if (removal?.mode === 'blocked') {
+      setActiveDialog('archive-blocked')
+      return
+    }
+
+    setActiveDialog(removalAction.dialog)
+  }
 
   return (
     <div className="space-y-6">
@@ -196,10 +218,13 @@ function StaffDetailPageContent() {
       </div>
 
       {isArchived ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          This staff account was archived on {formatCreatedAt(profile.archivedAt ?? profile.created_at)}.
-          Archived accounts are read-only and cannot sign in.
-        </div>
+        <Alert variant="warning">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            This staff account was archived on {formatCreatedAt(profile.archivedAt ?? profile.created_at)}.
+            Archived accounts are read-only and cannot sign in.
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -261,16 +286,12 @@ function StaffDetailPageContent() {
                 <Button
                   variant="destructive"
                   className="w-full"
-                  onClick={() => setActiveDialog(removalAction.dialog)}
-                  disabled={isActionLoading || isRemovalBlocked}
+                  onClick={handleRemovalActionClick}
+                  disabled={isActionLoading}
                 >
                   <removalAction.icon className="h-4 w-4" />
                   {removalAction.label}
                 </Button>
-              ) : null}
-
-              {isRemovalBlocked && blockedRemovalMessage ? (
-                <p className="text-sm text-muted-foreground">{blockedRemovalMessage}</p>
               ) : null}
             </div>
           </CardContent>
@@ -372,6 +393,26 @@ function StaffDetailPageContent() {
         isLoading={isActionLoading}
         variant="destructive"
       />
+
+      <Dialog
+        open={activeDialog === 'archive-blocked'}
+        onOpenChange={(open) => setActiveDialog(open ? 'archive-blocked' : null)}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Unable to archive staff account</DialogTitle>
+            <DialogDescription>
+              {blockedArchiveMessage ??
+                'This trainer still has active PT assignments. Reassign or inactivate them before archiving this staff account.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" onClick={() => setActiveDialog(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={activeDialog === 'archive-staff'}
