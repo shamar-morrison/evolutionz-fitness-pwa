@@ -110,6 +110,9 @@ export function PendingApprovalsPageContent({
         queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all(profile.id) }),
       )
       invalidations.push(
+        queryClient.invalidateQueries({ queryKey: queryKeys.notifications.archived(profile.id) }),
+      )
+      invalidations.push(
         queryClient.invalidateQueries({
           queryKey: queryKeys.notifications.unreadCount(profile.id),
         }),

@@ -17,6 +17,7 @@ type NotificationRow = {
   read: boolean
   metadata: Record<string, unknown> | null
   created_at: string
+  archived_at?: string | null
 }
 
 type NotificationInsertPayload = {
@@ -37,6 +38,36 @@ async function fetchNotifications(profileId: string) {
 
   if (error) {
     throw new Error(`Failed to load notifications: ${error.message}`)
+  }
+
+  return ((data ?? []) as NotificationRow[])
+    .map((row) =>
+      normalizeNotification({
+        id: row.id,
+        recipientId: row.recipient_id,
+        type: row.type,
+        title: row.title,
+        body: row.body,
+        read: row.read,
+        metadata: row.metadata,
+        createdAt: row.created_at,
+      }),
+    )
+    .filter((notification): notification is Notification => Boolean(notification))
+}
+
+async function fetchArchivedNotifications(profileId: string) {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id, recipient_id, type, title, body, read, metadata, created_at, archived_at')
+    .eq('recipient_id', profileId)
+    .not('archived_at', 'is', null)
+    .order('archived_at', { ascending: false })
+    .limit(50)
+
+  if (error) {
+    throw new Error(`Failed to load archived notifications: ${error.message}`)
   }
 
   return ((data ?? []) as NotificationRow[])
@@ -232,6 +263,24 @@ export function useNotifications(profileId: string) {
     error: notificationsQuery.error ?? unreadCountQuery.error ?? null,
     refresh: async () => {
       await Promise.all([notificationsQuery.refetch(), unreadCountQuery.refetch()])
+    },
+  }
+}
+
+export function useArchivedNotifications(profileId: string, enabled: boolean) {
+  const archivedNotificationsQuery = useQuery({
+    queryKey: queryKeys.notifications.archived(profileId),
+    queryFn: () => fetchArchivedNotifications(profileId),
+    enabled: Boolean(profileId) && enabled,
+    staleTime: 0,
+  })
+
+  return {
+    notifications: archivedNotificationsQuery.data ?? [],
+    isLoading: archivedNotificationsQuery.isLoading,
+    error: archivedNotificationsQuery.error ?? null,
+    refresh: async () => {
+      await archivedNotificationsQuery.refetch()
     },
   }
 }

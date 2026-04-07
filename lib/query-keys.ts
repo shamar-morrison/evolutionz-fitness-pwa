@@ -23,6 +23,7 @@ export const queryKeys = {
   },
   notifications: {
     all: (profileId: string) => ['notifications', profileId] as const,
+    archived: (profileId: string) => ['notifications', profileId, 'archived'] as const,
     unreadCount: (profileId: string) => ['notifications', profileId, 'unread-count'] as const,
   },
   rescheduleRequests: {

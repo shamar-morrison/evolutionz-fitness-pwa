@@ -12,6 +12,7 @@ const {
   markAllNotificationsAsReadMock,
   markNotificationAsReadMock,
   pushMock,
+  useArchivedNotificationsMock,
   useIsMobileMock,
   useNotificationsMock,
 } = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ const {
   markAllNotificationsAsReadMock: vi.fn().mockResolvedValue(undefined),
   markNotificationAsReadMock: vi.fn().mockResolvedValue(undefined),
   pushMock: vi.fn(),
+  useArchivedNotificationsMock: vi.fn(),
   useIsMobileMock: vi.fn(),
   useNotificationsMock: vi.fn(),
 }))
@@ -55,6 +57,7 @@ vi.mock('@/hooks/use-notifications', () => ({
   archiveNotification: archiveNotificationMock,
   markAllNotificationsAsRead: markAllNotificationsAsReadMock,
   markNotificationAsRead: markNotificationAsReadMock,
+  useArchivedNotifications: useArchivedNotificationsMock,
   useNotifications: useNotificationsMock,
 }))
 
@@ -82,6 +85,79 @@ vi.mock('@/components/ui/drawer', () => ({
   DrawerTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
+vi.mock('@/components/ui/tabs', async () => {
+  const React = await import('react')
+
+  const TabsContext = React.createContext<{
+    value: string
+    setValue: (value: string) => void
+  } | null>(null)
+
+  function Tabs({
+    children,
+    value,
+    onValueChange,
+  }: {
+    children: React.ReactNode
+    value: string
+    onValueChange: (value: string) => void
+    className?: string
+  }) {
+    return (
+      <TabsContext.Provider value={{ value, setValue: onValueChange }}>
+        <div>{children}</div>
+      </TabsContext.Provider>
+    )
+  }
+
+  function TabsList({ children }: { children: React.ReactNode }) {
+    return <div>{children}</div>
+  }
+
+  function TabsTrigger({
+    children,
+    value,
+  }: {
+    children: React.ReactNode
+    value: string
+  }) {
+    const context = React.useContext(TabsContext)
+
+    if (!context) {
+      return null
+    }
+
+    return (
+      <button type="button" onClick={() => context.setValue(value)}>
+        {children}
+      </button>
+    )
+  }
+
+  function TabsContent({
+    children,
+    value,
+  }: {
+    children: React.ReactNode
+    value: string
+  }) {
+    const context = React.useContext(TabsContext)
+
+    if (!context || context.value !== value) {
+      return null
+    }
+
+    return <div>{children}</div>
+  }
+
+  return {
+    Tabs,
+    TabsContent,
+    TabsList,
+    TabsTrigger,
+  }
+})
+
 import { NotificationsPanel } from '@/components/notifications-panel'
 
 describe('NotificationsPanel', () => {
@@ -105,6 +181,11 @@ describe('NotificationsPanel', () => {
     useNotificationsMock.mockReturnValue({
       notifications: [],
       unreadCount: 0,
+      error: null,
+    })
+    useArchivedNotificationsMock.mockReturnValue({
+      notifications: [],
+      isLoading: false,
       error: null,
     })
   })
@@ -213,6 +294,9 @@ describe('NotificationsPanel', () => {
     })
 
     expect(archiveNotificationMock).toHaveBeenCalledWith('user-1', 'notification-1', 'admin')
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1', 'archived'],
+    })
     expect(markNotificationAsReadMock).not.toHaveBeenCalled()
     expect(pushMock).not.toHaveBeenCalled()
   })
@@ -316,6 +400,105 @@ describe('NotificationsPanel', () => {
     expect(invalidateQueriesMock).toHaveBeenCalledTimes(2)
   })
 
+  it('shows archived notifications in a read-only archived tab', async () => {
+    useNotificationsMock.mockReturnValue({
+      notifications: [
+        {
+          id: 'notification-1',
+          type: 'status_change_denied',
+          title: 'Inbox Notification',
+          body: 'Current inbox item.',
+          read: true,
+          createdAt: '2026-04-06T10:00:00.000Z',
+        },
+      ],
+      unreadCount: 0,
+      error: null,
+    })
+    useArchivedNotificationsMock.mockReturnValue({
+      notifications: [
+        {
+          id: 'notification-archived',
+          type: 'status_change_request',
+          title: 'Archived Notification',
+          body: 'Archived history item.',
+          read: false,
+          createdAt: '2026-04-05T10:00:00.000Z',
+        },
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<NotificationsPanel />)
+    })
+
+    const archivedTab = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Archived',
+    )
+
+    if (!(archivedTab instanceof HTMLButtonElement)) {
+      throw new Error('Archived tab not found.')
+    }
+
+    await act(async () => {
+      archivedTab.click()
+    })
+
+    expect(container.textContent).toContain('Archived Notification')
+    expect(container.textContent).not.toContain('Inbox Notification')
+    expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent?.trim() === 'Review')).toBe(false)
+    expect(container.querySelector('button[aria-label="Archive Archived Notification"]')).toBeNull()
+
+    const archivedCard = Array.from(container.querySelectorAll('div')).find((element) =>
+      element.textContent?.includes('Archived Notification'),
+    )
+
+    expect(archivedCard?.getAttribute('role')).not.toBe('button')
+  })
+
+  it('shows archived notifications for staff accounts too', async () => {
+    authState.profile = {
+      id: 'user-1',
+      name: 'Staff User',
+      role: 'staff',
+      titles: ['Trainer'],
+    }
+    useArchivedNotificationsMock.mockReturnValue({
+      notifications: [
+        {
+          id: 'notification-archived',
+          type: 'reschedule_approved',
+          title: 'Archived Staff Notification',
+          body: 'Staff archive history item.',
+          read: true,
+          createdAt: '2026-04-05T10:00:00.000Z',
+        },
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<NotificationsPanel />)
+    })
+
+    const archivedTab = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Archived',
+    )
+
+    if (!(archivedTab instanceof HTMLButtonElement)) {
+      throw new Error('Archived tab not found.')
+    }
+
+    await act(async () => {
+      archivedTab.click()
+    })
+
+    expect(container.textContent).toContain('Archived Staff Notification')
+  })
+
   it('archives clearable notifications from the Clear All action', async () => {
     useNotificationsMock.mockReturnValue({
       notifications: [
@@ -357,7 +540,10 @@ describe('NotificationsPanel', () => {
     })
 
     expect(archiveClearableNotificationsMock).toHaveBeenCalledWith('user-1', 'admin')
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1', 'archived'],
+    })
     expect(markAllNotificationsAsReadMock).not.toHaveBeenCalled()
-    expect(invalidateQueriesMock).toHaveBeenCalledTimes(2)
+    expect(invalidateQueriesMock).toHaveBeenCalledTimes(3)
   })
 })

@@ -3,6 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { queryKeys } from '@/lib/query-keys'
 
 const {
   invalidateQueriesMock,
@@ -191,5 +192,41 @@ describe('PendingApprovalsPageContent loading wiring', () => {
 
     deferred.resolve()
     await flushAsyncWork()
+  })
+
+  it('invalidates archived notifications after an approval review archives matching requests', async () => {
+    reviewSessionUpdateRequestMock.mockResolvedValue(undefined)
+
+    await act(async () => {
+      root.render(<PendingApprovalsPageContent view="session-updates" />)
+    })
+
+    const reviewButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Review',
+    )
+
+    if (!(reviewButton instanceof HTMLButtonElement)) {
+      throw new Error('Review button not found.')
+    }
+
+    await act(async () => {
+      reviewButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const approveButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Approve',
+    )
+
+    if (!(approveButton instanceof HTMLButtonElement)) {
+      throw new Error('Approve button not found.')
+    }
+
+    await act(async () => {
+      approveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: queryKeys.notifications.archived('admin-1'),
+    })
   })
 })
