@@ -6,7 +6,10 @@ import {
   readPtRescheduleRequests,
   readPtSessionRowById,
 } from '@/lib/pt-scheduling-server'
-import { insertNotifications } from '@/lib/pt-notifications-server'
+import {
+  archiveResolvedRequestNotifications,
+  insertNotifications,
+} from '@/lib/pt-notifications-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -173,6 +176,12 @@ export async function PATCH(
         },
       ])
     }
+
+    await archiveResolvedRequestNotifications(supabase, {
+      requestId: existingRequest.id,
+      type: 'reschedule_request',
+      archivedAt: reviewTimestamp,
+    })
 
     const [reviewedRequest] = await readPtRescheduleRequests(supabase, { id: existingRequest.id })
 

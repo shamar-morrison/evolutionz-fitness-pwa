@@ -6,12 +6,15 @@ import { Bell, CheckCheck, X } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import {
+  archiveClearableNotifications,
+  archiveNotification,
   markAllNotificationsAsRead,
   markNotificationAsRead,
   useNotifications,
 } from '@/hooks/use-notifications'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { toast } from '@/hooks/use-toast'
+import { isNotificationArchivable } from '@/lib/notification-archive'
 import { queryKeys } from '@/lib/query-keys'
 import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
@@ -44,7 +47,9 @@ export function NotificationsPanel() {
   const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
   const [busyNotificationId, setBusyNotificationId] = useState<string | null>(null)
+  const [archivingNotificationId, setArchivingNotificationId] = useState<string | null>(null)
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false)
+  const [isArchivingAll, setIsArchivingAll] = useState(false)
   const profileId = profile?.id ?? ''
   const { notifications, unreadCount, error } = useNotifications(profileId)
 
@@ -52,7 +57,11 @@ export function NotificationsPanel() {
     return null
   }
 
+  const profileRole = profile.role
   const unreadBadgeLabel = unreadCount > 9 ? '9+' : String(unreadCount)
+  const hasClearableNotifications = notifications.some((notification) =>
+    isNotificationArchivable(notification, profileRole),
+  )
 
   const invalidateQueries = async () => {
     await Promise.all([
@@ -105,6 +114,46 @@ export function NotificationsPanel() {
     }
   }
 
+  const handleArchiveNotification = async (notificationId: string) => {
+    setArchivingNotificationId(notificationId)
+
+    try {
+      await archiveNotification(profileId, notificationId, profileRole)
+      await invalidateQueries()
+    } catch (notificationError) {
+      toast({
+        title: 'Archive failed',
+        description:
+          notificationError instanceof Error
+            ? notificationError.message
+            : 'Failed to archive the notification.',
+        variant: 'destructive',
+      })
+    } finally {
+      setArchivingNotificationId(null)
+    }
+  }
+
+  const handleClearAll = async () => {
+    setIsArchivingAll(true)
+
+    try {
+      await archiveClearableNotifications(profileId, profileRole)
+      await invalidateQueries()
+    } catch (notificationError) {
+      toast({
+        title: 'Clear all failed',
+        description:
+          notificationError instanceof Error
+            ? notificationError.message
+            : 'Failed to archive notifications.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsArchivingAll(false)
+    }
+  }
+
   return (
     <Drawer open={open} onOpenChange={setOpen} direction={isMobile ? 'bottom' : 'right'}>
       <DrawerTrigger asChild>
@@ -151,13 +200,28 @@ export function NotificationsPanel() {
                 </Button>
               </DrawerClose>
             </div>
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleClearAll()}
+                disabled={!hasClearableNotifications || isArchivingAll || archivingNotificationId !== null}
+              >
+                <X className="h-4 w-4" />
+                Clear All
+              </Button>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => void handleMarkAllRead()}
-                disabled={isMarkingAllRead || unreadCount === 0}
+                disabled={
+                  isMarkingAllRead ||
+                  unreadCount === 0 ||
+                  isArchivingAll ||
+                  archivingNotificationId !== null
+                }
               >
                 <CheckCheck className="h-4 w-4" />
                 Mark all as read
@@ -181,6 +245,12 @@ export function NotificationsPanel() {
                 const reviewHref = getReviewHref(notification.type)
                 const handleSelect = () =>
                   void handleNotificationClick(notification.id, notification.read)
+                const isArchivable = isNotificationArchivable(notification, profileRole)
+                const showArchiveButton = isArchivable
+                const archiveButtonVisibilityClass =
+                  isMobile || archivingNotificationId === notification.id
+                  ? 'pointer-events-auto opacity-100'
+                  : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100'
 
                 return (
                   <div
@@ -194,12 +264,34 @@ export function NotificationsPanel() {
                         handleSelect()
                       }
                     }}
-                    className={`w-full rounded-2xl border px-4 py-4 text-left shadow-sm transition-colors ${
+                    className={`group relative w-full rounded-2xl border px-4 py-4 text-left shadow-sm transition-colors ${
                       notification.read ? 'bg-background' : 'bg-amber-50/70'
                     }`}
                   >
+                    {showArchiveButton ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        loading={archivingNotificationId === notification.id}
+                        disabled={
+                          isArchivingAll ||
+                          (archivingNotificationId !== null &&
+                            archivingNotificationId !== notification.id)
+                        }
+                        aria-label={`Archive ${notification.title}`}
+                        className={`absolute right-3 top-3 z-10 rounded-full bg-background/80 ${archiveButtonVisibilityClass}`}
+                        onClick={async (event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          await handleArchiveNotification(notification.id)
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    ) : null}
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-1.5">
+                      <div className={`min-w-0 space-y-1.5 ${showArchiveButton ? 'pr-10' : ''}`}>
                         <p
                           className={`text-sm ${notification.read ? 'font-medium' : 'font-semibold'}`}
                         >

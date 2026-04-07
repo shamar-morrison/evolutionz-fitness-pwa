@@ -5,6 +5,9 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  authState,
+  archiveClearableNotificationsMock,
+  archiveNotificationMock,
   invalidateQueriesMock,
   markAllNotificationsAsReadMock,
   markNotificationAsReadMock,
@@ -12,6 +15,17 @@ const {
   useIsMobileMock,
   useNotificationsMock,
 } = vi.hoisted(() => ({
+  authState: {
+    profile: {
+      id: 'user-1',
+      name: 'Admin User',
+      role: 'admin' as 'admin' | 'staff',
+      titles: ['Owner'],
+    },
+    loading: false,
+  },
+  archiveClearableNotificationsMock: vi.fn().mockResolvedValue(undefined),
+  archiveNotificationMock: vi.fn().mockResolvedValue(undefined),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   markAllNotificationsAsReadMock: vi.fn().mockResolvedValue(undefined),
   markNotificationAsReadMock: vi.fn().mockResolvedValue(undefined),
@@ -33,18 +47,12 @@ vi.mock('next/navigation', () => ({
 }))
 
 vi.mock('@/contexts/auth-context', () => ({
-  useAuth: () => ({
-    profile: {
-      id: 'user-1',
-      name: 'Admin User',
-      role: 'admin',
-      titles: ['Owner'],
-    },
-    loading: false,
-  }),
+  useAuth: () => authState,
 }))
 
 vi.mock('@/hooks/use-notifications', () => ({
+  archiveClearableNotifications: archiveClearableNotificationsMock,
+  archiveNotification: archiveNotificationMock,
   markAllNotificationsAsRead: markAllNotificationsAsReadMock,
   markNotificationAsRead: markNotificationAsReadMock,
   useNotifications: useNotificationsMock,
@@ -86,6 +94,13 @@ describe('NotificationsPanel', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    authState.profile = {
+      id: 'user-1',
+      name: 'Admin User',
+      role: 'admin',
+      titles: ['Owner'],
+    }
+    authState.loading = false
     useIsMobileMock.mockReturnValue(false)
     useNotificationsMock.mockReturnValue({
       notifications: [],
@@ -157,6 +172,105 @@ describe('NotificationsPanel', () => {
     expect(pushMock).toHaveBeenCalledWith('/pending-approvals/session-updates')
   })
 
+  it('shows an archive control for read request notifications on admin accounts', async () => {
+    useNotificationsMock.mockReturnValue({
+      notifications: [
+        {
+          id: 'notification-1',
+          type: 'reschedule_request',
+          title: 'Reschedule Request',
+          body: 'Jordan Trainer requested a reschedule.',
+          read: true,
+          createdAt: '2026-04-06T10:00:00.000Z',
+        },
+        {
+          id: 'notification-2',
+          type: 'reschedule_request',
+          title: 'Reschedule Request',
+          body: 'Jordan Trainer requested a reschedule.',
+          read: false,
+          createdAt: '2026-04-06T11:00:00.000Z',
+        },
+      ],
+      unreadCount: 1,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<NotificationsPanel />)
+    })
+
+    const archiveButton = container.querySelector('button[aria-label="Archive Reschedule Request"]')
+
+    expect(archiveButton).not.toBeNull()
+
+    if (!(archiveButton instanceof HTMLButtonElement)) {
+      throw new Error('Archive button not found.')
+    }
+
+    await act(async () => {
+      archiveButton.click()
+    })
+
+    expect(archiveNotificationMock).toHaveBeenCalledWith('user-1', 'notification-1', 'admin')
+    expect(markNotificationAsReadMock).not.toHaveBeenCalled()
+    expect(pushMock).not.toHaveBeenCalled()
+  })
+
+  it('does not show an archive control for unread request notifications on admin accounts', async () => {
+    useNotificationsMock.mockReturnValue({
+      notifications: [
+        {
+          id: 'notification-1',
+          type: 'status_change_request',
+          title: 'Session Update Request',
+          body: 'Jordan Trainer requested a completed mark.',
+          read: false,
+          createdAt: '2026-04-06T10:00:00.000Z',
+        },
+      ],
+      unreadCount: 1,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<NotificationsPanel />)
+    })
+
+    expect(
+      container.querySelector('button[aria-label="Archive Session Update Request"]'),
+    ).toBeNull()
+  })
+
+  it('does not show an archive control for read request notifications on staff accounts', async () => {
+    authState.profile = {
+      id: 'user-1',
+      name: 'Staff User',
+      role: 'staff',
+      titles: ['Trainer'],
+    }
+    useNotificationsMock.mockReturnValue({
+      notifications: [
+        {
+          id: 'notification-1',
+          type: 'reschedule_request',
+          title: 'Reschedule Request',
+          body: 'Jordan Trainer requested a reschedule.',
+          read: true,
+          createdAt: '2026-04-06T10:00:00.000Z',
+        },
+      ],
+      unreadCount: 0,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<NotificationsPanel />)
+    })
+
+    expect(container.querySelector('button[aria-label="Archive Reschedule Request"]')).toBeNull()
+  })
+
   it('uses a bottom drawer on mobile and marks all notifications as read', async () => {
     useIsMobileMock.mockReturnValue(true)
     useNotificationsMock.mockReturnValue({
@@ -181,9 +295,15 @@ describe('NotificationsPanel', () => {
     const markAllButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent?.trim() === 'Mark all as read',
     )
+    const clearAllButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Clear All',
+    )
 
     if (!(markAllButton instanceof HTMLButtonElement)) {
       throw new Error('Mark all button not found.')
+    }
+    if (!(clearAllButton instanceof HTMLButtonElement)) {
+      throw new Error('Clear All button not found.')
     }
 
     await act(async () => {
@@ -191,7 +311,53 @@ describe('NotificationsPanel', () => {
     })
 
     expect(container.querySelector('[data-direction="bottom"]')).not.toBeNull()
+    expect(clearAllButton.disabled).toBe(true)
     expect(markAllNotificationsAsReadMock).toHaveBeenCalledWith('user-1')
+    expect(invalidateQueriesMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('archives clearable notifications from the Clear All action', async () => {
+    useNotificationsMock.mockReturnValue({
+      notifications: [
+        {
+          id: 'notification-1',
+          type: 'status_change_request',
+          title: 'Session Update Request',
+          body: 'Jordan Trainer requested a completed mark.',
+          read: true,
+          createdAt: '2026-04-06T10:00:00.000Z',
+        },
+        {
+          id: 'notification-2',
+          type: 'status_change_request',
+          title: 'Session Update Request',
+          body: 'Jordan Trainer requested a completed mark.',
+          read: false,
+          createdAt: '2026-04-06T11:00:00.000Z',
+        },
+      ],
+      unreadCount: 1,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<NotificationsPanel />)
+    })
+
+    const clearAllButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Clear All',
+    )
+
+    if (!(clearAllButton instanceof HTMLButtonElement)) {
+      throw new Error('Clear All button not found.')
+    }
+
+    await act(async () => {
+      clearAllButton.click()
+    })
+
+    expect(archiveClearableNotificationsMock).toHaveBeenCalledWith('user-1', 'admin')
+    expect(markAllNotificationsAsReadMock).not.toHaveBeenCalled()
     expect(invalidateQueriesMock).toHaveBeenCalledTimes(2)
   })
 })

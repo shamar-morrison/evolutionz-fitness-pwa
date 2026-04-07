@@ -12,6 +12,8 @@ type NotificationInsert = {
   metadata?: Record<string, unknown> | null
 }
 
+type RequestNotificationType = Extract<Notification['type'], 'reschedule_request' | 'status_change_request'>
+
 type AdminRecipient = {
   id: string
   name: string
@@ -52,5 +54,31 @@ export async function insertNotifications(
 
   if (error) {
     throw new Error(`Failed to create notifications: ${error.message}`)
+  }
+}
+
+export async function archiveResolvedRequestNotifications(
+  supabase: SupabaseAdminLike,
+  input: {
+    requestId: string
+    type: RequestNotificationType
+    archivedAt?: string
+  },
+) {
+  const requestId = input.requestId.trim()
+
+  if (!requestId) {
+    return
+  }
+
+  const { error } = await supabase
+    .from('notifications')
+    .update({ archived_at: input.archivedAt ?? new Date().toISOString() })
+    .eq('type', input.type)
+    .eq('metadata->>requestId', requestId)
+    .is('archived_at', null)
+
+  if (error) {
+    throw new Error(`Failed to archive notifications: ${error.message}`)
   }
 }

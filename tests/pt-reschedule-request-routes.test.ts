@@ -6,6 +6,7 @@ import {
 } from '@/tests/support/server-auth'
 
 const {
+  archiveResolvedRequestNotificationsMock,
   buildJamaicaScheduledAtFromLocalInputMock,
   formatPtSessionDateTimeMock,
   getSupabaseAdminClientMock,
@@ -16,6 +17,7 @@ const {
   readPtSessionRowByIdMock,
   readPtSessionsMock,
 } = vi.hoisted(() => ({
+  archiveResolvedRequestNotificationsMock: vi.fn().mockResolvedValue(undefined),
   buildJamaicaScheduledAtFromLocalInputMock: vi.fn(),
   formatPtSessionDateTimeMock: vi.fn((value: string) => `formatted:${value}`),
   getSupabaseAdminClientMock: vi.fn(),
@@ -40,6 +42,7 @@ vi.mock('@/lib/pt-scheduling-server', () => ({
 }))
 
 vi.mock('@/lib/pt-notifications-server', () => ({
+  archiveResolvedRequestNotifications: archiveResolvedRequestNotificationsMock,
   insertNotifications: insertNotificationsMock,
   readAdminNotificationRecipients: readAdminNotificationRecipientsMock,
 }))
@@ -258,6 +261,7 @@ function createPatchClient() {
 describe('PT reschedule request routes', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    archiveResolvedRequestNotificationsMock.mockClear()
     buildJamaicaScheduledAtFromLocalInputMock.mockReset()
     formatPtSessionDateTimeMock.mockClear()
     getSupabaseAdminClientMock.mockReset()
@@ -544,12 +548,66 @@ describe('PT reschedule request routes', () => {
         },
       }),
     ])
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'request-1',
+      type: 'reschedule_request',
+      archivedAt: expect.any(String),
+    })
     await expect(response.json()).resolves.toEqual({
       ok: true,
       request: {
         id: 'request-1',
         status: 'approved',
       },
+    })
+  })
+
+  it('archives the matching pending request notification when a reschedule request is denied', async () => {
+    const { client } = createPatchClient()
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readPtRescheduleRequestRowByIdMock.mockResolvedValue(createRescheduleRow())
+    readPtSessionRowByIdMock.mockResolvedValue(createSessionRow())
+    readPtRescheduleRequestsMock.mockResolvedValue([
+      {
+        id: 'request-1',
+        status: 'denied',
+      },
+    ])
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/reschedule-requests/request-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'denied',
+          reviewNote: 'The trainer needs to keep the original time.',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'request-1' }) },
+    )
+
+    expect(response.status).toBe(200)
+    expect(insertNotificationsMock).toHaveBeenCalledWith(client, [
+      expect.objectContaining({
+        recipientId: 'trainer-1',
+        type: 'reschedule_denied',
+        metadata: {
+          sessionId: 'session-1',
+          requestId: 'request-1',
+          reviewNote: 'The trainer needs to keep the original time.',
+        },
+      }),
+    ])
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'request-1',
+      type: 'reschedule_request',
+      archivedAt: expect.any(String),
     })
   })
 })

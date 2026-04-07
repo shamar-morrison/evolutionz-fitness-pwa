@@ -6,6 +6,7 @@ import {
 } from '@/tests/support/server-auth'
 
 const {
+  archiveResolvedRequestNotificationsMock,
   formatPtSessionDateTimeMock,
   getSupabaseAdminClientMock,
   insertNotificationsMock,
@@ -15,6 +16,7 @@ const {
   readPtSessionUpdateRequestRowByIdMock,
   readPtSessionUpdateRequestsMock,
 } = vi.hoisted(() => ({
+  archiveResolvedRequestNotificationsMock: vi.fn().mockResolvedValue(undefined),
   formatPtSessionDateTimeMock: vi.fn((value: string) => `formatted:${value}`),
   getSupabaseAdminClientMock: vi.fn(),
   insertNotificationsMock: vi.fn().mockResolvedValue(undefined),
@@ -37,6 +39,7 @@ vi.mock('@/lib/pt-scheduling-server', () => ({
 }))
 
 vi.mock('@/lib/pt-notifications-server', () => ({
+  archiveResolvedRequestNotifications: archiveResolvedRequestNotificationsMock,
   insertNotifications: insertNotificationsMock,
   readAdminNotificationRecipients: readAdminNotificationRecipientsMock,
 }))
@@ -297,6 +300,7 @@ function createReviewClient() {
 describe('PT session update request routes', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    archiveResolvedRequestNotificationsMock.mockClear()
     formatPtSessionDateTimeMock.mockClear()
     getSupabaseAdminClientMock.mockReset()
     insertNotificationsMock.mockClear()
@@ -588,6 +592,11 @@ describe('PT session update request routes', () => {
         }),
       }),
     ])
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'update-1',
+      type: 'status_change_request',
+      archivedAt: expect.any(String),
+    })
     await expect(response.json()).resolves.toEqual({
       ok: true,
       request: {
@@ -638,6 +647,11 @@ describe('PT session update request routes', () => {
         }),
       }),
     ])
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'update-1',
+      type: 'status_change_request',
+      archivedAt: expect.any(String),
+    })
   })
 
   it('directly cancels the PT session for admin callers and records a cancellation audit entry', async () => {

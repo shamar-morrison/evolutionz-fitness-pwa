@@ -24,6 +24,7 @@ import {
   useSessionUpdateRequests,
 } from '@/hooks/use-pt-scheduling'
 import { toast } from '@/hooks/use-toast'
+import { useAuth } from '@/contexts/auth-context'
 import {
   type ApprovalRequestStatus,
   formatPtSessionDateTime,
@@ -68,6 +69,7 @@ export function PendingApprovalsPageContent({
   view: PendingApprovalsView
 }) {
   const queryClient = useQueryClient()
+  const { profile } = useAuth()
   const [selectedRescheduleRequest, setSelectedRescheduleRequest] = useState<RescheduleRequest | null>(
     null,
   )
@@ -92,7 +94,7 @@ export function PendingApprovalsPageContent({
   const content = pageContent[view]
 
   const invalidateApprovalQueries = async () => {
-    await Promise.all([
+    const invalidations = [
       queryClient.invalidateQueries({ queryKey: queryKeys.rescheduleRequests.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.sessionUpdateRequests.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.rescheduleRequests.pending }),
@@ -101,7 +103,20 @@ export function PendingApprovalsPageContent({
         queryKey: queryKeys.ptScheduling.sessions({}),
         exact: false,
       }),
-    ])
+    ]
+
+    if (profile?.id) {
+      invalidations.push(
+        queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all(profile.id) }),
+      )
+      invalidations.push(
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.notifications.unreadCount(profile.id),
+        }),
+      )
+    }
+
+    await Promise.all(invalidations)
   }
 
   const handleOpenRescheduleReview = (request: RescheduleRequest) => {

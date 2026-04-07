@@ -33,6 +33,17 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
 }))
 
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({
+    profile: {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin',
+      titles: ['Owner'],
+    },
+  }),
+}))
+
 vi.mock('@/lib/pt-scheduling', async () => {
   const actual = await vi.importActual<typeof import('@/lib/pt-scheduling')>('@/lib/pt-scheduling')
 

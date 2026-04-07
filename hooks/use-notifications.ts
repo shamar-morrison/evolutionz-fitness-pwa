@@ -2,9 +2,11 @@
 
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { getArchivableNotificationTypes } from '@/lib/notification-archive'
 import { normalizeNotification, type Notification } from '@/lib/pt-scheduling'
 import { queryKeys } from '@/lib/query-keys'
 import { createClient } from '@/lib/supabase/client'
+import type { UserRole } from '@/types'
 
 type NotificationRow = {
   id: string
@@ -29,6 +31,7 @@ async function fetchNotifications(profileId: string) {
     .from('notifications')
     .select('id, recipient_id, type, title, body, read, metadata, created_at')
     .eq('recipient_id', profileId)
+    .is('archived_at', null)
     .order('created_at', { ascending: false })
     .limit(20)
 
@@ -59,6 +62,7 @@ async function fetchUnreadCount(profileId: string) {
     .select('id', { count: 'exact', head: true })
     .eq('recipient_id', profileId)
     .eq('read', false)
+    .is('archived_at', null)
 
   if (error) {
     throw new Error(`Failed to load unread notification count: ${error.message}`)
@@ -74,6 +78,7 @@ export async function markNotificationAsRead(profileId: string, id: string) {
     .update({ read: true })
     .eq('recipient_id', profileId)
     .eq('id', id)
+    .is('archived_at', null)
 
   if (error) {
     throw new Error(`Failed to mark the notification as read: ${error.message}`)
@@ -87,9 +92,43 @@ export async function markAllNotificationsAsRead(profileId: string) {
     .update({ read: true })
     .eq('recipient_id', profileId)
     .eq('read', false)
+    .is('archived_at', null)
 
   if (error) {
     throw new Error(`Failed to mark notifications as read: ${error.message}`)
+  }
+}
+
+export async function archiveNotification(profileId: string, id: string, role: UserRole | null) {
+  const allowedTypes = getArchivableNotificationTypes(role)
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('notifications')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('recipient_id', profileId)
+    .eq('id', id)
+    .eq('read', true)
+    .in('type', allowedTypes)
+    .is('archived_at', null)
+
+  if (error) {
+    throw new Error(`Failed to archive the notification: ${error.message}`)
+  }
+}
+
+export async function archiveClearableNotifications(profileId: string, role: UserRole | null) {
+  const allowedTypes = getArchivableNotificationTypes(role)
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('notifications')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('recipient_id', profileId)
+    .eq('read', true)
+    .in('type', allowedTypes)
+    .is('archived_at', null)
+
+  if (error) {
+    throw new Error(`Failed to archive notifications: ${error.message}`)
   }
 }
 

@@ -29,6 +29,17 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: vi.fn(),
 }))
 
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({
+    profile: {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin',
+      titles: ['Owner'],
+    },
+  }),
+}))
+
 vi.mock('@/components/role-guard', () => ({
   RoleGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
