@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  currentPathnameState,
   currentRoleState,
   invalidateQueriesMock,
   pushMock,
@@ -12,6 +13,9 @@ const {
   useMemberMock,
   usePtSessionsMock,
 } = vi.hoisted(() => ({
+  currentPathnameState: {
+    pathname: '/members/123e4567-e89b-12d3-a456-426614174000',
+  },
   currentRoleState: { role: 'admin' as 'admin' | 'staff' },
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   pushMock: vi.fn(),
@@ -28,9 +32,19 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'member-1' }),
+  usePathname: () => currentPathnameState.pathname,
   useRouter: () => ({
     push: pushMock,
     replace: replaceMock,
+  }),
+}))
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({
+    user: null,
+    profile: null,
+    role: currentRoleState.role,
+    loading: false,
   }),
 }))
 
@@ -200,6 +214,17 @@ function getButton(container: HTMLDivElement, label: string) {
   return button
 }
 
+function getIconOnlyButton(container: HTMLDivElement) {
+  const buttons = Array.from(container.querySelectorAll('button'))
+  const button = buttons.find((candidate) => !candidate.textContent?.trim())
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error('Icon-only button not found.')
+  }
+
+  return button
+}
+
 async function clickButton(container: HTMLDivElement, label: string) {
   await act(async () => {
     getButton(container, label).click()
@@ -230,6 +255,7 @@ describe('Member detail page tabs', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    currentPathnameState.pathname = '/members/123e4567-e89b-12d3-a456-426614174000'
     currentRoleState.role = 'admin'
     useMemberMock.mockReturnValue({
       member: createMember(),
@@ -279,6 +305,37 @@ describe('Member detail page tabs', () => {
 
     expect(container.textContent).not.toContain('PT Attendance')
     expect(usePtSessionsMock).not.toHaveBeenCalled()
+  })
+
+  it('routes the header back button to trainer clients for staff users', async () => {
+    currentRoleState.role = 'staff'
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    await act(async () => {
+      getIconOnlyButton(container).click()
+    })
+
+    expect(pushMock).toHaveBeenCalledWith('/trainer/clients')
+  })
+
+  it('routes the error-state back button to trainer clients for staff users', async () => {
+    currentRoleState.role = 'staff'
+    useMemberMock.mockReturnValue({
+      member: null,
+      isLoading: false,
+      error: new Error('Missing member'),
+    })
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    await clickButton(container, 'Back to Members')
+
+    expect(pushMock).toHaveBeenCalledWith('/trainer/clients')
   })
 })
 

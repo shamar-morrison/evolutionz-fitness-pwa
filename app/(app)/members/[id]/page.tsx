@@ -46,6 +46,7 @@ import { getMemberCardActionState } from '@/lib/member-card-action-state'
 import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
 import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
+import { useBackLink } from '@/hooks/use-back-link'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, Trash2, User } from 'lucide-react'
 
 export default function MemberDetailPage() {
@@ -54,6 +55,7 @@ export default function MemberDetailPage() {
   const memberId = params.id as string
   const queryClient = useQueryClient()
   const { member, isLoading, error } = useMember(memberId)
+  const backLink = useBackLink('/members', '/trainer/clients')
   const [showEditModal, setShowEditModal] = useState(false)
   const [showAssignCardModal, setShowAssignCardModal] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
@@ -268,7 +270,7 @@ export default function MemberDetailPage() {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center gap-4">
         <p className="text-destructive">Member not found</p>
-        <Button variant="outline" onClick={() => router.push('/members')}>
+        <Button variant="outline" onClick={() => router.push(backLink)}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Members
         </Button>
@@ -301,7 +303,7 @@ export default function MemberDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/members')}>
+        <Button variant="ghost" size="icon" onClick={() => router.push(backLink)}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-3xl font-bold tracking-tight">Member Details</h1>
