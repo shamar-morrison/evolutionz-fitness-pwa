@@ -20,8 +20,11 @@ function TestShell() {
   return (
     <>
       <NavigationProgress />
-      <a href="/staff" onClick={(event) => event.preventDefault()}>
+      <a data-progress href="/staff" onClick={(event) => event.preventDefault()}>
         Staff
+      </a>
+      <a href="/reports" onClick={(event) => event.preventDefault()}>
+        Reports
       </a>
       <a href="https://external.example/reports" onClick={(event) => event.preventDefault()}>
         External
@@ -66,7 +69,7 @@ describe('NavigationProgress', () => {
     vi.useRealTimers()
   })
 
-  it('starts the loader for internal same-origin anchor clicks', async () => {
+  it('starts the loader only for internal same-origin anchors that opt in with data-progress', async () => {
     await act(async () => {
       root.render(<TestShell />)
     })
@@ -88,18 +91,20 @@ describe('NavigationProgress', () => {
     expect(bar.style.transform).toContain('0.12')
   })
 
-  it('ignores external links and hash-only links on the current page', async () => {
+  it('ignores same-origin links without data-progress, plus external and hash-only links', async () => {
     await act(async () => {
       root.render(<TestShell />)
     })
 
     const bar = container.querySelector('[data-navigation-progress="bar"]')
     const links = Array.from(container.querySelectorAll('a'))
+    const reportsLink = links.find((link) => link.getAttribute('href') === '/reports')
     const externalLink = links.find((link) => link.getAttribute('href') === 'https://external.example/reports')
     const hashLink = links.find((link) => link.getAttribute('href') === '#details')
 
     if (
       !(bar instanceof HTMLDivElement) ||
+      !(reportsLink instanceof HTMLAnchorElement) ||
       !(externalLink instanceof HTMLAnchorElement) ||
       !(hashLink instanceof HTMLAnchorElement)
     ) {
@@ -107,6 +112,7 @@ describe('NavigationProgress', () => {
     }
 
     await act(async () => {
+      reportsLink.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
       externalLink.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
       hashLink.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
     })

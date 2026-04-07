@@ -187,7 +187,7 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild size="lg" tooltip="Evolutionz Fitness">
-              <Link href={homeHref}>
+              <Link data-progress href={homeHref}>
                 <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground">
                   EF
                 </div>
@@ -217,7 +217,7 @@ export function AppSidebar() {
                     isActive={isActivePath(pathname, item.href)}
                     tooltip={item.label}
                   >
-                    <Link href={item.href}>
+                    <Link data-progress href={item.href}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.label}</span>
                     </Link>
@@ -246,7 +246,7 @@ export function AppSidebar() {
                         isActive={isActivePath(pathname, item.href)}
                         tooltip={item.label}
                       >
-                        <Link href={item.href}>
+                        <Link data-progress href={item.href}>
                           <item.icon className="h-4 w-4" />
                           <span>{item.label}</span>
                         </Link>

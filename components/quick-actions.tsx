@@ -10,7 +10,7 @@ export function QuickActions() {
     <div className="flex flex-wrap gap-3">
       <RoleGuard role="admin">
         <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
-          <Link href="/members?action=add">
+          <Link data-progress href="/members?action=add">
             <UserPlus className="h-4 w-4" />
             Add Member
           </Link>

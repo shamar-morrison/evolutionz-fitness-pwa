@@ -59,6 +59,10 @@ export function NavigationProgress() {
         return
       }
 
+      if (!anchor.hasAttribute('data-progress')) {
+        return
+      }
+
       if (anchor.target || anchor.hasAttribute('download')) {
         return
       }
