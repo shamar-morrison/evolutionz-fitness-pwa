@@ -33,6 +33,11 @@ type DeleteStaffSuccessResponse = {
   warning?: string
 }
 
+type ArchiveStaffSuccessResponse = {
+  ok: true
+  archivedAt: string
+}
+
 type UploadStaffPhotoSuccessResponse = {
   ok: true
   photo_url: string
@@ -306,5 +311,33 @@ export async function deleteStaff(
 
   return {
     warning: typeof responseBody.warning === 'string' ? responseBody.warning : undefined,
+  }
+}
+
+export async function archiveStaff(id: string): Promise<{ archivedAt: string }> {
+  const response = await fetch(`/api/staff/${encodeURIComponent(id)}/archive`, {
+    method: 'POST',
+  })
+
+  let responseBody: ArchiveStaffSuccessResponse | StaffMutationErrorResponse | null = null
+
+  try {
+    responseBody = (await response.json()) as
+      | ArchiveStaffSuccessResponse
+      | StaffMutationErrorResponse
+  } catch {
+    responseBody = null
+  }
+
+  if (!response.ok || !responseBody || ('ok' in responseBody && responseBody.ok === false)) {
+    throw new Error(
+      responseBody && 'ok' in responseBody && responseBody.ok === false
+        ? responseBody.error
+        : 'Failed to archive staff.',
+    )
+  }
+
+  return {
+    archivedAt: responseBody.archivedAt,
   }
 }

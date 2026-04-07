@@ -9,11 +9,13 @@ const {
   pushMock,
   refreshMock,
   readStaffProfileMock,
+  signOutMock,
 } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
   pushMock: vi.fn(),
   refreshMock: vi.fn(),
   readStaffProfileMock: vi.fn(),
+  signOutMock: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -53,6 +55,7 @@ function createSupabaseBrowserClient() {
   return {
     auth: {
       signInWithPassword: vi.fn(),
+      signOut: signOutMock,
     },
   }
 }
@@ -265,5 +268,62 @@ describe('LoginPage', () => {
     )
     expect(container.textContent).not.toContain('Invalid login credentials')
     expect(consoleErrorSpy).toHaveBeenCalledOnce()
+  })
+
+  it('shows an archived-account error and signs out the session when the profile is archived', async () => {
+    const supabase = createSupabaseBrowserClient()
+
+    supabase.auth.signInWithPassword.mockResolvedValue({
+      data: {
+        user: { id: 'archived-1' },
+      },
+      error: null,
+    })
+    createClientMock.mockReturnValue(supabase)
+    readStaffProfileMock
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'archived-1',
+        role: 'staff',
+        archivedAt: '2026-04-07T18:00:00.000Z',
+      })
+
+    await act(async () => {
+      root.render(<LoginPage />)
+    })
+
+    const emailInput = container.querySelector('#email')
+    const passwordInput = container.querySelector('#password')
+    const form = container.querySelector('form')
+
+    if (!(emailInput instanceof HTMLInputElement)) {
+      throw new Error('Email input not found.')
+    }
+
+    if (!(passwordInput instanceof HTMLInputElement)) {
+      throw new Error('Password input not found.')
+    }
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('Login form not found.')
+    }
+
+    await act(async () => {
+      setInputValue(emailInput, 'archived@evolutionzfitness.com')
+      setInputValue(passwordInput, 'password123')
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+
+    await flushAsyncWork()
+
+    expect(readStaffProfileMock).toHaveBeenNthCalledWith(1, supabase, 'archived-1')
+    expect(readStaffProfileMock).toHaveBeenNthCalledWith(2, supabase, 'archived-1', {
+      includeArchived: true,
+    })
+    expect(signOutMock).toHaveBeenCalledOnce()
+    expect(pushMock).not.toHaveBeenCalled()
+    expect(container.textContent).toContain(
+      'This staff account has been archived. Contact an admin if you need access again.',
+    )
   })
 })

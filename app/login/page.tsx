@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 const GENERIC_ERROR_MESSAGE = 'Unable to sign in. Please check your credentials and try again.'
+const ARCHIVED_ACCOUNT_ERROR =
+  'This staff account has been archived. Contact an admin if you need access again.'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -38,6 +40,22 @@ export default function LoginPage() {
       }
 
       const profile = data.user ? await readStaffProfile(supabase as any, data.user.id) : null
+
+      if (!profile && data.user) {
+        const archivedProfile = await readStaffProfile(supabase as any, data.user.id, {
+          includeArchived: true,
+        })
+
+        await supabase.auth.signOut()
+
+        if (archivedProfile?.archivedAt) {
+          setError(ARCHIVED_ACCOUNT_ERROR)
+          return
+        }
+
+        setError(GENERIC_ERROR_MESSAGE)
+        return
+      }
 
       router.push(getAuthenticatedHomePath(profile?.role))
       router.refresh()

@@ -40,6 +40,8 @@ type AddTitleAdminClient = StaffReadClient & {
   from(table: string): unknown
 }
 
+const ARCHIVED_STAFF_ERROR = 'Archived staff accounts are read-only.'
+
 const addStaffTitlesRequestSchema = z
   .object({
     titles: z.array(z.enum(STAFF_TITLES)).min(1, 'Select at least one title.'),
@@ -71,10 +73,14 @@ export async function POST(
     const { id } = await params
     const input = addStaffTitlesRequestSchema.parse(await request.json())
     const supabase = getSupabaseAdminClient() as unknown as AddTitleAdminClient
-    const existingProfile = await readStaffProfile(supabase, id)
+    const existingProfile = await readStaffProfile(supabase, id, { includeArchived: true })
 
     if (!existingProfile) {
       return createErrorResponse('Staff profile not found.', 404)
+    }
+
+    if (existingProfile.archivedAt) {
+      return createErrorResponse(ARCHIVED_STAFF_ERROR, 409)
     }
 
     const mergedTitles = normalizeStaffTitles([...existingProfile.titles, ...input.titles])

@@ -74,13 +74,15 @@ vi.mock('@/lib/pt-scheduling', async () => {
 vi.mock('@/components/pt-assignment-dialog', () => ({
   PtAssignmentDialog: ({
     open,
+    mode,
     onSaved,
   }: {
     open: boolean
+    mode: 'create' | 'edit'
     onSaved: (assignment: typeof savedAssignmentFromDialog, mode: 'create' | 'edit') => void
   }) =>
     open ? (
-      <button type="button" onClick={() => void onSaved(savedAssignmentFromDialog, 'create')}>
+      <button type="button" onClick={() => void onSaved(savedAssignmentFromDialog, mode)}>
         Save Assignment
       </button>
     ) : null,
@@ -154,6 +156,7 @@ function createTrainer(overrides: Partial<Profile> = {}): Profile {
     remark: overrides.remark ?? null,
     specialties: overrides.specialties ?? [],
     photoUrl: overrides.photoUrl ?? null,
+    archivedAt: overrides.archivedAt ?? null,
     created_at: overrides.created_at ?? '2026-04-03T00:00:00.000Z',
   }
 }
@@ -260,6 +263,12 @@ describe('MemberPtSection', () => {
       cancelFutureSessions: true,
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: queryKeys.ptScheduling.trainerAssignments('trainer-1'),
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: queryKeys.staff.detail('trainer-1'),
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: queryKeys.ptScheduling.sessions({}),
       exact: false,
     })
@@ -304,7 +313,7 @@ describe('MemberPtSection', () => {
     })
   })
 
-  it('renders the training plan summary and assignment detail cache invalidation target', async () => {
+  it('renders the training plan summary and invalidates both old and new trainer detail caches after reassignment', async () => {
     const assignment = createAssignment({
       trainingPlan: [
         {
@@ -344,6 +353,18 @@ describe('MemberPtSection', () => {
 
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: queryKeys.ptScheduling.assignment('assignment-new'),
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: queryKeys.ptScheduling.trainerAssignments('trainer-1'),
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: queryKeys.ptScheduling.trainerAssignments('trainer-2'),
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: queryKeys.staff.detail('trainer-1'),
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: queryKeys.staff.detail('trainer-2'),
     })
   })
 })

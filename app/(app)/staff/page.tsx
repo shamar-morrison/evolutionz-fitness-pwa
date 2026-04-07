@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
+import { format } from 'date-fns'
 import { Users, UserPlus } from 'lucide-react'
 import { AddStaffModal } from '@/components/add-staff-modal'
 import { MemberAvatar } from '@/components/member-avatar'
@@ -49,9 +50,14 @@ function StaffPageLoading() {
 }
 
 function StaffPageContent() {
+  const [activeView, setActiveView] = useState<'active' | 'archived'>('active')
   const [activeTab, setActiveTab] = useState<StaffListFilter>('All')
   const [showAddModal, setShowAddModal] = useState(false)
-  const { staff, isLoading, error } = useStaff()
+  const activeStaffQuery = useStaff()
+  const archivedStaffQuery = useStaff({ archived: true })
+  const staff = activeView === 'archived' ? archivedStaffQuery.staff : activeStaffQuery.staff
+  const isLoading = activeView === 'archived' ? archivedStaffQuery.isLoading : activeStaffQuery.isLoading
+  const error = activeView === 'archived' ? archivedStaffQuery.error : activeStaffQuery.error
 
   const filteredStaff = useMemo(
     () => filterStaffByTitle(staff, activeTab),
@@ -84,6 +90,21 @@ function StaffPageContent() {
       </div>
 
       <Tabs
+        value={activeView}
+        onValueChange={(value) => setActiveView(value as 'active' | 'archived')}
+        className="gap-4"
+      >
+        <TabsList className="w-fit bg-muted/60 p-1">
+          <TabsTrigger value="active" className="px-3 py-1.5">
+            Active
+          </TabsTrigger>
+          <TabsTrigger value="archived" className="px-3 py-1.5">
+            Archived
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      <Tabs
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as StaffListFilter)}
         className="gap-4"
@@ -105,9 +126,15 @@ function StaffPageContent() {
             <EmptyMedia variant="icon">
               <Users />
             </EmptyMedia>
-            <EmptyTitle>No staff in {activeTab}</EmptyTitle>
+            <EmptyTitle>
+              No {activeView === 'archived' ? 'archived ' : ''}staff in {activeTab}
+            </EmptyTitle>
             <EmptyDescription>
-              {activeTab === 'All'
+              {activeView === 'archived'
+                ? activeTab === 'All'
+                  ? 'Archived staff accounts will appear here for admin reference.'
+                  : `No archived staff members currently use the ${activeTab} title.`
+                : activeTab === 'All'
                 ? 'Create the first staff account to start managing access.'
                 : `No staff members currently use the ${activeTab} title.`}
             </EmptyDescription>
@@ -133,6 +160,11 @@ function StaffPageContent() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      {profile.archivedAt ? (
+                        <Badge className="bg-amber-600 text-white hover:bg-amber-600">
+                          Archived
+                        </Badge>
+                      ) : null}
                       {profile.titles.length > 0 ? (
                         profile.titles.map((title) => (
                           <Badge key={title} variant="outline">
@@ -153,6 +185,11 @@ function StaffPageContent() {
                         {profile.role === 'admin' ? 'Admin' : 'Staff'}
                       </Badge>
                     </div>
+                    {profile.archivedAt ? (
+                      <p className="text-sm text-muted-foreground">
+                        Archived {format(new Date(profile.archivedAt), 'MMM d, yyyy h:mm a')}
+                      </p>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>

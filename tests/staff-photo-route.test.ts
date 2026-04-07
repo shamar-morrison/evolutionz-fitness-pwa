@@ -38,6 +38,7 @@ function buildProfileRow(overrides: Partial<Record<string, unknown>> = {}) {
     remark: null,
     specialties: [],
     photoUrl: null,
+    archivedAt: null,
     created_at: '2026-04-03T00:00:00.000Z',
     ...overrides,
   }
@@ -282,6 +283,40 @@ describe('/api/staff/[id]/photo', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Staff photo not found.',
+    })
+  })
+
+  it('returns 409 when mutating an archived staff photo', async () => {
+    const { client, uploadCalls, removeCalls, updateValues } = createStaffPhotoAdminClient({
+      profileReads: [
+        buildProfileRow({
+          photoUrl: 'staff-1.jpg',
+          archivedAt: '2026-04-07T18:00:00.000Z',
+        }),
+      ],
+    })
+    const formData = new FormData()
+
+    formData.append('photo', new File(['photo-bytes'], 'photo.jpg', { type: 'image/jpeg' }))
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/staff/staff-1/photo', {
+        method: 'POST',
+        body: formData,
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-1' }),
+      },
+    )
+
+    expect(response.status).toBe(409)
+    expect(uploadCalls).toEqual([])
+    expect(removeCalls).toEqual([])
+    expect(updateValues).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Archived staff accounts are read-only.',
     })
   })
 })

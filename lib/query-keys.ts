@@ -11,6 +11,7 @@ export const queryKeys = {
   },
   staff: {
     all: ['staff'] as const,
+    archived: ['staff', 'archived'] as const,
     detail: (id: string) => ['staff', id] as const,
   },
   ptScheduling: {

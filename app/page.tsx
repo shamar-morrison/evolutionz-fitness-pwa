@@ -10,5 +10,9 @@ export default async function HomePage() {
   } = await supabase.auth.getUser()
   const profile = user ? await readStaffProfile(supabase as any, user.id) : null
 
+  if (!profile) {
+    redirect('/login')
+  }
+
   redirect(getAuthenticatedHomePath(profile?.role))
 }

@@ -29,6 +29,8 @@ type StaffPhotoMutationClient = StaffReadClient &
     from(table: string): unknown
   }
 
+const ARCHIVED_STAFF_ERROR = 'Archived staff accounts are read-only.'
+
 function createErrorResponse(error: string, status: number) {
   return NextResponse.json(
     {
@@ -59,10 +61,14 @@ export async function POST(
     }
 
     const supabase = getSupabaseAdminClient() as unknown as StaffPhotoMutationClient
-    const existingProfile = await readStaffProfile(supabase, id)
+    const existingProfile = await readStaffProfile(supabase, id, { includeArchived: true })
 
     if (!existingProfile) {
       return createErrorResponse('Staff profile not found.', 404)
+    }
+
+    if (existingProfile.archivedAt) {
+      return createErrorResponse(ARCHIVED_STAFF_ERROR, 409)
     }
 
     const photoPath = await uploadStaffPhotoObject(supabase, id, await photo.arrayBuffer())
@@ -120,10 +126,14 @@ export async function DELETE(
 
     const { id } = await params
     const supabase = getSupabaseAdminClient() as unknown as StaffPhotoMutationClient
-    const existingProfile = await readStaffProfile(supabase, id)
+    const existingProfile = await readStaffProfile(supabase, id, { includeArchived: true })
 
     if (!existingProfile) {
       return createErrorResponse('Staff profile not found.', 404)
+    }
+
+    if (existingProfile.archivedAt) {
+      return createErrorResponse(ARCHIVED_STAFF_ERROR, 409)
     }
 
     if (!existingProfile.photoUrl) {

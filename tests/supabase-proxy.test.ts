@@ -105,10 +105,27 @@ describe('updateSession', () => {
       id: 'user-1',
       email: 'admin@evolutionzfitness.com',
     })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'user-1',
+      role: 'admin',
+    })
 
     const response = await updateSession(createRequest('/members'))
 
     expect(response.status).toBe(200)
     expect(response.headers.get('location')).toBeNull()
+  })
+
+  it('redirects archived or missing-profile sessions back to /login', async () => {
+    mockSupabaseUser({
+      id: 'user-3',
+      email: 'archived@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue(null)
+
+    const response = await updateSession(createRequest('/members'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/login')
   })
 })

@@ -108,7 +108,7 @@ async function rollbackCreatedAuthUser(
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const authResult = await requireAdminUser()
 
@@ -116,9 +116,11 @@ export async function GET() {
       return authResult.response
     }
 
+    const searchParams = new URL(request.url).searchParams
+    const archivedOnly = searchParams.get('archived') === '1'
     const supabase = (await createClient()) as unknown as StaffReadClient
     const storageClient = getSupabaseAdminClient() as unknown as StaffPhotoStorageClient
-    const staff = await readStaffProfiles(supabase)
+    const staff = await readStaffProfiles(supabase, archivedOnly ? { archivedOnly: true } : {})
     const hydratedStaff = await hydrateStaffPhotoUrls(storageClient, staff)
 
     return NextResponse.json({

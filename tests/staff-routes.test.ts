@@ -30,6 +30,7 @@ vi.mock('@/lib/server-auth', async () => {
 
 import { GET as getStaff, POST as postStaff } from '@/app/api/staff/route'
 import { POST as postAddTitle } from '@/app/api/staff/[id]/add-title/route'
+import { POST as archiveStaff } from '@/app/api/staff/[id]/archive/route'
 import {
   DELETE as deleteStaff,
   GET as getStaffDetail,
@@ -54,6 +55,7 @@ function buildProfileRow(overrides: Partial<Record<string, unknown>> = {}) {
     remark: null,
     specialties: [],
     photoUrl: null,
+    archivedAt: null,
     created_at: '2026-04-03T00:00:00.000Z',
     ...overrides,
   }
@@ -78,13 +80,37 @@ function createStaffServerClient({
         select(columns: string) {
           expect(columns).toBe(STAFF_PROFILE_SELECT)
 
-          return {
+          let archivedFilter: 'active' | 'archived' | 'all' = 'all'
+
+          const getFilteredListRows = () =>
+            listRows.filter((row) =>
+              archivedFilter === 'all'
+                ? true
+                : archivedFilter === 'active'
+                  ? !row.archivedAt
+                  : Boolean(row.archivedAt),
+            )
+
+          const listQuery = {
+            is(column: string, value: null) {
+              expect(column).toBe('archived_at')
+              expect(value).toBeNull()
+              archivedFilter = 'active'
+              return listQuery
+            },
+            not(column: string, operator: string, value: null) {
+              expect(column).toBe('archived_at')
+              expect(operator).toBe('is')
+              expect(value).toBeNull()
+              archivedFilter = 'archived'
+              return listQuery
+            },
             order(column: string, options: { ascending: boolean }) {
               expect(column).toBe('created_at')
               expect(options).toEqual({ ascending: true })
 
               return Promise.resolve({
-                data: listRows,
+                data: getFilteredListRows(),
                 error: listError,
               })
             },
@@ -102,6 +128,8 @@ function createStaffServerClient({
               }
             },
           }
+
+          return listQuery
         },
       }
     },
@@ -110,6 +138,13 @@ function createStaffServerClient({
 
 function createStaffAdminClient({
   detailReads = [buildProfileRow()],
+  trainerClientRows = [],
+  ptSessionRows = [],
+  ptSessionChangeRows = [],
+  ptRescheduleRequestedRows = [],
+  ptRescheduleReviewedRows = [],
+  ptSessionUpdateRequestedRows = [],
+  ptSessionUpdateReviewedRows = [],
   insertResult = {
     data: buildProfileRow(),
     error: null,
@@ -138,12 +173,23 @@ function createStaffAdminClient({
     data: {},
     error: null,
   },
+  updateUserResult = {
+    data: {},
+    error: null,
+  },
   removeResult = {
     data: [],
     error: null,
   },
 }: {
   detailReads?: Array<Record<string, unknown> | null>
+  trainerClientRows?: Array<Record<string, unknown>>
+  ptSessionRows?: Array<Record<string, unknown>>
+  ptSessionChangeRows?: Array<Record<string, unknown>>
+  ptRescheduleRequestedRows?: Array<Record<string, unknown>>
+  ptRescheduleReviewedRows?: Array<Record<string, unknown>>
+  ptSessionUpdateRequestedRows?: Array<Record<string, unknown>>
+  ptSessionUpdateReviewedRows?: Array<Record<string, unknown>>
   insertResult?: QueryResult<Record<string, unknown>>
   existingEmailResult?: QueryResult<Record<string, unknown>>
   updateResult?: QueryResult<Record<string, unknown>>
@@ -160,6 +206,10 @@ function createStaffAdminClient({
     data: unknown
     error: { message: string } | null
   }
+  updateUserResult?: {
+    data: unknown
+    error: { message: string } | null
+  }
   removeResult?: {
     data: unknown
     error: { message: string } | null
@@ -167,6 +217,7 @@ function createStaffAdminClient({
 } = {}) {
   const createUserCalls: Array<{ email: string; password: string; email_confirm: boolean }> = []
   const deleteUserCalls: string[] = []
+  const updateUserCalls: Array<{ userId: string; attributes: Record<string, unknown> }> = []
   const insertValues: Array<Record<string, unknown>> = []
   const updateValues: Array<Record<string, unknown>> = []
   const removeCalls: string[][] = []
@@ -185,10 +236,52 @@ function createStaffAdminClient({
             deleteUserCalls.push(userId)
             return Promise.resolve(deleteUserResult)
           },
+          updateUserById(userId: string, attributes: Record<string, unknown>) {
+            updateUserCalls.push({ userId, attributes })
+            return Promise.resolve(updateUserResult)
+          },
         },
       },
       from(table: string) {
-        expect(table).toBe('profiles')
+        if (table !== 'profiles') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('id')
+
+              const rows =
+                table === 'trainer_clients'
+                  ? trainerClientRows
+                  : table === 'pt_sessions'
+                    ? ptSessionRows
+                    : table === 'pt_session_changes'
+                      ? ptSessionChangeRows
+                      : table === 'pt_reschedule_requests'
+                        ? [...ptRescheduleRequestedRows, ...ptRescheduleReviewedRows]
+                        : table === 'pt_session_update_requests'
+                          ? [...ptSessionUpdateRequestedRows, ...ptSessionUpdateReviewedRows]
+                          : []
+              const filters: Record<string, string> = {}
+              const query = {
+                eq(column: string, value: string) {
+                  filters[column] = value
+                  return query
+                },
+                then(resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) {
+                  const filteredRows = rows.filter((row) =>
+                    Object.entries(filters).every(([column, value]) => row[column] === value),
+                  )
+
+                  return Promise.resolve({
+                    data: filteredRows,
+                    error: null,
+                  }).then(resolve, reject)
+                },
+              }
+
+              return query
+            },
+          }
+        }
 
         return {
           select(columns: string) {
@@ -254,10 +347,20 @@ function createStaffAdminClient({
 
                 return {
                   select(columns: string) {
-                    expect(columns).toBe(STAFF_PROFILE_SELECT)
+                    expect([STAFF_PROFILE_SELECT, 'id']).toContain(columns)
 
                     return {
                       maybeSingle() {
+                        if (columns === 'id') {
+                          return Promise.resolve({
+                            data:
+                              updateResult.data && 'id' in updateResult.data
+                                ? { id: String(updateResult.data.id) }
+                                : { id: String(value) },
+                            error: updateResult.error,
+                          })
+                        }
+
                         return Promise.resolve(updateResult)
                       },
                     }
@@ -312,6 +415,7 @@ function createStaffAdminClient({
     },
     createUserCalls,
     deleteUserCalls,
+    updateUserCalls,
     insertValues,
     updateValues,
     removeCalls,
@@ -351,7 +455,7 @@ describe('staff API routes', () => {
     const { client, signedUrlCalls } = createStaffAdminClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
 
-    const response = await getStaff()
+    const response = await getStaff(new Request('http://localhost/api/staff'))
 
     expect(response.status).toBe(200)
     expect(signedUrlCalls).toEqual(['staff-1.jpg'])
@@ -368,6 +472,7 @@ describe('staff API routes', () => {
           remark: null,
           specialties: [],
           photoUrl: 'https://signed.example.com/staff-1.jpg',
+          archivedAt: null,
           created_at: '2026-04-01T00:00:00.000Z',
         },
         {
@@ -381,6 +486,7 @@ describe('staff API routes', () => {
           remark: null,
           specialties: ['Strength Training', 'HIIT'],
           photoUrl: null,
+          archivedAt: null,
           created_at: '2026-04-02T00:00:00.000Z',
         },
       ],
@@ -390,7 +496,7 @@ describe('staff API routes', () => {
   it('returns 401 when the staff list is requested without a session', async () => {
     mockUnauthorized()
 
-    const response = await getStaff()
+    const response = await getStaff(new Request('http://localhost/api/staff'))
 
     expect(response.status).toBe(401)
     await expect(response.json()).resolves.toEqual({
@@ -401,11 +507,56 @@ describe('staff API routes', () => {
   it('returns 403 when a non-admin requests the staff list', async () => {
     mockForbidden()
 
-    const response = await getStaff()
+    const response = await getStaff(new Request('http://localhost/api/staff'))
 
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toEqual({
       error: 'Forbidden',
+    })
+  })
+
+  it('returns archived staff when the archived query flag is set', async () => {
+    createClientMock.mockResolvedValue(
+      createStaffServerClient({
+        listRows: [
+          buildProfileRow({
+            id: 'staff-active',
+            name: 'Active Trainer',
+            role: 'staff',
+            titles: ['Trainer'],
+          }),
+          buildProfileRow({
+            id: 'staff-archived',
+            name: 'Archived Trainer',
+            role: 'staff',
+            titles: ['Trainer'],
+            archivedAt: '2026-04-07T18:00:00.000Z',
+          }),
+        ],
+      }),
+    )
+    getSupabaseAdminClientMock.mockReturnValue(createStaffAdminClient().client)
+
+    const response = await getStaff(new Request('http://localhost/api/staff?archived=1'))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      staff: [
+        {
+          id: 'staff-archived',
+          name: 'Archived Trainer',
+          email: 'admin@evolutionzfitness.com',
+          role: 'staff',
+          titles: ['Trainer'],
+          phone: null,
+          gender: null,
+          remark: null,
+          specialties: [],
+          photoUrl: null,
+          archivedAt: '2026-04-07T18:00:00.000Z',
+          created_at: '2026-04-03T00:00:00.000Z',
+        },
+      ],
     })
   })
 
@@ -486,6 +637,7 @@ describe('staff API routes', () => {
         remark: 'Handles billing',
         specialties: [],
         photoUrl: null,
+        archivedAt: null,
         created_at: '2026-04-03T00:00:00.000Z',
       },
     })
@@ -555,6 +707,7 @@ describe('staff API routes', () => {
         remark: null,
         specialties: ['Strength Training', 'HIIT', 'Recovery Training'],
         photoUrl: null,
+        archivedAt: null,
         created_at: '2026-04-03T00:00:00.000Z',
       },
     })
@@ -612,6 +765,7 @@ describe('staff API routes', () => {
         remark: null,
         specialties: [],
         photoUrl: null,
+        archivedAt: null,
         created_at: '2026-04-03T00:00:00.000Z',
       },
     })
@@ -795,8 +949,43 @@ describe('staff API routes', () => {
         remark: null,
         specialties: ['Strength Training', 'HIIT'],
         photoUrl: null,
+        archivedAt: null,
         created_at: '2026-04-03T00:00:00.000Z',
       },
+    })
+  })
+
+  it('returns 409 when adding titles to an archived profile', async () => {
+    const { client, updateValues } = createStaffAdminClient({
+      detailReads: [
+        buildProfileRow({
+          id: 'staff-archived-titles',
+          archivedAt: '2026-04-07T18:00:00.000Z',
+        }),
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await postAddTitle(
+      new Request('http://localhost/api/staff/staff-archived-titles/add-title', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          titles: ['Trainer'],
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-archived-titles' }),
+      },
+    )
+
+    expect(response.status).toBe(409)
+    expect(updateValues).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Archived staff accounts are read-only.',
     })
   })
 
@@ -861,6 +1050,7 @@ describe('staff API routes', () => {
         remark: null,
         specialties: [],
         photoUrl: null,
+        archivedAt: null,
         created_at: '2026-04-03T00:00:00.000Z',
       },
     })
@@ -925,6 +1115,7 @@ describe('staff API routes', () => {
         remark: 'Keeps legacy gender',
         specialties: ['Strength Training'],
         photoUrl: null,
+        archivedAt: null,
         created_at: '2026-04-03T00:00:00.000Z',
       },
     })
@@ -986,6 +1177,7 @@ describe('staff API routes', () => {
         remark: null,
         specialties: ['Strength Training', 'HIIT'],
         photoUrl: null,
+        archivedAt: null,
         created_at: '2026-04-03T00:00:00.000Z',
       },
     })
@@ -1046,6 +1238,7 @@ describe('staff API routes', () => {
         remark: null,
         specialties: [],
         photoUrl: null,
+        archivedAt: null,
         created_at: '2026-04-03T00:00:00.000Z',
       },
     })
@@ -1185,6 +1378,41 @@ describe('staff API routes', () => {
     })
   })
 
+  it('returns 409 when patching an archived staff profile', async () => {
+    const { client, updateValues } = createStaffAdminClient({
+      detailReads: [
+        buildProfileRow({
+          id: 'staff-archived',
+          archivedAt: '2026-04-07T18:00:00.000Z',
+        }),
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await patchStaff(
+      new Request('http://localhost/api/staff/staff-archived', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Archived Staff',
+          titles: ['Owner'],
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-archived' }),
+      },
+    )
+
+    expect(response.status).toBe(409)
+    expect(updateValues).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Archived staff accounts are read-only.',
+    })
+  })
+
   it('blocks admins from removing their own admin access', async () => {
     mockAdminUser({
       user: {
@@ -1254,7 +1482,76 @@ describe('staff API routes', () => {
         remark: null,
         specialties: ['Strength Training', 'HIIT'],
         photoUrl: 'https://signed.example.com/staff-2.jpg',
+        archivedAt: null,
         created_at: '2026-04-03T00:00:00.000Z',
+      },
+      removal: {
+        mode: 'delete',
+        activeAssignments: 0,
+        history: {
+          trainerAssignments: 0,
+          ptSessions: 0,
+          sessionChanges: 0,
+          rescheduleRequestsRequested: 0,
+          rescheduleRequestsReviewed: 0,
+          sessionUpdateRequestsRequested: 0,
+          sessionUpdateRequestsReviewed: 0,
+          total: 0,
+        },
+      },
+    })
+  })
+
+  it('returns removal guidance for staff with retained history', async () => {
+    createClientMock.mockResolvedValue(
+      createStaffServerClient({
+        detailRow: buildProfileRow({
+          id: 'staff-3',
+          name: 'History Trainer',
+          role: 'staff',
+          titles: ['Trainer'],
+        }),
+      }),
+    )
+    const { client } = createStaffAdminClient({
+      trainerClientRows: [{ id: 'assignment-1', trainer_id: 'staff-3', status: 'inactive' }],
+      ptSessionRows: [{ id: 'session-1', trainer_id: 'staff-3' }],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await getStaffDetail(new Request('http://localhost/api/staff/staff-3'), {
+      params: Promise.resolve({ id: 'staff-3' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      profile: {
+        id: 'staff-3',
+        name: 'History Trainer',
+        email: 'admin@evolutionzfitness.com',
+        role: 'staff',
+        titles: ['Trainer'],
+        phone: null,
+        gender: null,
+        remark: null,
+        specialties: [],
+        photoUrl: null,
+        archivedAt: null,
+        created_at: '2026-04-03T00:00:00.000Z',
+      },
+      removal: {
+        mode: 'archive',
+        activeAssignments: 0,
+        history: {
+          trainerAssignments: 1,
+          ptSessions: 1,
+          sessionChanges: 0,
+          rescheduleRequestsRequested: 0,
+          rescheduleRequestsReviewed: 0,
+          sessionUpdateRequestsRequested: 0,
+          sessionUpdateRequestsReviewed: 0,
+          total: 2,
+        },
       },
     })
   })
@@ -1329,6 +1626,134 @@ describe('staff API routes', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'You cannot delete your own staff account.',
+    })
+  })
+
+  it('blocks deletion when the staff account has retained history', async () => {
+    const { client } = createStaffAdminClient({
+      detailReads: [
+        buildProfileRow({
+          id: 'staff-history',
+          role: 'staff',
+          titles: ['Trainer'],
+        }),
+      ],
+      trainerClientRows: [{ id: 'assignment-1', trainer_id: 'staff-history', status: 'inactive' }],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await deleteStaff(new Request('http://localhost/api/staff/staff-history'), {
+      params: Promise.resolve({ id: 'staff-history' }),
+    })
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'This staff account has retained PT or history records and should be archived instead of deleted.',
+      code: 'HAS_HISTORY',
+      removal: {
+        mode: 'archive',
+        activeAssignments: 0,
+        history: {
+          trainerAssignments: 1,
+          ptSessions: 0,
+          sessionChanges: 0,
+          rescheduleRequestsRequested: 0,
+          rescheduleRequestsReviewed: 0,
+          sessionUpdateRequestsRequested: 0,
+          sessionUpdateRequestsReviewed: 0,
+          total: 1,
+        },
+      },
+    })
+  })
+
+  it('blocks archiving when the staff account still has active assignments', async () => {
+    const { client, updateUserCalls, updateValues } = createStaffAdminClient({
+      detailReads: [
+        buildProfileRow({
+          id: 'staff-active-archive',
+          role: 'staff',
+          titles: ['Trainer'],
+        }),
+      ],
+      trainerClientRows: [{ id: 'assignment-1', trainer_id: 'staff-active-archive', status: 'active' }],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await archiveStaff(
+      new Request('http://localhost/api/staff/staff-active-archive/archive', {
+        method: 'POST',
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-active-archive' }),
+      },
+    )
+
+    expect(response.status).toBe(409)
+    expect(updateValues).toEqual([])
+    expect(updateUserCalls).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error:
+        'This staff account still has active PT assignments. Reassign or inactivate them before archiving this staff account.',
+      code: 'HAS_ACTIVE_ASSIGNMENTS',
+      removal: {
+        mode: 'blocked',
+        activeAssignments: 1,
+        history: {
+          trainerAssignments: 1,
+          ptSessions: 0,
+          sessionChanges: 0,
+          rescheduleRequestsRequested: 0,
+          rescheduleRequestsReviewed: 0,
+          sessionUpdateRequestsRequested: 0,
+          sessionUpdateRequestsReviewed: 0,
+          total: 1,
+        },
+      },
+    })
+  })
+
+  it('archives a history-only staff account and bans auth login', async () => {
+    const { client, updateUserCalls, updateValues } = createStaffAdminClient({
+      detailReads: [
+        buildProfileRow({
+          id: 'staff-archive',
+          role: 'staff',
+          titles: ['Trainer'],
+        }),
+      ],
+      trainerClientRows: [{ id: 'assignment-1', trainer_id: 'staff-archive', status: 'inactive' }],
+      ptSessionRows: [{ id: 'session-1', trainer_id: 'staff-archive' }],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await archiveStaff(
+      new Request('http://localhost/api/staff/staff-archive/archive', {
+        method: 'POST',
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-archive' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(updateValues).toHaveLength(1)
+    expect(updateValues[0]).toMatchObject({
+      archived_at: expect.any(String),
+    })
+    expect(updateUserCalls).toEqual([
+      {
+        userId: 'staff-archive',
+        attributes: {
+          ban_duration: '876000h',
+        },
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      archivedAt: expect.any(String),
     })
   })
 

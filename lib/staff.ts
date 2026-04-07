@@ -38,9 +38,32 @@ export type ExistingStaffProfileSummary = {
   name: string
   titles: StaffTitle[]
 }
+export type StaffRemovalHistory = {
+  trainerAssignments: number
+  ptSessions: number
+  sessionChanges: number
+  rescheduleRequestsRequested: number
+  rescheduleRequestsReviewed: number
+  sessionUpdateRequestsRequested: number
+  sessionUpdateRequestsReviewed: number
+  total: number
+}
+export type StaffRemoval = {
+  mode: 'blocked' | 'archive' | 'delete'
+  activeAssignments: number
+  history: StaffRemovalHistory
+}
+export type StaffDetail = {
+  profile: Profile
+  removal: StaffRemoval
+}
+export type ReadStaffOptions = {
+  includeArchived?: boolean
+  archivedOnly?: boolean
+}
 
 export const STAFF_PROFILE_SELECT =
-  'id, name, email, role, titles, phone, gender, remark, specialties, photoUrl:photo_url, created_at'
+  'id, name, email, role, titles, phone, gender, remark, specialties, photoUrl:photo_url, archivedAt:archived_at, created_at'
 
 type StaffListSuccessResponse = {
   staff: Profile[]
@@ -48,6 +71,7 @@ type StaffListSuccessResponse = {
 
 type StaffDetailSuccessResponse = {
   profile: Profile
+  removal: StaffRemoval
 }
 
 type StaffErrorResponse = {
@@ -72,6 +96,7 @@ const profileRecordSchema = z.object({
   remark: z.string().trim().min(1).nullable(),
   specialties: z.array(z.string()).nullable().optional(),
   photoUrl: z.string().trim().min(1).nullable(),
+  archivedAt: z.string().trim().min(1).nullable().optional(),
   created_at: z.string().trim().min(1, 'Created timestamp is required.'),
 })
 
@@ -87,6 +112,20 @@ const staffListResponseSchema = z.object({
 
 const staffDetailResponseSchema = z.object({
   profile: profileRecordSchema,
+  removal: z.object({
+    mode: z.enum(['blocked', 'archive', 'delete']),
+    activeAssignments: z.number().int().nonnegative(),
+    history: z.object({
+      trainerAssignments: z.number().int().nonnegative(),
+      ptSessions: z.number().int().nonnegative(),
+      sessionChanges: z.number().int().nonnegative(),
+      rescheduleRequestsRequested: z.number().int().nonnegative(),
+      rescheduleRequestsReviewed: z.number().int().nonnegative(),
+      sessionUpdateRequestsRequested: z.number().int().nonnegative(),
+      sessionUpdateRequestsReviewed: z.number().int().nonnegative(),
+      total: z.number().int().nonnegative(),
+    }),
+  }),
 })
 
 function normalizeText(value: string | null | undefined) {
@@ -172,6 +211,14 @@ function normalizeTimestamp(value: string) {
   return timestamp.toISOString()
 }
 
+function normalizeOptionalTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return null
+  }
+
+  return normalizeTimestamp(value)
+}
+
 export function mapProfileRecordToProfile(
   record: z.infer<typeof profileRecordSchema>,
 ): Profile {
@@ -188,6 +235,7 @@ export function mapProfileRecordToProfile(
     remark: normalizeNullableText(record.remark),
     specialties: normalizeStaffSpecialtiesForTitles(titles, record.specialties),
     photoUrl: normalizeNullableText(record.photoUrl),
+    archivedAt: normalizeOptionalTimestamp(record.archivedAt ?? null),
     created_at: normalizeTimestamp(record.created_at),
   }
 }
@@ -213,13 +261,30 @@ export function normalizeProfiles(input: unknown): Profile[] {
 }
 
 export function normalizeProfile(input: unknown): Profile | null {
-  const parsed = staffDetailResponseSchema.safeParse(input)
+  const parsed = z
+    .object({
+      profile: profileRecordSchema,
+    })
+    .safeParse(input)
 
   if (!parsed.success) {
     return null
   }
 
   return mapProfileRecordToProfile(parsed.data.profile)
+}
+
+export function normalizeStaffDetail(input: unknown): StaffDetail | null {
+  const parsed = staffDetailResponseSchema.safeParse(input)
+
+  if (!parsed.success) {
+    return null
+  }
+
+  return {
+    profile: mapProfileRecordToProfile(parsed.data.profile),
+    removal: parsed.data.removal,
+  }
 }
 
 export function normalizeExistingStaffProfileSummary(
@@ -272,11 +337,26 @@ export function formatStaffGenderLabel(gender: StaffGender | null) {
   return gender.charAt(0).toUpperCase() + gender.slice(1)
 }
 
-export async function readStaffProfiles(supabase: StaffReadClient) {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select(STAFF_PROFILE_SELECT)
-    .order('created_at', { ascending: true })
+function applyArchivedFilter(query: any, options: ReadStaffOptions = {}) {
+  if (options.archivedOnly) {
+    return typeof query?.not === 'function' ? query.not('archived_at', 'is', null) : query
+  }
+
+  if (options.includeArchived) {
+    return query
+  }
+
+  return typeof query?.is === 'function' ? query.is('archived_at', null) : query
+}
+
+export async function readStaffProfiles(
+  supabase: StaffReadClient,
+  options: ReadStaffOptions = {},
+) {
+  const { data, error } = await applyArchivedFilter(
+    supabase.from('profiles').select(STAFF_PROFILE_SELECT),
+    options,
+  ).order('created_at', { ascending: true })
 
   if (error) {
     throw new Error(`Failed to read staff profiles: ${error.message}`)
@@ -290,12 +370,12 @@ export async function readStaffProfiles(supabase: StaffReadClient) {
 export async function readStaffProfile(
   supabase: StaffReadClient,
   id: string,
+  options: ReadStaffOptions = {},
 ) {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select(STAFF_PROFILE_SELECT)
-    .eq('id', id)
-    .maybeSingle()
+  const { data, error } = await applyArchivedFilter(
+    supabase.from('profiles').select(STAFF_PROFILE_SELECT).eq('id', id),
+    options,
+  ).maybeSingle()
 
   if (error) {
     throw new Error(`Failed to read staff profile ${id}: ${error.message}`)
@@ -310,8 +390,18 @@ export async function readStaffProfile(
   })
 }
 
-export async function fetchStaff(): Promise<Profile[]> {
-  const response = await fetch('/api/staff', {
+export async function fetchStaff(
+  options: {
+    archived?: boolean
+  } = {},
+): Promise<Profile[]> {
+  const searchParams = new URLSearchParams()
+
+  if (options.archived) {
+    searchParams.set('archived', '1')
+  }
+
+  const response = await fetch(`/api/staff${searchParams.size > 0 ? `?${searchParams}` : ''}`, {
     method: 'GET',
     cache: 'no-store',
   })
@@ -333,7 +423,7 @@ export async function fetchStaff(): Promise<Profile[]> {
   return normalizeProfiles(responseBody)
 }
 
-export async function fetchStaffProfile(id: string): Promise<Profile> {
+export async function fetchStaffProfile(id: string): Promise<StaffDetail> {
   const response = await fetch(`/api/staff/${encodeURIComponent(id)}`, {
     method: 'GET',
     cache: 'no-store',
@@ -355,11 +445,11 @@ export async function fetchStaffProfile(id: string): Promise<Profile> {
     )
   }
 
-  const profile = normalizeProfile(responseBody)
+  const detail = normalizeStaffDetail(responseBody)
 
-  if (!profile) {
+  if (!detail) {
     throw new Error('Failed to load staff profile.')
   }
 
-  return profile
+  return detail
 }

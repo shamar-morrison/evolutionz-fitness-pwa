@@ -69,8 +69,29 @@ export async function updateSession(request: NextRequest) {
     return copyCookies(response, NextResponse.redirect(loginUrl))
   }
 
-  if (user && request.nextUrl.pathname === '/login') {
+  if (user) {
     const profile = await readStaffProfile(supabase as any, user.id)
+
+    if (!profile) {
+      if (typeof supabase.auth.signOut === 'function') {
+        await supabase.auth.signOut()
+      }
+
+      if (request.nextUrl.pathname === '/login') {
+        return response
+      }
+
+      const loginUrl = request.nextUrl.clone()
+      loginUrl.pathname = '/login'
+      loginUrl.search = ''
+
+      return copyCookies(response, NextResponse.redirect(loginUrl))
+    }
+
+    if (request.nextUrl.pathname !== '/login') {
+      return response
+    }
+
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = getAuthenticatedHomePath(profile?.role)
     redirectUrl.search = ''

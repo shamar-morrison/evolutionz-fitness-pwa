@@ -170,6 +170,7 @@ function createTrainer(overrides: Partial<Profile> = {}): Profile {
     remark: overrides.remark ?? null,
     specialties: overrides.specialties ?? [],
     photoUrl: overrides.photoUrl ?? null,
+    archivedAt: overrides.archivedAt ?? null,
     created_at: overrides.created_at ?? '2026-04-03T00:00:00.000Z',
   }
 }

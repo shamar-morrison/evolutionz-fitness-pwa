@@ -35,6 +35,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     remark: overrides.remark ?? 'Existing staff member',
     specialties: overrides.specialties ?? ['HIIT', 'Strength Training'],
     photoUrl: overrides.photoUrl ?? null,
+    archivedAt: overrides.archivedAt ?? null,
     created_at: overrides.created_at ?? '2026-04-03T00:00:00.000Z',
   }
 }
