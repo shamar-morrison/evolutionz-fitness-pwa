@@ -11,7 +11,7 @@ export function QuickActions() {
       <RoleGuard role="admin">
         <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
           <Link href="/members?action=add">
-            <UserPlus className="mr-2 h-4 w-4" />
+            <UserPlus className="h-4 w-4" />
             Add Member
           </Link>
         </Button>
