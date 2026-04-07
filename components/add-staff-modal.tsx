@@ -252,7 +252,10 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]">
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]"
+        isLoading={isSubmitting}
+      >
         <DialogHeader>
           <p className="text-sm font-medium text-muted-foreground">
             {duplicateProfile ? 'Confirmation required' : `Step ${step} of 3`}
@@ -295,7 +298,12 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
               >
                 Cancel
               </Button>
-              <Button type="button" onClick={() => void handleConfirmDuplicate()} disabled={isSubmitting}>
+              <Button
+                type="button"
+                onClick={() => void handleConfirmDuplicate()}
+                disabled={isSubmitting}
+                loading={isSubmitting}
+              >
                 {isSubmitting ? 'Updating Staff...' : 'Confirm'}
               </Button>
             </DialogFooter>
@@ -368,10 +376,15 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
                   Next
                 </Button>
               ) : (
-                <Button key="save-staff-button" type="submit" disabled={isSubmitting}>
+                <Button
+                  key="save-staff-button"
+                  type="submit"
+                  disabled={isSubmitting}
+                  loading={isSubmitting}
+                >
                   {isSubmitting ? 'Creating Staff...' : (
                     <>
-                      <UserPlus className="h-4 w-4" />
+                      <UserPlus data-icon="inline-start" className="h-4 w-4" />
                       Save Staff
                     </>
                   )}

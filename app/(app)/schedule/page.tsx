@@ -394,7 +394,7 @@ function SchedulePageContent() {
       </div>
 
       <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
-        <DialogContent className="sm:max-w-[560px]">
+        <DialogContent className="sm:max-w-[560px]" isLoading={isGenerating}>
           <DialogHeader>
             <DialogTitle>Generate Sessions</DialogTitle>
             <DialogDescription>
@@ -441,7 +441,12 @@ function SchedulePageContent() {
             <Button type="button" variant="outline" onClick={() => setShowGenerateDialog(false)} disabled={isGenerating}>
               Cancel
             </Button>
-            <Button type="button" onClick={() => void handleGenerate()} disabled={isGenerating}>
+            <Button
+              type="button"
+              onClick={() => void handleGenerate()}
+              disabled={isGenerating}
+              loading={isGenerating}
+            >
               {isGenerating ? 'Generating...' : 'Generate'}
             </Button>
           </DialogFooter>

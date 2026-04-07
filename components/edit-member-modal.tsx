@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { z } from 'zod'
-import { Calendar as CalendarIcon } from 'lucide-react'
+import { Calendar as CalendarIcon, Pencil } from 'lucide-react'
 import { Pattern } from '@/components/ui/file-upload'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -344,7 +344,10 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]">
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]"
+        isLoading={isSubmitting}
+      >
         <DialogHeader>
           <DialogTitle>Edit Member</DialogTitle>
           <DialogDescription>
@@ -599,8 +602,14 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
               type="submit"
               disabled={isSubmitting || !hasChanges || !isFormValid}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
+              loading={isSubmitting}
             >
-              {isSubmitting ? 'Saving...' : 'Save Changes'}
+              {isSubmitting ? 'Saving...' : (
+                <>
+                  <Pencil data-icon="inline-start" className="h-4 w-4" />
+                  Save Changes
+                </>
+              )}
             </Button>
           </DialogFooter>
         </form>

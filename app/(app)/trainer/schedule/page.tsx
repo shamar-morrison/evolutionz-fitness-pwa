@@ -464,7 +464,7 @@ function ScheduleContent() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent isLoading={isSubmittingReschedule}>
           <DialogHeader>
             <DialogTitle>Request Reschedule</DialogTitle>
             <DialogDescription>
@@ -513,6 +513,7 @@ function ScheduleContent() {
                 !rescheduleDateTime ||
                 Boolean(rescheduleValidationMessage)
               }
+              loading={isSubmittingReschedule}
             >
               {isSubmittingReschedule ? 'Sending...' : 'Send Request'}
             </Button>
@@ -528,7 +529,7 @@ function ScheduleContent() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent isLoading={isSubmittingCancellation}>
           <DialogHeader>
             <DialogTitle>Cancel Session</DialogTitle>
             <DialogDescription>
@@ -572,6 +573,7 @@ function ScheduleContent() {
               type="button"
               onClick={() => void handleSubmitCancellation()}
               disabled={isSubmittingCancellation || !cancellationReason.trim()}
+              loading={isSubmittingCancellation}
             >
               {isSubmittingCancellation ? 'Submitting...' : 'Submit'}
             </Button>

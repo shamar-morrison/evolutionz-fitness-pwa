@@ -165,7 +165,10 @@ export function PtSessionDialog({ sessionId, open, onOpenChange }: PtSessionDial
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[640px]">
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-[640px]"
+        isLoading={isSubmitting}
+      >
         <DialogHeader>
           <DialogTitle>Session Details</DialogTitle>
           <DialogDescription>
@@ -301,12 +304,12 @@ export function PtSessionDialog({ sessionId, open, onOpenChange }: PtSessionDial
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting || !hasChanges}>
+              <Button type="submit" disabled={isSubmitting || !hasChanges} loading={isSubmitting}>
                 {isSubmitting ? (
                   'Saving...'
                 ) : (
                   <>
-                    <Save className="h-4 w-4" />
+                    <Save data-icon="inline-start" className="h-4 w-4" />
                     Save
                   </>
                 )}

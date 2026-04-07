@@ -23,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Spinner } from '@/components/ui/spinner'
 import { useAvailableCards } from '@/hooks/use-available-cards'
 import { toast } from '@/hooks/use-toast'
 import { formatAvailableAccessCardLabel } from '@/lib/available-cards'
@@ -258,7 +257,7 @@ export function AssignCardModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg" showCloseButton={!isSubmitting}>
+      <DialogContent className="sm:max-w-lg" isLoading={isSubmitting}>
         <DialogHeader>
           <DialogTitle>Assign Card</DialogTitle>
           <DialogDescription>{progressDescription}</DialogDescription>
@@ -421,8 +420,8 @@ export function AssignCardModal({
                 !calculatedEndTime
               }
               className="bg-primary text-primary-foreground hover:bg-primary/90"
+              loading={isSubmitting}
             >
-              {isSubmitting ? <Spinner className="mr-2" /> : null}
               {isSubmitting ? 'Assigning Card...' : 'Assign Card'}
             </Button>
           </DialogFooter>

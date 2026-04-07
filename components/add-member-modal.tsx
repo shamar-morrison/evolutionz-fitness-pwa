@@ -339,7 +339,10 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]">
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]"
+        isLoading={isSubmitting}
+      >
         <DialogHeader>
           <DialogTitle>Add New Member</DialogTitle>
           <DialogDescription>{progressDescription}</DialogDescription>
@@ -631,6 +634,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
                 !calculatedEndTime
               }
               className="bg-primary text-primary-foreground hover:bg-primary/90"
+              loading={isSubmitting}
             >
               {submitLabel}
             </Button>

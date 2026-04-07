@@ -177,7 +177,7 @@ describe('Sidebar', () => {
     })
 
     expect(container.textContent).toContain('Dashboard')
-    expect(container.textContent).toContain('Pending Approvals')
+    expect(container.textContent).toContain('Notifications')
     expect(container.textContent).toContain('Reschedule Requests')
     expect(container.textContent).toContain('Session Updates')
 

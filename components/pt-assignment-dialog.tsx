@@ -325,7 +325,10 @@ export function PtAssignmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]">
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]"
+        isLoading={isSubmitting}
+      >
         <DialogHeader>
           <DialogTitle>{mode === 'create' ? 'Assign Trainer' : 'Edit Assignment'}</DialogTitle>
           <DialogDescription>
@@ -607,17 +610,18 @@ export function PtAssignmentDialog({
                 (mode === 'edit' && !hasChanges) ||
                 (mode === 'create' && trainers.length === 0)
               }
+              loading={isSubmitting}
             >
               {isSubmitting ? (
                 mode === 'create' ? 'Assigning...' : 'Saving...'
               ) : mode === 'create' ? (
                 <>
-                  <Plus className="h-4 w-4" />
+                  <Plus data-icon="inline-start" className="h-4 w-4" />
                   Assign Trainer
                 </>
               ) : (
                 <>
-                  <Pencil className="h-4 w-4" />
+                  <Pencil data-icon="inline-start" className="h-4 w-4" />
                   Save Changes
                 </>
               )}

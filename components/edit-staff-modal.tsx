@@ -195,7 +195,10 @@ export function EditStaffModal({ profile, open, onOpenChange, onSuccess }: EditS
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]">
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]"
+        isLoading={isSubmitting}
+      >
         <DialogHeader>
           <DialogTitle>Edit Staff</DialogTitle>
           <DialogDescription>
@@ -226,10 +229,11 @@ export function EditStaffModal({ profile, open, onOpenChange, onSuccess }: EditS
             <Button
               type="submit"
               disabled={isSubmitting || !formData.name.trim() || formData.titles.length === 0 || !hasChanges}
+              loading={isSubmitting}
             >
               {isSubmitting ? 'Saving Changes...' : (
                 <>
-                  <Pencil className="h-4 w-4" />
+                  <Pencil data-icon="inline-start" className="h-4 w-4" />
                   Save Changes
                 </>
               )}

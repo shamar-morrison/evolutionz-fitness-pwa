@@ -300,7 +300,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
       />
 
       <Dialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
-        <DialogContent className="sm:max-w-[560px]">
+        <DialogContent className="sm:max-w-[560px]" isLoading={isRemoving}>
           <DialogHeader>
             <DialogTitle>Remove trainer assignment?</DialogTitle>
             <DialogDescription>
@@ -313,6 +313,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
               variant="outline"
               onClick={() => void handleRemoveAssignment(false)}
               disabled={isRemoving}
+              loading={isRemoving}
             >
               Keep existing sessions
             </Button>
@@ -321,6 +322,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
               variant="destructive"
               onClick={() => void handleRemoveAssignment(true)}
               disabled={isRemoving}
+              loading={isRemoving}
             >
               Remove assignment and cancel all future sessions
             </Button>

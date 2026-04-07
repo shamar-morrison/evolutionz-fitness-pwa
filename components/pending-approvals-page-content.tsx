@@ -301,7 +301,7 @@ export function PendingApprovalsPageContent({
             }
           }}
         >
-          <DialogContent>
+          <DialogContent isLoading={isSubmittingReview}>
             <DialogHeader>
               <DialogTitle>Review Reschedule Request</DialogTitle>
               <DialogDescription>
@@ -376,6 +376,7 @@ export function PendingApprovalsPageContent({
                 variant="outline"
                 onClick={() => void handleReviewRescheduleRequest('denied')}
                 disabled={isSubmittingReview}
+                loading={isSubmittingReview}
               >
                 Deny
               </Button>
@@ -387,6 +388,7 @@ export function PendingApprovalsPageContent({
                   !approvedTime ||
                   Boolean(approvedTimeValidationMessage)
                 }
+                loading={isSubmittingReview}
               >
                 Approve
               </Button>
@@ -402,7 +404,7 @@ export function PendingApprovalsPageContent({
             }
           }}
         >
-          <DialogContent>
+          <DialogContent isLoading={isSubmittingReview}>
             <DialogHeader>
               <DialogTitle>Review Session Update</DialogTitle>
               <DialogDescription>
@@ -465,6 +467,7 @@ export function PendingApprovalsPageContent({
                 variant="outline"
                 onClick={() => void handleReviewSessionUpdateRequest('denied')}
                 disabled={isSubmittingReview}
+                loading={isSubmittingReview}
               >
                 Deny
               </Button>
@@ -472,6 +475,7 @@ export function PendingApprovalsPageContent({
                 type="button"
                 onClick={() => void handleReviewSessionUpdateRequest('approved')}
                 disabled={isSubmittingReview}
+                loading={isSubmittingReview}
               >
                 Approve
               </Button>
