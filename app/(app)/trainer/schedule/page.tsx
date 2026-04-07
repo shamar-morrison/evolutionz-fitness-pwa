@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/auth-context'
@@ -42,6 +43,7 @@ import {
   type PtSession,
 } from '@/lib/pt-scheduling'
 import { queryKeys } from '@/lib/query-keys'
+import { cn } from '@/lib/utils'
 
 const TWO_MINUTES_MS = 2 * 60 * 1000
 const PAST_PAGE_SIZE = 10
@@ -49,6 +51,7 @@ const PENDING_APPROVAL_BADGE_CLASSNAME =
   'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
 
 type TrainerScheduleTab = 'upcoming' | 'today' | 'past'
+type SessionPendingAction = 'completed' | 'missed' | 'cancelled' | 'reschedule'
 
 function sortAscending(left: PtSession, right: PtSession) {
   return new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime()
@@ -72,6 +75,12 @@ function getEmptyStateLabel(tab: TrainerScheduleTab) {
   }
 
   return 'No upcoming sessions.'
+}
+
+function getSessionPendingActionLabel(action: SessionPendingAction) {
+  return action === 'completed' || action === 'missed'
+    ? 'Updating session...'
+    : 'Submitting request...'
 }
 
 function ReadOnlyField({
@@ -106,6 +115,9 @@ function ScheduleContent() {
   const [cancellationReason, setCancellationReason] = useState('')
   const [isSubmittingReschedule, setIsSubmittingReschedule] = useState(false)
   const [isSubmittingCancellation, setIsSubmittingCancellation] = useState(false)
+  const [pendingActionBySessionId, setPendingActionBySessionId] = useState<
+    Partial<Record<string, SessionPendingAction>>
+  >({})
   const trainerId = profile?.id ?? ''
 
   const upcomingQuery = useQuery({
@@ -196,20 +208,47 @@ function ScheduleContent() {
     ])
   }
 
+  const runSessionAction = async <TResult,>(
+    sessionId: string,
+    pendingAction: SessionPendingAction,
+    action: () => Promise<TResult>,
+  ) => {
+    setPendingActionBySessionId((current) => ({
+      ...current,
+      [sessionId]: pendingAction,
+    }))
+
+    try {
+      return await action()
+    } finally {
+      setPendingActionBySessionId((current) => {
+        if (!(sessionId in current)) {
+          return current
+        }
+
+        const next = { ...current }
+        delete next[sessionId]
+        return next
+      })
+    }
+  }
+
   const handleMarkSession = async (
     session: PtSession,
     requestedStatus: 'completed' | 'missed',
   ) => {
     try {
-      const result = await markPtSession(session.id, { requestedStatus })
+      const result = await runSessionAction(session.id, requestedStatus, async () => {
+        const nextResult = await markPtSession(session.id, { requestedStatus })
+        await invalidateTrainerWorkspaceQueries()
+        return nextResult
+      })
 
       if ('pending' in result && result.pending) {
-        await invalidateTrainerWorkspaceQueries()
         toast({
           title: 'Request submitted — pending admin approval.',
         })
       } else {
-        await invalidateTrainerWorkspaceQueries()
         toast({
           title: 'Session updated',
           description: `The session was marked ${requestedStatus}.`,
@@ -242,14 +281,17 @@ function ScheduleContent() {
       return
     }
 
+    const sessionId = selectedRescheduleSession.id
     setIsSubmittingReschedule(true)
 
     try {
-      await createPtRescheduleRequest(selectedRescheduleSession.id, {
-        proposedAt: rescheduleDateTime,
-        note: rescheduleNote.trim() || null,
+      await runSessionAction(sessionId, 'reschedule', async () => {
+        await createPtRescheduleRequest(sessionId, {
+          proposedAt: rescheduleDateTime,
+          note: rescheduleNote.trim() || null,
+        })
+        await invalidateTrainerWorkspaceQueries()
       })
-      await invalidateTrainerWorkspaceQueries()
       setSelectedRescheduleSession(null)
       toast({
         title: 'Request submitted — pending admin approval.',
@@ -273,23 +315,26 @@ function ScheduleContent() {
       return
     }
 
+    const sessionId = selectedCancellationSession.id
     setIsSubmittingCancellation(true)
 
     try {
-      const result = await markPtSession(selectedCancellationSession.id, {
-        requestedStatus: 'cancelled',
-        note,
+      const result = await runSessionAction(sessionId, 'cancelled', async () => {
+        const nextResult = await markPtSession(sessionId, {
+          requestedStatus: 'cancelled',
+          note,
+        })
+        await invalidateTrainerWorkspaceQueries()
+        return nextResult
       })
 
       if ('pending' in result && result.pending) {
-        await invalidateTrainerWorkspaceQueries()
         setSelectedCancellationSession(null)
         setCancellationReason('')
         toast({
           title: 'Request submitted — pending admin approval.',
         })
       } else {
-        await invalidateTrainerWorkspaceQueries()
         setSelectedCancellationSession(null)
         setCancellationReason('')
         toast({
@@ -355,13 +400,26 @@ function ScheduleContent() {
             ) : (
               visibleSessions.map((session) => {
                 const hasPendingRequest = session.pendingRequestType !== null
+                const pendingAction = pendingActionBySessionId[session.id] ?? null
+                const isSessionPending = pendingAction !== null
                 const showMarkAction =
                   (activeTab === 'upcoming' || activeTab === 'today') && !hasPendingRequest
                 const showRescheduleAction = activeTab === 'upcoming' && !hasPendingRequest
 
                 return (
-                  <Card key={session.id}>
-                    <CardContent className="flex flex-col gap-4 p-5 xl:flex-row xl:items-center xl:justify-between">
+                  <Card
+                    key={session.id}
+                    className="relative overflow-hidden"
+                    data-session-id={session.id}
+                    data-session-loading={isSessionPending ? 'true' : 'false'}
+                    aria-busy={isSessionPending}
+                  >
+                    <CardContent
+                      className={cn(
+                        'flex flex-col gap-4 p-5 xl:flex-row xl:items-center xl:justify-between',
+                        isSessionPending ? 'opacity-60' : undefined,
+                      )}
+                    >
                       <div className="flex items-start gap-4">
                         <MemberAvatar
                           name={session.memberName ?? 'Member'}
@@ -403,23 +461,28 @@ function ScheduleContent() {
                         {showMarkAction ? (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="outline">
+                              <Button variant="outline" disabled={isSessionPending}>
                                 <EllipsisVertical className="h-4 w-4" />
                                 Mark Session
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
+                                disabled={isSessionPending}
                                 onClick={() => void handleMarkSession(session, 'completed')}
                               >
                                 Completed
                               </DropdownMenuItem>
                               <DropdownMenuItem
+                                disabled={isSessionPending}
                                 onClick={() => void handleMarkSession(session, 'missed')}
                               >
                                 Missed
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleOpenCancellation(session)}>
+                              <DropdownMenuItem
+                                disabled={isSessionPending}
+                                onClick={() => handleOpenCancellation(session)}
+                              >
                                 Cancelled
                               </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -430,6 +493,7 @@ function ScheduleContent() {
                           <Button
                             type="button"
                             variant="outline"
+                            disabled={isSessionPending}
                             onClick={() => handleOpenReschedule(session)}
                           >
                             Request Reschedule
@@ -437,6 +501,17 @@ function ScheduleContent() {
                         ) : null}
                       </div>
                     </CardContent>
+
+                    {pendingAction ? (
+                      <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/75">
+                        <div className="flex items-center gap-3 rounded-full border bg-background px-4 py-2 shadow-sm">
+                          <Spinner />
+                          <span className="text-sm font-medium">
+                            {getSessionPendingActionLabel(pendingAction)}
+                          </span>
+                        </div>
+                      </div>
+                    ) : null}
                   </Card>
                 )
               })
