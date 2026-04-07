@@ -11,7 +11,9 @@ import {
   normalizeStaffSpecialtiesForTitles,
   readStaffProfile,
   type StaffReadClient,
+  type StaffRemoval,
 } from '@/lib/staff'
+import { readStaffRemovalState, type StaffRemovalReadClient } from '@/lib/staff-removal'
 import {
   deleteStaffPhotoObject,
   hydrateStaffPhotoUrl,
@@ -26,8 +28,32 @@ type QueryResult<T> = PromiseLike<{
   error: { message: string } | null
 }>
 
+type UpdateStaffValues = {
+  name: string
+  role: 'admin' | 'staff'
+  titles: string[]
+  phone: string | null
+  gender?: 'male' | 'female' | null
+  remark: string | null
+  specialties?: string[]
+}
+
+type UpdateStaffAdminClient = StaffReadClient & {
+  from(table: 'profiles'): {
+    update(values: UpdateStaffValues): {
+      eq(column: 'id', value: string): {
+        select(columns: typeof STAFF_PROFILE_SELECT): {
+          maybeSingle(): QueryResult<Record<string, unknown>>
+        }
+      }
+    }
+  }
+  from(table: string): unknown
+}
+
 type DeleteStaffAdminClient = StaffReadClient &
-  StaffPhotoStorageClient & {
+  StaffPhotoStorageClient &
+  StaffRemovalReadClient & {
     auth: {
       admin: {
         deleteUser(userId: string): PromiseLike<{
@@ -48,29 +74,7 @@ type DeleteStaffAdminClient = StaffReadClient &
     from(table: string): unknown
   }
 
-type UpdateStaffValues = {
-  name: string
-  role: 'admin' | 'staff'
-  titles: string[]
-  phone: string | null
-  gender?: 'male' | 'female' | null
-  remark: string | null
-  specialties?: string[]
-}
-
-type UpdateStaffAdminClient = {
-  from(table: 'profiles'): {
-    update(values: UpdateStaffValues): {
-      eq(column: 'id', value: string): {
-        select(columns: typeof STAFF_PROFILE_SELECT): {
-          maybeSingle(): QueryResult<Record<string, unknown>>
-        }
-      }
-    }
-  }
-  from(table: string): unknown
-}
-
+const ARCHIVED_STAFF_ERROR = 'Archived staff accounts are read-only.'
 const DELETE_STAFF_AUTH_WARNING =
   'The staff profile was deleted, but the auth user could not be removed. Delete the user manually from Supabase Auth.'
 const SELF_DEMOTION_ERROR = 'You cannot remove your own admin access.'
@@ -86,11 +90,16 @@ const updateStaffRequestSchema = z
   })
   .strict()
 
-function createErrorResponse(error: string, status: number) {
+function createErrorResponse(
+  error: string,
+  status: number,
+  options: Record<string, unknown> = {},
+) {
   return NextResponse.json(
     {
       ok: false,
       error,
+      ...options,
     },
     { status },
   )
@@ -99,6 +108,28 @@ function createErrorResponse(error: string, status: number) {
 function normalizeOptionalText(value: string | null | undefined) {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || null
+}
+
+function createRemovalConflictResponse(removal: StaffRemoval) {
+  if (removal.mode === 'blocked') {
+    return createErrorResponse(
+      'This staff account still has active PT assignments. Reassign or inactivate them before removing this staff account.',
+      409,
+      {
+        code: 'HAS_ACTIVE_ASSIGNMENTS',
+        removal,
+      },
+    )
+  }
+
+  return createErrorResponse(
+    'This staff account has retained PT or history records and should be archived instead of deleted.',
+    409,
+    {
+      code: 'HAS_HISTORY',
+      removal,
+    },
+  )
 }
 
 export async function GET(
@@ -115,16 +146,21 @@ export async function GET(
     const { id } = await params
     const supabase = (await createClient()) as unknown as StaffReadClient
     const storageClient = getSupabaseAdminClient() as unknown as StaffPhotoStorageClient
-    const profile = await readStaffProfile(supabase, id)
+    const removalClient = getSupabaseAdminClient() as unknown as StaffRemovalReadClient
+    const profile = await readStaffProfile(supabase, id, { includeArchived: true })
 
     if (!profile) {
       return createErrorResponse('Staff profile not found.', 404)
     }
 
-    const hydratedProfile = await hydrateStaffPhotoUrl(storageClient, profile)
+    const [hydratedProfile, removal] = await Promise.all([
+      hydrateStaffPhotoUrl(storageClient, profile),
+      readStaffRemovalState(removalClient, id),
+    ])
 
     return NextResponse.json({
       profile: hydratedProfile,
+      removal,
     })
   } catch (error) {
     return createErrorResponse(
@@ -164,6 +200,16 @@ export async function PATCH(
     }
 
     const supabase = getSupabaseAdminClient() as unknown as UpdateStaffAdminClient
+    const existingProfile = await readStaffProfile(supabase, id, { includeArchived: true })
+
+    if (!existingProfile) {
+      return createErrorResponse('Staff profile not found.', 404)
+    }
+
+    if (existingProfile.archivedAt) {
+      return createErrorResponse(ARCHIVED_STAFF_ERROR, 409)
+    }
+
     const updateValues: UpdateStaffValues = {
       name: input.name.trim(),
       role: deriveRoleFromTitles(input.titles),
@@ -248,10 +294,20 @@ export async function DELETE(
     }
 
     const supabase = getSupabaseAdminClient() as unknown as DeleteStaffAdminClient
-    const existingProfile = await readStaffProfile(supabase, id)
+    const existingProfile = await readStaffProfile(supabase, id, { includeArchived: true })
 
     if (!existingProfile) {
       return createErrorResponse('Staff profile not found.', 404)
+    }
+
+    if (existingProfile.archivedAt) {
+      return createErrorResponse(ARCHIVED_STAFF_ERROR, 409)
+    }
+
+    const removal = await readStaffRemovalState(supabase, id)
+
+    if (removal.mode !== 'delete') {
+      return createRemovalConflictResponse(removal)
     }
 
     if (existingProfile.photoUrl) {

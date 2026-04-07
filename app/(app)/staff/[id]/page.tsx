@@ -3,7 +3,7 @@
 import { format } from 'date-fns'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Pencil, Trash2, User } from 'lucide-react'
+import { Archive, ArrowLeft, Pencil, Trash2, User } from 'lucide-react'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EditStaffModal } from '@/components/edit-staff-modal'
 import { MemberAvatar } from '@/components/member-avatar'
@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useStaffProfile } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
 import { queryKeys } from '@/lib/query-keys'
-import { deleteStaff, deleteStaffPhoto } from '@/lib/staff-actions'
+import { archiveStaff, deleteStaff, deleteStaffPhoto } from '@/lib/staff-actions'
 import { formatStaffGenderLabel, formatStaffTitles, hasStaffTitle } from '@/lib/staff'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -35,11 +35,11 @@ function StaffDetailPageContent() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const profileId = params.id as string
-  const { profile, isLoading, error } = useStaffProfile(profileId)
+  const { profile, removal, isLoading, error } = useStaffProfile(profileId)
   const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
-  const [activeDialog, setActiveDialog] = useState<null | 'delete-photo' | 'delete-staff'>(null)
+  const [activeDialog, setActiveDialog] = useState<null | 'archive-staff' | 'delete-photo' | 'delete-staff'>(null)
 
   useEffect(() => {
     setAvatarPhotoUrl(profile?.photoUrl ?? null)
@@ -48,6 +48,7 @@ function StaffDetailPageContent() {
   const invalidateStaffQueries = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.staff.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.staff.archived }),
       queryClient.invalidateQueries({ queryKey: queryKeys.staff.detail(profileId) }),
     ])
 
@@ -108,6 +109,34 @@ function StaffDetailPageContent() {
     }
   }
 
+  const handleArchiveStaff = async () => {
+    if (!profile) {
+      return
+    }
+
+    setIsActionLoading(true)
+
+    try {
+      await archiveStaff(profile.id)
+      setActiveDialog(null)
+      await invalidateStaffQueries()
+      toast({
+        title: 'Staff archived',
+        description: `${profile.name} was archived and can no longer sign in.`,
+      })
+      router.replace('/staff')
+    } catch (error) {
+      console.error('Failed to archive staff:', error)
+      toast({
+        title: 'Staff archive failed',
+        description: error instanceof Error ? error.message : 'Failed to archive this staff member.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   if (error) {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center gap-4">
@@ -136,6 +165,27 @@ function StaffDetailPageContent() {
     return null
   }
 
+  const isArchived = Boolean(profile.archivedAt)
+  const removalAction =
+    isArchived || !removal
+      ? null
+      : removal.mode === 'delete'
+        ? {
+            dialog: 'delete-staff' as const,
+            icon: Trash2,
+            label: 'Delete Staff',
+          }
+        : {
+            dialog: 'archive-staff' as const,
+            icon: Archive,
+            label: 'Archive Staff',
+          }
+  const isRemovalBlocked = !isArchived && removal?.mode === 'blocked'
+  const blockedRemovalMessage =
+    removal && removal.activeAssignments > 0
+      ? `This trainer still has ${removal.activeAssignments} active PT assignment${removal.activeAssignments === 1 ? '' : 's'}. Reassign or inactivate them before removing this staff account.`
+      : null
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -144,6 +194,13 @@ function StaffDetailPageContent() {
         </Button>
         <h1 className="text-3xl font-bold tracking-tight">Staff Details</h1>
       </div>
+
+      {isArchived ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          This staff account was archived on {formatCreatedAt(profile.archivedAt ?? profile.created_at)}.
+          Archived accounts are read-only and cannot sign in.
+        </div>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1">
@@ -155,7 +212,7 @@ function StaffDetailPageContent() {
                 size="lg"
                 className="h-28 w-28 text-2xl"
               />
-              {avatarPhotoUrl ? (
+              {avatarPhotoUrl && !isArchived ? (
                 <Button
                   type="button"
                   size="icon"
@@ -173,6 +230,9 @@ function StaffDetailPageContent() {
             <h2 className="mt-4 text-center text-xl font-bold">{profile.name}</h2>
 
             <div className="mt-3 flex flex-wrap justify-center gap-2">
+              {isArchived ? (
+                <Badge className="bg-amber-600 text-white hover:bg-amber-600">Archived</Badge>
+              ) : null}
               {profile.titles.length > 0 ? (
                 profile.titles.map((title) => (
                   <Badge key={title} variant="outline">
@@ -185,25 +245,33 @@ function StaffDetailPageContent() {
             </div>
 
             <div className="mt-6 w-full space-y-3">
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setShowEditModal(true)}
-                disabled={isActionLoading}
-              >
-                <Pencil className="h-4 w-4" />
-                Edit Staff
-              </Button>
+              {!isArchived ? (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowEditModal(true)}
+                  disabled={isActionLoading}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit Staff
+                </Button>
+              ) : null}
 
-              <Button
-                variant="destructive"
-                className="w-full"
-                onClick={() => setActiveDialog('delete-staff')}
-                disabled={isActionLoading}
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete Staff
-              </Button>
+              {!isArchived && removalAction ? (
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  onClick={() => setActiveDialog(removalAction.dialog)}
+                  disabled={isActionLoading || isRemovalBlocked}
+                >
+                  <removalAction.icon className="h-4 w-4" />
+                  {removalAction.label}
+                </Button>
+              ) : null}
+
+              {isRemovalBlocked && blockedRemovalMessage ? (
+                <p className="text-sm text-muted-foreground">{blockedRemovalMessage}</p>
+              ) : null}
             </div>
           </CardContent>
         </Card>
@@ -277,6 +345,12 @@ function StaffDetailPageContent() {
                 <p className="text-sm text-muted-foreground">Created At</p>
                 <p className="font-medium">{formatCreatedAt(profile.created_at)}</p>
               </div>
+              {isArchived ? (
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Archived At</p>
+                  <p className="font-medium">{formatCreatedAt(profile.archivedAt ?? profile.created_at)}</p>
+                </div>
+              ) : null}
             </div>
           </CardContent>
         </Card>
@@ -294,6 +368,19 @@ function StaffDetailPageContent() {
         confirmLabel="Delete Photo"
         cancelLabel="Cancel"
         onConfirm={() => void handleDeletePhoto()}
+        onCancel={() => setActiveDialog(null)}
+        isLoading={isActionLoading}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={activeDialog === 'archive-staff'}
+        onOpenChange={(open) => setActiveDialog(open ? 'archive-staff' : null)}
+        title="Archive staff account?"
+        description="This will archive this staff account, preserve historical records, and block future sign-ins."
+        confirmLabel="Archive Staff"
+        cancelLabel="Cancel"
+        onConfirm={() => void handleArchiveStaff()}
         onCancel={() => setActiveDialog(null)}
         isLoading={isActionLoading}
         variant="destructive"

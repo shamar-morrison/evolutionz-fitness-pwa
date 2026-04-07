@@ -85,6 +85,7 @@ export type Profile = {
   remark: string | null
   specialties: string[]
   photoUrl: string | null
+  archivedAt: string | null
   created_at: string
 }
 
