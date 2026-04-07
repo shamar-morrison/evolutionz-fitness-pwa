@@ -139,7 +139,7 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
     }
   }
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (!validateIdentityStep() || !validateTitlesStep()) {

@@ -104,7 +104,7 @@ export function EditStaffModal({ profile, open, onOpenChange, onSuccess }: EditS
     onOpenChange(nextOpen)
   }
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (!formData.name.trim()) {

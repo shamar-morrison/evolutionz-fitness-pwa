@@ -172,7 +172,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     onOpenChange(nextOpen)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault()
 
     if (!formData.name.trim()) {

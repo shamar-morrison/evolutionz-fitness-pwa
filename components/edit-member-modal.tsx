@@ -217,7 +217,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
     onOpenChange(nextOpen)
   }
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
     let nextBeginTime: string
     let nextEndTime: string

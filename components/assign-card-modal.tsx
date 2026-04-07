@@ -183,7 +183,7 @@ export function AssignCardModal({
     onOpenChange(nextOpen)
   }
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (!selectedInventoryCard?.cardNo) {

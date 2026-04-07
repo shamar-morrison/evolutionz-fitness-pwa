@@ -116,7 +116,7 @@ export function PtSessionDialog({ sessionId, open, onOpenChange }: PtSessionDial
     onOpenChange(nextOpen)
   }
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (!sessionId || !formData) {
