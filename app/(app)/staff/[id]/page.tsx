@@ -2,7 +2,7 @@
 
 import { format } from 'date-fns'
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { AlertCircle, Archive, ArrowLeft, Pencil, Trash2, User } from 'lucide-react'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EditStaffModal } from '@/components/edit-staff-modal'
@@ -23,6 +23,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { useStaffProfile } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
+import { useProgressRouter } from '@/hooks/use-progress-router'
 import { queryKeys } from '@/lib/query-keys'
 import { archiveStaff, deleteStaff, deleteStaffPhoto } from '@/lib/staff-actions'
 import { formatStaffGenderLabel, hasStaffTitle } from '@/lib/staff'
@@ -41,7 +42,7 @@ function formatCreatedAt(value: string) {
 
 function StaffDetailPageContent() {
   const params = useParams()
-  const router = useRouter()
+  const router = useProgressRouter()
   const queryClient = useQueryClient()
   const profileId = params.id as string
   const { profile, removal, isLoading, error } = useStaffProfile(profileId)

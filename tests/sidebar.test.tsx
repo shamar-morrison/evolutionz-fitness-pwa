@@ -48,7 +48,10 @@ vi.mock('next/link', () => ({
 
 vi.mock('next/navigation', () => ({
   usePathname: () => pathnameState.value,
-  useRouter: () => ({
+}))
+
+vi.mock('@/hooks/use-progress-router', () => ({
+  useProgressRouter: () => ({
     push: pushMock,
     refresh: refreshMock,
   }),

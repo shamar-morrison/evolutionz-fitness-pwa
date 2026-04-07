@@ -26,8 +26,8 @@ vi.mock('@/lib/staff', () => ({
   readStaffProfile: readStaffProfileMock,
 }))
 
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
+vi.mock('@/hooks/use-progress-router', () => ({
+  useProgressRouter: () => ({
     push: pushMock,
     refresh: refreshMock,
   }),

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useProgressRouter } from '@/hooks/use-progress-router'
 import { PaginationControls } from '@/components/pagination-controls'
 import { formatAccessDate } from '@/lib/member-access-time'
 import {
@@ -32,7 +32,7 @@ type MembersTableProps = {
 const PAGE_SIZE_OPTIONS = ['10', '25', '50'] as const
 
 export function MembersTable({ members }: MembersTableProps) {
-  const router = useRouter()
+  const router = useProgressRouter()
   const [pageSize, setPageSize] = useState<number>(Number(PAGE_SIZE_OPTIONS[0]))
   const [currentPage, setCurrentPage] = useState(0)
 

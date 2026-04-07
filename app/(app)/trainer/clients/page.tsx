@@ -98,7 +98,9 @@ function TrainerClientsContent() {
 
                 <div className="flex items-start justify-start lg:justify-end">
                   <Button asChild variant="outline">
-                    <Link href={`/members/${assignment.memberId}`}>View Details</Link>
+                    <Link data-progress href={`/members/${assignment.memberId}`}>
+                      View Details
+                    </Link>
                   </Button>
                 </div>
               </div>

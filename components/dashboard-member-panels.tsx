@@ -88,6 +88,7 @@ function formatExpiryDate(endTime: string | null) {
 function RecentMemberRow({ member }: { member: DashboardMemberListItem }) {
   return (
     <Link
+      data-progress
       href={`/members/${member.id}`}
       className="flex items-center justify-between gap-3 rounded-lg border px-3 py-3 transition-colors hover:bg-muted/30"
     >
@@ -108,6 +109,7 @@ function ExpiringMemberRow({ member }: { member: DashboardMemberListItem }) {
 
   return (
     <Link
+      data-progress
       href={`/members/${member.id}`}
       className={cn(
         'flex items-center justify-between gap-3 rounded-lg border px-3 py-3 transition-colors',

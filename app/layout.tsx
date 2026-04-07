@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AuthProvider } from '@/contexts/auth-context'
+import { NavigationProgress } from '@/components/navigation-progress'
 import { QueryProvider } from '@/components/query-provider'
 import './globals.css'
 
@@ -40,6 +41,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="font-sans antialiased">
+        <NavigationProgress />
         <QueryProvider>
           <AuthProvider>{children}</AuthProvider>
           <Analytics />

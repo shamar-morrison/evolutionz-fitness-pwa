@@ -32,7 +32,10 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'staff-1' }),
-  useRouter: () => ({
+}))
+
+vi.mock('@/hooks/use-progress-router', () => ({
+  useProgressRouter: () => ({
     push: pushMock,
     replace: replaceMock,
   }),

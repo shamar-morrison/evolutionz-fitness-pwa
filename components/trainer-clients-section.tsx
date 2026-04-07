@@ -97,7 +97,9 @@ export function TrainerClientsSection({ trainerId }: TrainerClientsSectionProps)
                   </div>
                 </div>
                 <Button asChild variant="outline">
-                  <Link href={`/members/${assignment.memberId}`}>View</Link>
+                  <Link data-progress href={`/members/${assignment.memberId}`}>
+                    View
+                  </Link>
                 </Button>
               </div>
             ))}

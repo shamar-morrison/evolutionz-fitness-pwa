@@ -42,8 +42,8 @@ vi.mock('@tanstack/react-query', () => ({
   }),
 }))
 
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
+vi.mock('@/hooks/use-progress-router', () => ({
+  useProgressRouter: () => ({
     push: pushMock,
   }),
 }))

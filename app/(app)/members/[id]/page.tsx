@@ -2,7 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { AssignCardModal } from '@/components/assign-card-modal'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { formatAccessDate } from '@/lib/member-access-time'
@@ -36,11 +36,12 @@ import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
 import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
 import { useBackLink } from '@/hooks/use-back-link'
+import { useProgressRouter } from '@/hooks/use-progress-router'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, Trash2, User } from 'lucide-react'
 
 export default function MemberDetailPage() {
   const params = useParams()
-  const router = useRouter()
+  const router = useProgressRouter()
   const memberId = params.id as string
   const queryClient = useQueryClient()
   const { member, isLoading, error } = useMember(memberId)

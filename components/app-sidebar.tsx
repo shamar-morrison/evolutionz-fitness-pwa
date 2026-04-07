@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -16,6 +16,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
+import { useProgressRouter } from '@/hooks/use-progress-router'
 import {
   useRescheduleRequests,
   useSessionUpdateRequests,
@@ -122,7 +123,7 @@ function getBadgeLabel(count: number) {
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const router = useRouter()
+  const router = useProgressRouter()
   const { user, profile, role, loading } = useAuth()
   const [unlockState, setUnlockState] = useState<'idle' | 'unlocking' | 'unlocked'>('idle')
   const [isSigningOut, setIsSigningOut] = useState(false)
@@ -186,7 +187,7 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild size="lg" tooltip="Evolutionz Fitness">
-              <Link href={homeHref}>
+              <Link data-progress href={homeHref}>
                 <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground">
                   EF
                 </div>
@@ -216,7 +217,7 @@ export function AppSidebar() {
                     isActive={isActivePath(pathname, item.href)}
                     tooltip={item.label}
                   >
-                    <Link href={item.href}>
+                    <Link data-progress href={item.href}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.label}</span>
                     </Link>
@@ -245,7 +246,7 @@ export function AppSidebar() {
                         isActive={isActivePath(pathname, item.href)}
                         tooltip={item.label}
                       >
-                        <Link href={item.href}>
+                        <Link data-progress href={item.href}>
                           <item.icon className="h-4 w-4" />
                           <span>{item.label}</span>
                         </Link>

@@ -127,7 +127,7 @@ function StaffPageContent() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredStaff.map((profile) => (
-            <Link key={profile.id} href={`/staff/${profile.id}`} className="block">
+            <Link key={profile.id} data-progress href={`/staff/${profile.id}`} className="block">
               <Card className="h-full transition-colors hover:border-primary/40">
                 <CardContent className="flex h-full items-start gap-4">
                   <MemberAvatar

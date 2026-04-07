@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Bell, CheckCheck, X } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useRouter } from 'next/navigation'
 import {
   archiveClearableNotifications,
   archiveNotification,
@@ -14,6 +13,7 @@ import {
   useNotifications,
 } from '@/hooks/use-notifications'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useProgressRouter } from '@/hooks/use-progress-router'
 import { toast } from '@/hooks/use-toast'
 import { isNotificationArchivable } from '@/lib/notification-archive'
 import { queryKeys } from '@/lib/query-keys'
@@ -45,7 +45,7 @@ function getReviewHref(type: string) {
 }
 
 export function NotificationsPanel() {
-  const router = useRouter()
+  const router = useProgressRouter()
   const queryClient = useQueryClient()
   const { profile, loading } = useAuth()
   const isMobile = useIsMobile()

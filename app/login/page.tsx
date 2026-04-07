@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useProgressRouter } from '@/hooks/use-progress-router'
 import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
 import { readStaffProfile } from '@/lib/staff'
 import { createClient } from '@/lib/supabase/client'
@@ -15,7 +15,7 @@ const ARCHIVED_ACCOUNT_ERROR =
   'This staff account has been archived. Contact an admin if you need access again.'
 
 export default function LoginPage() {
-  const router = useRouter()
+  const router = useProgressRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
