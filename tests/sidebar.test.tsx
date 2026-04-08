@@ -38,9 +38,17 @@ vi.mock('next/link', () => ({
   default: ({
     children,
     href,
+    onClick,
     ...props
   }: React.ComponentProps<'a'> & { href: string }) => (
-    <a href={href} {...props}>
+    <a
+      href={href}
+      onClick={(event) => {
+        event.preventDefault()
+        onClick?.(event)
+      }}
+      {...props}
+    >
       {children}
     </a>
   ),
@@ -75,7 +83,15 @@ vi.mock('@/lib/supabase/client', () => ({
 }))
 
 import { AppSidebar } from '@/components/app-sidebar'
-import { SidebarProvider } from '@/components/ui/sidebar'
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+
+function setViewport(width: number) {
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    writable: true,
+    value: width,
+  })
+}
 
 describe('Sidebar', () => {
   let container: HTMLDivElement
@@ -84,11 +100,12 @@ describe('Sidebar', () => {
   beforeEach(() => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
+    setViewport(1024)
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
-      value: vi.fn().mockImplementation(() => ({
-        matches: false,
-        media: '(max-width: 767px)',
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: window.innerWidth < 768,
+        media: query,
         onchange: null,
         addEventListener: vi.fn(),
         removeEventListener: vi.fn(),
@@ -195,5 +212,53 @@ describe('Sidebar', () => {
 
     expect(badges).toContain('9+')
     expect(badges).toContain('5')
+  })
+
+  it('closes the mobile sidebar after clicking a navigation link', async () => {
+    pathnameState.value = '/dashboard'
+    authState.role = 'admin'
+    authState.profile = {
+      id: 'user-1',
+      name: 'Admin User',
+      role: 'admin',
+      titles: ['Owner'],
+    }
+    authState.user = { id: 'user-1', email: 'admin@evolutionzfitness.com' }
+    setViewport(390)
+
+    await act(async () => {
+      root.render(
+        <SidebarProvider>
+          <SidebarTrigger />
+          <AppSidebar />
+        </SidebarProvider>,
+      )
+    })
+
+    const trigger = container.querySelector('[data-sidebar="trigger"]')
+
+    if (!(trigger instanceof HTMLButtonElement)) {
+      throw new Error('Sidebar trigger not found.')
+    }
+
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+    })
+
+    expect(document.body.querySelector('[data-mobile="true"]')).not.toBeNull()
+
+    const dashboardLink = document.body.querySelector('[data-mobile="true"] a[href="/dashboard"]')
+
+    if (!(dashboardLink instanceof HTMLAnchorElement)) {
+      throw new Error('Mobile dashboard link not found.')
+    }
+
+    await act(async () => {
+      dashboardLink.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }),
+      )
+    })
+
+    expect(document.body.querySelector('[data-mobile="true"]')).toBeNull()
   })
 })
