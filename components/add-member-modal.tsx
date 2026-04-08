@@ -2,54 +2,34 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
-import { format } from 'date-fns'
 import { z } from 'zod'
-import { Calendar as CalendarIcon } from 'lucide-react'
-import { Pattern } from '@/components/ui/file-upload'
-import { Button } from '@/components/ui/button'
-import { Calendar } from '@/components/ui/calendar'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
+  createInitialMemberFormState,
+  getDefaultMemberCardNo,
+  MemberAccessFields,
+  MemberBasicFields,
+  MemberExtrasFields,
+} from '@/components/member-form-fields'
+import { DialogStepForm, type DialogStep } from '@/components/dialog-step-form'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { useAvailableCards } from '@/hooks/use-available-cards'
+import type { FileWithPreview } from '@/hooks/use-file-upload'
+import { toast } from '@/hooks/use-toast'
+import { compressImage } from '@/lib/compress-image'
 import {
   buildBeginTimeValue,
   buildEndTimeValue,
   calculateInclusiveEndDate,
-  formatAccessDate,
   formatDateInputValue,
-  parseDateInputValue,
-  MEMBER_DURATION_OPTIONS,
-  type MemberDurationValue,
 } from '@/lib/member-access-time'
 import {
   addMember,
   MemberProvisioningError,
   uploadMemberPhoto,
 } from '@/lib/member-actions'
-import { compressImage } from '@/lib/compress-image'
-import { queryKeys } from '@/lib/query-keys'
-import { useAvailableCards } from '@/hooks/use-available-cards'
-import type { FileWithPreview } from '@/hooks/use-file-upload'
-import { formatAvailableAccessCardLabel } from '@/lib/available-cards'
 import { buildMemberDisplayName, hasUsableCardCode } from '@/lib/member-name'
-import { toast } from '@/hooks/use-toast'
-import type { Member, MemberGender, MemberType } from '@/types'
+import { queryKeys } from '@/lib/query-keys'
+import type { Member } from '@/types'
 
 type AddMemberModalProps = {
   open: boolean
@@ -57,48 +37,15 @@ type AddMemberModalProps = {
   onSuccess?: (member: Member) => void
 }
 
-type AddMemberFormState = {
-  name: string
-  gender: MemberGender | ''
-  email: string
-  phone: string
-  selectedInventoryCardNo: string
-  type: MemberType
-  remark: string
-  startDate: string
-  startTime: string
-  duration: MemberDurationValue | ''
-}
-
-const memberTypes: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
-const memberGenders: MemberGender[] = ['Male', 'Female']
 const emailSchema = z.string().trim().email('Enter a valid email address.')
-
-function createInitialFormState(now: Date = new Date()): AddMemberFormState {
-  return {
-    name: '',
-    gender: '',
-    email: '',
-    phone: '',
-    selectedInventoryCardNo: '',
-    type: 'General',
-    remark: '',
-    startDate: formatDateInputValue(now),
-    startTime: '00:00:00',
-    duration: '',
-  }
-}
-
-function getDefaultCardNo(cards: Array<{ cardNo: string; cardCode: string | null }>) {
-  return cards.find((card) => hasUsableCardCode(card.cardCode))?.cardNo ?? cards[0]?.cardNo ?? ''
-}
 
 export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModalProps) {
   const queryClient = useQueryClient()
   const [submissionStep, setSubmissionStep] = useState<'idle' | 'provisioning_member'>('idle')
-  const [formData, setFormData] = useState<AddMemberFormState>(() => createInitialFormState())
+  const [formData, setFormData] = useState(() => createInitialMemberFormState())
   const [photoFile, setPhotoFile] = useState<FileWithPreview | null>(null)
   const [isStartDatePickerOpen, setIsStartDatePickerOpen] = useState(false)
+  const [step, setStep] = useState<1 | 2 | 3>(1)
   const {
     cards: availableCards,
     isLoading: isCardsLoading,
@@ -109,10 +56,6 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
   const isSubmitting = submissionStep !== 'idle'
   const hasNoAvailableCards = !isCardsLoading && availableCards.length === 0 && !cardsError
   const minimumStartDate = useMemo(() => formatDateInputValue(new Date()), [open])
-  const selectedStartDate = useMemo(
-    () => parseDateInputValue(formData.startDate),
-    [formData.startDate],
-  )
   const selectedInventoryCard = useMemo(
     () =>
       availableCards.find((card) => card.cardNo === formData.selectedInventoryCardNo) ?? null,
@@ -133,10 +76,6 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     () => (calculatedEndDate ? buildEndTimeValue(calculatedEndDate) : null),
     [calculatedEndDate],
   )
-  const displayedStartDate = useMemo(
-    () => (selectedStartDate ? format(selectedStartDate, 'MMM d, yyyy') : 'Select a date'),
-    [selectedStartDate],
-  )
 
   useEffect(() => {
     if (!open) {
@@ -148,7 +87,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
         (card) => card.cardNo === currentFormData.selectedInventoryCardNo,
       )
         ? currentFormData.selectedInventoryCardNo
-        : getDefaultCardNo(availableCards)
+        : getDefaultMemberCardNo(availableCards)
 
       if (nextSelectedInventoryCardNo === currentFormData.selectedInventoryCardNo) {
         return currentFormData
@@ -161,36 +100,30 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     })
   }, [availableCards, open])
 
+  const resetModalState = () => {
+    setSubmissionStep('idle')
+    setIsStartDatePickerOpen(false)
+    setPhotoFile(null)
+    setFormData(createInitialMemberFormState())
+    setStep(1)
+  }
+
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
-      setSubmissionStep('idle')
-      setIsStartDatePickerOpen(false)
-      setPhotoFile(null)
-      setFormData(createInitialFormState())
+      resetModalState()
     }
 
     onOpenChange(nextOpen)
   }
 
-  const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault()
-
-    if (!formData.name.trim()) {
-      toast({
-        title: 'Full name required',
-        description: 'Enter the member’s full name before saving.',
-        variant: 'destructive',
-      })
-      return
-    }
-
+  const validateBasicStep = () => {
     if (!selectedInventoryCard?.cardNo) {
       toast({
         title: 'Select a card',
         description: 'Choose an available access card before creating the member.',
         variant: 'destructive',
       })
-      return
+      return false
     }
 
     const selectedCardCode = selectedInventoryCard.cardCode ?? ''
@@ -201,43 +134,16 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
         description: 'This card is missing its synced card code. Re-sync the imported cards and try again.',
         variant: 'destructive',
       })
-      return
+      return false
     }
 
-    if (!formData.startDate || !calculatedBeginTime) {
+    if (!formData.name.trim()) {
       toast({
-        title: 'Start date required',
-        description: 'Choose a valid access start date and time.',
+        title: 'Full name required',
+        description: 'Enter the member’s full name before saving.',
         variant: 'destructive',
       })
-      return
-    }
-
-    if (formData.startDate < minimumStartDate) {
-      toast({
-        title: 'Invalid start date',
-        description: 'Choose today or a future date for access to begin.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    if (!formData.duration) {
-      toast({
-        title: 'Duration required',
-        description: 'Choose how long this member should have access.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    if (!calculatedEndDate || !calculatedEndTime) {
-      toast({
-        title: 'End date unavailable',
-        description: 'The selected duration could not be converted into an access end date.',
-        variant: 'destructive',
-      })
-      return
+      return false
     }
 
     if (formData.email && !emailSchema.safeParse(formData.email).success) {
@@ -246,6 +152,85 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
         description: 'Enter a valid email address or leave the field blank.',
         variant: 'destructive',
       })
+      return false
+    }
+
+    return true
+  }
+
+  const validateAccessStep = () => {
+    if (!formData.startDate || !calculatedBeginTime) {
+      toast({
+        title: 'Start date required',
+        description: 'Choose a valid access start date and time.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
+    if (formData.startDate < minimumStartDate) {
+      toast({
+        title: 'Invalid start date',
+        description: 'Choose today or a future date for access to begin.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
+    if (!formData.duration) {
+      toast({
+        title: 'Duration required',
+        description: 'Choose how long this member should have access.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
+    if (!calculatedEndDate || !calculatedEndTime) {
+      toast({
+        title: 'End date unavailable',
+        description: 'The selected duration could not be converted into an access end date.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
+    return true
+  }
+
+  const handleNextStep = () => {
+    if (step === 1) {
+      if (!validateBasicStep()) {
+        return
+      }
+
+      setStep(2)
+      return
+    }
+
+    if (step === 2) {
+      if (!validateAccessStep()) {
+        return
+      }
+
+      setStep(3)
+    }
+  }
+
+  const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!validateBasicStep() || !validateAccessStep()) {
+      return
+    }
+
+    if (!selectedInventoryCard?.cardNo || !calculatedBeginTime || !calculatedEndTime) {
+      return
+    }
+
+    const selectedCardCode = selectedInventoryCard.cardCode ?? ''
+
+    if (!hasUsableCardCode(selectedCardCode)) {
       return
     }
 
@@ -321,21 +306,65 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     }
   }
 
-  const submitLabel =
-    submissionStep === 'provisioning_member'
-      ? 'Provisioning Access...'
-      : 'Save Member'
-
-  const progressDescription =
-    submissionStep === 'provisioning_member'
-      ? 'Creating the Hik member record and assigning the selected card.'
-      : isCardsLoading
+  const steps: DialogStep[] = [
+    {
+      title: 'Add New Member',
+      description: isCardsLoading
         ? 'Loading imported unassigned cards.'
         : cardsError
           ? 'Could not load imported cards. Refresh the inventory and try again.'
           : hasNoAvailableCards
             ? 'No imported unassigned cards are available. Import more cards into iVMS-4200 and re-sync.'
-            : 'Enter the full member profile, choose an imported unassigned card, and confirm the access window.'
+            : 'Choose an imported unassigned card and enter the member’s basic profile.',
+      content: (
+        <MemberBasicFields
+          idPrefix="member"
+          formData={formData}
+          setFormData={setFormData}
+          isSubmitting={isSubmitting}
+          availableCards={availableCards}
+          selectedInventoryCard={selectedInventoryCard}
+          isCardsLoading={isCardsLoading}
+          cardsError={cardsError}
+          hasNoAvailableCards={hasNoAvailableCards}
+          onRefreshCards={() => {
+            void refetchAvailableCards()
+          }}
+        />
+      ),
+    },
+    {
+      title: 'Add New Member',
+      description: 'Set when access should begin and how long this member should have access.',
+      content: (
+        <MemberAccessFields
+          idPrefix="member"
+          formData={formData}
+          setFormData={setFormData}
+          isSubmitting={isSubmitting}
+          minimumStartDate={minimumStartDate}
+          calculatedEndTime={calculatedEndTime}
+          isStartDatePickerOpen={isStartDatePickerOpen}
+          setIsStartDatePickerOpen={setIsStartDatePickerOpen}
+        />
+      ),
+    },
+    {
+      title: 'Add New Member',
+      description:
+        submissionStep === 'provisioning_member'
+          ? 'Creating the Hik member record and assigning the selected card.'
+          : 'Add an optional photo and notes, then save the member.',
+      content: (
+        <MemberExtrasFields
+          idPrefix="member"
+          formData={formData}
+          setFormData={setFormData}
+          setPhotoFile={setPhotoFile}
+        />
+      ),
+    },
+  ]
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -343,303 +372,26 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
         className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]"
         isLoading={isSubmitting}
       >
-        <DialogHeader>
-          <DialogTitle>Add New Member</DialogTitle>
-          <DialogDescription>{progressDescription}</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid gap-4 py-2">
-            {/* Row 1: Access Card — full width, prominent */}
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="card-number">Available Access Card</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={refetchAvailableCards}
-                  disabled={isSubmitting || isCardsLoading}
-                >
-                  Refresh
-                </Button>
-              </div>
-              <Select
-                value={formData.selectedInventoryCardNo}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, selectedInventoryCardNo: value })
-                }
-                disabled={isSubmitting || isCardsLoading || availableCards.length === 0}
-              >
-                <SelectTrigger id="card-number">
-                  <SelectValue
-                    placeholder={
-                      isCardsLoading
-                        ? 'Loading cards...'
-                        : hasNoAvailableCards
-                          ? 'No cards available'
-                          : 'Select an access card'
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableCards.map((card) => (
-                    <SelectItem key={card.cardNo} value={card.cardNo}>
-                      {formatAvailableAccessCardLabel(card)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {isCardsLoading ? (
-                <p className="text-xs text-muted-foreground">Fetching unassigned card records from Hik.</p>
-              ) : cardsError ? (
-                <p className="text-xs text-destructive">{cardsError}</p>
-              ) : hasNoAvailableCards ? (
-                <p className="text-xs text-muted-foreground">
-                  No unassigned cards are currently available from the imported inventory.
-                </p>
-              ) : selectedInventoryCard && !selectedInventoryCard.cardCode ? (
-                <p className="text-xs text-destructive">
-                  This card is missing its synced card code and cannot be assigned until the next successful sync.
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  {availableCards.length} unassigned card{availableCards.length === 1 ? '' : 's'} loaded from Hik.
-                </p>
-              )}
-            </div>
-
-            <div className="h-px bg-border" />
-
-            {/* Row 2: Full Name — full width */}
-            <div className="grid gap-2">
-              <Label htmlFor="name">Full Name</Label>
-              <div className="flex overflow-hidden rounded-md border border-input bg-background">
-                {selectedInventoryCard?.cardCode ? (
-                  <span className="flex items-center border-r border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
-                    {selectedInventoryCard.cardCode}
-                  </span>
-                ) : null}
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder={
-                    selectedInventoryCard?.cardCode
-                      ? 'Enter member name'
-                      : 'Select a card with a synced card code'
-                  }
-                  className="border-0 shadow-none focus-visible:ring-0"
-                  disabled={!selectedInventoryCard?.cardCode}
-                  required
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                The card code prefix is shown here for staff and sent to Hik automatically.
-              </p>
-            </div>
-
-            {/* Row 3: Gender + Membership Type — 2 cols */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label>Gender</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {memberGenders.map((gender) => (
-                    <Button
-                      key={gender}
-                      type="button"
-                      variant={formData.gender === gender ? 'default' : 'outline'}
-                      onClick={() =>
-                        setFormData({
-                          ...formData,
-                          gender: formData.gender === gender ? '' : gender,
-                        })
-                      }
-                      disabled={isSubmitting}
-                    >
-                      {gender}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="type">Membership Type</Label>
-                <Select
-                  value={formData.type}
-                  onValueChange={(value: MemberType) => setFormData({ ...formData, type: value })}
-                >
-                  <SelectTrigger id="type">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {memberTypes.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Row 4: Email + Phone — 2 cols */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="Optional email"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="Optional phone number"
-                />
-              </div>
-            </div>
-
-            <div className="h-px bg-border" />
-
-            {/* Row 5: Start Date + Start Time + Duration — 3 cols */}
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="grid gap-2">
-                <Label htmlFor="start-date">Start Date</Label>
-                <Popover open={isStartDatePickerOpen} onOpenChange={setIsStartDatePickerOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      id="start-date"
-                      type="button"
-                      variant="outline"
-                      className="w-full justify-between px-3 text-left font-normal"
-                      disabled={isSubmitting}
-                    >
-                      <span>{displayedStartDate}</span>
-                      <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={selectedStartDate ?? undefined}
-                      defaultMonth={selectedStartDate ?? undefined}
-                      onSelect={(date) => {
-                        if (!date) {
-                          return
-                        }
-
-                        setFormData((currentFormData) => ({
-                          ...currentFormData,
-                          startDate: formatDateInputValue(date),
-                        }))
-                        setIsStartDatePickerOpen(false)
-                      }}
-                      disabled={(date) => formatDateInputValue(date) < minimumStartDate}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="start-time">Start Time</Label>
-                <Input
-                  id="start-time"
-                  type="time"
-                  step={1}
-                  value={formData.startTime}
-                  onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="duration">Duration</Label>
-                <Select
-                  value={formData.duration}
-                  onValueChange={(value: MemberDurationValue) =>
-                    setFormData({ ...formData, duration: value })
-                  }
-                >
-                  <SelectTrigger id="duration">
-                    <SelectValue placeholder="Select duration" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MEMBER_DURATION_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Row 6: End Date summary — full width */}
-            <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-4 py-3">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">End Date</p>
-                <p className="text-base font-semibold mt-0.5">
-                  {calculatedEndTime ? formatAccessDate(calculatedEndTime, 'long') : 'Select a duration above'}
-                </p>
-              </div>
-              <p className="text-xs text-muted-foreground text-right max-w-[200px]">
-                Access always expires at 23:59:59 on the calculated end date.
-              </p>
-            </div>
-
-            <div className="h-px bg-border" />
-
-            {/* Row 7: Avatar — centered */}
-            <div className="flex justify-center py-2">
-              <Pattern onFileChange={setPhotoFile} />
-            </div>
-
-            <div className="h-px bg-border" />
-
-            {/* Row 8: Remark — full width */}
-            <div className="grid gap-2">
-              <Label htmlFor="remark">Remark</Label>
-              <Textarea
-                id="remark"
-                rows={3}
-                value={formData.remark}
-                onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
-                placeholder="Add notes about this member..."
-                className="resize-none"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                isSubmitting ||
-                !selectedInventoryCard ||
-                !selectedInventoryCard.cardCode ||
-                isCardsLoading ||
-                !formData.duration ||
-                !calculatedBeginTime ||
-                !calculatedEndTime
-              }
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-              loading={isSubmitting}
-            >
-              {submitLabel}
-            </Button>
-          </DialogFooter>
-        </form>
+        <DialogStepForm
+          steps={steps}
+          currentStep={step}
+          isSubmitting={isSubmitting}
+          onCancel={() => handleOpenChange(false)}
+          onBack={() => setStep((currentStep) => (currentStep === 3 ? 2 : 1))}
+          onNext={handleNextStep}
+          onSubmit={handleSubmit}
+          submitLabel="Save Member"
+          submitLoadingLabel="Provisioning Access..."
+          submitDisabled={
+            isSubmitting ||
+            !selectedInventoryCard ||
+            !selectedInventoryCard.cardCode ||
+            isCardsLoading ||
+            !formData.duration ||
+            !calculatedBeginTime ||
+            !calculatedEndTime
+          }
+        />
       </DialogContent>
     </Dialog>
   )
