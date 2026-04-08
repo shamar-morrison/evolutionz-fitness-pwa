@@ -16,6 +16,7 @@ interface UseFileUploadOptions {
   maxSize?: number
   accept?: string
   multiple?: boolean
+  revokeOnUnmount?: boolean
   onFilesChange?: (files: FileWithPreview[]) => void
 }
 
@@ -74,6 +75,7 @@ export function useFileUpload(
     maxSize = 5 * 1024 * 1024,
     accept = '*',
     multiple = false,
+    revokeOnUnmount = true,
     onFilesChange,
   } = options
 
@@ -94,10 +96,12 @@ export function useFileUpload(
 
   useEffect(() => {
     return () => {
-      revokeFilePreviews(filesRef.current)
+      if (revokeOnUnmount) {
+        revokeFilePreviews(filesRef.current)
+      }
       filesRef.current = []
     }
-  }, [])
+  }, [revokeOnUnmount])
 
   const processFiles = useCallback(
     (incoming: File[]) => {

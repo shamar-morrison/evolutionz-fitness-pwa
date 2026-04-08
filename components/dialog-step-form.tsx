@@ -55,6 +55,14 @@ export function DialogStepForm({
   const stepIndex = Math.min(Math.max(currentStep - 1, 0), steps.length - 1)
   const step = steps[stepIndex]
   const isFinalStep = currentStep === steps.length
+  const handleSubmit: SubmitEventHandler<HTMLFormElement> = (event) => {
+    if (!isFinalStep) {
+      event.preventDefault()
+      return
+    }
+
+    onSubmit(event)
+  }
   const handleNextClick: MouseEventHandler<HTMLButtonElement> = (event) => {
     event.preventDefault()
     onNext()
@@ -70,7 +78,7 @@ export function DialogStepForm({
         <DialogDescription>{step.description}</DialogDescription>
       </DialogHeader>
 
-      <form onSubmit={onSubmit} className={className}>
+      <form onSubmit={handleSubmit} className={className}>
         {step.content}
 
         <DialogFooter>

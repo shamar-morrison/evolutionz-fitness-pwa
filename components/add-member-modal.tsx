@@ -39,6 +39,12 @@ type AddMemberModalProps = {
 
 const emailSchema = z.string().trim().email('Enter a valid email address.')
 
+function revokePreviewUrl(previewUrl: string | null | undefined) {
+  if (previewUrl && typeof URL.revokeObjectURL === 'function') {
+    URL.revokeObjectURL(previewUrl)
+  }
+}
+
 export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModalProps) {
   const queryClient = useQueryClient()
   const [submissionStep, setSubmissionStep] = useState<'idle' | 'provisioning_member'>('idle')
@@ -61,6 +67,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       availableCards.find((card) => card.cardNo === formData.selectedInventoryCardNo) ?? null,
     [availableCards, formData.selectedInventoryCardNo],
   )
+  const hasSelectedCardCode = hasUsableCardCode(selectedInventoryCard?.cardCode)
   const calculatedEndDate = useMemo(
     () =>
       formData.duration
@@ -99,6 +106,14 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       }
     })
   }, [availableCards, open])
+
+  useEffect(() => {
+    const previewUrl = photoFile?.preview
+
+    return () => {
+      revokePreviewUrl(previewUrl)
+    }
+  }, [photoFile])
 
   const resetModalState = () => {
     setSubmissionStep('idle')
@@ -385,7 +400,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           submitDisabled={
             isSubmitting ||
             !selectedInventoryCard ||
-            !selectedInventoryCard.cardCode ||
+            !hasSelectedCardCode ||
             isCardsLoading ||
             !formData.duration ||
             !calculatedBeginTime ||

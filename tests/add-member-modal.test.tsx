@@ -70,7 +70,44 @@ vi.mock('@/components/ui/dialog', () => ({
 }))
 
 vi.mock('@/components/ui/file-upload', () => ({
-  Pattern: () => <div data-testid="pattern" />,
+  Pattern: ({
+    onFileChange,
+    selectedFile,
+  }: {
+    onFileChange?: (file: {
+      id: string
+      file: File
+      preview: string
+      name: string
+      size: number
+      type: string
+    } | null) => void
+    selectedFile?: { name: string } | null
+  }) => (
+    <div data-testid="pattern">
+      <output data-testid="pattern-selected-file">{selectedFile?.name ?? 'none'}</output>
+      <button
+        type="button"
+        onClick={() => {
+          const file = new File(['avatar-bytes'], 'avatar.png', { type: 'image/png' })
+
+          onFileChange?.({
+            id: 'mock-photo',
+            file,
+            preview: 'blob:mock-photo',
+            name: file.name,
+            size: file.size,
+            type: file.type,
+          })
+        }}
+      >
+        Choose Photo
+      </button>
+      <button type="button" onClick={() => onFileChange?.(null)}>
+        Remove Photo
+      </button>
+    </div>
+  ),
 }))
 
 vi.mock('@/components/ui/popover', () => ({
@@ -222,12 +259,19 @@ function mockAvailableCards(cards: AvailableAccessCard[], error: string | null =
 describe('AddMemberModal', () => {
   let container: HTMLDivElement
   let root: Root
+  let revokeObjectURLDescriptor: PropertyDescriptor | undefined
 
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-08T10:00:00.000Z'))
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
+    revokeObjectURLDescriptor = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      writable: true,
+      value: vi.fn(),
+    })
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -247,6 +291,13 @@ describe('AddMemberModal', () => {
     vi.useRealTimers()
     container.remove()
     document.body.innerHTML = ''
+
+    if (revokeObjectURLDescriptor) {
+      Object.defineProperty(URL, 'revokeObjectURL', revokeObjectURLDescriptor)
+    } else {
+      delete (URL as unknown as Record<string, unknown>)['revokeObjectURL']
+    }
+
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       false
     vi.clearAllMocks()
@@ -326,11 +377,11 @@ describe('AddMemberModal', () => {
     expect(uploadMemberPhotoMock).not.toHaveBeenCalled()
   })
 
-  it('blocks Step 1 progression when the selected card does not have a synced card code', async () => {
+  it('treats whitespace-only card codes as missing in Step 1', async () => {
     mockAvailableCards([
       {
         cardNo: '99999',
-        cardCode: null,
+        cardCode: '   ',
       },
     ])
 
@@ -338,6 +389,18 @@ describe('AddMemberModal', () => {
       root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
     })
     await flushAsyncWork()
+
+    const nameInput = container.querySelector('#member-name')
+
+    if (!(nameInput instanceof HTMLInputElement)) {
+      throw new Error('Step 1 name input not found.')
+    }
+
+    expect(container.textContent).toContain(
+      'This card is missing its synced card code and cannot be assigned until the next successful sync.',
+    )
+    expect(nameInput.disabled).toBe(true)
+    expect(nameInput.placeholder).toBe('Select a card with a synced card code')
 
     await clickButton(container, 'Next')
 
@@ -418,5 +481,53 @@ describe('AddMemberModal', () => {
 
     expect(persistedNameInput.value).toBe('Jordan Member')
     expect(container.textContent).toContain('Step 1 of 3')
+  })
+
+  it('preserves the selected photo when returning to Step 3', async () => {
+    const revokeObjectURLMock = vi.mocked(URL.revokeObjectURL)
+
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    const nameInput = container.querySelector('#member-name')
+
+    if (!(nameInput instanceof HTMLInputElement)) {
+      throw new Error('Step 1 name input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(nameInput, 'Jordan Member')
+    })
+
+    await clickButton(container, 'Next')
+    await clickButton(container, '2 Weeks')
+    await clickButton(container, 'Next')
+
+    const selectedPhotoOutput = container.querySelector('[data-testid="pattern-selected-file"]')
+
+    if (!(selectedPhotoOutput instanceof HTMLOutputElement)) {
+      throw new Error('Pattern selected-file output not found.')
+    }
+
+    expect(selectedPhotoOutput.textContent).toBe('none')
+
+    await clickButton(container, 'Choose Photo')
+
+    expect(selectedPhotoOutput.textContent).toBe('avatar.png')
+    expect(revokeObjectURLMock).not.toHaveBeenCalled()
+
+    await clickButton(container, 'Back')
+    await clickButton(container, 'Next')
+
+    const restoredPhotoOutput = container.querySelector('[data-testid="pattern-selected-file"]')
+
+    if (!(restoredPhotoOutput instanceof HTMLOutputElement)) {
+      throw new Error('Pattern selected-file output not found after returning to Step 3.')
+    }
+
+    expect(restoredPhotoOutput.textContent).toBe('avatar.png')
+    expect(revokeObjectURLMock).not.toHaveBeenCalled()
   })
 })

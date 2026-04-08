@@ -40,6 +40,7 @@ export type MemberFormState = {
   startDate: string
   startTime: string
   duration: MemberDurationValue | ''
+  photoFile: FileWithPreview | null
 }
 
 type SharedMemberFieldsProps = {
@@ -88,6 +89,7 @@ export function createInitialMemberFormState(now: Date = new Date()): MemberForm
     startDate: formatDateInputValue(now),
     startTime: '00:00:00',
     duration: '',
+    photoFile: null,
   }
 }
 
@@ -107,6 +109,9 @@ export function MemberBasicFields({
   selectedInventoryCard,
   setFormData,
 }: MemberBasicFieldsProps) {
+  const selectedCardCode = selectedInventoryCard?.cardCode ?? ''
+  const hasSelectedCardCode = hasUsableCardCode(selectedCardCode)
+
   return (
     <div className="grid gap-4 py-2">
       <div className="grid gap-2">
@@ -159,7 +164,7 @@ export function MemberBasicFields({
           <p className="text-xs text-muted-foreground">
             No unassigned cards are currently available from the imported inventory.
           </p>
-        ) : selectedInventoryCard && !selectedInventoryCard.cardCode ? (
+        ) : selectedInventoryCard && !hasSelectedCardCode ? (
           <p className="text-xs text-destructive">
             This card is missing its synced card code and cannot be assigned until the next successful sync.
           </p>
@@ -175,9 +180,9 @@ export function MemberBasicFields({
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-name`}>Full Name</Label>
         <div className="flex overflow-hidden rounded-md border border-input bg-background">
-          {selectedInventoryCard?.cardCode ? (
+          {hasSelectedCardCode ? (
             <span className="flex items-center border-r border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
-              {selectedInventoryCard.cardCode}
+              {selectedCardCode.trim()}
             </span>
           ) : null}
           <Input
@@ -190,12 +195,12 @@ export function MemberBasicFields({
               }))
             }
             placeholder={
-              selectedInventoryCard?.cardCode
+              hasSelectedCardCode
                 ? 'Enter member name'
                 : 'Select a card with a synced card code'
             }
             className="border-0 shadow-none focus-visible:ring-0"
-            disabled={!selectedInventoryCard?.cardCode}
+            disabled={!hasSelectedCardCode}
             required
           />
         </div>
@@ -412,12 +417,21 @@ export function MemberExtrasFields({
   setFormData,
   setPhotoFile,
 }: MemberExtrasFieldsProps) {
+  const handlePhotoChange = (file: FileWithPreview | null) => {
+    setPhotoFile(file)
+    setFormData((currentFormData) => ({
+      ...currentFormData,
+      photoFile: file,
+    }))
+  }
+
   return (
     <div className="grid gap-4 py-2">
       <div className="flex justify-center py-2">
         <Pattern
-          onFileChange={setPhotoFile}
+          onFileChange={handlePhotoChange}
           defaultAvatar={defaultPhotoUrl ?? undefined}
+          selectedFile={formData.photoFile}
         />
       </div>
 
