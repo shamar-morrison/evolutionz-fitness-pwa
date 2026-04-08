@@ -193,6 +193,17 @@ function getButton(container: HTMLDivElement, label: string) {
   return button
 }
 
+function getBadge(container: HTMLDivElement, label: string) {
+  const badges = Array.from(container.querySelectorAll('[data-slot="badge"]'))
+  const badge = badges.find((candidate) => candidate.textContent?.trim() === label)
+
+  if (!(badge instanceof HTMLElement)) {
+    throw new Error(`${label} badge not found.`)
+  }
+
+  return badge
+}
+
 async function clickButton(container: HTMLDivElement, label: string) {
   await act(async () => {
     getButton(container, label).dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -318,5 +329,67 @@ describe('SchedulePage', () => {
     })
 
     expect(container.textContent).toContain('Legs')
+  })
+
+  it('uses schedule-specific colors for scheduled, cancelled, and rescheduled badges', async () => {
+    usePtSessionsMock.mockReturnValue({
+      sessions: [
+        {
+          id: 'session-1',
+          assignmentId: 'assignment-1',
+          trainerId: 'trainer-1',
+          memberId: 'member-1',
+          scheduledAt: '2026-04-06T07:00:00-05:00',
+          status: 'scheduled',
+          isRecurring: true,
+          notes: null,
+          trainingTypeName: null,
+          createdAt: '2026-04-05T00:00:00.000Z',
+          updatedAt: '2026-04-05T00:00:00.000Z',
+          trainerName: 'Jordan Trainer',
+          memberName: 'Member One',
+        },
+        {
+          id: 'session-2',
+          assignmentId: 'assignment-1',
+          trainerId: 'trainer-1',
+          memberId: 'member-2',
+          scheduledAt: '2026-04-06T08:00:00-05:00',
+          status: 'cancelled',
+          isRecurring: true,
+          notes: null,
+          trainingTypeName: null,
+          createdAt: '2026-04-05T00:00:00.000Z',
+          updatedAt: '2026-04-05T00:00:00.000Z',
+          trainerName: 'Jordan Trainer',
+          memberName: 'Member Two',
+        },
+        {
+          id: 'session-3',
+          assignmentId: 'assignment-1',
+          trainerId: 'trainer-1',
+          memberId: 'member-3',
+          scheduledAt: '2026-04-06T09:00:00-05:00',
+          status: 'rescheduled',
+          isRecurring: true,
+          notes: null,
+          trainingTypeName: null,
+          createdAt: '2026-04-05T00:00:00.000Z',
+          updatedAt: '2026-04-05T00:00:00.000Z',
+          trainerName: 'Jordan Trainer',
+          memberName: 'Member Three',
+        },
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    expect(getBadge(container, 'Scheduled').className).toContain('text-blue-700')
+    expect(getBadge(container, 'Cancelled').className).toContain('text-amber-700')
+    expect(getBadge(container, 'Rescheduled').className).toContain('text-orange-700')
   })
 })

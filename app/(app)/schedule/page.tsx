@@ -50,6 +50,12 @@ import { hasStaffTitle } from '@/lib/staff'
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 
+const scheduleCalendarStatusBadgeClassNames: Partial<Record<SessionStatus, string>> = {
+  scheduled: 'bg-blue-500/15 text-blue-700 hover:bg-blue-500/25',
+  cancelled: 'bg-amber-500/15 text-amber-700 hover:bg-amber-500/25',
+  rescheduled: 'bg-orange-500/15 text-orange-700 hover:bg-orange-500/25',
+}
+
 function formatPtSessionTime(value: string) {
   return new Intl.DateTimeFormat('en-JM', {
     timeZone: 'America/Jamaica',
@@ -138,6 +144,10 @@ function shiftMonthValue(monthValue: string, delta: number) {
   }
 
   return `${nextYear}-${String(nextMonth).padStart(2, '0')}`
+}
+
+function getScheduleCalendarStatusBadgeClassName(status: SessionStatus) {
+  return scheduleCalendarStatusBadgeClassNames[status] ?? getPtSessionStatusBadgeClassName(status)
 }
 
 function SchedulePageContent() {
@@ -377,7 +387,7 @@ function SchedulePageContent() {
                             ) : null}
                             <Badge
                               variant="secondary"
-                              className={getPtSessionStatusBadgeClassName(session.status)}
+                              className={getScheduleCalendarStatusBadgeClassName(session.status)}
                             >
                               {formatPtSessionStatusLabel(session.status)}
                             </Badge>
