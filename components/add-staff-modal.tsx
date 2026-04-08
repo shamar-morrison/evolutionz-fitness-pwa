@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { z } from 'zod'
 import { UserPlus } from 'lucide-react'
+import { DialogStepForm, type DialogStep } from '@/components/dialog-step-form'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -250,26 +251,69 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
     }
   }
 
+  const steps: DialogStep[] = [
+    {
+      title: 'Add Staff',
+      description:
+        'Create a new staff login and staff profile. Names, email addresses, and passwords are not editable after creation.',
+      content: (
+        <div className="space-y-4">
+          <StaffIdentityFields
+            idPrefix="staff"
+            mode="add"
+            formData={formData}
+            setFormData={setFormData}
+            isSubmitting={isSubmitting}
+            resetPasswordVisibilityKey={open}
+          />
+          <div className="h-px bg-border" />
+          <StaffPhotoField setPhotoFile={setPhotoFile} />
+        </div>
+      ),
+    },
+    {
+      title: 'Add Staff',
+      description: 'Choose at least one title to define the level of access for this account.',
+      content: (
+        <StaffTitlesFields
+          formData={formData}
+          setFormData={setFormData}
+          isSubmitting={isSubmitting}
+        />
+      ),
+    },
+    {
+      title: 'Add Staff',
+      description: 'Add optional contact details, gender, and notes before saving the staff account.',
+      content: (
+        <StaffAdditionalInfoFields
+          idPrefix="staff"
+          formData={formData}
+          setFormData={setFormData}
+          isSubmitting={isSubmitting}
+        />
+      ),
+    },
+  ]
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]"
         isLoading={isSubmitting}
       >
-        <DialogHeader>
-          <p className="text-sm font-medium text-muted-foreground">
-            {duplicateProfile ? 'Confirmation required' : `Step ${step} of 3`}
-          </p>
-          <DialogTitle>{duplicateProfile ? 'Existing Staff Account Found' : 'Add Staff'}</DialogTitle>
-          <DialogDescription>
-            {duplicateProfile
-              ? 'Choose whether to add the selected titles to the existing account.'
-              : 'Create a new staff login and staff profile. Names, email addresses, and passwords are not editable after creation.'}
-          </DialogDescription>
-        </DialogHeader>
-
         {duplicateProfile ? (
           <div className="space-y-5">
+            <DialogHeader>
+              <p className="text-sm font-medium text-muted-foreground">
+                Confirmation required
+              </p>
+              <DialogTitle>Existing Staff Account Found</DialogTitle>
+              <DialogDescription>
+                Choose whether to add the selected titles to the existing account.
+              </DialogDescription>
+            </DialogHeader>
+
             <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
               <p>
                 A staff member with this email already exists: <span className="font-medium text-foreground">
@@ -309,89 +353,19 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
             </DialogFooter>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {step === 1 ? (
-              <div className="space-y-4">
-                <StaffIdentityFields
-                  idPrefix="staff"
-                  mode="add"
-                  formData={formData}
-                  setFormData={setFormData}
-                  isSubmitting={isSubmitting}
-                  resetPasswordVisibilityKey={open}
-                />
-                <div className="h-px bg-border" />
-                <StaffPhotoField setPhotoFile={setPhotoFile} />
-              </div>
-            ) : null}
-
-            {step === 2 ? (
-              <StaffTitlesFields
-                formData={formData}
-                setFormData={setFormData}
-                isSubmitting={isSubmitting}
-              />
-            ) : null}
-
-            {step === 3 ? (
-              <StaffAdditionalInfoFields
-                idPrefix="staff"
-                formData={formData}
-                setFormData={setFormData}
-                isSubmitting={isSubmitting}
-              />
-            ) : null}
-
-            <DialogFooter>
-              {step === 1 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleOpenChange(false)}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setStep((currentStep) => (currentStep === 3 ? 2 : 1))}
-                  disabled={isSubmitting}
-                >
-                  Back
-                </Button>
-              )}
-
-              {step < 3 ? (
-                <Button
-                  key="next-step-button"
-                  type="button"
-                  onClick={(event) => {
-                    event.preventDefault()
-                    handleNextStep()
-                  }}
-                  disabled={isSubmitting}
-                >
-                  Next
-                </Button>
-              ) : (
-                <Button
-                  key="save-staff-button"
-                  type="submit"
-                  disabled={isSubmitting}
-                  loading={isSubmitting}
-                >
-                  {isSubmitting ? 'Creating Staff...' : (
-                    <>
-                      <UserPlus data-icon="inline-start" className="h-4 w-4" />
-                      Save Staff
-                    </>
-                  )}
-                </Button>
-              )}
-            </DialogFooter>
-          </form>
+          <DialogStepForm
+            steps={steps}
+            currentStep={step}
+            isSubmitting={isSubmitting}
+            onCancel={() => handleOpenChange(false)}
+            onBack={() => setStep((currentStep) => (currentStep === 3 ? 2 : 1))}
+            onNext={handleNextStep}
+            onSubmit={handleSubmit}
+            submitLabel="Save Staff"
+            submitLoadingLabel="Creating Staff..."
+            submitIcon={<UserPlus data-icon="inline-start" className="h-4 w-4" />}
+            submitDisabled={isSubmitting}
+          />
         )}
       </DialogContent>
     </Dialog>

@@ -20,6 +20,7 @@ interface AvatarUploadProps {
   className?: string
   onFileChange?: (file: FileWithPreview | null) => void
   defaultAvatar?: string
+  selectedFile?: FileWithPreview | null
 }
 
 export function Pattern({
@@ -27,7 +28,9 @@ export function Pattern({
   className,
   onFileChange,
   defaultAvatar,
+  selectedFile,
 }: AvatarUploadProps) {
+  const isControlled = selectedFile !== undefined
   const [
     { files, isDragging, errors },
     {
@@ -44,18 +47,24 @@ export function Pattern({
     maxSize,
     accept: "image/*",
     multiple: false,
+    revokeOnUnmount: !isControlled,
     onFilesChange: (files) => {
       onFileChange?.(files[0] || null)
     },
   })
 
-  const currentFile = files[0]
+  const currentFile = isControlled ? selectedFile : files[0]
   const previewUrl = currentFile?.preview || defaultAvatar
 
   const handleRemove = () => {
-    if (currentFile) {
-      removeFile(currentFile.id)
+    const managedFile = currentFile ? files.find((file) => file.id === currentFile.id) : null
+
+    if (managedFile) {
+      removeFile(managedFile.id)
+      return
     }
+
+    onFileChange?.(null)
   }
 
   return (

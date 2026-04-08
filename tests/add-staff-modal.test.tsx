@@ -205,6 +205,61 @@ describe('AddStaffModal', () => {
     expect(uploadStaffPhotoMock).not.toHaveBeenCalled()
   })
 
+  it('does not submit when advancing from step 2 to step 3', async () => {
+    await act(async () => {
+      root.render(<AddStaffModal open onOpenChange={onOpenChangeMock} />)
+    })
+
+    const nameInput = container.querySelector('#staff-name')
+    const emailInput = container.querySelector('#staff-email')
+    const passwordInput = container.querySelector('#staff-password')
+    const confirmPasswordInput = container.querySelector('#staff-confirm-password')
+
+    if (
+      !(nameInput instanceof HTMLInputElement) ||
+      !(emailInput instanceof HTMLInputElement) ||
+      !(passwordInput instanceof HTMLInputElement) ||
+      !(confirmPasswordInput instanceof HTMLInputElement)
+    ) {
+      throw new Error('Step 1 inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(nameInput, 'Jordan Trainer')
+      setInputValue(emailInput, 'jordan@evolutionzfitness.com')
+      setInputValue(passwordInput, 'password123')
+      setInputValue(confirmPasswordInput, 'password123')
+    })
+
+    await clickButton(container, 'Next')
+    await clickButton(container, 'Trainer')
+    await clickButton(container, 'HIIT')
+
+    const nextButton = getButton(container, 'Next')
+
+    await act(async () => {
+      nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.textContent).toContain('Step 3 of 3')
+    expect(createStaffMock).not.toHaveBeenCalled()
+
+    const phoneInput = container.querySelector('#staff-phone')
+    const remarkInput = container.querySelector('#staff-remark')
+
+    if (!(phoneInput instanceof HTMLInputElement)) {
+      throw new Error('Step 3 phone input not found.')
+    }
+
+    if (!(remarkInput instanceof HTMLTextAreaElement)) {
+      throw new Error('Step 3 remark input not found.')
+    }
+
+    const saveButton = getButton(container, 'Save Staff')
+
+    expect(saveButton).not.toBe(nextButton)
+  })
+
   it('shows the duplicate-email confirmation flow and merges titles into the existing profile', async () => {
     createStaffMock.mockResolvedValue({
       ok: false,
