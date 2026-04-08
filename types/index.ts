@@ -89,6 +89,47 @@ export type Profile = {
   created_at: string
 }
 
+// Group Classes Types
+export type GuestProfile = {
+  id: string
+  name: string
+  phone: string | null
+  email: string | null
+  remark: string | null
+  created_at: string
+}
+
+export type Class = {
+  id: string
+  name: string
+  schedule_description: string
+  per_session_fee: number | null
+  monthly_fee: number | null
+  trainer_compensation_pct: number
+  created_at: string
+}
+
+export type ClassTrainer = {
+  class_id: string
+  profile_id: string
+  created_at: string
+}
+
+export type ClassRegistration = {
+  id: string
+  class_id: string
+  member_id: string | null
+  guest_profile_id: string | null
+  month_start: string
+  status: 'pending' | 'approved' | 'denied'
+  amount_paid: number
+  payment_recorded_at: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  review_note: string | null
+  created_at: string
+}
+
 // Dashboard Types
 export type DashboardMembershipStats = {
   activeMembers: number

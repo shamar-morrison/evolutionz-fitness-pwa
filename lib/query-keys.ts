@@ -14,6 +14,16 @@ export const queryKeys = {
     archived: ['staff', 'archived'] as const,
     detail: (id: string) => ['staff', id] as const,
   },
+  classes: {
+    all: ['classes'] as const,
+    registrations: (classId: string, monthStart: string) =>
+      ['classes', 'registrations', classId, monthStart] as const,
+    trainers: (classId: string) => ['classes', 'trainers', classId] as const,
+  },
+  guestProfiles: {
+    all: ['guestProfiles'] as const,
+    detail: (id: string) => ['guestProfiles', id] as const,
+  },
   ptScheduling: {
     assignments: ['pt-assignments'] as const,
     assignment: (id: string) => ['pt-assignments', id] as const,
