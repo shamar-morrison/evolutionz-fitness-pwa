@@ -27,6 +27,16 @@ export const routeConfig: Record<string, RouteConfig> = {
   '/dashboard': {
     allowedRoles: ['admin'],
   },
+  '/classes': {
+    allowedRoles: ['admin', 'staff'],
+  },
+  '/classes/[id]': {
+    allowedRoles: ['admin', 'staff'],
+    backLink: {
+      admin: '/classes',
+      staff: '/classes',
+    },
+  },
   '/trainer/schedule': {
     allowedRoles: ['staff'],
   },

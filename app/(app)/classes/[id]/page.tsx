@@ -1,0 +1,733 @@
+'use client'
+
+import { format } from 'date-fns'
+import { useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, Calendar as CalendarIcon } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useParams } from 'next/navigation'
+import { ClassRegistrationDialog } from '@/components/class-registration-dialog'
+import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
+import { useAuth } from '@/contexts/auth-context'
+import { useBackLink } from '@/hooks/use-back-link'
+import { useClassDetail, useClassRegistrations } from '@/hooks/use-classes'
+import { toast } from '@/hooks/use-toast'
+import {
+  calculateClassRegistrationAmount,
+  formatClassDate,
+  formatClassDateTime,
+  formatOptionalJmd,
+  getDefaultClassDateValue,
+  reviewClassRegistration,
+  updateClassPeriodStart,
+  type ClassRegistrationListItem,
+} from '@/lib/classes'
+import { parseDateInputValue } from '@/lib/member-access-time'
+import { queryKeys } from '@/lib/query-keys'
+import { useProgressRouter } from '@/hooks/use-progress-router'
+
+type ClassesTab = 'registrations' | 'pending'
+
+function InfoField({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="font-medium">{value}</p>
+    </div>
+  )
+}
+
+function EmptyRegistrationsState({
+  label,
+}: {
+  label: string
+}) {
+  return (
+    <Card>
+      <CardContent className="p-8 text-center text-sm text-muted-foreground">
+        {label}
+      </CardContent>
+    </Card>
+  )
+}
+
+function RegistrationsTable({
+  registrations,
+  showStatus = false,
+  showActions = false,
+  onApprove,
+  onDeny,
+}: {
+  registrations: ClassRegistrationListItem[]
+  showStatus?: boolean
+  showActions?: boolean
+  onApprove?: (registration: ClassRegistrationListItem) => void
+  onDeny?: (registration: ClassRegistrationListItem) => void
+}) {
+  if (registrations.length === 0) {
+    return (
+      <EmptyRegistrationsState
+        label={showActions ? 'No pending approvals.' : 'No approved registrations yet.'}
+      />
+    )
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Amount Paid</TableHead>
+              <TableHead>Period Start</TableHead>
+              <TableHead>Registered At</TableHead>
+              {showStatus ? <TableHead>Status</TableHead> : null}
+              {showActions ? <TableHead className="text-right">Actions</TableHead> : null}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {registrations.map((registration) => (
+              <TableRow key={registration.id}>
+                <TableCell className="font-medium">{registration.registrant_name}</TableCell>
+                <TableCell>
+                  {registration.registrant_type === 'member' ? 'Member' : 'Guest'}
+                </TableCell>
+                <TableCell>{formatOptionalJmd(registration.amount_paid)}</TableCell>
+                <TableCell>{formatClassDate(registration.month_start)}</TableCell>
+                <TableCell>{formatClassDateTime(registration.created_at)}</TableCell>
+                {showStatus ? (
+                  <TableCell className="capitalize">{registration.status}</TableCell>
+                ) : null}
+                {showActions ? (
+                  <TableCell>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onDeny?.(registration)}
+                      >
+                        Deny
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => onApprove?.(registration)}
+                      >
+                        Approve
+                      </Button>
+                    </div>
+                  </TableCell>
+                ) : null}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  )
+}
+
+export default function ClassDetailPage() {
+  const params = useParams()
+  const router = useProgressRouter()
+  const queryClient = useQueryClient()
+  const { role, loading } = useAuth()
+  const classId = params.id as string
+  const isAdmin = role === 'admin'
+  const backLink = useBackLink('/classes', '/classes')
+  const { classItem, isLoading, error } = useClassDetail(classId, {
+    enabled: !loading,
+  })
+  const approvedRegistrationsQuery = useClassRegistrations(classId, 'approved', {
+    enabled: !loading,
+  })
+  const [activeTab, setActiveTab] = useState<ClassesTab>('registrations')
+  const pendingRegistrationsQuery = useClassRegistrations(classId, 'pending', {
+    enabled: !loading && isAdmin && activeTab === 'pending',
+  })
+  const [showRegistrationDialog, setShowRegistrationDialog] = useState(false)
+  const [showPeriodDialog, setShowPeriodDialog] = useState(false)
+  const [periodStart, setPeriodStart] = useState(getDefaultClassDateValue)
+  const [isPeriodPickerOpen, setIsPeriodPickerOpen] = useState(false)
+  const [approveRegistrationItem, setApproveRegistrationItem] =
+    useState<ClassRegistrationListItem | null>(null)
+  const [approveAmount, setApproveAmount] = useState('')
+  const [approveNote, setApproveNote] = useState('')
+  const [denyRegistrationItem, setDenyRegistrationItem] = useState<ClassRegistrationListItem | null>(
+    null,
+  )
+  const [denyReason, setDenyReason] = useState('')
+  const [pendingAction, setPendingAction] = useState<null | 'period' | 'approve' | 'deny'>(null)
+
+  useEffect(() => {
+    if (!classItem?.current_period_start) {
+      setPeriodStart(getDefaultClassDateValue())
+      return
+    }
+
+    setPeriodStart(classItem.current_period_start)
+  }, [classItem?.current_period_start])
+
+  const selectedPeriodStartDate = useMemo(
+    () => parseDateInputValue(periodStart),
+    [periodStart],
+  )
+  const displayedPeriodStart = selectedPeriodStartDate
+    ? format(selectedPeriodStartDate, 'MMM d, yyyy')
+    : 'Select a date'
+  const isSavingPeriod = pendingAction === 'period'
+  const isApproving = pendingAction === 'approve'
+  const isDenying = pendingAction === 'deny'
+
+  const invalidateClassQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.classes.detail(classId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.classes.all,
+        exact: false,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.classes.registrations(classId, ''),
+        exact: false,
+      }),
+    ])
+  }
+
+  const openApproveDialog = (registration: ClassRegistrationListItem) => {
+    if (!classItem) {
+      return
+    }
+
+    const suggestedAmount =
+      registration.amount_paid > 0
+        ? registration.amount_paid
+        : calculateClassRegistrationAmount({
+            classItem,
+            month_start: registration.month_start,
+            registrant_type: registration.registrant_type,
+          })
+
+    setApproveRegistrationItem(registration)
+    setApproveAmount(String(suggestedAmount))
+    setApproveNote(registration.review_note ?? '')
+  }
+
+  const handleApprove = async () => {
+    if (!approveRegistrationItem) {
+      return
+    }
+
+    const parsedAmount = Number(approveAmount)
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+      toast({
+        title: 'Amount required',
+        description: 'Enter a valid JMD amount before approving.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setPendingAction('approve')
+
+    try {
+      await reviewClassRegistration(classId, approveRegistrationItem.id, {
+        status: 'approved',
+        amount_paid: parsedAmount,
+        review_note: approveNote.trim() || null,
+      })
+      await invalidateClassQueries()
+      setApproveRegistrationItem(null)
+      setApproveAmount('')
+      setApproveNote('')
+      toast({
+        title: 'Registration approved',
+      })
+    } catch (error) {
+      toast({
+        title: 'Approval failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to approve the class registration.',
+        variant: 'destructive',
+      })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  const handleDeny = async () => {
+    if (!denyRegistrationItem) {
+      return
+    }
+
+    if (!denyReason.trim()) {
+      toast({
+        title: 'Reason required',
+        description: 'Enter a denial reason before submitting.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setPendingAction('deny')
+
+    try {
+      await reviewClassRegistration(classId, denyRegistrationItem.id, {
+        status: 'denied',
+        review_note: denyReason.trim(),
+      })
+      await invalidateClassQueries()
+      setDenyRegistrationItem(null)
+      setDenyReason('')
+      toast({
+        title: 'Registration denied',
+      })
+    } catch (error) {
+      toast({
+        title: 'Denial failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to deny the class registration.',
+        variant: 'destructive',
+      })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  const handleUpdatePeriodStart = async () => {
+    if (!periodStart) {
+      return
+    }
+
+    setPendingAction('period')
+
+    try {
+      await updateClassPeriodStart(classId, periodStart)
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.classes.detail(classId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.classes.all,
+          exact: false,
+        }),
+      ])
+      setShowPeriodDialog(false)
+      toast({
+        title: 'Billing period updated',
+        description: `${classItem?.name ?? 'The class'} now starts on ${formatClassDate(periodStart)}.`,
+      })
+    } catch (error) {
+      toast({
+        title: 'Update failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to update the billing period.',
+        variant: 'destructive',
+      })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  if (loading || isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-56" />
+        <Skeleton className="h-56 w-full" />
+        <Skeleton className="h-80 w-full" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <p className="text-destructive">
+          {error instanceof Error ? error.message : 'Failed to load the class.'}
+        </p>
+        <Button type="button" variant="outline" onClick={() => router.push(backLink)}>
+          <ArrowLeft className="h-4 w-4" />
+          Back to Classes
+        </Button>
+      </div>
+    )
+  }
+
+  if (!classItem) {
+    return null
+  }
+
+  return (
+    <>
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button type="button" variant="ghost" size="icon" onClick={() => router.push(backLink)}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="min-w-0">
+            <h1 className="truncate text-3xl font-bold tracking-tight">{classItem.name}</h1>
+            <p className="text-sm text-muted-foreground">
+              Review current registrations and billing period settings.
+            </p>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <CardTitle>Class Information</CardTitle>
+              <CardDescription>{classItem.schedule_description}</CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {isAdmin ? (
+                <Button type="button" variant="outline" onClick={() => setShowPeriodDialog(true)}>
+                  Set Period Start
+                </Button>
+              ) : null}
+              <Button type="button" onClick={() => setShowRegistrationDialog(true)}>
+                Register
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <InfoField label="Monthly fee" value={formatOptionalJmd(classItem.monthly_fee)} />
+            <InfoField label="Per session fee" value={formatOptionalJmd(classItem.per_session_fee)} />
+            <InfoField
+              label="Trainer compensation"
+              value={`${classItem.trainer_compensation_pct}%`}
+            />
+            <InfoField
+              label="Trainers"
+              value={
+                classItem.trainers.length > 0
+                  ? classItem.trainers.map((trainer) => trainer.name).join(', ')
+                  : 'No trainers assigned'
+              }
+            />
+            <InfoField
+              label="Current period start"
+              value={formatClassDate(classItem.current_period_start)}
+            />
+          </CardContent>
+        </Card>
+
+        {isAdmin ? (
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as ClassesTab)}
+            className="space-y-4"
+          >
+            <TabsList>
+              <TabsTrigger value="registrations">Registrations</TabsTrigger>
+              <TabsTrigger value="pending">Pending Approvals</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="registrations">
+              {approvedRegistrationsQuery.isLoading ? (
+                <Skeleton className="h-80 w-full" />
+              ) : approvedRegistrationsQuery.error ? (
+                <EmptyRegistrationsState label="Failed to load approved registrations." />
+              ) : (
+                <RegistrationsTable registrations={approvedRegistrationsQuery.registrations} />
+              )}
+            </TabsContent>
+
+            <TabsContent value="pending">
+              {pendingRegistrationsQuery.isLoading ? (
+                <Skeleton className="h-80 w-full" />
+              ) : pendingRegistrationsQuery.error ? (
+                <EmptyRegistrationsState label="Failed to load pending approvals." />
+              ) : (
+                <RegistrationsTable
+                  registrations={pendingRegistrationsQuery.registrations}
+                  showStatus
+                  showActions
+                  onApprove={openApproveDialog}
+                  onDeny={(registration) => {
+                    setDenyRegistrationItem(registration)
+                    setDenyReason('')
+                  }}
+                />
+              )}
+            </TabsContent>
+          </Tabs>
+        ) : approvedRegistrationsQuery.isLoading ? (
+          <Skeleton className="h-80 w-full" />
+        ) : approvedRegistrationsQuery.error ? (
+          <EmptyRegistrationsState label="Failed to load approved registrations." />
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold">Registrations</h2>
+              <p className="text-sm text-muted-foreground">
+                Approved registrations for the current class.
+              </p>
+            </div>
+            <RegistrationsTable registrations={approvedRegistrationsQuery.registrations} />
+          </div>
+        )}
+      </div>
+
+      <ClassRegistrationDialog
+        classItem={classItem}
+        open={showRegistrationDialog}
+        onOpenChange={setShowRegistrationDialog}
+      />
+
+      <Dialog open={showPeriodDialog} onOpenChange={setShowPeriodDialog}>
+        <DialogContent className="sm:max-w-md" isLoading={isSavingPeriod}>
+          <DialogHeader>
+            <DialogTitle>Set Billing Period Start</DialogTitle>
+            <DialogDescription>
+              Update the start date of the active 28-day billing period for this class.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="period-start">Current period start</Label>
+              <Popover open={isPeriodPickerOpen} onOpenChange={setIsPeriodPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="period-start"
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-between"
+                  >
+                    <span>{displayedPeriodStart}</span>
+                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={selectedPeriodStartDate ?? undefined}
+                    onSelect={(date) => {
+                      if (!date) {
+                        return
+                      }
+
+                      setPeriodStart(
+                        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+                          2,
+                          '0',
+                        )}-${String(date.getDate()).padStart(2, '0')}`,
+                      )
+                      setIsPeriodPickerOpen(false)
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowPeriodDialog(false)}
+              disabled={isSavingPeriod}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleUpdatePeriodStart} loading={isSavingPeriod}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(approveRegistrationItem)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && isApproving) {
+            return
+          }
+
+          if (!nextOpen) {
+            setApproveRegistrationItem(null)
+            setApproveAmount('')
+            setApproveNote('')
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg" isLoading={isApproving}>
+          <DialogHeader>
+            <DialogTitle>Approve Registration</DialogTitle>
+            <DialogDescription>
+              Confirm the registration details and adjust the final recorded amount if needed.
+            </DialogDescription>
+          </DialogHeader>
+
+          {approveRegistrationItem ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <div className="space-y-2 text-sm">
+                  <p>
+                    <span className="text-muted-foreground">Name:</span>{' '}
+                    <span className="font-medium">{approveRegistrationItem.registrant_name}</span>
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Type:</span>{' '}
+                    <span className="font-medium capitalize">
+                      {approveRegistrationItem.registrant_type}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">First class date:</span>{' '}
+                    <span className="font-medium">
+                      {formatClassDate(approveRegistrationItem.month_start)}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Submitted:</span>{' '}
+                    <span className="font-medium">
+                      {formatClassDateTime(approveRegistrationItem.created_at)}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="approve-amount">Amount paid (JMD)</Label>
+                <Input
+                  id="approve-amount"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={approveAmount}
+                  onChange={(event) => setApproveAmount(event.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="approve-note">Review note</Label>
+                <Textarea
+                  id="approve-note"
+                  value={approveNote}
+                  onChange={(event) => setApproveNote(event.target.value)}
+                  placeholder="Optional note"
+                />
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setApproveRegistrationItem(null)}
+              disabled={isApproving}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleApprove} loading={isApproving}>
+              Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(denyRegistrationItem)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && isDenying) {
+            return
+          }
+
+          if (!nextOpen) {
+            setDenyRegistrationItem(null)
+            setDenyReason('')
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg" isLoading={isDenying}>
+          <DialogHeader>
+            <DialogTitle>Deny Registration</DialogTitle>
+            <DialogDescription>
+              Enter the reason for denying this class registration.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/20 p-4 text-sm">
+              {denyRegistrationItem ? (
+                <>
+                  <p className="font-medium">{denyRegistrationItem.registrant_name}</p>
+                  <p className="text-muted-foreground">
+                    {formatClassDate(denyRegistrationItem.month_start)} ·{' '}
+                    {denyRegistrationItem.registrant_type === 'member' ? 'Member' : 'Guest'}
+                  </p>
+                </>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="deny-reason">Reason</Label>
+              <Textarea
+                id="deny-reason"
+                value={denyReason}
+                onChange={(event) => setDenyReason(event.target.value)}
+                placeholder="Explain why this registration is being denied."
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDenyRegistrationItem(null)}
+              disabled={isDenying}
+            >
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleDeny} loading={isDenying}>
+              Deny
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}

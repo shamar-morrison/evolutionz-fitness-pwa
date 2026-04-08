@@ -106,6 +106,7 @@ export type Class = {
   per_session_fee: number | null
   monthly_fee: number | null
   trainer_compensation_pct: number
+  current_period_start: string | null
   created_at: string
 }
 

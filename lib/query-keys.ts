@@ -16,6 +16,7 @@ export const queryKeys = {
   },
   classes: {
     all: ['classes'] as const,
+    detail: (id: string) => ['classes', 'detail', id] as const,
     registrations: (classId: string, monthStart: string) =>
       ['classes', 'registrations', classId, monthStart] as const,
     trainers: (classId: string) => ['classes', 'trainers', classId] as const,

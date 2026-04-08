@@ -11,6 +11,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   DoorOpen,
+  GraduationCap,
   LayoutDashboard,
   LogOut,
   Users,
@@ -82,6 +83,7 @@ const adminNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/members', label: 'Members', icon: Users },
   { href: '/staff', label: 'Staff', icon: Users },
+  { href: '/classes', label: 'Classes', icon: GraduationCap },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/reports', label: 'Reports', icon: BarChart3 },
 ]
@@ -103,6 +105,7 @@ const trainerNavItems: NavItem[] = [
   { href: '/trainer/schedule', label: 'My Schedule', icon: CalendarDays },
   { href: '/trainer/clients', label: 'My Clients', icon: Users },
   { href: '/trainer/requests', label: 'My Requests', icon: ClipboardList },
+  { href: '/classes', label: 'Classes', icon: GraduationCap },
 ]
 
 function getInitials(name: string) {

@@ -163,6 +163,7 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('My Schedule')
     expect(container.textContent).toContain('My Clients')
     expect(container.textContent).toContain('My Requests')
+    expect(container.textContent).toContain('Classes')
     expect(container.textContent).not.toContain('Dashboard')
     expect(container.textContent).not.toContain('Pending Approvals')
   })
@@ -197,12 +198,14 @@ describe('Sidebar', () => {
     })
 
     expect(container.textContent).toContain('Dashboard')
+    expect(container.textContent).toContain('Classes')
     expect(container.textContent).toContain('Notifications')
     expect(container.textContent).toContain('Reschedule Requests')
     expect(container.textContent).toContain('Session Updates')
 
     const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
 
+    expect(links).toContain('/classes')
     expect(links).toContain('/pending-approvals/reschedule-requests')
     expect(links).toContain('/pending-approvals/session-updates')
 
