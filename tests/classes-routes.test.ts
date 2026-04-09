@@ -756,6 +756,8 @@ function createAttendancePatchClient() {
 
 function createRegistrationReviewClient(options: {
   reviewState?: { id: string; class_id: string; status: string } | null
+  updatedRegistration?: { id: string } | null
+  updateError?: { message: string } | null
   futureSessions?: Array<Record<string, unknown>>
   futureSessionsError?: { message: string } | null
   attendanceInsertError?: { message: string } | null
@@ -862,9 +864,28 @@ function createRegistrationReviewClient(options: {
                     expect(nextColumn).toBe('class_id')
                     expect(nextValue).toBe('class-1')
 
-                    return Promise.resolve({
-                      error: null,
-                    })
+                    return {
+                      eq(statusColumn: string, statusValue: string) {
+                        expect(statusColumn).toBe('status')
+                        expect(statusValue).toBe('pending')
+
+                        return {
+                          select(columns: string) {
+                            expect(columns).toBe('id')
+
+                            return {
+                              maybeSingle: vi.fn().mockResolvedValue({
+                                data:
+                                  'updatedRegistration' in options
+                                    ? options.updatedRegistration
+                                    : { id: 'registration-1' },
+                                error: options.updateError ?? null,
+                              }),
+                            }
+                          },
+                        }
+                      },
+                    }
                   },
                 }
               },
@@ -1327,6 +1348,41 @@ describe('classes routes', () => {
       reviewed_by: 'admin-1',
     })
     expect(body.registration.amount_paid).toBe(3200)
+  })
+
+  it('returns 400 when the registration is already reviewed before the update applies', async () => {
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+      },
+    })
+    const { client } = createRegistrationReviewClient({
+      updatedRegistration: null,
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await patchClassRegistration(
+      new Request('http://localhost/api/classes/class-1/registrations/registration-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'approved',
+          amount_paid: 3200,
+          review_note: 'Paid at the desk.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1', registrationId: 'registration-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body).toEqual({
+      ok: false,
+      error: 'This class registration has already been reviewed.',
+    })
+    expect(readClassRegistrationByIdMock).not.toHaveBeenCalled()
+    expect(readClassByIdMock).not.toHaveBeenCalled()
   })
 
   it('backfills attendance when approving a pending registration', async () => {

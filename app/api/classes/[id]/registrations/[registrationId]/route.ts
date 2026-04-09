@@ -74,10 +74,6 @@ export async function PATCH(
       return createErrorResponse('Class registration not found.', 404)
     }
 
-    if (existingRegistration.status !== 'pending') {
-      return createErrorResponse('This class registration has already been reviewed.', 400)
-    }
-
     const reviewedAt = new Date().toISOString()
     const nextValues: Record<string, unknown> = {
       status: input.status,
@@ -90,14 +86,21 @@ export async function PATCH(
       nextValues.amount_paid = input.amount_paid
     }
 
-    const { error: updateError } = await supabase
+    const { data: updatedRegistration, error: updateError } = await supabase
       .from('class_registrations')
       .update(nextValues)
       .eq('id', registrationId)
       .eq('class_id', id)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle()
 
     if (updateError) {
       throw new Error(`Failed to review the class registration: ${updateError.message}`)
+    }
+
+    if (!updatedRegistration) {
+      return createErrorResponse('This class registration has already been reviewed.', 400)
     }
 
     const registration = await readClassRegistrationById(supabase, id, registrationId)
