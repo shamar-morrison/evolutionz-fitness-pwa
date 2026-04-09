@@ -153,9 +153,9 @@ function RegistrationsTable({
   }
 
   return (
-    <Card>
+    <Card className="overflow-hidden gap-0 py-0">
       <CardContent className="p-0">
-        <Table>
+        <Table size="compact">
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
@@ -224,9 +224,9 @@ function SessionsTable({
   }
 
   return (
-    <Card>
+    <Card className="overflow-hidden gap-0 py-0">
       <CardContent className="p-0">
-        <Table>
+        <Table size="compact">
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>

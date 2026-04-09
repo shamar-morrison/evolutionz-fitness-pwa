@@ -414,6 +414,10 @@ function getInputByLabel(container: HTMLDivElement, label: string) {
   return field
 }
 
+function getCompactTables(container: HTMLDivElement) {
+  return Array.from(container.querySelectorAll('table[data-size="compact"]'))
+}
+
 async function clickButton(container: HTMLDivElement, label: string) {
   await act(async () => {
     getButton(container, label).click()
@@ -589,6 +593,7 @@ describe('classes pages', () => {
       root.render(<ClassDetailPage />)
     })
 
+    expect(getCompactTables(container)).toHaveLength(3)
     expect(getButton(container, 'Add Trainer').className).toContain('w-full')
     expect(getButton(container, 'Add Rule').className).toContain('w-full')
     expect(container.textContent).toContain('Assign or remove trainer-title staff for this class.')
@@ -623,6 +628,7 @@ describe('classes pages', () => {
       root.render(<ClassDetailPage />)
     })
 
+    expect(getCompactTables(container)).toHaveLength(2)
     expect(container.textContent).toContain('Register')
     expect(container.textContent).not.toContain('Assign or remove trainer-title staff for this class.')
     expect(container.textContent).not.toContain('Add Trainer')
