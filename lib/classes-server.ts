@@ -1,15 +1,25 @@
 import type {
+  ClassAttendanceRow,
   ClassRegistrationListItem,
   ClassRegistrationStatus,
+  ClassScheduleRule,
+  ClassSessionListItem,
   ClassTrainerProfile,
   ClassWithTrainers,
 } from '@/lib/classes'
+import { isClassRegistrationEligibleForSession } from '@/lib/classes'
+import { normalizeTimeInputValue } from '@/lib/member-access-time'
 import { normalizeStaffTitles } from '@/lib/staff'
+import type { ClassScheduleRuleDay } from '@/types'
 
 const CLASS_SELECT =
   'id, name, schedule_description, per_session_fee, monthly_fee, trainer_compensation_pct, current_period_start, created_at'
 const CLASS_REGISTRATION_SELECT =
   'id, class_id, member_id, guest_profile_id, month_start, status, amount_paid, payment_recorded_at, reviewed_by, reviewed_at, review_note, created_at'
+const CLASS_SCHEDULE_RULE_SELECT = 'id, class_id, day_of_week, session_time, created_at'
+const CLASS_SESSION_SELECT = 'id, class_id, scheduled_at, period_start, created_at'
+const CLASS_ATTENDANCE_SELECT =
+  'id, session_id, member_id, guest_profile_id, marked_by, marked_at, created_at'
 
 type ClassesAdminClient = {
   from(table: string): any
@@ -62,6 +72,32 @@ type GuestRegistrantRow = {
   name: string
 }
 
+type ClassScheduleRuleRow = {
+  id: string
+  class_id: string
+  day_of_week: number | string
+  session_time: string
+  created_at: string
+}
+
+type ClassSessionRow = {
+  id: string
+  class_id: string
+  scheduled_at: string
+  period_start: string
+  created_at: string
+}
+
+type ClassAttendanceRowRecord = {
+  id: string
+  session_id: string
+  member_id: string | null
+  guest_profile_id: string | null
+  marked_by: string | null
+  marked_at: string | null
+  created_at: string
+}
+
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -93,6 +129,24 @@ function normalizeNullableNumber(value: unknown) {
   }
 
   return normalizeNumber(value)
+}
+
+function getClassRegistrantKey({
+  member_id,
+  guest_profile_id,
+}: {
+  member_id: string | null
+  guest_profile_id: string | null
+}) {
+  if (member_id) {
+    return `member:${member_id}`
+  }
+
+  if (guest_profile_id) {
+    return `guest:${guest_profile_id}`
+  }
+
+  return null
 }
 
 function mapTrainerProfileRow(row: TrainerProfileRow): ClassTrainerProfile {
@@ -240,6 +294,83 @@ async function hydrateClassRegistrations(
   })
 }
 
+function mapClassScheduleRuleRow(row: ClassScheduleRuleRow): ClassScheduleRule {
+  const normalizedTime = normalizeTimeInputValue(row.session_time) ?? normalizeText(row.session_time)
+  const normalizedDay = normalizeNumber(row.day_of_week)
+
+  return {
+    id: normalizeText(row.id),
+    class_id: normalizeText(row.class_id),
+    day_of_week: normalizedDay as ClassScheduleRuleDay,
+    session_time: normalizedTime,
+    created_at: normalizeText(row.created_at),
+  }
+}
+
+function mapClassSessionRow(row: ClassSessionRow): Omit<ClassSessionListItem, 'marked_count' | 'total_count'> {
+  return {
+    id: normalizeText(row.id),
+    class_id: normalizeText(row.class_id),
+    scheduled_at: normalizeText(row.scheduled_at),
+    period_start: normalizeText(row.period_start),
+    created_at: normalizeText(row.created_at),
+  }
+}
+
+async function hydrateClassAttendanceRows(
+  supabase: ClassesAdminClient,
+  rows: ClassAttendanceRowRecord[],
+) {
+  const memberIds = Array.from(
+    new Set(rows.map((row) => normalizeText(row.member_id)).filter(Boolean)),
+  )
+  const guestIds = Array.from(
+    new Set(rows.map((row) => normalizeText(row.guest_profile_id)).filter(Boolean)),
+  )
+
+  const [memberResult, guestResult] = await Promise.all([
+    memberIds.length > 0
+      ? supabase.from('members').select('id, name').in('id', memberIds)
+      : Promise.resolve({ data: [], error: null }),
+    guestIds.length > 0
+      ? supabase.from('guest_profiles').select('id, name').in('id', guestIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+
+  if (memberResult.error) {
+    throw new Error(`Failed to read class attendance members: ${memberResult.error.message}`)
+  }
+
+  if (guestResult.error) {
+    throw new Error(`Failed to read class attendance guests: ${guestResult.error.message}`)
+  }
+
+  const memberById = new Map(
+    ((memberResult.data ?? []) as MemberRegistrantRow[]).map((row) => [row.id, row]),
+  )
+  const guestById = new Map(
+    ((guestResult.data ?? []) as GuestRegistrantRow[]).map((row) => [row.id, row]),
+  )
+
+  return rows.map((row) => {
+    const isMember = Boolean(row.member_id)
+
+    return {
+      id: normalizeText(row.id),
+      session_id: normalizeText(row.session_id),
+      member_id: normalizeNullableText(row.member_id),
+      guest_profile_id: normalizeNullableText(row.guest_profile_id),
+      marked_by: normalizeNullableText(row.marked_by),
+      marked_at: normalizeNullableText(row.marked_at),
+      created_at: normalizeText(row.created_at),
+      registrant_name: isMember
+        ? normalizeText(memberById.get(row.member_id ?? '')?.name) || 'Unknown member'
+        : normalizeText(guestById.get(row.guest_profile_id ?? '')?.name) || 'Unknown guest',
+      registrant_type: isMember ? 'member' : 'guest',
+    } satisfies ClassAttendanceRow
+  })
+}
+
 export async function readClasses(supabase: ClassesAdminClient) {
   const { data, error } = await supabase
     .from('classes')
@@ -322,4 +453,172 @@ export async function readClassRegistrationById(
   })
 
   return registrations[0] ?? null
+}
+
+export async function readClassScheduleRules(
+  supabase: ClassesAdminClient,
+  classId: string,
+) {
+  const { data, error } = await supabase
+    .from('class_schedule_rules')
+    .select(CLASS_SCHEDULE_RULE_SELECT)
+    .eq('class_id', classId)
+    .order('day_of_week', { ascending: true })
+    .order('session_time', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to read class schedule rules: ${error.message}`)
+  }
+
+  return ((data ?? []) as ClassScheduleRuleRow[]).map(mapClassScheduleRuleRow)
+}
+
+export async function readClassSessionById(
+  supabase: ClassesAdminClient,
+  classId: string,
+  sessionId: string,
+) {
+  const { data, error } = await supabase
+    .from('class_sessions')
+    .select(CLASS_SESSION_SELECT)
+    .eq('id', sessionId)
+    .eq('class_id', classId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to read class session ${sessionId}: ${error.message}`)
+  }
+
+  if (!data) {
+    return null
+  }
+
+  return mapClassSessionRow(data as ClassSessionRow)
+}
+
+export async function readEligibleClassRegistrationsForSession(
+  supabase: ClassesAdminClient,
+  classId: string,
+  sessionScheduledAt: string,
+  periodStart: string,
+) {
+  const registrations = await readClassRegistrations(supabase, classId, {
+    status: 'approved',
+  })
+
+  return registrations.filter((registration) =>
+    isClassRegistrationEligibleForSession(
+      registration.month_start,
+      sessionScheduledAt,
+      periodStart,
+    ),
+  )
+}
+
+export async function readClassSessions(
+  supabase: ClassesAdminClient,
+  classId: string,
+  periodStart: string,
+) {
+  const { data, error } = await supabase
+    .from('class_sessions')
+    .select(CLASS_SESSION_SELECT)
+    .eq('class_id', classId)
+    .eq('period_start', periodStart)
+    .order('scheduled_at', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to read class sessions: ${error.message}`)
+  }
+
+  const sessionRows = ((data ?? []) as ClassSessionRow[]).map(mapClassSessionRow)
+
+  if (sessionRows.length === 0) {
+    return [] as ClassSessionListItem[]
+  }
+
+  const [attendanceRows, registrations] = await Promise.all([
+    supabase
+      .from('class_attendance')
+      .select(CLASS_ATTENDANCE_SELECT)
+      .in(
+        'session_id',
+        sessionRows.map((row) => row.id),
+      ),
+    readClassRegistrations(supabase, classId, {
+      status: 'approved',
+    }),
+  ])
+
+  if (attendanceRows.error) {
+    throw new Error(`Failed to read class attendance counts: ${attendanceRows.error.message}`)
+  }
+
+  const attendanceBySessionAndRegistrant = new Map<string, ClassAttendanceRowRecord>()
+
+  for (const row of (attendanceRows.data ?? []) as ClassAttendanceRowRecord[]) {
+    const registrantKey = getClassRegistrantKey(row)
+
+    if (!registrantKey) {
+      continue
+    }
+
+    attendanceBySessionAndRegistrant.set(`${row.session_id}:${registrantKey}`, row)
+  }
+
+  return sessionRows.map((session) => {
+    const eligibleRegistrations = registrations.filter((registration) =>
+      isClassRegistrationEligibleForSession(
+        registration.month_start,
+        session.scheduled_at,
+        session.period_start,
+      ),
+    )
+
+    const markedCount = eligibleRegistrations.reduce((count, registration) => {
+      const registrantKey = getClassRegistrantKey(registration)
+
+      if (!registrantKey) {
+        return count
+      }
+
+      const attendance = attendanceBySessionAndRegistrant.get(`${session.id}:${registrantKey}`)
+
+      return attendance?.marked_at ? count + 1 : count
+    }, 0)
+
+    return {
+      ...session,
+      marked_count: markedCount,
+      total_count: eligibleRegistrations.length,
+    } satisfies ClassSessionListItem
+  })
+}
+
+export async function readClassAttendance(
+  supabase: ClassesAdminClient,
+  sessionId: string,
+) {
+  const { data, error } = await supabase
+    .from('class_attendance')
+    .select(CLASS_ATTENDANCE_SELECT)
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    throw new Error(`Failed to read class attendance: ${error.message}`)
+  }
+
+  const attendanceRows = await hydrateClassAttendanceRows(
+    supabase,
+    (data ?? []) as ClassAttendanceRowRecord[],
+  )
+
+  return attendanceRows.sort((left, right) => {
+    if (left.registrant_type !== right.registrant_type) {
+      return left.registrant_type.localeCompare(right.registrant_type)
+    }
+
+    return left.registrant_name.localeCompare(right.registrant_name)
+  })
 }

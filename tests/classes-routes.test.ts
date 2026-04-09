@@ -10,16 +10,26 @@ import type { Profile } from '@/types'
 const {
   getSupabaseAdminClientMock,
   readClassByIdMock,
+  readClassAttendanceMock,
   readClassesMock,
   readClassRegistrationByIdMock,
   readClassRegistrationsMock,
+  readClassScheduleRulesMock,
+  readClassSessionByIdMock,
+  readClassSessionsMock,
+  readEligibleClassRegistrationsForSessionMock,
   readStaffProfileMock,
 } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
   readClassByIdMock: vi.fn(),
+  readClassAttendanceMock: vi.fn(),
   readClassesMock: vi.fn(),
   readClassRegistrationByIdMock: vi.fn(),
   readClassRegistrationsMock: vi.fn(),
+  readClassScheduleRulesMock: vi.fn(),
+  readClassSessionByIdMock: vi.fn(),
+  readClassSessionsMock: vi.fn(),
+  readEligibleClassRegistrationsForSessionMock: vi.fn(),
   readStaffProfileMock: vi.fn(),
 }))
 
@@ -28,10 +38,15 @@ vi.mock('@/lib/supabase-admin', () => ({
 }))
 
 vi.mock('@/lib/classes-server', () => ({
+  readClassAttendance: readClassAttendanceMock,
   readClasses: readClassesMock,
   readClassById: readClassByIdMock,
   readClassRegistrations: readClassRegistrationsMock,
   readClassRegistrationById: readClassRegistrationByIdMock,
+  readClassScheduleRules: readClassScheduleRulesMock,
+  readClassSessionById: readClassSessionByIdMock,
+  readClassSessions: readClassSessionsMock,
+  readEligibleClassRegistrationsForSession: readEligibleClassRegistrationsForSessionMock,
 }))
 
 vi.mock('@/lib/staff', async () => {
@@ -59,6 +74,20 @@ import {
   POST as postClassRegistration,
 } from '@/app/api/classes/[id]/registrations/route'
 import { PATCH as patchClassRegistration } from '@/app/api/classes/[id]/registrations/[registrationId]/route'
+import {
+  GET as getClassScheduleRules,
+  POST as postClassScheduleRule,
+} from '@/app/api/classes/[id]/schedule-rules/route'
+import { DELETE as deleteClassScheduleRule } from '@/app/api/classes/[id]/schedule-rules/[ruleId]/route'
+import {
+  GET as getClassSessions,
+  POST as postClassSessions,
+} from '@/app/api/classes/[id]/sessions/route'
+import {
+  GET as getSessionAttendance,
+  POST as postSessionAttendance,
+} from '@/app/api/classes/[id]/sessions/[sessionId]/attendance/route'
+import { PATCH as patchSessionAttendance } from '@/app/api/classes/[id]/sessions/[sessionId]/attendance/[attendanceId]/route'
 
 function buildProfile(overrides: Partial<Profile> = {}): Profile {
   return {
@@ -118,6 +147,45 @@ function buildRegistration(overrides: Partial<Record<string, unknown>> = {}) {
   }
 }
 
+function buildScheduleRule(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 'rule-1',
+    class_id: 'class-1',
+    day_of_week: 1,
+    session_time: '09:00:00',
+    created_at: '2026-04-08T12:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function buildSession(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 'session-1',
+    class_id: 'class-1',
+    scheduled_at: '2026-04-14T09:00:00-05:00',
+    period_start: '2026-04-01',
+    created_at: '2026-04-08T12:00:00.000Z',
+    marked_count: 1,
+    total_count: 2,
+    ...overrides,
+  }
+}
+
+function buildAttendance(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 'attendance-1',
+    session_id: 'session-1',
+    member_id: 'member-1',
+    guest_profile_id: null,
+    marked_by: 'admin-1',
+    marked_at: '2026-04-14T15:00:00.000Z',
+    created_at: '2026-04-14T15:00:00.000Z',
+    registrant_name: 'Client One',
+    registrant_type: 'member',
+    ...overrides,
+  }
+}
+
 function createClassPatchClient() {
   const updateValues: Array<Record<string, unknown>> = []
 
@@ -159,16 +227,21 @@ function createClassPatchClient() {
 
 function createRegistrationPostClient(options: {
   registrationError?: { message: string; code?: string } | null
+  futureSessions?: Array<Record<string, unknown>>
+  futureSessionsError?: { message: string } | null
+  attendanceInsertError?: { message: string } | null
 } = {}) {
   const memberId = '11111111-1111-1111-1111-111111111111'
   const registrationValues: Array<Record<string, unknown>> = []
   const guestDeletes: string[] = []
   const guestInserts: Array<Record<string, unknown>> = []
+  const attendanceInserts: Array<Record<string, unknown>> = []
 
   return {
     registrationValues,
     guestDeletes,
     guestInserts,
+    attendanceInserts,
     client: {
       from(table: string) {
         if (table === 'members') {
@@ -226,6 +299,55 @@ function createRegistrationPostClient(options: {
           }
         }
 
+        if (table === 'class_sessions') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('id, scheduled_at, period_start')
+
+              const chain = {
+                eq(column: string, value: string) {
+                  if (column === 'class_id') {
+                    expect(value).toBe('class-1')
+                  }
+
+                  if (column === 'period_start') {
+                    expect(value).toBe('2026-04-01')
+                  }
+
+                  return chain
+                },
+                gt(column: string) {
+                  expect(column).toBe('scheduled_at')
+                  return chain
+                },
+                order(column: string, orderOptions: { ascending: boolean }) {
+                  expect(column).toBe('scheduled_at')
+                  expect(orderOptions.ascending).toBe(true)
+
+                  return Promise.resolve({
+                    data: options.futureSessions ?? [],
+                    error: options.futureSessionsError ?? null,
+                  })
+                },
+              }
+
+              return chain
+            },
+          }
+        }
+
+        if (table === 'class_attendance') {
+          return {
+            insert(values: Record<string, unknown> | Array<Record<string, unknown>>) {
+              attendanceInserts.push(...(Array.isArray(values) ? values : [values]))
+
+              return Promise.resolve({
+                error: options.attendanceInsertError ?? null,
+              })
+            },
+          }
+        }
+
         expect(table).toBe('class_registrations')
 
         return {
@@ -241,6 +363,234 @@ function createRegistrationPostClient(options: {
                     data: options.registrationError ? null : { id: 'registration-1' },
                     error: options.registrationError ?? null,
                   }),
+                }
+              },
+            }
+          },
+        }
+      },
+    },
+  }
+}
+
+function createScheduleRulePostClient() {
+  const insertValues: Array<Record<string, unknown>> = []
+
+  return {
+    insertValues,
+    client: {
+      from(table: string) {
+        expect(table).toBe('class_schedule_rules')
+
+        return {
+          insert(values: Record<string, unknown>) {
+            insertValues.push(values)
+
+            return {
+              select(columns: string) {
+                expect(columns).toBe('id, class_id, day_of_week, session_time, created_at')
+
+                return {
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: buildScheduleRule(),
+                    error: null,
+                  }),
+                }
+              },
+            }
+          },
+        }
+      },
+    },
+  }
+}
+
+function createScheduleRuleDeleteClient() {
+  return {
+    client: {
+      from(table: string) {
+        expect(table).toBe('class_schedule_rules')
+
+        return {
+          delete() {
+            return {
+              eq(column: string, value: string) {
+                expect(column).toBe('id')
+                expect(value).toBe('rule-1')
+
+                return {
+                  eq(nextColumn: string, nextValue: string) {
+                    expect(nextColumn).toBe('class_id')
+                    expect(nextValue).toBe('class-1')
+
+                    return {
+                      select(columns: string) {
+                        expect(columns).toBe('id')
+
+                        return {
+                          maybeSingle: vi.fn().mockResolvedValue({
+                            data: { id: 'rule-1' },
+                            error: null,
+                          }),
+                        }
+                      },
+                    }
+                  },
+                }
+              },
+            }
+          },
+        }
+      },
+    },
+  }
+}
+
+function createGenerateSessionsClient() {
+  const upsertValues: Array<Array<Record<string, unknown>>> = []
+  const attendanceInserts: Array<Record<string, unknown>> = []
+  let selectCallCount = 0
+
+  return {
+    upsertValues,
+    attendanceInserts,
+    client: {
+      from(table: string) {
+        if (table === 'class_sessions') {
+          return {
+            select(columns: string) {
+              const callIndex = selectCallCount
+              selectCallCount += 1
+
+              const chain = {
+                eq(column: string, value: string) {
+                  if (column === 'class_id') {
+                    expect(value).toBe('class-1')
+                  }
+
+                  if (column === 'period_start') {
+                    expect(value).toBe('2026-04-01')
+                  }
+
+                  return chain
+                },
+                in(column: string, values: string[]) {
+                  expect(column).toBe('scheduled_at')
+                  expect(values).toEqual([
+                    '2026-04-14T09:00:00-05:00',
+                    '2026-04-16T09:00:00-05:00',
+                  ])
+
+                  return Promise.resolve({
+                    data:
+                      callIndex === 0
+                        ? [{ id: 'session-existing', scheduled_at: '2026-04-14T09:00:00-05:00' }]
+                        : [
+                            {
+                              id: 'session-existing',
+                              scheduled_at: '2026-04-14T09:00:00-05:00',
+                              period_start: '2026-04-01',
+                            },
+                            {
+                              id: 'session-new',
+                              scheduled_at: '2026-04-16T09:00:00-05:00',
+                              period_start: '2026-04-01',
+                            },
+                          ],
+                    error: null,
+                  })
+                },
+              }
+
+              if (callIndex === 0) {
+                expect(columns).toBe('id, scheduled_at')
+              } else {
+                expect(columns).toBe('id, scheduled_at, period_start')
+              }
+
+              return chain
+            },
+            upsert(values: Array<Record<string, unknown>>, options: Record<string, unknown>) {
+              upsertValues.push(values)
+              expect(options).toMatchObject({
+                onConflict: 'class_id,scheduled_at',
+                ignoreDuplicates: true,
+              })
+
+              return Promise.resolve({
+                error: null,
+              })
+            },
+          }
+        }
+
+        expect(table).toBe('class_attendance')
+
+        return {
+          insert(values: Array<Record<string, unknown>>) {
+            attendanceInserts.push(...values)
+
+            return Promise.resolve({
+              error: null,
+            })
+          },
+        }
+      },
+    },
+  }
+}
+
+function createAttendancePatchClient() {
+  const updateValues: Array<Record<string, unknown>> = []
+
+  return {
+    updateValues,
+    client: {
+      from(table: string) {
+        expect(table).toBe('class_attendance')
+
+        return {
+          select(columns: string) {
+            expect(columns).toBe('id, session_id')
+
+            return {
+              eq(column: string, value: string) {
+                expect(column).toBe('id')
+                expect(value).toBe('attendance-1')
+
+                return {
+                  eq(nextColumn: string, nextValue: string) {
+                    expect(nextColumn).toBe('session_id')
+                    expect(nextValue).toBe('session-1')
+
+                    return {
+                      maybeSingle: vi.fn().mockResolvedValue({
+                        data: { id: 'attendance-1', session_id: 'session-1' },
+                        error: null,
+                      }),
+                    }
+                  },
+                }
+              },
+            }
+          },
+          update(values: Record<string, unknown>) {
+            updateValues.push(values)
+
+            return {
+              eq(column: string, value: string) {
+                expect(column).toBe('id')
+                expect(value).toBe('attendance-1')
+
+                return {
+                  eq(nextColumn: string, nextValue: string) {
+                    expect(nextColumn).toBe('session_id')
+                    expect(nextValue).toBe('session-1')
+
+                    return Promise.resolve({
+                      error: null,
+                    })
+                  },
                 }
               },
             }
@@ -585,5 +935,283 @@ describe('classes routes', () => {
       reviewed_by: 'admin-1',
     })
     expect(body.registration.amount_paid).toBe(3200)
+  })
+
+  it('returns class schedule rules for authenticated users', async () => {
+    mockAuthenticatedUser()
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'staff', titles: ['Assistant'] }))
+    readClassByIdMock.mockResolvedValue(buildClass())
+    readClassScheduleRulesMock.mockResolvedValue([buildScheduleRule()])
+
+    const response = await getClassScheduleRules(new Request('http://localhost/api/classes/class-1/schedule-rules'), {
+      params: Promise.resolve({ id: 'class-1' }),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.schedule_rules).toHaveLength(1)
+    expect(body.schedule_rules[0].day_of_week).toBe(1)
+  })
+
+  it('creates a class schedule rule for admins', async () => {
+    mockAdminUser()
+    const { client, insertValues } = createScheduleRulePostClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readClassByIdMock.mockResolvedValue(buildClass())
+
+    const response = await postClassScheduleRule(
+      new Request('http://localhost/api/classes/class-1/schedule-rules', {
+        method: 'POST',
+        body: JSON.stringify({
+          day_of_week: 1,
+          session_time: '09:00',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(insertValues).toEqual([
+      {
+        class_id: 'class-1',
+        day_of_week: 1,
+        session_time: '09:00:00',
+      },
+    ])
+    expect(body.schedule_rule.session_time).toBe('09:00:00')
+  })
+
+  it('deletes a class schedule rule for admins', async () => {
+    mockAdminUser()
+    const { client } = createScheduleRuleDeleteClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readClassByIdMock.mockResolvedValue(buildClass())
+
+    const response = await deleteClassScheduleRule(
+      new Request('http://localhost/api/classes/class-1/schedule-rules/rule-1', {
+        method: 'DELETE',
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1', ruleId: 'rule-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+  })
+
+  it('returns current-period class sessions for authenticated users', async () => {
+    mockAuthenticatedUser()
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'staff', titles: ['Trainer'] }))
+    readClassByIdMock.mockResolvedValue(buildClass())
+    readClassSessionsMock.mockResolvedValue([buildSession()])
+
+    const response = await getClassSessions(
+      new Request('http://localhost/api/classes/class-1/sessions?period_start=2026-04-01'),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(readClassSessionsMock).toHaveBeenCalledWith({}, 'class-1', '2026-04-01')
+    expect(body.sessions).toHaveLength(1)
+  })
+
+  it('generates only new sessions and seeds attendance for eligible registrants', async () => {
+    mockAdminUser()
+    const { client, upsertValues, attendanceInserts } = createGenerateSessionsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readClassByIdMock.mockResolvedValue(buildClass())
+    readClassRegistrationsMock.mockResolvedValue([
+      buildRegistration({
+        id: 'registration-1',
+        member_id: 'member-1',
+        guest_profile_id: null,
+        month_start: '2026-04-05',
+      }),
+      buildRegistration({
+        id: 'registration-2',
+        member_id: null,
+        guest_profile_id: 'guest-1',
+        registrant_type: 'guest',
+        registrant_name: 'Guest One',
+        month_start: '2026-04-20',
+      }),
+    ])
+
+    const response = await postClassSessions(
+      new Request('http://localhost/api/classes/class-1/sessions', {
+        method: 'POST',
+        body: JSON.stringify({
+          sessions: [
+            { scheduled_at: '2026-04-14T09:00:00-05:00' },
+            { scheduled_at: '2026-04-16T09:00:00-05:00' },
+          ],
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(upsertValues).toHaveLength(1)
+    expect(attendanceInserts).toEqual([
+      {
+        session_id: 'session-new',
+        member_id: 'member-1',
+        guest_profile_id: null,
+        marked_by: null,
+        marked_at: null,
+      },
+    ])
+    expect(body.count).toBe(1)
+  })
+
+  it('returns session attendance for authenticated users', async () => {
+    mockAuthenticatedUser()
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'staff', titles: ['Trainer'] }))
+    readClassSessionByIdMock.mockResolvedValue(buildSession())
+    readClassAttendanceMock.mockResolvedValue([buildAttendance()])
+
+    const response = await getSessionAttendance(
+      new Request('http://localhost/api/classes/class-1/sessions/session-1/attendance'),
+      {
+        params: Promise.resolve({ id: 'class-1', sessionId: 'session-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.attendance).toHaveLength(1)
+  })
+
+  it('forbids trainer-title staff from marking attendance', async () => {
+    mockAuthenticatedUser()
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'staff', titles: ['Trainer'] }))
+
+    const response = await postSessionAttendance(
+      new Request('http://localhost/api/classes/class-1/sessions/session-1/attendance', {
+        method: 'POST',
+        body: JSON.stringify({
+          member_id: '11111111-1111-1111-1111-111111111111',
+          marked_at: '2026-04-14T15:00:00.000Z',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1', sessionId: 'session-1' }),
+      },
+    )
+
+    expect(response.status).toBe(403)
+  })
+
+  it('updates attendance rows for admins', async () => {
+    mockAuthenticatedUser({
+      id: 'admin-1',
+      email: 'admin@evolutionzfitness.com',
+    })
+    const { client, updateValues } = createAttendancePatchClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readStaffProfileMock.mockResolvedValue(buildProfile({ id: 'admin-1', role: 'admin' }))
+    readClassSessionByIdMock.mockResolvedValue(buildSession())
+    readClassAttendanceMock.mockResolvedValue([
+      buildAttendance({
+        id: 'attendance-1',
+        marked_at: '2026-04-14T15:00:00.000Z',
+        marked_by: 'admin-1',
+      }),
+    ])
+
+    const response = await patchSessionAttendance(
+      new Request('http://localhost/api/classes/class-1/sessions/session-1/attendance/attendance-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          marked_at: '2026-04-14T15:00:00.000Z',
+        }),
+      }),
+      {
+        params: Promise.resolve({
+          id: 'class-1',
+          sessionId: 'session-1',
+          attendanceId: 'attendance-1',
+        }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(updateValues[0]).toMatchObject({
+      marked_by: 'admin-1',
+    })
+    expect(body.attendance.id).toBe('attendance-1')
+  })
+
+  it('logs attendance backfill failures without failing the registration', async () => {
+    const consoleErrorMock = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      mockAuthenticatedUser()
+      readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'admin', titles: ['Owner'] }))
+      readClassByIdMock.mockResolvedValue(buildClass())
+      readClassRegistrationByIdMock.mockResolvedValue(buildRegistration({ status: 'approved' }))
+      const { client, attendanceInserts } = createRegistrationPostClient({
+        futureSessions: [
+          {
+            id: 'session-1',
+            scheduled_at: '2026-04-12T09:00:00-05:00',
+            period_start: '2026-04-01',
+          },
+        ],
+        attendanceInsertError: {
+          message: 'insert failed',
+        },
+      })
+      getSupabaseAdminClientMock.mockReturnValue(client)
+
+      const response = await postClassRegistration(
+        new Request('http://localhost/api/classes/class-1/registrations', {
+          method: 'POST',
+          body: JSON.stringify({
+            registrant_type: 'member',
+            member_id: '11111111-1111-1111-1111-111111111111',
+            month_start: '2026-04-10',
+            amount_paid: 3000,
+            payment_received: true,
+          }),
+        }),
+        {
+          params: Promise.resolve({ id: 'class-1' }),
+        },
+      )
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(attendanceInserts).toEqual([
+        {
+          session_id: 'session-1',
+          member_id: 'member-1',
+          guest_profile_id: null,
+          marked_at: null,
+          marked_by: null,
+        },
+      ])
+      expect(consoleErrorMock).toHaveBeenCalledWith(
+        'Failed to backfill class attendance rows after registration:',
+        expect.any(Error),
+      )
+      expect(body.registration.status).toBe('approved')
+    } finally {
+      consoleErrorMock.mockRestore()
+    }
   })
 })

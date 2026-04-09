@@ -164,8 +164,16 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('My Clients')
     expect(container.textContent).toContain('My Requests')
     expect(container.textContent).toContain('Classes')
+    expect(container.textContent).toContain('Trainer')
     expect(container.textContent).not.toContain('Dashboard')
     expect(container.textContent).not.toContain('Pending Approvals')
+
+    const groupLabels = Array.from(container.querySelectorAll('[data-sidebar="group-label"]')).map(
+      (label) => label.textContent?.trim(),
+    )
+
+    expect(groupLabels).toContain('Trainer')
+    expect(groupLabels).toContain('Classes')
   })
 
   it('shows the admin navigation and caps the pending approvals badge at 9+', async () => {

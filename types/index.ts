@@ -131,6 +131,44 @@ export type ClassRegistration = {
   created_at: string
 }
 
+export type ClassScheduleRuleDay = 0 | 1 | 2 | 3 | 4 | 5 | 6
+
+export type ClassScheduleRule = {
+  id: string
+  class_id: string
+  day_of_week: ClassScheduleRuleDay
+  session_time: string
+  created_at: string
+}
+
+export type ClassSession = {
+  id: string
+  class_id: string
+  scheduled_at: string
+  period_start: string
+  created_at: string
+}
+
+export type ClassAttendance = {
+  id: string
+  session_id: string
+  member_id: string | null
+  guest_profile_id: string | null
+  marked_by: string | null
+  marked_at: string | null
+  created_at: string
+}
+
+export type ClassSessionSummary = ClassSession & {
+  marked_count: number
+  total_count: number
+}
+
+export type ClassAttendanceListItem = ClassAttendance & {
+  registrant_name: string
+  registrant_type: 'member' | 'guest'
+}
+
 // Dashboard Types
 export type DashboardMembershipStats = {
   activeMembers: number

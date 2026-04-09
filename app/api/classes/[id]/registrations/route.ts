@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getUtcDateFromDateValue } from '@/lib/classes'
+import {
+  addDaysToDateValue,
+  getUtcDateFromDateValue,
+  isClassRegistrationEligibleForSession,
+} from '@/lib/classes'
 import {
   readClassById,
   readClassRegistrationById,
@@ -78,6 +82,69 @@ async function rollbackGuestProfile(supabase: any, guestProfileId: string) {
 
   if (error) {
     throw new Error(`Registration failed and guest rollback also failed: ${error.message}`)
+  }
+}
+
+async function backfillCurrentPeriodAttendance({
+  supabase,
+  classId,
+  currentPeriodStart,
+  memberId,
+  guestProfileId,
+  registrationStart,
+}: {
+  supabase: any
+  classId: string
+  currentPeriodStart: string
+  memberId: string | null
+  guestProfileId: string | null
+  registrationStart: string
+}) {
+  if (!addDaysToDateValue(currentPeriodStart, 27)) {
+    throw new Error('Failed to resolve the current class period end date.')
+  }
+
+  const nowIso = new Date().toISOString()
+  const { data: sessions, error: sessionsError } = await supabase
+    .from('class_sessions')
+    .select('id, scheduled_at, period_start')
+    .eq('class_id', classId)
+    .eq('period_start', currentPeriodStart)
+    .gt('scheduled_at', nowIso)
+    .order('scheduled_at', { ascending: true })
+
+  if (sessionsError) {
+    throw new Error(`Failed to read current-period sessions for attendance backfill: ${sessionsError.message}`)
+  }
+
+  const attendanceRows = ((sessions ?? []) as Array<{
+    id: string
+    scheduled_at: string
+    period_start: string
+  }>)
+    .filter((session) =>
+      isClassRegistrationEligibleForSession(
+        registrationStart,
+        String(session.scheduled_at),
+        String(session.period_start ?? currentPeriodStart),
+      ),
+    )
+    .map((session) => ({
+      session_id: String(session.id),
+      member_id: memberId,
+      guest_profile_id: guestProfileId,
+      marked_at: null,
+      marked_by: null,
+    }))
+
+  if (attendanceRows.length === 0) {
+    return
+  }
+
+  const { error: attendanceError } = await supabase.from('class_attendance').insert(attendanceRows)
+
+  if (attendanceError) {
+    throw new Error(`Failed to create class attendance rows: ${attendanceError.message}`)
   }
 }
 
@@ -253,6 +320,21 @@ export async function POST(
 
     if (!registration) {
       throw new Error('Failed to load the created class registration.')
+    }
+
+    if (classItem.current_period_start) {
+      try {
+        await backfillCurrentPeriodAttendance({
+          supabase,
+          classId: id,
+          currentPeriodStart: classItem.current_period_start,
+          memberId: registration.member_id,
+          guestProfileId: registration.guest_profile_id,
+          registrationStart: registration.month_start,
+        })
+      } catch (attendanceError) {
+        console.error('Failed to backfill class attendance rows after registration:', attendanceError)
+      }
     }
 
     return NextResponse.json({

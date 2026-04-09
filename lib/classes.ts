@@ -1,7 +1,25 @@
 import { z } from 'zod'
-import { formatAccessDate, getJamaicaDateInputValue } from '@/lib/member-access-time'
-import { formatJmdCurrency, JAMAICA_TIME_ZONE } from '@/lib/pt-scheduling'
-import type { Class, ClassRegistration, Profile } from '@/types'
+import {
+  formatAccessDate,
+  getJamaicaDateInputValue,
+  normalizeTimeInputValue,
+} from '@/lib/member-access-time'
+import {
+  buildJamaicaScheduledAt,
+  formatJmdCurrency,
+  formatSessionTime,
+  getJamaicaDateValue,
+  JAMAICA_TIME_ZONE,
+} from '@/lib/pt-scheduling'
+import type {
+  Class,
+  ClassAttendanceListItem,
+  ClassRegistration,
+  ClassScheduleRule,
+  ClassScheduleRuleDay,
+  ClassSessionSummary,
+  Profile,
+} from '@/types'
 
 const DATE_VALUE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/u
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -29,6 +47,8 @@ const optionalDateValueSchema = z
   .trim()
   .regex(DATE_VALUE_PATTERN)
   .nullable()
+const countValueSchema = z.number().int().nonnegative()
+const classScheduleRuleDaySchema = z.number().int().min(0).max(6)
 
 const classTrainerProfileSchema = z.object({
   id: z.string().trim().min(1),
@@ -68,6 +88,36 @@ const classRegistrationSchema = z.object({
   registrant_type: z.enum(['member', 'guest']),
 })
 
+const classScheduleRuleSchema = z.object({
+  id: z.string().trim().min(1),
+  class_id: z.string().trim().min(1),
+  day_of_week: classScheduleRuleDaySchema,
+  session_time: z.string().trim().min(1),
+  created_at: z.string().trim().min(1),
+})
+
+const classSessionSummarySchema = z.object({
+  id: z.string().trim().min(1),
+  class_id: z.string().trim().min(1),
+  scheduled_at: z.string().trim().min(1),
+  period_start: z.string().trim().regex(DATE_VALUE_PATTERN),
+  created_at: z.string().trim().min(1),
+  marked_count: countValueSchema,
+  total_count: countValueSchema,
+})
+
+const classAttendanceListItemSchema = z.object({
+  id: z.string().trim().min(1),
+  session_id: z.string().trim().min(1),
+  member_id: z.string().trim().min(1).nullable(),
+  guest_profile_id: z.string().trim().min(1).nullable(),
+  marked_by: z.string().trim().min(1).nullable(),
+  marked_at: z.string().trim().min(1).nullable(),
+  created_at: z.string().trim().min(1),
+  registrant_name: z.string().trim().min(1),
+  registrant_type: z.enum(['member', 'guest']),
+})
+
 const classesResponseSchema = z.object({
   classes: z.array(classWithTrainersSchema).default([]),
 })
@@ -80,6 +130,18 @@ const registrationsResponseSchema = z.object({
   registrations: z.array(classRegistrationSchema).default([]),
 })
 
+const scheduleRulesResponseSchema = z.object({
+  schedule_rules: z.array(classScheduleRuleSchema).default([]),
+})
+
+const sessionsResponseSchema = z.object({
+  sessions: z.array(classSessionSummarySchema).default([]),
+})
+
+const attendanceResponseSchema = z.object({
+  attendance: z.array(classAttendanceListItemSchema).default([]),
+})
+
 const registrationMutationResponseSchema = z.object({
   ok: z.literal(true),
   registration: classRegistrationSchema,
@@ -90,10 +152,42 @@ const classMutationResponseSchema = z.object({
   class: classWithTrainersSchema,
 })
 
+const scheduleRuleMutationResponseSchema = z.object({
+  ok: z.literal(true),
+  schedule_rule: classScheduleRuleSchema,
+})
+
+const attendanceMutationResponseSchema = z.object({
+  ok: z.literal(true),
+  attendance: classAttendanceListItemSchema,
+})
+
+const generateSessionsResponseSchema = z.object({
+  ok: z.literal(true),
+  count: countValueSchema,
+})
+
 const errorResponseSchema = z.object({
   ok: z.literal(false).optional(),
   error: z.string().trim().min(1),
 })
+
+export const CLASS_DAY_OF_WEEK_LABELS = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+] as const
+
+export type {
+  ClassAttendanceListItem,
+  ClassScheduleRule,
+  ClassScheduleRuleDay,
+  ClassSessionSummary,
+} from '@/types'
 
 export type ClassTrainerProfile = Pick<Profile, 'id' | 'name' | 'titles'>
 export type ClassWithTrainers = Class & {
@@ -104,6 +198,14 @@ export type ClassRegistrantType = 'member' | 'guest'
 export type ClassRegistrationListItem = ClassRegistration & {
   registrant_name: string
   registrant_type: ClassRegistrantType
+}
+export type ClassSessionListItem = ClassSessionSummary
+export type ClassAttendanceRow = ClassAttendanceListItem
+export type ClassSessionPreviewItem = {
+  date_value: string
+  day_of_week: ClassScheduleRuleDay
+  session_time: string
+  scheduled_at: string
 }
 export type CreateClassRegistrationInput =
   | {
@@ -137,6 +239,29 @@ export type ReviewClassRegistrationInput =
       review_note: string
     }
 
+export type CreateClassScheduleRuleInput = {
+  day_of_week: ClassScheduleRuleDay
+  session_time: string
+}
+
+export type GenerateClassSessionsInput = {
+  sessions: Array<{
+    scheduled_at: string
+  }>
+}
+
+export type CreateClassAttendanceInput = {
+  member_id?: string | null
+  guest_profile_id?: string | null
+  marked_by: string | null
+  marked_at: string | null
+}
+
+export type UpdateClassAttendanceInput = {
+  marked_at: string | null
+  marked_by: string | null
+}
+
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -165,6 +290,10 @@ function getErrorMessage(payload: unknown, fallback: string) {
   const parsed = errorResponseSchema.safeParse(payload)
 
   return parsed.success ? parsed.data.error : fallback
+}
+
+function normalizeClassTimeValue(value: string) {
+  return normalizeTimeInputValue(value)
 }
 
 export function getUtcDateFromDateValue(value: string) {
@@ -219,6 +348,20 @@ export function getDaysBetweenDateValues(startValue: string, endValue: string) {
   }
 
   return Math.round((endDate.getTime() - startDate.getTime()) / MS_PER_DAY)
+}
+
+export function getClassDayOfWeekLabel(value: number) {
+  return CLASS_DAY_OF_WEEK_LABELS[value as ClassScheduleRuleDay] ?? 'Unknown day'
+}
+
+export function getClassDayOfWeekFromDateValue(value: string) {
+  const date = getUtcDateFromDateValue(value)
+
+  if (!date) {
+    return null
+  }
+
+  return date.getUTCDay() as ClassScheduleRuleDay
 }
 
 export function isPerSessionClass(classItem: Pick<Class, 'name'>) {
@@ -316,6 +459,134 @@ export function formatClassDateTime(value: string) {
   }).format(date)
 }
 
+export function formatClassTime(value: string) {
+  return formatSessionTime(value)
+}
+
+export function formatClassSessionDate(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('en-JM', {
+    timeZone: JAMAICA_TIME_ZONE,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  }).format(date)
+}
+
+export function formatClassSessionTime(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('en-JM', {
+    timeZone: JAMAICA_TIME_ZONE,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date)
+}
+
+export function buildClassScheduledAt(dateValue: string, timeValue: string) {
+  return buildJamaicaScheduledAt(dateValue, timeValue)
+}
+
+export function getClassPeriodDateValues(currentPeriodStart: string) {
+  const values: string[] = []
+
+  for (let index = 0; index < 28; index += 1) {
+    const nextDateValue = addDaysToDateValue(currentPeriodStart, index)
+
+    if (!nextDateValue) {
+      continue
+    }
+
+    values.push(nextDateValue)
+  }
+
+  return values
+}
+
+export function sortClassScheduleRules(rules: ClassScheduleRule[]) {
+  return [...rules].sort((left, right) => {
+    if (left.day_of_week !== right.day_of_week) {
+      return left.day_of_week - right.day_of_week
+    }
+
+    const leftTime = normalizeClassTimeValue(left.session_time) ?? left.session_time
+    const rightTime = normalizeClassTimeValue(right.session_time) ?? right.session_time
+
+    return leftTime.localeCompare(rightTime)
+  })
+}
+
+export function getClassSessionPreviewItems(
+  currentPeriodStart: string,
+  rules: ClassScheduleRule[],
+) {
+  const previewItems: ClassSessionPreviewItem[] = []
+  const sortedRules = sortClassScheduleRules(rules)
+
+  for (const dateValue of getClassPeriodDateValues(currentPeriodStart)) {
+    const dayOfWeek = getClassDayOfWeekFromDateValue(dateValue)
+
+    if (dayOfWeek === null) {
+      continue
+    }
+
+    for (const rule of sortedRules) {
+      if (rule.day_of_week !== dayOfWeek) {
+        continue
+      }
+
+      const scheduledAt = buildClassScheduledAt(dateValue, rule.session_time)
+
+      if (!scheduledAt) {
+        continue
+      }
+
+      previewItems.push({
+        date_value: dateValue,
+        day_of_week: dayOfWeek,
+        session_time: normalizeClassTimeValue(rule.session_time) ?? rule.session_time,
+        scheduled_at: scheduledAt,
+      })
+    }
+  }
+
+  return previewItems.sort((left, right) => left.scheduled_at.localeCompare(right.scheduled_at))
+}
+
+export function isClassRegistrationEligibleForSession(
+  registrationStartDateValue: string,
+  sessionScheduledAt: string,
+  periodStartDateValue?: string,
+) {
+  const sessionDateValue = getJamaicaDateValue(sessionScheduledAt)
+
+  if (!sessionDateValue) {
+    return false
+  }
+
+  if (periodStartDateValue) {
+    const periodOffset = getDaysBetweenDateValues(periodStartDateValue, registrationStartDateValue)
+
+    if (periodOffset === null || periodOffset < 0) {
+      return false
+    }
+  }
+
+  const dayOffset = getDaysBetweenDateValues(registrationStartDateValue, sessionDateValue)
+
+  return dayOffset !== null && dayOffset >= 0
+}
+
 export function formatOptionalJmd(value: number | null) {
   return typeof value === 'number' ? formatJmdCurrency(value) : 'Not set'
 }
@@ -393,6 +664,204 @@ export async function fetchClassRegistrations(
   }
 
   return parsed.data.registrations as ClassRegistrationListItem[]
+}
+
+export async function fetchClassScheduleRules(classId: string) {
+  const response = await fetch(`/api/classes/${encodeURIComponent(classId)}/schedule-rules`, {
+    method: 'GET',
+    cache: 'no-store',
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to load class schedule rules.'))
+  }
+
+  const parsed = scheduleRulesResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to load class schedule rules.')
+  }
+
+  return parsed.data.schedule_rules as ClassScheduleRule[]
+}
+
+export async function createClassScheduleRule(
+  classId: string,
+  input: CreateClassScheduleRuleInput,
+) {
+  const response = await fetch(`/api/classes/${encodeURIComponent(classId)}/schedule-rules`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to create the class schedule rule.'))
+  }
+
+  const parsed = scheduleRuleMutationResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to create the class schedule rule.')
+  }
+
+  return parsed.data.schedule_rule as ClassScheduleRule
+}
+
+export async function deleteClassScheduleRule(classId: string, ruleId: string) {
+  const response = await fetch(
+    `/api/classes/${encodeURIComponent(classId)}/schedule-rules/${encodeURIComponent(ruleId)}`,
+    {
+      method: 'DELETE',
+    },
+  )
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to delete the class schedule rule.'))
+  }
+}
+
+export async function fetchClassSessions(classId: string, periodStart: string) {
+  const searchParams = buildSearchParams({
+    period_start: periodStart,
+  })
+  const response = await fetch(
+    `/api/classes/${encodeURIComponent(classId)}/sessions?${searchParams.toString()}`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+  )
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to load class sessions.'))
+  }
+
+  const parsed = sessionsResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to load class sessions.')
+  }
+
+  return parsed.data.sessions as ClassSessionListItem[]
+}
+
+export async function generateClassSessions(
+  classId: string,
+  input: GenerateClassSessionsInput,
+) {
+  const response = await fetch(`/api/classes/${encodeURIComponent(classId)}/sessions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to generate class sessions.'))
+  }
+
+  const parsed = generateSessionsResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to generate class sessions.')
+  }
+
+  return parsed.data.count
+}
+
+export async function fetchClassAttendance(classId: string, sessionId: string) {
+  const response = await fetch(
+    `/api/classes/${encodeURIComponent(classId)}/sessions/${encodeURIComponent(sessionId)}/attendance`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+  )
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to load class attendance.'))
+  }
+
+  const parsed = attendanceResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to load class attendance.')
+  }
+
+  return parsed.data.attendance as ClassAttendanceRow[]
+}
+
+export async function createClassAttendance(
+  classId: string,
+  sessionId: string,
+  input: CreateClassAttendanceInput,
+) {
+  const response = await fetch(
+    `/api/classes/${encodeURIComponent(classId)}/sessions/${encodeURIComponent(sessionId)}/attendance`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
+    },
+  )
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to update class attendance.'))
+  }
+
+  const parsed = attendanceMutationResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to update class attendance.')
+  }
+
+  return parsed.data.attendance as ClassAttendanceRow
+}
+
+export async function updateClassAttendance(
+  classId: string,
+  sessionId: string,
+  attendanceId: string,
+  input: UpdateClassAttendanceInput,
+) {
+  const response = await fetch(
+    `/api/classes/${encodeURIComponent(classId)}/sessions/${encodeURIComponent(
+      sessionId,
+    )}/attendance/${encodeURIComponent(attendanceId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
+    },
+  )
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to update class attendance.'))
+  }
+
+  const parsed = attendanceMutationResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to update class attendance.')
+  }
+
+  return parsed.data.attendance as ClassAttendanceRow
 }
 
 export async function createClassRegistration(

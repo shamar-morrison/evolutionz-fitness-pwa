@@ -19,6 +19,12 @@ export const queryKeys = {
     detail: (id: string) => ['classes', 'detail', id] as const,
     registrations: (classId: string, monthStart: string) =>
       ['classes', 'registrations', classId, monthStart] as const,
+    sessions: (classId: string, periodStart: string) =>
+      ['classes', 'sessions', classId, periodStart] as const,
+    attendance: (sessionId: string) =>
+      ['classes', 'attendance', sessionId] as const,
+    scheduleRules: (classId: string) =>
+      ['classes', 'scheduleRules', classId] as const,
     trainers: (classId: string) => ['classes', 'trainers', classId] as const,
   },
   guestProfiles: {

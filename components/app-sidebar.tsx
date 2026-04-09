@@ -105,8 +105,9 @@ const trainerNavItems: NavItem[] = [
   { href: '/trainer/schedule', label: 'My Schedule', icon: CalendarDays },
   { href: '/trainer/clients', label: 'My Clients', icon: Users },
   { href: '/trainer/requests', label: 'My Requests', icon: ClipboardList },
-  { href: '/classes', label: 'Classes', icon: GraduationCap },
 ]
+
+const trainerClassesNavItems: NavItem[] = [{ href: '/classes', label: 'Classes', icon: GraduationCap }]
 
 function getInitials(name: string) {
   return name
@@ -139,6 +140,7 @@ export function AppSidebar() {
     enabled: role === 'admin',
   })
   const navItems = role === 'staff' ? trainerNavItems : adminNavItems
+  const secondaryNavItems = role === 'staff' ? trainerClassesNavItems : []
   const homeHref = role === 'staff' ? '/trainer/schedule' : '/dashboard'
   const displayName = profile?.name ?? user?.email ?? 'Account'
   const subtitle = profile ? formatStaffTitles(profile.titles) || 'Signed in' : user?.email ?? null
@@ -238,6 +240,30 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {secondaryNavItems.length > 0 ? (
+          <SidebarGroup>
+            <SidebarGroupLabel>Classes</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {secondaryNavItems.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActivePath(pathname, item.href)}
+                      tooltip={item.label}
+                    >
+                      <Link data-progress href={item.href} onClick={handleNavigationClick}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
 
         {role === 'admin' ? (
           <SidebarGroup>

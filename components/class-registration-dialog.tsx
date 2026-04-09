@@ -213,6 +213,10 @@ export function ClassRegistrationDialog({
           queryKey: queryKeys.classes.all,
           exact: false,
         }),
+        queryClient.invalidateQueries({
+          queryKey: ['classes', 'sessions', classItem.id],
+          exact: false,
+        }),
       ])
       onOpenChange(false)
       toast({

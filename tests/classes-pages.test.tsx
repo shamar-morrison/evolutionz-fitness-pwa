@@ -3,14 +3,24 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ClassWithTrainers, ClassRegistrationListItem } from '@/lib/classes'
+import type {
+  ClassScheduleRule,
+  ClassSessionListItem,
+  ClassWithTrainers,
+  ClassRegistrationListItem,
+} from '@/lib/classes'
 
 const {
   authState,
   createClassRegistrationMock,
+  createClassScheduleRuleMock,
+  deleteClassScheduleRuleMock,
+  generateClassSessionsMock,
   invalidateQueriesMock,
   pushMock,
   toastMock,
+  useClassScheduleRulesMock,
+  useClassSessionsMock,
   useClassDetailMock,
   useClassRegistrationsMock,
   useClassesMock,
@@ -27,9 +37,14 @@ const {
     loading: false,
   },
   createClassRegistrationMock: vi.fn(),
+  createClassScheduleRuleMock: vi.fn(),
+  deleteClassScheduleRuleMock: vi.fn(),
+  generateClassSessionsMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   pushMock: vi.fn(),
   toastMock: vi.fn(),
+  useClassScheduleRulesMock: vi.fn(),
+  useClassSessionsMock: vi.fn(),
   useClassDetailMock: vi.fn(),
   useClassRegistrationsMock: vi.fn(),
   useClassesMock: vi.fn(),
@@ -64,6 +79,8 @@ vi.mock('@/hooks/use-classes', () => ({
   useClasses: useClassesMock,
   useClassDetail: useClassDetailMock,
   useClassRegistrations: useClassRegistrationsMock,
+  useClassScheduleRules: useClassScheduleRulesMock,
+  useClassSessions: useClassSessionsMock,
 }))
 
 vi.mock('@/hooks/use-members', () => ({
@@ -94,8 +111,21 @@ vi.mock('@/lib/classes', async () => {
   return {
     ...actual,
     createClassRegistration: createClassRegistrationMock,
+    createClassScheduleRule: createClassScheduleRuleMock,
+    deleteClassScheduleRule: deleteClassScheduleRuleMock,
+    generateClassSessions: generateClassSessionsMock,
   }
 })
+
+vi.mock('@/components/class-attendance-dialog', () => ({
+  ClassAttendanceDialog: ({
+    open,
+    readOnly,
+  }: {
+    open: boolean
+    readOnly: boolean
+  }) => (open ? <div>{readOnly ? 'Attendance dialog (read-only)' : 'Attendance dialog'}</div> : null),
+}))
 
 vi.mock('@/components/searchable-select', () => ({
   SearchableSelect: ({
@@ -154,6 +184,36 @@ vi.mock('@/components/ui/tabs', () => ({
   TabsTrigger: ({ children }: React.ComponentProps<'button'>) => <button type="button">{children}</button>,
 }))
 
+vi.mock('@/components/ui/select', () => ({
+  Select: ({
+    children,
+    value,
+    onValueChange,
+  }: {
+    children: React.ReactNode
+    value?: string
+    onValueChange?: (value: string) => void
+  }) => (
+    <select
+      aria-label="Day of week"
+      value={value ?? ''}
+      onChange={(event) => onValueChange?.(event.target.value)}
+    >
+      {children}
+    </select>
+  ),
+  SelectContent: ({ children }: React.ComponentProps<'div'>) => <>{children}</>,
+  SelectItem: ({
+    children,
+    value,
+  }: {
+    children: React.ReactNode
+    value: string
+  }) => <option value={value}>{children}</option>,
+  SelectTrigger: ({ children }: React.ComponentProps<'div'>) => <>{children}</>,
+  SelectValue: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+}))
+
 import ClassesPage from '@/app/(app)/classes/page'
 import ClassDetailPage from '@/app/(app)/classes/[id]/page'
 import { ClassRegistrationDialog } from '@/components/class-registration-dialog'
@@ -204,6 +264,28 @@ function buildRegistration(
   }
 }
 
+function buildScheduleRule(overrides: Partial<ClassScheduleRule> = {}): ClassScheduleRule {
+  return {
+    id: overrides.id ?? 'rule-1',
+    class_id: overrides.class_id ?? 'class-1',
+    day_of_week: overrides.day_of_week ?? 1,
+    session_time: overrides.session_time ?? '09:00:00',
+    created_at: overrides.created_at ?? '2026-04-08T12:00:00.000Z',
+  }
+}
+
+function buildSession(overrides: Partial<ClassSessionListItem> = {}): ClassSessionListItem {
+  return {
+    id: overrides.id ?? 'session-1',
+    class_id: overrides.class_id ?? 'class-1',
+    scheduled_at: overrides.scheduled_at ?? '2026-04-14T09:00:00-05:00',
+    period_start: overrides.period_start ?? '2026-04-01',
+    created_at: overrides.created_at ?? '2026-04-08T12:00:00.000Z',
+    marked_count: overrides.marked_count ?? 1,
+    total_count: overrides.total_count ?? 2,
+  }
+}
+
 function getButton(container: HTMLDivElement, label: string) {
   const button = Array.from(container.querySelectorAll('button')).find(
     (candidate) => candidate.textContent?.trim() === label,
@@ -248,6 +330,20 @@ function getInputByLabel(container: HTMLDivElement, label: string) {
 async function clickButton(container: HTMLDivElement, label: string) {
   await act(async () => {
     getButton(container, label).click()
+  })
+}
+
+async function clickButtonByAriaLabel(container: HTMLDivElement, label: string) {
+  const button = Array.from(container.querySelectorAll('button')).find(
+    (candidate) => candidate.getAttribute('aria-label') === label,
+  )
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`${label} button not found.`)
+  }
+
+  await act(async () => {
+    button.click()
   })
 }
 
@@ -316,6 +412,16 @@ describe('classes pages', () => {
       isLoading: false,
       error: null,
     }))
+    useClassScheduleRulesMock.mockReturnValue({
+      scheduleRules: [buildScheduleRule()],
+      isLoading: false,
+      error: null,
+    })
+    useClassSessionsMock.mockReturnValue({
+      sessions: [buildSession()],
+      isLoading: false,
+      error: null,
+    })
     useMembersMock.mockReturnValue({
       members: [
         {
@@ -330,6 +436,9 @@ describe('classes pages', () => {
       error: null,
     })
     createClassRegistrationMock.mockResolvedValue(buildRegistration({ status: 'approved' }))
+    createClassScheduleRuleMock.mockResolvedValue(buildScheduleRule())
+    deleteClassScheduleRuleMock.mockResolvedValue(undefined)
+    generateClassSessionsMock.mockResolvedValue(1)
   })
 
   afterEach(async () => {
@@ -360,10 +469,15 @@ describe('classes pages', () => {
       root.render(<ClassDetailPage />)
     })
 
+    expect(container.textContent).toContain('Schedule')
+    expect(container.textContent).toContain('Add Rule')
+    expect(container.textContent).toContain('Generate Sessions')
     expect(container.textContent).toContain('Set Period Start')
     expect(container.textContent).toContain('Register')
     expect(container.textContent).toContain('Pending Approvals')
     expect(container.textContent).toContain('Registrations')
+    expect(container.textContent).toContain('Sessions')
+    expect(container.textContent).toContain('Mark Attendance')
   })
 
   it('hides admin-only class detail controls for staff users', async () => {
@@ -382,6 +496,120 @@ describe('classes pages', () => {
     expect(container.textContent).toContain('Register')
     expect(container.textContent).not.toContain('Set Period Start')
     expect(container.textContent).not.toContain('Pending Approvals')
+    expect(container.textContent).toContain('Sessions')
+    expect(container.textContent).toContain('Mark Attendance')
+  })
+
+  it('opens the add rule dialog and saves a new schedule rule', async () => {
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    await clickButton(container, 'Add Rule')
+
+    const dayField = getInputByLabel(container, 'Day of week')
+    const timeField = getInputByLabel(container, 'Session time')
+    await setInputValue(dayField, '4')
+    await setInputValue(timeField, '11:30')
+    await clickButton(container, 'Save')
+
+    expect(createClassScheduleRuleMock).toHaveBeenCalledWith('class-1', {
+      day_of_week: 4,
+      session_time: '11:30',
+    })
+  })
+
+  it('shows generate-session warnings when the current period start and rules are missing', async () => {
+    useClassDetailMock.mockReturnValue({
+      classItem: buildClass({
+        current_period_start: null,
+      }),
+      isLoading: false,
+      error: null,
+    })
+    useClassScheduleRulesMock.mockReturnValue({
+      scheduleRules: [],
+      isLoading: false,
+      error: null,
+    })
+    useClassSessionsMock.mockReturnValue({
+      sessions: [],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    await clickButton(container, 'Generate Sessions')
+
+    expect(container.textContent).toContain('Set a period start date before generating sessions.')
+    expect(container.textContent).toContain('Add schedule rules before generating sessions.')
+  })
+
+  it('allows admins to remove preview rows before confirming session generation', async () => {
+    useClassScheduleRulesMock.mockReturnValue({
+      scheduleRules: [buildScheduleRule({ day_of_week: 1 })],
+      isLoading: false,
+      error: null,
+    })
+    useClassSessionsMock.mockReturnValue({
+      sessions: [buildSession()],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    await clickButton(container, 'Generate Sessions')
+    await clickButtonByAriaLabel(container, 'Remove 2026-04-06T09:00:00-05:00')
+    await clickButton(container, 'Confirm')
+
+    expect(generateClassSessionsMock).toHaveBeenCalledWith('class-1', {
+      sessions: [
+        { scheduled_at: '2026-04-13T09:00:00-05:00' },
+        { scheduled_at: '2026-04-20T09:00:00-05:00' },
+        { scheduled_at: '2026-04-27T09:00:00-05:00' },
+      ],
+    })
+  })
+
+  it('shows a read-only attendance action for trainer-title staff', async () => {
+    authState.role = 'staff'
+    authState.profile = {
+      id: 'trainer-1',
+      name: 'Jordan Trainer',
+      role: 'staff',
+      titles: ['Trainer'],
+    }
+
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    expect(container.textContent).toContain('View Attendance')
+    expect(container.textContent).not.toContain('Mark Attendance')
+
+    await clickButton(container, 'View Attendance')
+
+    expect(container.textContent).toContain('Attendance dialog (read-only)')
+  })
+
+  it('shows an empty sessions state when no current-period sessions exist', async () => {
+    useClassSessionsMock.mockReturnValue({
+      sessions: [],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    expect(container.textContent).toContain('No sessions generated for this period.')
   })
 
   it('advances through the registration dialog and submits the selected member registration', async () => {
@@ -424,6 +652,6 @@ describe('classes pages', () => {
         payment_received: true,
       }),
     )
-    expect(invalidateQueriesMock).toHaveBeenCalledTimes(2)
+    expect(invalidateQueriesMock).toHaveBeenCalledTimes(3)
   })
 })
