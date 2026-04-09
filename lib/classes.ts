@@ -18,6 +18,7 @@ import type {
   ClassScheduleRule,
   ClassScheduleRuleDay,
   ClassSessionSummary,
+  ClassTrainer,
   Profile,
 } from '@/types'
 
@@ -54,6 +55,12 @@ const classTrainerProfileSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1),
   titles: z.array(z.string()).default([]),
+})
+
+const classTrainerSchema = z.object({
+  class_id: z.string().trim().min(1),
+  profile_id: z.string().trim().min(1),
+  created_at: z.string().trim().min(1),
 })
 
 const classSchema = z.object({
@@ -126,6 +133,10 @@ const classResponseSchema = z.object({
   class: classWithTrainersSchema,
 })
 
+const classTrainersResponseSchema = z.object({
+  trainers: z.array(classTrainerProfileSchema).default([]),
+})
+
 const registrationsResponseSchema = z.object({
   registrations: z.array(classRegistrationSchema).default([]),
 })
@@ -155,6 +166,11 @@ const classMutationResponseSchema = z.object({
 const scheduleRuleMutationResponseSchema = z.object({
   ok: z.literal(true),
   schedule_rule: classScheduleRuleSchema,
+})
+
+const classTrainerMutationResponseSchema = z.object({
+  ok: z.literal(true),
+  class_trainer: classTrainerSchema,
 })
 
 const attendanceMutationResponseSchema = z.object({
@@ -215,6 +231,7 @@ export type ClassTrainerProfile = Pick<Profile, 'id' | 'name' | 'titles'>
 export type ClassWithTrainers = Class & {
   trainers: ClassTrainerProfile[]
 }
+export type ClassTrainerAssignment = ClassTrainer
 export type ClassRegistrationStatus = ClassRegistration['status']
 export type ClassRegistrantType = 'member' | 'guest'
 export type ClassRegistrationListItem = ClassRegistration & {
@@ -288,6 +305,10 @@ export type GenerateClassSessionsInput = {
   sessions: Array<{
     scheduled_at: string
   }>
+}
+
+export type AssignClassTrainerInput = {
+  profile_id: string
 }
 
 export type CreateClassAttendanceInput = {
@@ -689,6 +710,26 @@ export async function fetchClassDetail(id: string) {
   return parsed.data.class as ClassWithTrainers
 }
 
+export async function fetchClassTrainers(classId: string) {
+  const response = await fetch(`/api/classes/${encodeURIComponent(classId)}/trainers`, {
+    method: 'GET',
+    cache: 'no-store',
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to load class trainers.'))
+  }
+
+  const parsed = classTrainersResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to load class trainers.')
+  }
+
+  return parsed.data.trainers as ClassTrainerProfile[]
+}
+
 export async function fetchClassRegistrations(
   classId: string,
   status?: ClassRegistrationStatus,
@@ -764,6 +805,46 @@ export async function createClassScheduleRule(
   }
 
   return parsed.data.schedule_rule as ClassScheduleRule
+}
+
+export async function assignClassTrainer(
+  classId: string,
+  input: AssignClassTrainerInput,
+) {
+  const response = await fetch(`/api/classes/${encodeURIComponent(classId)}/trainers`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to assign the trainer to this class.'))
+  }
+
+  const parsed = classTrainerMutationResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to assign the trainer to this class.')
+  }
+
+  return parsed.data.class_trainer as ClassTrainerAssignment
+}
+
+export async function removeClassTrainer(classId: string, profileId: string) {
+  const response = await fetch(
+    `/api/classes/${encodeURIComponent(classId)}/trainers/${encodeURIComponent(profileId)}`,
+    {
+      method: 'DELETE',
+    },
+  )
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to remove the trainer from this class.'))
+  }
 }
 
 export async function deleteClassScheduleRule(classId: string, ruleId: string) {

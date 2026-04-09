@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import {
+  fetchClassTrainers,
   fetchClassPaymentsReport,
   fetchClassAttendance,
   fetchClassDetail,
@@ -14,6 +15,7 @@ import {
   type ClassPaymentsReportTrainer,
   type ClassRegistrationStatus,
   type ClassSessionListItem,
+  type ClassTrainerProfile,
 } from '@/lib/classes'
 import { queryKeys } from '@/lib/query-keys'
 
@@ -48,6 +50,26 @@ export function useClassDetail(id: string, options: { enabled?: boolean } = {}) 
 
   return {
     classItem: query.data ?? null,
+    isLoading: enabled ? query.isLoading : false,
+    error: query.error ?? null,
+    refetch: () => query.refetch(),
+  }
+}
+
+export function useClassTrainers(
+  classId: string,
+  options: { enabled?: boolean } = {},
+) {
+  const enabled = Boolean(classId) && (options.enabled ?? true)
+  const query = useQuery({
+    queryKey: queryKeys.classes.trainers(classId),
+    queryFn: () => fetchClassTrainers(classId),
+    enabled,
+    staleTime: FIVE_MINUTES_MS,
+  })
+
+  return {
+    trainers: (query.data ?? []) as ClassTrainerProfile[],
     isLoading: enabled ? query.isLoading : false,
     error: query.error ?? null,
     refetch: () => query.refetch(),

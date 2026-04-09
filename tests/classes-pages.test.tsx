@@ -12,19 +12,23 @@ import type {
 
 const {
   authState,
+  assignClassTrainerMock,
   createClassRegistrationMock,
   createClassScheduleRuleMock,
   deleteClassScheduleRuleMock,
   generateClassSessionsMock,
   invalidateQueriesMock,
   pushMock,
+  removeClassTrainerMock,
   toastMock,
   useClassScheduleRulesMock,
   useClassSessionsMock,
   useClassDetailMock,
   useClassRegistrationsMock,
+  useClassTrainersMock,
   useClassesMock,
   useMembersMock,
+  useStaffMock,
 } = vi.hoisted(() => ({
   authState: {
     role: 'admin' as 'admin' | 'staff' | null,
@@ -36,19 +40,23 @@ const {
     },
     loading: false,
   },
+  assignClassTrainerMock: vi.fn(),
   createClassRegistrationMock: vi.fn(),
   createClassScheduleRuleMock: vi.fn(),
   deleteClassScheduleRuleMock: vi.fn(),
   generateClassSessionsMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   pushMock: vi.fn(),
+  removeClassTrainerMock: vi.fn(),
   toastMock: vi.fn(),
   useClassScheduleRulesMock: vi.fn(),
   useClassSessionsMock: vi.fn(),
   useClassDetailMock: vi.fn(),
   useClassRegistrationsMock: vi.fn(),
+  useClassTrainersMock: vi.fn(),
   useClassesMock: vi.fn(),
   useMembersMock: vi.fn(),
+  useStaffMock: vi.fn(),
 }))
 
 vi.mock('next/link', () => ({
@@ -81,10 +89,15 @@ vi.mock('@/hooks/use-classes', () => ({
   useClassRegistrations: useClassRegistrationsMock,
   useClassScheduleRules: useClassScheduleRulesMock,
   useClassSessions: useClassSessionsMock,
+  useClassTrainers: useClassTrainersMock,
 }))
 
 vi.mock('@/hooks/use-members', () => ({
   useMembers: useMembersMock,
+}))
+
+vi.mock('@/hooks/use-staff', () => ({
+  useStaff: useStaffMock,
 }))
 
 vi.mock('@/contexts/auth-context', () => ({
@@ -110,12 +123,54 @@ vi.mock('@/lib/classes', async () => {
 
   return {
     ...actual,
+    assignClassTrainer: assignClassTrainerMock,
     createClassRegistration: createClassRegistrationMock,
     createClassScheduleRule: createClassScheduleRuleMock,
     deleteClassScheduleRule: deleteClassScheduleRuleMock,
     generateClassSessions: generateClassSessionsMock,
+    removeClassTrainer: removeClassTrainerMock,
   }
 })
+
+vi.mock('@/components/confirm-dialog', () => ({
+  ConfirmDialog: ({
+    open,
+    title,
+    description,
+    confirmLabel,
+    cancelLabel = 'Cancel',
+    onConfirm,
+    onCancel,
+    onOpenChange,
+  }: {
+    open: boolean
+    title: string
+    description: string
+    confirmLabel: string
+    cancelLabel?: string
+    onConfirm: () => void
+    onCancel?: () => void
+    onOpenChange: (open: boolean) => void
+  }) =>
+    open ? (
+      <div>
+        <h2>{title}</h2>
+        <p>{description}</p>
+        <button
+          type="button"
+          onClick={() => {
+            onCancel?.()
+            onOpenChange(false)
+          }}
+        >
+          {cancelLabel}
+        </button>
+        <button type="button" onClick={onConfirm}>
+          {confirmLabel}
+        </button>
+      </div>
+    ) : null,
+}))
 
 vi.mock('@/components/class-attendance-dialog', () => ({
   ClassAttendanceDialog: ({
@@ -132,17 +187,19 @@ vi.mock('@/components/searchable-select', () => ({
     value,
     onValueChange,
     options,
+    placeholder,
   }: {
     value: string | null
     onValueChange: (value: string) => void
     options: Array<{ value: string; label: string }>
+    placeholder?: string
   }) => (
     <select
-      aria-label="Member"
+      aria-label={placeholder?.toLowerCase().includes('trainer') ? 'Trainer' : 'Member'}
       value={value ?? ''}
       onChange={(event) => onValueChange(event.target.value)}
     >
-      <option value="">Select a member</option>
+      <option value="">{placeholder ?? 'Select an option'}</option>
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
@@ -286,6 +343,24 @@ function buildSession(overrides: Partial<ClassSessionListItem> = {}): ClassSessi
   }
 }
 
+function buildStaffProfile(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 'trainer-1',
+    name: 'Jordan Trainer',
+    email: 'jordan@evolutionzfitness.com',
+    role: 'staff',
+    titles: ['Trainer'],
+    phone: null,
+    gender: null,
+    remark: null,
+    specialties: [],
+    photoUrl: null,
+    archivedAt: null,
+    created_at: '2026-04-03T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
 function getButton(container: HTMLDivElement, label: string) {
   const button = Array.from(container.querySelectorAll('button')).find(
     (candidate) => candidate.textContent?.trim() === label,
@@ -417,8 +492,32 @@ describe('classes pages', () => {
       isLoading: false,
       error: null,
     })
+    useClassTrainersMock.mockReturnValue({
+      trainers: buildClass().trainers,
+      isLoading: false,
+      error: null,
+    })
     useClassSessionsMock.mockReturnValue({
       sessions: [buildSession()],
+      isLoading: false,
+      error: null,
+    })
+    useStaffMock.mockReturnValue({
+      staff: [
+        buildStaffProfile(),
+        buildStaffProfile({
+          id: 'trainer-2',
+          name: 'Alex Coach',
+          titles: ['Trainer', 'Medical'],
+          email: 'alex@evolutionzfitness.com',
+        }),
+        buildStaffProfile({
+          id: 'assistant-1',
+          name: 'Casey Assistant',
+          titles: ['Assistant'],
+          email: 'casey@evolutionzfitness.com',
+        }),
+      ],
       isLoading: false,
       error: null,
     })
@@ -436,9 +535,15 @@ describe('classes pages', () => {
       error: null,
     })
     createClassRegistrationMock.mockResolvedValue(buildRegistration({ status: 'approved' }))
+    assignClassTrainerMock.mockResolvedValue({
+      class_id: 'class-1',
+      profile_id: 'trainer-2',
+      created_at: '2026-04-08T12:00:00.000Z',
+    })
     createClassScheduleRuleMock.mockResolvedValue(buildScheduleRule())
     deleteClassScheduleRuleMock.mockResolvedValue(undefined)
     generateClassSessionsMock.mockResolvedValue(1)
+    removeClassTrainerMock.mockResolvedValue(undefined)
   })
 
   afterEach(async () => {
@@ -469,6 +574,8 @@ describe('classes pages', () => {
       root.render(<ClassDetailPage />)
     })
 
+    expect(container.textContent).toContain('Assign or remove trainer-title staff for this class.')
+    expect(container.textContent).toContain('Add Trainer')
     expect(container.textContent).toContain('Schedule')
     expect(container.textContent).toContain('Add Rule')
     expect(container.textContent).toContain('Generate Sessions')
@@ -494,10 +601,103 @@ describe('classes pages', () => {
     })
 
     expect(container.textContent).toContain('Register')
+    expect(container.textContent).not.toContain('Assign or remove trainer-title staff for this class.')
+    expect(container.textContent).not.toContain('Add Trainer')
     expect(container.textContent).not.toContain('Set Period Start')
     expect(container.textContent).not.toContain('Pending Approvals')
     expect(container.textContent).toContain('Sessions')
     expect(container.textContent).toContain('Mark Attendance')
+  })
+
+  it('shows an empty trainer state when no trainers are assigned', async () => {
+    useClassDetailMock.mockReturnValue({
+      classItem: buildClass({ trainers: [] }),
+      isLoading: false,
+      error: null,
+    })
+    useClassTrainersMock.mockReturnValue({
+      trainers: [],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    expect(container.textContent).toContain('No trainers assigned to this class')
+  })
+
+  it('filters the add trainer options to unassigned trainer-title staff', async () => {
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    await clickButton(container, 'Add Trainer')
+
+    const trainerField = getInputByLabel(container, 'Trainer')
+
+    if (!(trainerField instanceof HTMLSelectElement)) {
+      throw new Error('Trainer field was not rendered as a select.')
+    }
+
+    expect(Array.from(trainerField.options).map((option) => option.textContent?.trim())).toEqual([
+      'Select a trainer',
+      'Alex Coach',
+    ])
+  })
+
+  it('assigns a trainer from the dialog and invalidates the trainer queries', async () => {
+    useClassTrainersMock.mockReturnValue({
+      trainers: [],
+      isLoading: false,
+      error: null,
+    })
+    useClassDetailMock.mockReturnValue({
+      classItem: buildClass({ trainers: [] }),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    await clickButton(container, 'Add Trainer')
+    const trainerField = getInputByLabel(container, 'Trainer')
+    await setInputValue(trainerField, 'trainer-2')
+    await clickButton(container, 'Save')
+
+    expect(assignClassTrainerMock).toHaveBeenCalledWith('class-1', {
+      profile_id: 'trainer-2',
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['classes', 'trainers', 'class-1'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['classes', 'detail', 'class-1'],
+    })
+    expect(container.textContent).not.toContain('Assign a trainer-title staff profile to this class.')
+  })
+
+  it('confirms trainer removal and invalidates the trainer queries', async () => {
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    await clickButton(container, 'Remove')
+
+    expect(container.textContent).toContain('Remove trainer from class?')
+
+    await clickButton(container, 'Remove Trainer')
+
+    expect(removeClassTrainerMock).toHaveBeenCalledWith('class-1', 'trainer-1')
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['classes', 'trainers', 'class-1'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['classes', 'detail', 'class-1'],
+    })
   })
 
   it('opens the add rule dialog and saves a new schedule rule', async () => {

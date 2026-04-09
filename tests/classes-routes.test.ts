@@ -12,6 +12,7 @@ const {
   readClassByIdMock,
   readClassAttendanceMock,
   readClassesMock,
+  readClassTrainersMock,
   readClassRegistrationByIdMock,
   readClassRegistrationsMock,
   readClassScheduleRulesMock,
@@ -24,6 +25,7 @@ const {
   readClassByIdMock: vi.fn(),
   readClassAttendanceMock: vi.fn(),
   readClassesMock: vi.fn(),
+  readClassTrainersMock: vi.fn(),
   readClassRegistrationByIdMock: vi.fn(),
   readClassRegistrationsMock: vi.fn(),
   readClassScheduleRulesMock: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock('@/lib/classes-server', () => ({
   readClassAttendance: readClassAttendanceMock,
   readClasses: readClassesMock,
   readClassById: readClassByIdMock,
+  readClassTrainers: readClassTrainersMock,
   readClassRegistrations: readClassRegistrationsMock,
   readClassRegistrationById: readClassRegistrationByIdMock,
   readClassScheduleRules: readClassScheduleRulesMock,
@@ -70,6 +73,11 @@ vi.mock('@/lib/server-auth', async () => {
 import { GET as getClasses } from '@/app/api/classes/route'
 import { GET as getClass, PATCH as patchClass } from '@/app/api/classes/[id]/route'
 import {
+  GET as getClassTrainers,
+  POST as postClassTrainer,
+} from '@/app/api/classes/[id]/trainers/route'
+import { DELETE as deleteClassTrainer } from '@/app/api/classes/[id]/trainers/[profileId]/route'
+import {
   GET as getClassRegistrations,
   POST as postClassRegistration,
 } from '@/app/api/classes/[id]/registrations/route'
@@ -88,6 +96,8 @@ import {
   POST as postSessionAttendance,
 } from '@/app/api/classes/[id]/sessions/[sessionId]/attendance/route'
 import { PATCH as patchSessionAttendance } from '@/app/api/classes/[id]/sessions/[sessionId]/attendance/[attendanceId]/route'
+
+const TRAINER_PROFILE_ID = '11111111-1111-1111-1111-111111111111'
 
 function buildProfile(overrides: Partial<Profile> = {}): Profile {
   return {
@@ -123,6 +133,15 @@ function buildClass(overrides: Partial<Record<string, unknown>> = {}) {
         titles: ['Trainer'],
       },
     ],
+    ...overrides,
+  }
+}
+
+function buildClassTrainer(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    class_id: 'class-1',
+    profile_id: TRAINER_PROFILE_ID,
+    created_at: '2026-04-08T12:00:00.000Z',
     ...overrides,
   }
 }
@@ -430,6 +449,83 @@ function createScheduleRuleDeleteClient() {
                         return {
                           maybeSingle: vi.fn().mockResolvedValue({
                             data: { id: 'rule-1' },
+                            error: null,
+                          }),
+                        }
+                      },
+                    }
+                  },
+                }
+              },
+            }
+          },
+        }
+      },
+    },
+  }
+}
+
+function createClassTrainerPostClient(options: {
+  insertError?: { message: string; code?: string } | null
+} = {}) {
+  const insertValues: Array<Record<string, unknown>> = []
+
+  return {
+    insertValues,
+    client: {
+      from(table: string) {
+        expect(table).toBe('class_trainers')
+
+        return {
+          insert(values: Record<string, unknown>) {
+            insertValues.push(values)
+
+            return {
+              select(columns: string) {
+                expect(columns).toBe('class_id, profile_id, created_at')
+
+                return {
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: options.insertError ? null : buildClassTrainer(),
+                    error: options.insertError ?? null,
+                  }),
+                }
+              },
+            }
+          },
+        }
+      },
+    },
+  }
+}
+
+function createClassTrainerDeleteClient(options: {
+  notFound?: boolean
+} = {}) {
+  return {
+    client: {
+      from(table: string) {
+        expect(table).toBe('class_trainers')
+
+        return {
+          delete() {
+            return {
+              eq(column: string, value: string) {
+                expect(column).toBe('class_id')
+                expect(value).toBe('class-1')
+
+                return {
+                  eq(nextColumn: string, nextValue: string) {
+                    expect(nextColumn).toBe('profile_id')
+                    expect(nextValue).toBe('trainer-1')
+
+                    return {
+                      select(columns: string) {
+                        expect(columns).toBe('profile_id')
+
+                        return {
+                          maybeSingle: vi.fn().mockResolvedValue({
+                            data: options.notFound ? null : { profile_id: 'trainer-1' },
                             error: null,
                           }),
                         }
@@ -935,6 +1031,165 @@ describe('classes routes', () => {
       reviewed_by: 'admin-1',
     })
     expect(body.registration.amount_paid).toBe(3200)
+  })
+
+  it('returns class trainers for admins', async () => {
+    mockAdminUser()
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readClassByIdMock.mockResolvedValue(buildClass())
+    readClassTrainersMock.mockResolvedValue(buildClass().trainers)
+
+    const response = await getClassTrainers(
+      new Request('http://localhost/api/classes/class-1/trainers'),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.trainers).toHaveLength(1)
+    expect(body.trainers[0].name).toBe('Jordan Trainer')
+  })
+
+  it('creates a class trainer assignment for admins', async () => {
+    mockAdminUser()
+    const { client, insertValues } = createClassTrainerPostClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readClassByIdMock.mockResolvedValue(buildClass())
+    readStaffProfileMock.mockResolvedValue(
+      buildProfile({
+        id: TRAINER_PROFILE_ID,
+        role: 'staff',
+        titles: ['Trainer'],
+      }),
+    )
+
+    const response = await postClassTrainer(
+      new Request('http://localhost/api/classes/class-1/trainers', {
+        method: 'POST',
+        body: JSON.stringify({
+          profile_id: TRAINER_PROFILE_ID,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(201)
+    expect(insertValues).toEqual([
+      {
+        class_id: 'class-1',
+        profile_id: TRAINER_PROFILE_ID,
+      },
+    ])
+    expect(body.class_trainer.profile_id).toBe(TRAINER_PROFILE_ID)
+  })
+
+  it('rejects non-trainer staff when assigning a class trainer', async () => {
+    mockAdminUser()
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readClassByIdMock.mockResolvedValue(buildClass())
+    readStaffProfileMock.mockResolvedValue(
+      buildProfile({
+        id: TRAINER_PROFILE_ID,
+        role: 'staff',
+        titles: ['Assistant'],
+      }),
+    )
+
+    const response = await postClassTrainer(
+      new Request('http://localhost/api/classes/class-1/trainers', {
+        method: 'POST',
+        body: JSON.stringify({
+          profile_id: TRAINER_PROFILE_ID,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toBe('Only staff with the Trainer title can be assigned to a class')
+  })
+
+  it('returns a conflict when the trainer is already assigned to the class', async () => {
+    mockAdminUser()
+    const { client } = createClassTrainerPostClient({
+      insertError: {
+        message: 'duplicate key value violates unique constraint',
+        code: '23505',
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readClassByIdMock.mockResolvedValue(buildClass())
+    readStaffProfileMock.mockResolvedValue(
+      buildProfile({
+        id: TRAINER_PROFILE_ID,
+        role: 'staff',
+        titles: ['Trainer'],
+      }),
+    )
+
+    const response = await postClassTrainer(
+      new Request('http://localhost/api/classes/class-1/trainers', {
+        method: 'POST',
+        body: JSON.stringify({
+          profile_id: TRAINER_PROFILE_ID,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(body.error).toBe('Trainer is already assigned to this class')
+  })
+
+  it('removes a class trainer assignment for admins', async () => {
+    mockAdminUser()
+    const { client } = createClassTrainerDeleteClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readClassByIdMock.mockResolvedValue(buildClass())
+
+    const response = await deleteClassTrainer(
+      new Request('http://localhost/api/classes/class-1/trainers/trainer-1', {
+        method: 'DELETE',
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1', profileId: 'trainer-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.ok).toBe(true)
+  })
+
+  it('returns not found when removing a missing class trainer assignment', async () => {
+    mockAdminUser()
+    const { client } = createClassTrainerDeleteClient({ notFound: true })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readClassByIdMock.mockResolvedValue(buildClass())
+
+    const response = await deleteClassTrainer(
+      new Request('http://localhost/api/classes/class-1/trainers/trainer-1', {
+        method: 'DELETE',
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1', profileId: 'trainer-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(404)
+    expect(body.error).toBe('Class trainer not found.')
   })
 
   it('returns class schedule rules for authenticated users', async () => {

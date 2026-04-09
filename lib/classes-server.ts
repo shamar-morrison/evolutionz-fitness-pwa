@@ -451,6 +451,15 @@ export async function readClassById(
   return mapClassRow(data as ClassRow, trainersByClassId)
 }
 
+export async function readClassTrainers(
+  supabase: ClassesAdminClient,
+  classId: string,
+) {
+  const trainersByClassId = await loadTrainerProfilesByClassId(supabase, [classId])
+
+  return trainersByClassId.get(classId) ?? []
+}
+
 export async function readClassRegistrations(
   supabase: ClassesAdminClient,
   classId: string,

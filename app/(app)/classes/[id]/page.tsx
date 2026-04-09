@@ -14,7 +14,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { ClassAttendanceDialog } from '@/components/class-attendance-dialog'
 import { ClassRegistrationDialog } from '@/components/class-registration-dialog'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { SearchableSelect } from '@/components/searchable-select'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import {
@@ -60,11 +63,15 @@ import {
   useClassRegistrations,
   useClassScheduleRules,
   useClassSessions,
+  useClassTrainers,
 } from '@/hooks/use-classes'
+import { useStaff } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
 import {
+  assignClassTrainer,
   calculateClassRegistrationAmount,
   createClassScheduleRule,
+  type ClassTrainerProfile,
   deleteClassScheduleRule,
   formatClassDate,
   formatClassDateTime,
@@ -76,6 +83,7 @@ import {
   getClassDayOfWeekLabel,
   getClassSessionPreviewItems,
   getDefaultClassDateValue,
+  removeClassTrainer,
   reviewClassRegistration,
   sortClassScheduleRules,
   updateClassPeriodStart,
@@ -285,15 +293,23 @@ export default function ClassDetailPage() {
   const sessionsQuery = useClassSessions(classId, classItem?.current_period_start ?? null, {
     enabled: !loading && Boolean(classItem?.current_period_start),
   })
+  const trainersQuery = useClassTrainers(classId, {
+    enabled: !loading && isAdmin,
+  })
+  const staffQuery = useStaff({
+    enabled: !loading && isAdmin,
+  })
   const [showRegistrationDialog, setShowRegistrationDialog] = useState(false)
   const [showPeriodDialog, setShowPeriodDialog] = useState(false)
   const [showAddRuleDialog, setShowAddRuleDialog] = useState(false)
+  const [showAddTrainerDialog, setShowAddTrainerDialog] = useState(false)
   const [showGenerateDialog, setShowGenerateDialog] = useState(false)
   const [periodStart, setPeriodStart] = useState(getDefaultClassDateValue)
   const [scheduleRuleDay, setScheduleRuleDay] = useState<ClassScheduleRuleDay>(
     DEFAULT_SCHEDULE_RULE_DAY,
   )
   const [scheduleRuleTime, setScheduleRuleTime] = useState(DEFAULT_SCHEDULE_RULE_TIME)
+  const [selectedTrainerId, setSelectedTrainerId] = useState('')
   const [isPeriodPickerOpen, setIsPeriodPickerOpen] = useState(false)
   const [approveRegistrationItem, setApproveRegistrationItem] =
     useState<ClassRegistrationListItem | null>(null)
@@ -305,9 +321,11 @@ export default function ClassDetailPage() {
   const [pendingAction, setPendingAction] = useState<
     null | 'period' | 'approve' | 'deny' | 'schedule-rule' | 'generate'
   >(null)
+  const [trainerAction, setTrainerAction] = useState<null | 'add' | 'remove'>(null)
   const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null)
   const [previewItems, setPreviewItems] = useState<ClassSessionPreviewItem[]>([])
   const [selectedSession, setSelectedSession] = useState<ClassSessionListItem | null>(null)
+  const [trainerToRemove, setTrainerToRemove] = useState<ClassTrainerProfile | null>(null)
 
   useEffect(() => {
     if (!classItem?.current_period_start) {
@@ -335,10 +353,48 @@ export default function ClassDetailPage() {
     setScheduleRuleTime(DEFAULT_SCHEDULE_RULE_TIME)
   }, [showAddRuleDialog])
 
+  useEffect(() => {
+    if (showAddTrainerDialog) {
+      return
+    }
+
+    setSelectedTrainerId('')
+  }, [showAddTrainerDialog])
+
   const sortedScheduleRules = useMemo(
     () => sortClassScheduleRules(scheduleRulesQuery.scheduleRules),
     [scheduleRulesQuery.scheduleRules],
   )
+  const assignedTrainerIds = useMemo(
+    () => new Set(trainersQuery.trainers.map((trainer) => trainer.id)),
+    [trainersQuery.trainers],
+  )
+  const availableTrainers = useMemo(
+    () =>
+      [...staffQuery.staff]
+        .filter(
+          (profile) =>
+            hasStaffTitle(profile.titles, 'Trainer') && !assignedTrainerIds.has(profile.id),
+        )
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    [assignedTrainerIds, staffQuery.staff],
+  )
+  const selectedTrainer = useMemo(
+    () => availableTrainers.find((trainer) => trainer.id === selectedTrainerId) ?? null,
+    [availableTrainers, selectedTrainerId],
+  )
+
+  useEffect(() => {
+    if (!selectedTrainerId) {
+      return
+    }
+
+    if (availableTrainers.some((trainer) => trainer.id === selectedTrainerId)) {
+      return
+    }
+
+    setSelectedTrainerId('')
+  }, [availableTrainers, selectedTrainerId])
   const generatedPreviewItems = useMemo(
     () =>
       classItem?.current_period_start
@@ -365,6 +421,8 @@ export default function ClassDetailPage() {
   const isDenying = pendingAction === 'deny'
   const isSavingScheduleRule = pendingAction === 'schedule-rule'
   const isGeneratingSessions = pendingAction === 'generate'
+  const isSavingTrainer = trainerAction === 'add'
+  const isRemovingTrainer = trainerAction === 'remove'
   const sessionsErrorLabel = sessionsQuery.error
     ? sessionsQuery.error instanceof Error
       ? sessionsQuery.error.message
@@ -387,6 +445,17 @@ export default function ClassDetailPage() {
       queryClient.invalidateQueries({
         queryKey: ['classes', 'sessions', classId],
         exact: false,
+      }),
+    ])
+  }
+
+  const invalidateTrainerQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.classes.trainers(classId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.classes.detail(classId),
       }),
     ])
   }
@@ -593,6 +662,71 @@ export default function ClassDetailPage() {
     }
   }
 
+  const handleAddTrainer = async () => {
+    if (!classItem || !selectedTrainer) {
+      toast({
+        title: 'Trainer required',
+        description: !classItem ? 'Reload the class before assigning a trainer.' : 'Select a trainer before saving.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setTrainerAction('add')
+
+    try {
+      await assignClassTrainer(classId, {
+        profile_id: selectedTrainer.id,
+      })
+      await invalidateTrainerQueries()
+      setShowAddTrainerDialog(false)
+      toast({
+        title: 'Trainer assigned',
+        description: `${selectedTrainer.name} was assigned to ${classItem.name}.`,
+      })
+    } catch (trainerError) {
+      toast({
+        title: 'Unable to assign trainer',
+        description:
+          trainerError instanceof Error
+            ? trainerError.message
+            : 'Failed to assign the trainer to this class.',
+        variant: 'destructive',
+      })
+    } finally {
+      setTrainerAction(null)
+    }
+  }
+
+  const handleRemoveTrainer = async () => {
+    if (!classItem || !trainerToRemove) {
+      return
+    }
+
+    setTrainerAction('remove')
+
+    try {
+      await removeClassTrainer(classId, trainerToRemove.id)
+      await invalidateTrainerQueries()
+      setTrainerToRemove(null)
+      toast({
+        title: 'Trainer removed',
+        description: `${trainerToRemove.name} was removed from ${classItem.name}.`,
+      })
+    } catch (trainerError) {
+      toast({
+        title: 'Unable to remove trainer',
+        description:
+          trainerError instanceof Error
+            ? trainerError.message
+            : 'Failed to remove the trainer from this class.',
+        variant: 'destructive',
+      })
+    } finally {
+      setTrainerAction(null)
+    }
+  }
+
   const handleGenerateSessions = async () => {
     if (!classItem?.current_period_start) {
       toast({
@@ -745,6 +879,77 @@ export default function ClassDetailPage() {
             />
           </CardContent>
         </Card>
+
+        {isAdmin ? (
+          <Card>
+            <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle>Trainers</CardTitle>
+                <CardDescription>
+                  Assign or remove trainer-title staff for this class.
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                onClick={() => setShowAddTrainerDialog(true)}
+                disabled={trainersQuery.isLoading || staffQuery.isLoading}
+              >
+                <Plus className="h-4 w-4" />
+                Add Trainer
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {trainersQuery.isLoading ? (
+                <>
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </>
+              ) : trainersQuery.error ? (
+                <p className="text-sm text-destructive">
+                  {trainersQuery.error instanceof Error
+                    ? trainersQuery.error.message
+                    : 'Failed to load class trainers.'}
+                </p>
+              ) : trainersQuery.trainers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No trainers assigned to this class
+                </p>
+              ) : (
+                trainersQuery.trainers.map((trainer) => (
+                  <div
+                    key={trainer.id}
+                    className="flex items-start justify-between gap-4 rounded-lg border p-3"
+                  >
+                    <div className="space-y-2">
+                      <p className="font-medium">{trainer.name}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {trainer.titles.length > 0 ? (
+                          trainer.titles.map((title) => (
+                            <Badge key={title} variant="outline">
+                              {title}
+                            </Badge>
+                          ))
+                        ) : (
+                          <Badge variant="outline">No title assigned</Badge>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTrainerToRemove(trainer)}
+                      disabled={isRemovingTrainer}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Remove
+                    </Button>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
 
         {isAdmin ? (
           <Card>
@@ -932,6 +1137,125 @@ export default function ClassDetailPage() {
             setSelectedSession(null)
           }
         }}
+      />
+
+      <Dialog
+        open={showAddTrainerDialog}
+        onOpenChange={(nextOpen) => {
+          if (isSavingTrainer) {
+            return
+          }
+
+          setShowAddTrainerDialog(nextOpen)
+        }}
+      >
+        <DialogContent className="sm:max-w-md" isLoading={isSavingTrainer}>
+          <DialogHeader>
+            <DialogTitle>Add Trainer</DialogTitle>
+            <DialogDescription>
+              Assign a trainer-title staff profile to this class.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="class-trainer-select">Trainer</Label>
+              <SearchableSelect
+                value={selectedTrainerId || null}
+                onValueChange={setSelectedTrainerId}
+                options={availableTrainers.map((trainer) => ({
+                  value: trainer.id,
+                  label: trainer.name,
+                  description: trainer.titles.join(', '),
+                  keywords: trainer.titles,
+                }))}
+                placeholder={availableTrainers.length > 0 ? 'Select a trainer' : 'No trainers available'}
+                searchPlaceholder="Search trainers..."
+                emptyMessage="No matching trainers found."
+                disabled={
+                  isSavingTrainer ||
+                  trainersQuery.isLoading ||
+                  staffQuery.isLoading ||
+                  Boolean(staffQuery.error) ||
+                  availableTrainers.length === 0
+                }
+              />
+            </div>
+
+            {staffQuery.error ? (
+              <p className="text-sm text-destructive">
+                {staffQuery.error instanceof Error
+                  ? staffQuery.error.message
+                  : 'Failed to load available trainers.'}
+              </p>
+            ) : null}
+
+            {availableTrainers.length === 0 && !staffQuery.isLoading && !staffQuery.error ? (
+              <p className="text-sm text-muted-foreground">
+                All trainer-title staff are already assigned to this class.
+              </p>
+            ) : null}
+
+            {selectedTrainer ? (
+              <div className="rounded-lg border p-3">
+                <div className="font-medium">{selectedTrainer.name}</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {selectedTrainer.titles.map((title) => (
+                    <Badge key={title} variant="outline">
+                      {title}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowAddTrainerDialog(false)}
+              disabled={isSavingTrainer}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              loading={isSavingTrainer}
+              onClick={() => void handleAddTrainer()}
+              disabled={
+                isSavingTrainer ||
+                trainersQuery.isLoading ||
+                staffQuery.isLoading ||
+                Boolean(staffQuery.error) ||
+                !selectedTrainer
+              }
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(trainerToRemove)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTrainerToRemove(null)
+          }
+        }}
+        title="Remove trainer from class?"
+        description={
+          trainerToRemove
+            ? `${trainerToRemove.name} will no longer be assigned to ${classItem.name}.`
+            : 'This trainer will no longer be assigned to this class.'
+        }
+        confirmLabel="Remove Trainer"
+        cancelLabel="Cancel"
+        onConfirm={() => void handleRemoveTrainer()}
+        onCancel={() => setTrainerToRemove(null)}
+        isLoading={isRemovingTrainer}
+        variant="destructive"
       />
 
       <Dialog open={showAddRuleDialog} onOpenChange={setShowAddRuleDialog}>
