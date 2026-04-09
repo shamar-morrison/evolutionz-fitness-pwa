@@ -36,9 +36,8 @@ export async function GET() {
       classes,
     })
   } catch (error) {
-    return createErrorResponse(
-      error instanceof Error ? error.message : 'Unexpected server error while loading classes.',
-      500,
-    )
+    console.error('Failed to load classes:', error)
+
+    return createErrorResponse('Unexpected server error while loading classes.', 500)
   }
 }

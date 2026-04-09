@@ -344,18 +344,23 @@ export async function updateMember(
   id: string,
   data: UpdateMemberData,
 ): Promise<UpdateMemberResult> {
+  const body: Record<string, unknown> = {
+    name: data.name,
+    gender: data.gender ?? null,
+    email: data.email ?? null,
+    phone: data.phone ?? null,
+    remark: data.remark ?? null,
+    beginTime: data.beginTime,
+    endTime: data.endTime,
+  }
+
+  if (Object.prototype.hasOwnProperty.call(data, 'memberTypeId')) {
+    body.member_type_id = data.memberTypeId ?? null
+  }
+
   return requestMemberMutation(`/api/members/${encodeURIComponent(id)}/edit`, {
     method: 'PATCH',
-    body: {
-      name: data.name,
-      member_type_id: data.memberTypeId ?? null,
-      gender: data.gender ?? null,
-      email: data.email ?? null,
-      phone: data.phone ?? null,
-      remark: data.remark ?? null,
-      beginTime: data.beginTime,
-      endTime: data.endTime,
-    },
+    body,
     errorMessage: 'Failed to update member.',
   })
 }

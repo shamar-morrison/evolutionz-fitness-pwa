@@ -12,7 +12,9 @@ export function ServiceWorkerRegistration() {
       return
     }
 
-    void navigator.serviceWorker.register('/sw.js')
+    void navigator.serviceWorker
+      .register('/sw.js')
+      .catch((error) => console.error('Failed to register service worker:', error))
   }, [])
 
   return null

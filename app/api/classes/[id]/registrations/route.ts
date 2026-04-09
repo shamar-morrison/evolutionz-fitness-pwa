@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
-  addDaysToDateValue,
   getUtcDateFromDateValue,
   isClassRegistrationEligibleForSession,
 } from '@/lib/classes'
@@ -100,10 +99,6 @@ async function backfillCurrentPeriodAttendance({
   guestProfileId: string | null
   registrationStart: string
 }) {
-  if (!addDaysToDateValue(currentPeriodStart, 27)) {
-    throw new Error('Failed to resolve the current class period end date.')
-  }
-
   const nowIso = new Date().toISOString()
   const { data: sessions, error: sessionsError } = await supabase
     .from('class_sessions')

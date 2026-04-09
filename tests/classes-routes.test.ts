@@ -785,6 +785,32 @@ describe('classes routes', () => {
     expect(readClassesMock).toHaveBeenCalled()
   })
 
+  it('logs class-loading failures and returns a generic 500 response', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      mockAuthenticatedUser()
+      getSupabaseAdminClientMock.mockReturnValue({})
+      readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'staff', titles: ['Assistant'] }))
+      readClassesMock.mockRejectedValue(new Error('Database offline.'))
+
+      const response = await getClasses()
+      const body = await response.json()
+
+      expect(response.status).toBe(500)
+      expect(body).toEqual({
+        ok: false,
+        error: 'Unexpected server error while loading classes.',
+      })
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Failed to load classes:',
+        expect.any(Error),
+      )
+    } finally {
+      consoleErrorSpy.mockRestore()
+    }
+  })
+
   it('returns a single class detail for authenticated users', async () => {
     mockAuthenticatedUser()
     getSupabaseAdminClientMock.mockReturnValue({})
@@ -1086,6 +1112,28 @@ describe('classes routes', () => {
       },
     ])
     expect(body.class_trainer.profile_id).toBe(TRAINER_PROFILE_ID)
+  })
+
+  it('returns validation errors for invalid class trainer payloads', async () => {
+    mockAdminUser()
+    getSupabaseAdminClientMock.mockReturnValue({})
+
+    const response = await postClassTrainer(
+      new Request('http://localhost/api/classes/class-1/trainers', {
+        method: 'POST',
+        body: JSON.stringify({
+          profile_id: 'not-a-uuid',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.ok).toBe(false)
+    expect(body.error).toContain('Invalid uuid')
   })
 
   it('rejects non-trainer staff when assigning a class trainer', async () => {

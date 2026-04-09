@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
+import { ZodError, z } from 'zod'
 import { readClassById, readClassTrainers } from '@/lib/classes-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { hasStaffTitle, readStaffProfile } from '@/lib/staff'
@@ -129,7 +129,7 @@ export async function POST(
       return createErrorResponse('Invalid JSON body.', 400)
     }
 
-    if (error instanceof Error && error.name === 'ZodError') {
+    if (error instanceof ZodError) {
       return createErrorResponse(error.message, 400)
     }
 

@@ -352,6 +352,7 @@ export async function PATCH(
       })
     } catch (paymentError) {
       console.error('Failed to record member approval payment:', paymentError)
+      throw paymentError
     }
 
     const { data, error } = await supabase

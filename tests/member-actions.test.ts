@@ -389,6 +389,112 @@ describe('member actions', () => {
     expect(result.member.type).toBe('Civil Servant')
   })
 
+  it('omits member_type_id when updating a member without memberTypeId', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          member: {
+            id: 'member-1',
+            employeeNo: '000611',
+            name: 'Jane Doe',
+            cardNo: '0102857149',
+            cardCode: 'A18',
+            cardStatus: 'assigned',
+            cardLostAt: null,
+            type: 'Civil Servant',
+            status: 'Active',
+            deviceAccessState: 'ready',
+            gender: 'Female',
+            email: 'jane@example.com',
+            phone: '876-555-1212',
+            remark: 'Updated remark',
+            photoUrl: null,
+            beginTime: '2026-03-30T08:00:00.000Z',
+            endTime: '2026-04-29T23:59:59.000Z',
+          },
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await updateMember('member-1', {
+      name: 'Jane Doe',
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
+      remark: 'Updated remark',
+      beginTime: '2026-03-30T08:00:00',
+      endTime: '2026-04-29T23:59:59',
+    })
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      name: 'Jane Doe',
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
+      remark: 'Updated remark',
+      beginTime: '2026-03-30T08:00:00',
+      endTime: '2026-04-29T23:59:59',
+    })
+  })
+
+  it('sends member_type_id: null when explicitly clearing the member type', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          member: {
+            id: 'member-1',
+            employeeNo: '000611',
+            name: 'Jane Doe',
+            cardNo: '0102857149',
+            cardCode: 'A18',
+            cardStatus: 'assigned',
+            cardLostAt: null,
+            type: 'Civil Servant',
+            status: 'Active',
+            deviceAccessState: 'ready',
+            gender: 'Female',
+            email: 'jane@example.com',
+            phone: '876-555-1212',
+            remark: 'Updated remark',
+            photoUrl: null,
+            beginTime: '2026-03-30T08:00:00.000Z',
+            endTime: '2026-04-29T23:59:59.000Z',
+          },
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await updateMember('member-1', {
+      name: 'Jane Doe',
+      memberTypeId: null,
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
+      remark: 'Updated remark',
+      beginTime: '2026-03-30T08:00:00',
+      endTime: '2026-04-29T23:59:59',
+    })
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      name: 'Jane Doe',
+      member_type_id: null,
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
+      remark: 'Updated remark',
+      beginTime: '2026-03-30T08:00:00',
+      endTime: '2026-04-29T23:59:59',
+    })
+  })
+
   it('uploads a member photo through the photo route', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       createJsonResponse(

@@ -455,7 +455,7 @@ describe('member approval request routes', () => {
     })
   })
 
-  it('approves the request, updates the photo, and logs payment failures without failing approval', async () => {
+  it('fails approval when recording the payment fails', async () => {
     const existingRequest = createRequestRecord({
       photo_url: 'pending-member-requests/request-1.jpg',
       member_type_id: MEMBER_TYPE_ID_GENERAL,
@@ -553,31 +553,15 @@ describe('member approval request routes', () => {
         notes: 'Collected at front desk',
       },
     ])
-    expect(requestUpdates[0]).toEqual(
-      expect.objectContaining({
-        status: 'approved',
-        card_no: '0102857149',
-        card_code: 'A18',
-        member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
-        member_id: 'member-77',
-        photo_url: null,
-        reviewed_by: 'admin-1',
-        review_note: 'Approved after payment.',
-      }),
-    )
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Failed to record member approval payment:',
       expect.any(Error),
     )
-    expect(response.status).toBe(200)
+    expect(requestUpdates).toEqual([])
+    expect(response.status).toBe(500)
     await expect(response.json()).resolves.toEqual({
-      ok: true,
-      request: expect.objectContaining({
-        id: 'request-1',
-        status: 'approved',
-        memberTypeId: MEMBER_TYPE_ID_CIVIL_SERVANT,
-        memberId: 'member-77',
-      }),
+      ok: false,
+      error: 'Failed to record the approval payment: Insert failed.',
     })
   })
 })
