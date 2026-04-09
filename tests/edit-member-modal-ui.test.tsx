@@ -81,6 +81,16 @@ vi.mock('@/components/ui/calendar', () => ({
   Calendar: () => <div data-testid="calendar" />,
 }))
 
+vi.mock('@/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <div data-testid="tooltip-root">{children}</div>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-content">{children}</div>
+  ),
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-trigger">{children}</div>
+  ),
+}))
+
 vi.mock('@/components/ui/select', () => ({
   Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SelectContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
@@ -255,5 +265,58 @@ describe('EditMemberModal UI', () => {
 
     deferred.resolve({ member: createMember({ name: 'Jane Smith' }) })
     await flushAsyncWork()
+  })
+
+  it('renders membership type guidance in a tooltip and leaves load errors below the field', async () => {
+    await act(async () => {
+      root.render(
+        <EditMemberModal
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    const infoTrigger = container.querySelector('button[aria-label="Membership type information"]')
+
+    if (!(infoTrigger instanceof HTMLButtonElement)) {
+      throw new Error('Membership type info trigger not found.')
+    }
+
+    const helperParagraphs = Array.from(container.querySelectorAll('p')).filter((paragraph) =>
+      paragraph.textContent?.includes(
+        'Leave blank for legacy members who do not have a membership type assigned yet.',
+      ),
+    )
+
+    expect(infoTrigger.textContent).toBe('i')
+    expect(helperParagraphs).toHaveLength(0)
+    expect(
+      Array.from(container.querySelectorAll('[data-testid="tooltip-content"]')).some((element) =>
+        element.textContent?.includes(
+          'Leave blank for legacy members who do not have a membership type assigned yet.',
+        ),
+      ),
+    ).toBe(true)
+
+    useMemberTypesMock.mockReturnValue({
+      memberTypes: [],
+      isLoading: false,
+      error: new Error('Failed to load membership types.'),
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(
+        <EditMemberModal
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('Failed to load membership types.')
   })
 })

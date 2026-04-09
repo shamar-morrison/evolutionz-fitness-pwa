@@ -6,6 +6,7 @@ import { queryKeys } from '@/lib/query-keys'
 import type { MemberTypeRecord } from '@/types'
 
 const FIVE_MINUTES_MS = 5 * 60 * 1000
+const EMPTY_MEMBER_TYPES: MemberTypeRecord[] = []
 
 export function useMemberTypes(options: { enabled?: boolean } = {}) {
   const enabled = options.enabled ?? true
@@ -17,7 +18,7 @@ export function useMemberTypes(options: { enabled?: boolean } = {}) {
   })
 
   return {
-    memberTypes: (query.data ?? []) as MemberTypeRecord[],
+    memberTypes: (query.data ?? EMPTY_MEMBER_TYPES) as MemberTypeRecord[],
     isLoading: enabled ? query.isLoading : false,
     error: query.error ?? null,
     refetch: () => query.refetch(),

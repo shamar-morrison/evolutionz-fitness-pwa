@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
+import { FieldInfoTooltip } from '@/components/ui/field-info-tooltip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -87,23 +88,34 @@ export function MemberPaymentFields({
       return
     }
 
-    previousMemberTypeIdRef.current = formData.memberTypeId
-
     const monthlyRate = formData.memberTypeId
       ? getMemberTypeMonthlyRate(memberTypes, formData.memberTypeId)
       : null
+    const nextAmount = monthlyRate === null ? '' : formatPaymentAmountInputValue(monthlyRate)
+
+    previousMemberTypeIdRef.current = formData.memberTypeId
+
+    if (nextAmount === formData.amount) {
+      return
+    }
 
     setFormData((currentFormData) => ({
       ...currentFormData,
-      amount: monthlyRate === null ? '' : formatPaymentAmountInputValue(monthlyRate),
+      amount: nextAmount,
     }))
-  }, [amountDirty, formData.memberTypeId, memberTypes, setFormData])
+  }, [amountDirty, formData.amount, formData.memberTypeId, memberTypes, setFormData])
 
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}-member-type`}>Membership Type</Label>
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor={`${idPrefix}-member-type`}>Membership Type</Label>
+            <FieldInfoTooltip
+              label="Membership type information"
+              content="Changing the membership type auto-fills the amount until it is edited manually."
+            />
+          </div>
           <Select
             value={formData.memberTypeId || EMPTY_MEMBER_TYPE_VALUE}
             onValueChange={(value) => {
@@ -128,13 +140,7 @@ export function MemberPaymentFields({
               ))}
             </SelectContent>
           </Select>
-          {memberTypesError ? (
-            <p className="text-xs text-destructive">{memberTypesError}</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Changing the membership type auto-fills the amount until it is edited manually.
-            </p>
-          )}
+          {memberTypesError ? <p className="text-xs text-destructive">{memberTypesError}</p> : null}
         </div>
 
         <div className="grid gap-2">

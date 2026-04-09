@@ -8,6 +8,7 @@ import { Calendar as CalendarIcon, Pencil } from 'lucide-react'
 import { Pattern } from '@/components/ui/file-upload'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
+import { FieldInfoTooltip } from '@/components/ui/field-info-tooltip'
 import {
   Dialog,
   DialogContent,
@@ -412,7 +413,13 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="edit-type">Membership Type</Label>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="edit-type">Membership Type</Label>
+                  <FieldInfoTooltip
+                    label="Membership type information"
+                    content="Leave blank for legacy members who do not have a membership type assigned yet."
+                  />
+                </div>
                 <Select
                   value={formData.memberTypeId || EMPTY_MEMBER_TYPE_VALUE}
                   onValueChange={(value) =>
@@ -443,11 +450,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
                       ? memberTypesError.message
                       : 'Failed to load membership types.'}
                   </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Leave blank for legacy members who do not have a membership type assigned yet.
-                  </p>
-                )}
+                ) : null}
               </div>
             </div>
 

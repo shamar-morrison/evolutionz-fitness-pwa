@@ -128,6 +128,16 @@ vi.mock('@/components/ui/calendar', () => ({
   Calendar: () => <div data-testid="calendar" />,
 }))
 
+vi.mock('@/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <div data-testid="tooltip-root">{children}</div>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-content">{children}</div>
+  ),
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-trigger">{children}</div>
+  ),
+}))
+
 vi.mock('@/components/ui/select', async () => {
   const React = await import('react')
 
@@ -565,5 +575,43 @@ describe('AddMemberModal', () => {
 
     expect(restoredPhotoOutput.textContent).toBe('avatar.png')
     expect(revokeObjectURLMock).not.toHaveBeenCalled()
+  })
+
+  it('shows membership type guidance in a tooltip and keeps errors under the field', async () => {
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    const infoTrigger = container.querySelector('button[aria-label="Membership type information"]')
+
+    if (!(infoTrigger instanceof HTMLButtonElement)) {
+      throw new Error('Membership type info trigger not found.')
+    }
+
+    const helperParagraphs = Array.from(container.querySelectorAll('p')).filter((paragraph) =>
+      paragraph.textContent?.includes(
+        'Select the submitted membership type. Payment is recorded during approval.',
+      ),
+    )
+
+    expect(infoTrigger.textContent).toBe('i')
+    expect(helperParagraphs).toHaveLength(0)
+    expect(
+      Array.from(container.querySelectorAll('[data-testid="tooltip-content"]')).some((element) =>
+        element.textContent?.includes(
+          'Select the submitted membership type. Payment is recorded during approval.',
+        ),
+      ),
+    ).toBe(true)
+
+    mockMemberTypes([], new Error('Failed to load membership types.'))
+
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    expect(container.textContent).toContain('Failed to load membership types.')
   })
 })

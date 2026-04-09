@@ -68,6 +68,16 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogTitle: ({ children }: React.ComponentProps<'h2'>) => <h2>{children}</h2>,
 }))
 
+vi.mock('@/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <div data-testid="tooltip-root">{children}</div>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-content">{children}</div>
+  ),
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-trigger">{children}</div>
+  ),
+}))
+
 vi.mock('@/components/ui/select', async () => {
   const React = await import('react')
 
@@ -201,6 +211,11 @@ async function clickButton(container: ParentNode, label: string) {
 describe('RecordMemberPaymentDialog', () => {
   let container: HTMLDivElement
   let root: Root
+  let memberTypesState: {
+    memberTypes: MemberTypeRecord[]
+    isLoading: boolean
+    error: Error | null
+  }
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -210,14 +225,15 @@ describe('RecordMemberPaymentDialog', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    useMemberTypesMock.mockReturnValue({
+    memberTypesState = {
       memberTypes: [
         createMemberType(),
         createMemberType({ id: 'type-2', name: 'Civil Servant', monthly_rate: 7500 }),
       ],
       isLoading: false,
       error: null,
-    })
+    }
+    useMemberTypesMock.mockImplementation(() => memberTypesState)
   })
 
   afterEach(async () => {
@@ -304,5 +320,110 @@ describe('RecordMemberPaymentDialog', () => {
     await clickButton(container, 'Civil Servant')
 
     expect(amountInput.value).toBe('11000')
+  })
+
+  it('auto-fills the amount after member types finish loading when the dialog opens first', async () => {
+    memberTypesState = {
+      memberTypes: [],
+      isLoading: true,
+      error: null,
+    }
+
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    let amountInput = container.querySelector('#record-payment-amount')
+
+    if (!(amountInput instanceof HTMLInputElement)) {
+      throw new Error('Amount input not found.')
+    }
+
+    expect(amountInput.value).toBe('')
+
+    await act(async () => {
+      memberTypesState = {
+        memberTypes: [
+          createMemberType(),
+          createMemberType({ id: 'type-2', name: 'Civil Servant', monthly_rate: 7500 }),
+        ],
+        isLoading: false,
+        error: null,
+      }
+
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    amountInput = container.querySelector('#record-payment-amount')
+
+    if (!(amountInput instanceof HTMLInputElement)) {
+      throw new Error('Amount input not found after member types loaded.')
+    }
+
+    expect(amountInput.value).toBe('12000')
+  })
+
+  it('shows membership type guidance in a tooltip and keeps load errors under the field', async () => {
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    const infoTrigger = container.querySelector('button[aria-label="Membership type information"]')
+
+    if (!(infoTrigger instanceof HTMLButtonElement)) {
+      throw new Error('Membership type info trigger not found.')
+    }
+
+    const helperParagraphs = Array.from(container.querySelectorAll('p')).filter((paragraph) =>
+      paragraph.textContent?.includes(
+        'Changing the membership type auto-fills the amount until it is edited manually.',
+      ),
+    )
+
+    expect(infoTrigger.textContent).toBe('i')
+    expect(helperParagraphs).toHaveLength(0)
+    expect(
+      Array.from(container.querySelectorAll('[data-testid="tooltip-content"]')).some((element) =>
+        element.textContent?.includes(
+          'Changing the membership type auto-fills the amount until it is edited manually.',
+        ),
+      ),
+    ).toBe(true)
+
+    await act(async () => {
+      memberTypesState = {
+        memberTypes: [],
+        isLoading: false,
+        error: new Error('Failed to load membership types.'),
+      }
+
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('Failed to load membership types.')
   })
 })

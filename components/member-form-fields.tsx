@@ -6,6 +6,7 @@ import { type Dispatch, type SetStateAction } from 'react'
 import { Pattern } from '@/components/ui/file-upload'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
+import { FieldInfoTooltip } from '@/components/ui/field-info-tooltip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -238,7 +239,13 @@ export function MemberBasicFields({
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}-type`}>Membership Type</Label>
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor={`${idPrefix}-type`}>Membership Type</Label>
+            <FieldInfoTooltip
+              label="Membership type information"
+              content="Select the submitted membership type. Payment is recorded during approval."
+            />
+          </div>
           <Select
             value={formData.memberTypeId}
             onValueChange={(value) =>
@@ -262,13 +269,7 @@ export function MemberBasicFields({
               ))}
             </SelectContent>
           </Select>
-          {memberTypesError ? (
-            <p className="text-xs text-destructive">{memberTypesError}</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Select the submitted membership type. Payment is recorded during approval.
-            </p>
-          )}
+          {memberTypesError ? <p className="text-xs text-destructive">{memberTypesError}</p> : null}
         </div>
       </div>
 

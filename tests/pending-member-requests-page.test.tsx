@@ -217,6 +217,11 @@ async function clickButton(container: ParentNode, label: string) {
 describe('PendingMemberRequestsPage', () => {
   let container: HTMLDivElement
   let root: Root
+  let memberTypesState: {
+    memberTypes: MemberTypeRecord[]
+    isLoading: boolean
+    error: null
+  }
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -239,14 +244,15 @@ describe('PendingMemberRequestsPage', () => {
       isLoading: false,
       error: null,
     })
-    useMemberTypesMock.mockReturnValue({
+    memberTypesState = {
       memberTypes: [
         createMemberType(),
         createMemberType({ id: 'type-2', name: 'Civil Servant', monthly_rate: 7500 }),
       ],
       isLoading: false,
       error: null,
-    })
+    }
+    useMemberTypesMock.mockImplementation(() => memberTypesState)
   })
 
   afterEach(async () => {
@@ -318,5 +324,48 @@ describe('PendingMemberRequestsPage', () => {
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Member approved',
     })
+  })
+
+  it('auto-fills the amount after member types finish loading during review', async () => {
+    memberTypesState = {
+      memberTypes: [],
+      isLoading: true,
+      error: null,
+    }
+
+    await act(async () => {
+      root.render(<PendingMemberRequestsPage />)
+    })
+
+    await clickButton(container, 'Review')
+
+    let amountInput = container.querySelector('#member-request-payment-amount')
+
+    if (!(amountInput instanceof HTMLInputElement)) {
+      throw new Error('Amount input not found.')
+    }
+
+    expect(amountInput.value).toBe('')
+
+    await act(async () => {
+      memberTypesState = {
+        memberTypes: [
+          createMemberType(),
+          createMemberType({ id: 'type-2', name: 'Civil Servant', monthly_rate: 7500 }),
+        ],
+        isLoading: false,
+        error: null,
+      }
+
+      root.render(<PendingMemberRequestsPage />)
+    })
+
+    amountInput = container.querySelector('#member-request-payment-amount')
+
+    if (!(amountInput instanceof HTMLInputElement)) {
+      throw new Error('Amount input not found after member types loaded.')
+    }
+
+    expect(amountInput.value).toBe('12000')
   })
 })

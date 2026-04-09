@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { MemberPaymentFields, createInitialMemberPaymentFormState } from '@/components/member-payment-fields'
 import { Button } from '@/components/ui/button'
@@ -38,16 +38,24 @@ export function RecordMemberPaymentDialog({
   const [formData, setFormData] = useState(() =>
     createInitialMemberPaymentFormState(member.memberTypeId ?? '', memberTypes),
   )
+  const previousOpenRef = useRef(false)
+  const previousMemberIdRef = useRef(member.id)
 
   useEffect(() => {
-    if (!open) {
+    const memberChanged = previousMemberIdRef.current !== member.id
+    const shouldResetState = open && (!previousOpenRef.current || memberChanged)
+
+    previousOpenRef.current = open
+    previousMemberIdRef.current = member.id
+
+    if (!shouldResetState) {
       return
     }
 
     setFormData(createInitialMemberPaymentFormState(member.memberTypeId ?? '', memberTypes))
     setAmountDirty(false)
     setIsSubmitting(false)
-  }, [member.memberTypeId, memberTypes, open])
+  }, [member.id, member.memberTypeId, memberTypes, open])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
