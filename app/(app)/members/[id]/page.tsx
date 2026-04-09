@@ -13,6 +13,7 @@ import { MemberPtSection } from '@/components/member-pt-section'
 import { StatusBadge } from '@/components/status-badge'
 import { CheckInHistory } from '@/components/check-in-history'
 import { EditMemberModal } from '@/components/edit-member-modal'
+import { RecordMemberPaymentDialog } from '@/components/record-member-payment-dialog'
 import { RoleGuard } from '@/components/role-guard'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -47,6 +48,7 @@ export default function MemberDetailPage() {
   const { member, isLoading, error } = useMember(memberId)
   const backLink = useBackLink('/members', '/trainer/clients')
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false)
   const [showAssignCardModal, setShowAssignCardModal] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null)
@@ -348,6 +350,16 @@ export default function MemberDetailPage() {
             </Badge>
 
             <div className="mt-6 w-full space-y-3">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowRecordPaymentModal(true)}
+                disabled={isActionLoading}
+              >
+                <CreditCard className="mr-2 h-4 w-4" />
+                Record Payment
+              </Button>
+
               <RoleGuard role="admin">
                 <Button
                   variant="outline"
@@ -680,6 +692,12 @@ export default function MemberDetailPage() {
         member={member}
         open={showEditModal}
         onOpenChange={setShowEditModal}
+      />
+
+      <RecordMemberPaymentDialog
+        member={member}
+        open={showRecordPaymentModal}
+        onOpenChange={setShowRecordPaymentModal}
       />
     </div>
   )

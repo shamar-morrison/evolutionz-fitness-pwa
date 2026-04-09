@@ -4,7 +4,7 @@ import {
   normalizeAvailableAccessCards,
   normalizeSyncedAvailableAccessCards,
 } from '@/lib/available-cards'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import type { AvailableAccessCard, CardStatus } from '@/types'
 
@@ -177,7 +177,7 @@ async function persistSyncedAvailableCards(cards: AvailableAccessCard[]) {
 
 export async function GET() {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedUser()
 
     if ('response' in authResult) {
       return authResult.response

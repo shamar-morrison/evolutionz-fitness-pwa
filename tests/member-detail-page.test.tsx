@@ -83,6 +83,10 @@ vi.mock('@/components/edit-member-modal', () => ({
   EditMemberModal: () => null,
 }))
 
+vi.mock('@/components/record-member-payment-dialog', () => ({
+  RecordMemberPaymentDialog: () => null,
+}))
+
 vi.mock('@/components/member-avatar', () => ({
   MemberAvatar: ({ name }: { name: string }) => <div>{name}</div>,
 }))
@@ -311,7 +315,7 @@ describe('Member detail page tabs', () => {
     expect(usePtSessionsMock).not.toHaveBeenCalled()
   })
 
-  it('routes the header back button to trainer clients for staff users', async () => {
+  it('routes the header back button to the shared members list for staff users', async () => {
     currentRoleState.role = 'staff'
 
     await act(async () => {
@@ -322,10 +326,10 @@ describe('Member detail page tabs', () => {
       getIconOnlyButton(container).click()
     })
 
-    expect(pushMock).toHaveBeenCalledWith('/trainer/clients')
+    expect(pushMock).toHaveBeenCalledWith('/members')
   })
 
-  it('routes the error-state back button to trainer clients for staff users', async () => {
+  it('routes the error-state back button to the shared members list for staff users', async () => {
     currentRoleState.role = 'staff'
     useMemberMock.mockReturnValue({
       member: null,
@@ -339,7 +343,7 @@ describe('Member detail page tabs', () => {
 
     await clickButton(container, 'Back to Members')
 
-    expect(pushMock).toHaveBeenCalledWith('/trainer/clients')
+    expect(pushMock).toHaveBeenCalledWith('/members')
   })
 })
 

@@ -326,7 +326,7 @@ export async function releaseMemberSlot(member: Member): Promise<Member> {
 
 export type UpdateMemberData = {
   name: string
-  type: MemberType
+  memberTypeId?: string | null
   gender?: MemberGender | null
   email?: string | null
   phone?: string | null
@@ -348,7 +348,7 @@ export async function updateMember(
     method: 'PATCH',
     body: {
       name: data.name,
-      type: data.type,
+      member_type_id: data.memberTypeId ?? null,
       gender: data.gender ?? null,
       email: data.email ?? null,
       phone: data.phone ?? null,

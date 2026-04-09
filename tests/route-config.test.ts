@@ -29,7 +29,7 @@ describe('route config helpers', () => {
         'staff',
         '/fallback-staff',
       ),
-    ).toBe('/trainer/clients')
+    ).toBe('/members')
   })
 
   it('falls back when the route is not configured', () => {

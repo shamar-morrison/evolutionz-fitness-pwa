@@ -8,7 +8,7 @@ function createFormState() {
     gender: 'Female' as const,
     email: 'jane@example.com',
     phone: '555-0100',
-    type: 'General' as const,
+    memberTypeId: 'type-1',
     remark: 'Existing member',
     startDate: '2026-04-02',
     startTime: '00:00:00',

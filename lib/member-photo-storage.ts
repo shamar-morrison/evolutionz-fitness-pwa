@@ -34,12 +34,23 @@ export type MemberPhotoStorageClient = {
         data: unknown
         error: StorageError | null
       }>
+      move(
+        fromPath: string,
+        toPath: string,
+      ): PromiseLike<{
+        data: { path: string } | null
+        error: StorageError | null
+      }>
     }
   }
 }
 
 export function buildMemberPhotoPath(memberId: string) {
   return `${memberId}.jpg`
+}
+
+export function buildPendingMemberRequestPhotoPath(requestId: string) {
+  return `pending-member-requests/${requestId}.jpg`
 }
 
 export async function createMemberPhotoSignedUrl(
@@ -68,6 +79,14 @@ export async function uploadMemberPhotoObject(
   fileBody: ArrayBuffer,
 ) {
   const path = buildMemberPhotoPath(memberId)
+  return uploadMemberPhotoAtPath(storageClient, path, fileBody)
+}
+
+export async function uploadMemberPhotoAtPath(
+  storageClient: MemberPhotoStorageClient,
+  path: string,
+  fileBody: ArrayBuffer,
+) {
   const { error } = await storageClient.storage.from(MEMBER_PHOTOS_BUCKET).upload(path, fileBody, {
     contentType: 'image/jpeg',
     upsert: true,
@@ -89,6 +108,22 @@ export async function deleteMemberPhotoObject(
   if (error) {
     throw new Error(`Failed to delete member photo: ${error.message}`)
   }
+}
+
+export async function moveMemberPhotoObject(
+  storageClient: MemberPhotoStorageClient,
+  fromPath: string,
+  toPath: string,
+) {
+  const { error } = await storageClient.storage
+    .from(MEMBER_PHOTOS_BUCKET)
+    .move(fromPath, toPath)
+
+  if (error) {
+    throw new Error(`Failed to move member photo: ${error.message}`)
+  }
+
+  return toPath
 }
 
 export async function hydrateMemberPhotoUrl(

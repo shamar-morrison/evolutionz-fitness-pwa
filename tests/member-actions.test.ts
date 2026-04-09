@@ -364,7 +364,7 @@ describe('member actions', () => {
 
     const result = await updateMember('member-1', {
       name: 'Jane Doe',
-      type: 'Civil Servant',
+      memberTypeId: 'type-2',
       gender: 'Female',
       email: 'jane@example.com',
       phone: '876-555-1212',
@@ -377,7 +377,7 @@ describe('member actions', () => {
     expect(fetchMock.mock.calls[0][1]?.method).toBe('PATCH')
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
       name: 'Jane Doe',
-      type: 'Civil Servant',
+      member_type_id: 'type-2',
       gender: 'Female',
       email: 'jane@example.com',
       phone: '876-555-1212',

@@ -62,6 +62,7 @@ export const addMemberUserJobRequestSchema = z.object({
 export const provisionMemberAccessRequestSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
   type: z.enum(memberTypeValues),
+  member_type_id: z.string().trim().uuid().nullable().optional(),
   gender: memberGenderSchema.optional(),
   email: z.string().trim().email('Email must be valid.').optional(),
   phone: memberOptionalTextSchema,

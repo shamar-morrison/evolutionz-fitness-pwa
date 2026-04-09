@@ -18,6 +18,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
+import { useMemberApprovalRequests } from '@/hooks/use-member-approval-requests'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import {
   useRescheduleRequests,
@@ -102,6 +103,11 @@ const adminReportItems: NavItem[] = [
 
 const adminApprovalItems: NavItem[] = [
   {
+    href: '/pending-approvals/member-requests',
+    label: 'Member Requests',
+    icon: ClipboardCheck,
+  },
+  {
     href: '/pending-approvals/reschedule-requests',
     label: 'Reschedule Requests',
     icon: CalendarDays,
@@ -116,6 +122,7 @@ const adminApprovalItems: NavItem[] = [
 const trainerNavItems: NavItem[] = [
   { href: '/trainer/schedule', label: 'My Schedule', icon: CalendarDays },
   { href: '/trainer/clients', label: 'My Clients', icon: Users },
+  { href: '/members', label: 'Members', icon: Users },
   { href: '/trainer/requests', label: 'My Requests', icon: ClipboardList },
 ]
 
@@ -149,6 +156,9 @@ export function AppSidebar() {
     enabled: role === 'admin',
   })
   const pendingSessionUpdateRequests = useSessionUpdateRequests('pending', {
+    enabled: role === 'admin',
+  })
+  const pendingMemberApprovalRequests = useMemberApprovalRequests('pending', {
     enabled: role === 'admin',
   })
   const navItems = role === 'staff' ? trainerNavItems : adminNavItems
@@ -314,7 +324,9 @@ export function AppSidebar() {
               <SidebarMenu>
                 {adminApprovalItems.map((item) => {
                   const count =
-                    item.href === '/pending-approvals/reschedule-requests'
+                    item.href === '/pending-approvals/member-requests'
+                      ? pendingMemberApprovalRequests.requests.length
+                      : item.href === '/pending-approvals/reschedule-requests'
                       ? pendingRescheduleRequests.requests.length
                       : pendingSessionUpdateRequests.requests.length
 

@@ -10,6 +10,7 @@ const {
   pushMock,
   refreshMock,
   signOutMock,
+  useMemberApprovalRequestsMock,
   useRescheduleRequestsMock,
   useSessionUpdateRequestsMock,
 } = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ const {
   pushMock: vi.fn(),
   refreshMock: vi.fn(),
   signOutMock: vi.fn().mockResolvedValue({ error: null }),
+  useMemberApprovalRequestsMock: vi.fn(),
   useRescheduleRequestsMock: vi.fn(),
   useSessionUpdateRequestsMock: vi.fn(),
 }))
@@ -72,6 +74,10 @@ vi.mock('@/contexts/auth-context', () => ({
 vi.mock('@/hooks/use-pt-scheduling', () => ({
   useRescheduleRequests: useRescheduleRequestsMock,
   useSessionUpdateRequests: useSessionUpdateRequestsMock,
+}))
+
+vi.mock('@/hooks/use-member-approval-requests', () => ({
+  useMemberApprovalRequests: useMemberApprovalRequestsMock,
 }))
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -145,6 +151,11 @@ describe('Sidebar', () => {
       isLoading: false,
       error: null,
     })
+    useMemberApprovalRequestsMock.mockReturnValue({
+      requests: [],
+      isLoading: false,
+      error: null,
+    })
   })
 
   afterEach(async () => {
@@ -196,6 +207,7 @@ describe('Sidebar', () => {
 
     expect(container.textContent).toContain('My Schedule')
     expect(container.textContent).toContain('My Clients')
+    expect(container.textContent).toContain('Members')
     expect(container.textContent).toContain('My Requests')
     expect(container.textContent).toContain('Classes')
     expect(container.textContent).toContain('Trainer')
@@ -232,6 +244,11 @@ describe('Sidebar', () => {
       isLoading: false,
       error: null,
     })
+    useMemberApprovalRequestsMock.mockReturnValue({
+      requests: new Array(3).fill(null).map((_, index) => ({ id: `member-request-${index}` })),
+      isLoading: false,
+      error: null,
+    })
 
     await act(async () => {
       root.render(
@@ -247,6 +264,7 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('PT Trainer Payments')
     expect(container.textContent).toContain('Group Class Payments')
     expect(container.textContent).toContain('Notifications')
+    expect(container.textContent).toContain('Member Requests')
     expect(container.textContent).toContain('Reschedule Requests')
     expect(container.textContent).toContain('Session Updates')
     expect(container.textContent).toContain('Settings')
@@ -258,6 +276,7 @@ describe('Sidebar', () => {
     expect(links).toContain('/classes')
     expect(links).toContain('/reports/pt-payments')
     expect(links).toContain('/reports/class-payments')
+    expect(links).toContain('/pending-approvals/member-requests')
     expect(links).toContain('/pending-approvals/reschedule-requests')
     expect(links).toContain('/pending-approvals/session-updates')
 
@@ -274,6 +293,7 @@ describe('Sidebar', () => {
     )
 
     expect(badges).toContain('9+')
+    expect(badges).toContain('3')
     expect(badges).toContain('5')
   })
 

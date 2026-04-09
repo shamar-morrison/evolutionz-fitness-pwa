@@ -1,0 +1,322 @@
+// @vitest-environment jsdom
+
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const {
+  invalidateQueriesMock,
+  reviewMemberApprovalRequestMock,
+  toastMock,
+  useAvailableCardsMock,
+  useMemberApprovalRequestsMock,
+  useMemberTypesMock,
+} = vi.hoisted(() => ({
+  invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
+  reviewMemberApprovalRequestMock: vi.fn().mockResolvedValue({
+    ok: true,
+  }),
+  toastMock: vi.fn(),
+  useAvailableCardsMock: vi.fn(),
+  useMemberApprovalRequestsMock: vi.fn(),
+  useMemberTypesMock: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({
+    invalidateQueries: invalidateQueriesMock,
+  }),
+}))
+
+vi.mock('@/hooks/use-available-cards', () => ({
+  useAvailableCards: useAvailableCardsMock,
+}))
+
+vi.mock('@/hooks/use-member-approval-requests', () => ({
+  useMemberApprovalRequests: useMemberApprovalRequestsMock,
+}))
+
+vi.mock('@/hooks/use-member-types', () => ({
+  useMemberTypes: useMemberTypesMock,
+}))
+
+vi.mock('@/hooks/use-toast', () => ({
+  toast: toastMock,
+}))
+
+vi.mock('@/lib/member-approval-requests', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/member-approval-requests')>(
+    '@/lib/member-approval-requests',
+  )
+
+  return {
+    ...actual,
+    reviewMemberApprovalRequest: reviewMemberApprovalRequestMock,
+  }
+})
+
+vi.mock('@/components/ui/dialog', () => ({
+  Dialog: ({
+    children,
+    open,
+  }: {
+    children: React.ReactNode
+    open: boolean
+  }) => (open ? <div>{children}</div> : null),
+  DialogContent: ({
+    children,
+    className,
+    isLoading = false,
+  }: React.ComponentProps<'div'> & { isLoading?: boolean }) => (
+    <div className={className} data-is-loading={isLoading ? 'true' : 'false'}>
+      {children}
+    </div>
+  ),
+  DialogDescription: ({ children }: React.ComponentProps<'p'>) => <p>{children}</p>,
+  DialogFooter: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  DialogHeader: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  DialogTitle: ({ children }: React.ComponentProps<'h2'>) => <h2>{children}</h2>,
+}))
+
+vi.mock('@/components/ui/select', async () => {
+  const React = await import('react')
+
+  const SelectContext = React.createContext<{
+    disabled?: boolean
+    onValueChange?: (value: string) => void
+    value?: string
+  } | null>(null)
+
+  return {
+    Select: ({
+      children,
+      disabled,
+      onValueChange,
+      value,
+    }: {
+      children: React.ReactNode
+      disabled?: boolean
+      onValueChange?: (value: string) => void
+      value?: string
+    }) => (
+      <SelectContext.Provider
+        value={{
+          disabled,
+          onValueChange,
+          value: value ?? '',
+        }}
+      >
+        <div>{children}</div>
+      </SelectContext.Provider>
+    ),
+    SelectContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+    SelectItem: ({
+      children,
+      value,
+    }: React.ComponentProps<'button'> & { value: string }) => {
+      const context = React.useContext(SelectContext)
+
+      return (
+        <button
+          type="button"
+          onClick={() => context?.onValueChange?.(value)}
+          disabled={context?.disabled}
+        >
+          {children}
+        </button>
+      )
+    },
+    SelectTrigger: ({ children, id }: React.ComponentProps<'button'>) => {
+      const context = React.useContext(SelectContext)
+
+      return (
+        <button id={id} type="button" disabled={context?.disabled}>
+          {children}
+        </button>
+      )
+    },
+    SelectValue: ({ placeholder }: { placeholder?: string }) => {
+      const context = React.useContext(SelectContext)
+
+      return <span>{context?.value || placeholder}</span>
+    },
+  }
+})
+
+import { PendingMemberRequestsPage } from '@/components/pending-member-requests-page'
+import type { MemberApprovalRequest, MemberTypeRecord } from '@/types'
+
+function createRequest(
+  overrides: Partial<MemberApprovalRequest> = {},
+): MemberApprovalRequest {
+  return {
+    id: overrides.id ?? 'request-1',
+    name: overrides.name ?? 'Jane Doe',
+    gender: overrides.gender ?? 'Female',
+    email: overrides.email ?? 'jane@example.com',
+    phone: overrides.phone ?? '876-555-1111',
+    remark: overrides.remark ?? 'Wants mornings only',
+    beginTime: overrides.beginTime ?? '2026-04-09T14:00:00.000Z',
+    endTime: overrides.endTime ?? '2026-05-09T04:59:59.000Z',
+    cardNo: overrides.cardNo ?? '0102857149',
+    cardCode: overrides.cardCode ?? 'A18',
+    memberTypeId: overrides.memberTypeId ?? 'type-1',
+    memberTypeName: overrides.memberTypeName ?? 'General',
+    photoUrl: overrides.photoUrl ?? null,
+    status: overrides.status ?? 'pending',
+    submittedBy: overrides.submittedBy ?? 'staff-1',
+    submittedByName: overrides.submittedByName ?? 'Jordan Staff',
+    reviewedBy: overrides.reviewedBy ?? null,
+    reviewedAt: overrides.reviewedAt ?? null,
+    reviewNote: overrides.reviewNote ?? null,
+    memberId: overrides.memberId ?? null,
+    createdAt: overrides.createdAt ?? '2026-04-09T10:00:00.000Z',
+    updatedAt: overrides.updatedAt ?? '2026-04-09T10:00:00.000Z',
+  }
+}
+
+function createMemberType(overrides: Partial<MemberTypeRecord> = {}): MemberTypeRecord {
+  return {
+    id: overrides.id ?? 'type-1',
+    name: overrides.name ?? 'General',
+    monthly_rate: overrides.monthly_rate ?? 12000,
+    is_active: overrides.is_active ?? true,
+    created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
+  }
+}
+
+function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')
+  const setValue = descriptor?.set
+
+  if (!setValue) {
+    throw new Error('Input value setter is unavailable.')
+  }
+
+  setValue.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  input.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+async function clickButton(container: ParentNode, label: string) {
+  const button = Array.from(container.querySelectorAll('button')).find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`${label} button not found.`)
+  }
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
+describe('PendingMemberRequestsPage', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-09T12:00:00.000Z'))
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    useMemberApprovalRequestsMock.mockReturnValue({
+      requests: [createRequest()],
+      isLoading: false,
+      error: null,
+    })
+    useAvailableCardsMock.mockReturnValue({
+      cards: [
+        { cardNo: '0102857149', cardCode: 'A18' },
+        { cardNo: '0102857150', cardCode: 'A19' },
+      ],
+      isLoading: false,
+      error: null,
+    })
+    useMemberTypesMock.mockReturnValue({
+      memberTypes: [
+        createMemberType(),
+        createMemberType({ id: 'type-2', name: 'Civil Servant', monthly_rate: 7500 }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+  })
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+
+    vi.useRealTimers()
+    container.remove()
+    document.body.innerHTML = ''
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      false
+    vi.clearAllMocks()
+  })
+
+  it('keeps a manually edited amount when the membership type changes in review', async () => {
+    await act(async () => {
+      root.render(<PendingMemberRequestsPage />)
+    })
+
+    await clickButton(container, 'Review')
+
+    const amountInput = container.querySelector('#member-request-payment-amount')
+
+    if (!(amountInput instanceof HTMLInputElement)) {
+      throw new Error('Amount input not found.')
+    }
+
+    expect(amountInput.value).toBe('12000')
+
+    await act(async () => {
+      setInputValue(amountInput, '11500')
+    })
+
+    await clickButton(container, 'Civil Servant')
+
+    expect(amountInput.value).toBe('11500')
+  })
+
+  it('approves the request with the selected payment data and invalidates the related queries', async () => {
+    await act(async () => {
+      root.render(<PendingMemberRequestsPage />)
+    })
+
+    await clickButton(container, 'Review')
+    await clickButton(container, 'Cash')
+    await clickButton(container, 'Approve')
+
+    expect(reviewMemberApprovalRequestMock).toHaveBeenCalledWith('request-1', {
+      status: 'approved',
+      selected_card_no: '0102857149',
+      member_type_id: 'type-1',
+      payment_method: 'cash',
+      amount_paid: 12000,
+      promotion: null,
+      payment_date: '2026-04-09',
+      notes: null,
+      review_note: null,
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['memberApprovalRequests'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['memberApprovalRequests', 'pending'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['members', 'all'],
+    })
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Member approved',
+    })
+  })
+})

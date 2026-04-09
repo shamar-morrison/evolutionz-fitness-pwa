@@ -5,21 +5,23 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
-  addMemberMock,
+  createMemberApprovalRequestMock,
   invalidateQueriesMock,
   onOpenChangeMock,
   refetchAvailableCardsMock,
   toastMock,
-  uploadMemberPhotoMock,
+  uploadMemberApprovalRequestPhotoMock,
   useAvailableCardsMock,
+  useMemberTypesMock,
 } = vi.hoisted(() => ({
-  addMemberMock: vi.fn(),
+  createMemberApprovalRequestMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   onOpenChangeMock: vi.fn(),
   refetchAvailableCardsMock: vi.fn().mockResolvedValue(undefined),
   toastMock: vi.fn(),
-  uploadMemberPhotoMock: vi.fn(),
+  uploadMemberApprovalRequestPhotoMock: vi.fn(),
   useAvailableCardsMock: vi.fn(),
+  useMemberTypesMock: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -32,17 +34,23 @@ vi.mock('@/hooks/use-available-cards', () => ({
   useAvailableCards: useAvailableCardsMock,
 }))
 
+vi.mock('@/hooks/use-member-types', () => ({
+  useMemberTypes: useMemberTypesMock,
+}))
+
 vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
 }))
 
-vi.mock('@/lib/member-actions', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/member-actions')>('@/lib/member-actions')
+vi.mock('@/lib/member-approval-requests', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/member-approval-requests')>(
+    '@/lib/member-approval-requests',
+  )
 
   return {
     ...actual,
-    addMember: addMemberMock,
-    uploadMemberPhoto: uploadMemberPhotoMock,
+    createMemberApprovalRequest: createMemberApprovalRequestMock,
+    uploadMemberApprovalRequestPhoto: uploadMemberApprovalRequestPhotoMock,
   }
 })
 
@@ -186,28 +194,42 @@ vi.mock('@/components/ui/select', async () => {
 })
 
 import { AddMemberModal } from '@/components/add-member-modal'
-import type { AvailableAccessCard, Member } from '@/types'
+import type { AvailableAccessCard, MemberApprovalRequest, MemberTypeRecord } from '@/types'
 
-function createMember(overrides: Partial<Member> = {}): Member {
+function createRequest(overrides: Partial<MemberApprovalRequest> = {}): MemberApprovalRequest {
   return {
-    id: overrides.id ?? 'member-1',
-    employeeNo: overrides.employeeNo ?? '1001',
+    id: overrides.id ?? 'request-1',
     name: overrides.name ?? 'Jane Doe',
-    cardNo: overrides.cardNo ?? '12345',
-    cardCode: overrides.cardCode ?? 'EF-01',
-    cardStatus: overrides.cardStatus ?? 'assigned',
-    cardLostAt: overrides.cardLostAt ?? null,
-    type: overrides.type ?? 'General',
-    memberTypeId: overrides.memberTypeId ?? null,
-    status: overrides.status ?? 'Active',
-    deviceAccessState: overrides.deviceAccessState ?? 'ready',
     gender: overrides.gender ?? 'Female',
     email: overrides.email ?? 'jane@example.com',
     phone: overrides.phone ?? null,
     remark: overrides.remark ?? null,
+    beginTime: overrides.beginTime ?? '2026-04-08T09:30:00.000Z',
+    endTime: overrides.endTime ?? '2026-05-05T23:59:59.000Z',
+    cardNo: overrides.cardNo ?? '12345',
+    cardCode: overrides.cardCode ?? 'EF-01',
+    memberTypeId: overrides.memberTypeId ?? 'type-1',
+    memberTypeName: overrides.memberTypeName ?? 'General',
     photoUrl: overrides.photoUrl ?? null,
-    beginTime: overrides.beginTime ?? '2026-04-08T09:30:00',
-    endTime: overrides.endTime ?? '2026-05-05T23:59:59',
+    status: overrides.status ?? 'pending',
+    submittedBy: overrides.submittedBy ?? 'staff-1',
+    submittedByName: overrides.submittedByName ?? 'Jordan Staff',
+    reviewedBy: overrides.reviewedBy ?? null,
+    reviewedAt: overrides.reviewedAt ?? null,
+    reviewNote: overrides.reviewNote ?? null,
+    memberId: overrides.memberId ?? null,
+    createdAt: overrides.createdAt ?? '2026-04-08T15:00:00.000Z',
+    updatedAt: overrides.updatedAt ?? '2026-04-08T15:00:00.000Z',
+  }
+}
+
+function createMemberType(overrides: Partial<MemberTypeRecord> = {}): MemberTypeRecord {
+  return {
+    id: overrides.id ?? 'type-1',
+    name: overrides.name ?? 'General',
+    monthly_rate: overrides.monthly_rate ?? 12000,
+    is_active: overrides.is_active ?? true,
+    created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
   }
 }
 
@@ -257,6 +279,22 @@ function mockAvailableCards(cards: AvailableAccessCard[], error: string | null =
   })
 }
 
+function mockMemberTypes(
+  memberTypes: MemberTypeRecord[] = [
+    createMemberType(),
+    createMemberType({ id: 'type-2', name: 'Civil Servant', monthly_rate: 7500 }),
+    createMemberType({ id: 'type-3', name: 'Student/BPO', monthly_rate: 7500 }),
+  ],
+  error: Error | null = null,
+) {
+  useMemberTypesMock.mockReturnValue({
+    memberTypes,
+    isLoading: false,
+    error,
+    refetch: vi.fn(),
+  })
+}
+
 describe('AddMemberModal', () => {
   let container: HTMLDivElement
   let root: Root
@@ -282,6 +320,7 @@ describe('AddMemberModal', () => {
         cardCode: 'EF-01',
       },
     ])
+    mockMemberTypes()
   })
 
   afterEach(async () => {
@@ -304,8 +343,8 @@ describe('AddMemberModal', () => {
     vi.clearAllMocks()
   })
 
-  it('creates a member after progressing through the three steps', async () => {
-    addMemberMock.mockResolvedValue(createMember())
+  it('submits a pending member request after progressing through the three steps', async () => {
+    createMemberApprovalRequestMock.mockResolvedValue(createRequest())
 
     await act(async () => {
       root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
@@ -325,6 +364,7 @@ describe('AddMemberModal', () => {
     })
 
     await clickButton(container, 'Female')
+    await clickButton(container, 'General')
     await clickButton(container, 'Next')
 
     const startTimeInput = container.querySelector('#member-start-time')
@@ -342,13 +382,13 @@ describe('AddMemberModal', () => {
 
     expect(container.textContent).toContain('Step 3 of 3')
 
-    await clickButton(container, 'Save Member')
+    await clickButton(container, 'Submit Request')
     await flushAsyncWork()
 
-    expect(addMemberMock).toHaveBeenCalledWith(
+    expect(createMemberApprovalRequestMock).toHaveBeenCalledWith(
       {
         name: 'Jane Doe',
-        type: 'General',
+        member_type_id: 'type-1',
         gender: 'Female',
         email: 'jane@example.com',
         beginTime: '2026-04-08T09:30:00',
@@ -356,26 +396,18 @@ describe('AddMemberModal', () => {
         cardNo: '12345',
         cardCode: 'EF-01',
       },
-      {
-        onStepChange: expect.any(Function),
-      },
     )
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
-      queryKey: ['dashboard', 'stats'],
+      queryKey: ['memberApprovalRequests'],
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
-      queryKey: ['dashboard', 'recent-members'],
+      queryKey: ['memberApprovalRequests', 'pending'],
     })
-    expect(invalidateQueriesMock).toHaveBeenCalledWith({
-      queryKey: ['dashboard', 'expiring-members'],
+    expect(uploadMemberApprovalRequestPhotoMock).not.toHaveBeenCalled()
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Request submitted',
+      description: 'Jane Doe was submitted for admin approval.',
     })
-    expect(invalidateQueriesMock).toHaveBeenCalledWith({
-      queryKey: ['members', 'all'],
-    })
-    expect(invalidateQueriesMock).toHaveBeenCalledWith({
-      queryKey: ['cards', 'available'],
-    })
-    expect(uploadMemberPhotoMock).not.toHaveBeenCalled()
   })
 
   it('treats whitespace-only card codes as missing in Step 1', async () => {
@@ -406,7 +438,7 @@ describe('AddMemberModal', () => {
     await clickButton(container, 'Next')
 
     expect(container.textContent).toContain('Step 1 of 3')
-    expect(addMemberMock).not.toHaveBeenCalled()
+    expect(createMemberApprovalRequestMock).not.toHaveBeenCalled()
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Card code required',
       description: 'This card is missing its synced card code. Re-sync the imported cards and try again.',
@@ -430,11 +462,12 @@ describe('AddMemberModal', () => {
       setInputValue(nameInput, 'Jane Doe')
     })
 
+    await clickButton(container, 'General')
     await clickButton(container, 'Next')
     await clickButton(container, 'Next')
 
     expect(container.textContent).toContain('Step 2 of 3')
-    expect(addMemberMock).not.toHaveBeenCalled()
+    expect(createMemberApprovalRequestMock).not.toHaveBeenCalled()
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Duration required',
       description: 'Choose how long this member should have access.',
@@ -459,6 +492,7 @@ describe('AddMemberModal', () => {
     })
 
     await clickButton(container, 'Male')
+    await clickButton(container, 'General')
     await clickButton(container, 'Next')
     await clickButton(container, '2 Weeks')
     await clickButton(container, 'Next')
@@ -502,6 +536,7 @@ describe('AddMemberModal', () => {
       setInputValue(nameInput, 'Jordan Member')
     })
 
+    await clickButton(container, 'General')
     await clickButton(container, 'Next')
     await clickButton(container, '2 Weeks')
     await clickButton(container, 'Next')

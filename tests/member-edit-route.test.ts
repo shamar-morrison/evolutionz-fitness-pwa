@@ -192,7 +192,6 @@ describe('PATCH /api/members/[id]/edit', () => {
         },
         body: JSON.stringify({
           name: 'Jane Updated',
-          type: 'Civil Servant',
           gender: 'Female',
           email: 'jane@example.com',
           phone: '876-555-1212',
@@ -211,7 +210,6 @@ describe('PATCH /api/members/[id]/edit', () => {
     expect(memberUpdates).toEqual([
       {
         name: 'A18 Jane Updated',
-        type: 'Civil Servant',
         gender: 'Female',
         email: 'jane@example.com',
         phone: '876-555-1212',
@@ -276,7 +274,6 @@ describe('PATCH /api/members/[id]/edit', () => {
         },
         body: JSON.stringify({
           name: 'Jane Doe',
-          type: 'General',
           gender: 'Female',
           email: 'jane@example.com',
           phone: '876-555-1212',
@@ -347,7 +344,6 @@ describe('PATCH /api/members/[id]/edit', () => {
         },
         body: JSON.stringify({
           name: 'Jane Doe',
-          type: 'General',
           gender: 'Female',
           email: 'jane@example.com',
           phone: '876-555-1212',
@@ -412,7 +408,6 @@ describe('PATCH /api/members/[id]/edit', () => {
         },
         body: JSON.stringify({
           name: 'Jane Doe',
-          type: 'General',
           gender: 'Female',
           email: 'jane@example.com',
           phone: '876-555-1212',

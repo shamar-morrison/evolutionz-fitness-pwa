@@ -29,17 +29,45 @@ export type MemberTypeRecord = {
   created_at: string
 }
 
+export type MemberPaymentMethod = 'cash' | 'fygaro' | 'bank_transfer' | 'point_of_sale'
+export type MemberApprovalRequestStatus = 'pending' | 'approved' | 'denied'
+
 export type MemberPayment = {
   id: string
   member_id: string
   member_type_id: string
-  payment_method: 'cash' | 'fygaro' | 'bank_transfer' | 'point_of_sale'
+  payment_method: MemberPaymentMethod
   amount_paid: number
   promotion: string | null
   recorded_by: string | null
   payment_date: string
   notes: string | null
   created_at: string
+}
+
+export type MemberApprovalRequest = {
+  id: string
+  name: string
+  gender: MemberGender | null
+  email: string | null
+  phone: string | null
+  remark: string | null
+  beginTime: string
+  endTime: string
+  cardNo: string
+  cardCode: string
+  memberTypeId: string
+  memberTypeName: string
+  photoUrl: string | null
+  status: MemberApprovalRequestStatus
+  submittedBy: string
+  submittedByName: string | null
+  reviewedBy: string | null
+  reviewedAt: string | null
+  reviewNote: string | null
+  memberId: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export type Member = {

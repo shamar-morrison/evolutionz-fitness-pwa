@@ -9,13 +9,13 @@ export interface RouteConfig {
 
 export const routeConfig: Record<string, RouteConfig> = {
   '/members': {
-    allowedRoles: ['admin'],
+    allowedRoles: ['admin', 'staff'],
   },
   '/members/[id]': {
     allowedRoles: ['admin', 'staff'],
     backLink: {
       admin: '/members',
-      staff: '/trainer/clients',
+      staff: '/members',
     },
   },
   '/staff': {
@@ -50,6 +50,9 @@ export const routeConfig: Record<string, RouteConfig> = {
     allowedRoles: ['staff'],
   },
   '/pending-approvals': {
+    allowedRoles: ['admin'],
+  },
+  '/pending-approvals/member-requests': {
     allowedRoles: ['admin'],
   },
   '/reports/pt-payments': {

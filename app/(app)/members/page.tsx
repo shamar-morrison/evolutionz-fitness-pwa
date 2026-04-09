@@ -140,38 +140,36 @@ function MembersPageContent() {
         </div>
         <div className="flex items-center gap-2">
           <RoleGuard role="admin">
-            <>
-              {config.features.showSyncButtons && (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleSyncCards()}
-                    disabled={isSyncingCards}
-                  >
-                    {isSyncingCards ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
-                    Sync Cards
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleSyncMembers()}
-                    disabled={isSyncingMembers}
-                  >
-                    {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
-                    Sync Members
-                  </Button>
-                </>
-              )}
-              <Button
-                onClick={() => setShowAddModal(true)}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                <UserPlus className="h-4 w-4" />
-                Add Member
-              </Button>
-            </>
+            {config.features.showSyncButtons ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleSyncCards()}
+                  disabled={isSyncingCards}
+                >
+                  {isSyncingCards ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
+                  Sync Cards
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleSyncMembers()}
+                  disabled={isSyncingMembers}
+                >
+                  {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
+                  Sync Members
+                </Button>
+              </>
+            ) : null}
           </RoleGuard>
+          <Button
+            onClick={() => setShowAddModal(true)}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add Member
+          </Button>
         </div>
       </div>
 
@@ -230,12 +228,10 @@ function MembersPageContent() {
         <MembersTable members={members} />
       )}
 
-      <RoleGuard role="admin">
-        <AddMemberModal
-          open={showAddModal}
-          onOpenChange={setShowAddModal}
-        />
-      </RoleGuard>
+      <AddMemberModal
+        open={showAddModal}
+        onOpenChange={setShowAddModal}
+      />
     </div>
   )
 }

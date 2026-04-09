@@ -10,12 +10,14 @@ const {
   toastMock,
   updateMemberMock,
   uploadMemberPhotoMock,
+  useMemberTypesMock,
 } = vi.hoisted(() => ({
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   onOpenChangeMock: vi.fn(),
   toastMock: vi.fn(),
   updateMemberMock: vi.fn(),
   uploadMemberPhotoMock: vi.fn(),
+  useMemberTypesMock: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -26,6 +28,10 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
+}))
+
+vi.mock('@/hooks/use-member-types', () => ({
+  useMemberTypes: useMemberTypesMock,
 }))
 
 vi.mock('@/lib/member-actions', async () => {
@@ -88,7 +94,7 @@ vi.mock('@/components/ui/select', () => ({
 }))
 
 import { EditMemberModal } from '@/components/edit-member-modal'
-import type { Member } from '@/types'
+import type { Member, MemberTypeRecord } from '@/types'
 
 function createMember(overrides: Partial<Member> = {}): Member {
   return {
@@ -110,6 +116,16 @@ function createMember(overrides: Partial<Member> = {}): Member {
     photoUrl: overrides.photoUrl ?? null,
     beginTime: overrides.beginTime ?? '2026-04-02T00:00:00.000Z',
     endTime: overrides.endTime ?? '2026-05-01T23:59:59.000Z',
+  }
+}
+
+function createMemberType(overrides: Partial<MemberTypeRecord> = {}): MemberTypeRecord {
+  return {
+    id: overrides.id ?? 'type-1',
+    name: overrides.name ?? 'General',
+    monthly_rate: overrides.monthly_rate ?? 12000,
+    is_active: overrides.is_active ?? true,
+    created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
   }
 }
 
@@ -152,6 +168,15 @@ describe('EditMemberModal UI', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    useMemberTypesMock.mockReturnValue({
+      memberTypes: [
+        createMemberType(),
+        createMemberType({ id: 'type-2', name: 'Civil Servant', monthly_rate: 7500 }),
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
   })
 
   afterEach(async () => {

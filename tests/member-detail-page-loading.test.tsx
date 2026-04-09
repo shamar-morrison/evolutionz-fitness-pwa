@@ -84,6 +84,10 @@ vi.mock('@/components/edit-member-modal', () => ({
   EditMemberModal: () => null,
 }))
 
+vi.mock('@/components/record-member-payment-dialog', () => ({
+  RecordMemberPaymentDialog: () => null,
+}))
+
 vi.mock('@/components/member-avatar', () => ({
   MemberAvatar: ({ name }: { name: string }) => <div>{name}</div>,
 }))

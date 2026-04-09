@@ -12,6 +12,12 @@ export const queryKeys = {
   memberTypes: {
     all: ['memberTypes'] as const,
   },
+  memberApprovalRequests: {
+    all: ['memberApprovalRequests'] as const,
+    pending: ['memberApprovalRequests', 'pending'] as const,
+    status: (status: 'pending' | 'approved' | 'denied') =>
+      ['memberApprovalRequests', status] as const,
+  },
   memberPayments: {
     all: ['memberPayments'] as const,
     member: (memberId: string) => ['memberPayments', memberId] as const,

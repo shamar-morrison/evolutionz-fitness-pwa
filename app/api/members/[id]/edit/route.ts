@@ -18,16 +18,17 @@ import {
   readMemberWithCardCode,
   type MembersReadClient,
 } from '@/lib/members'
+import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import type { MemberGender, MemberRecord, MemberType } from '@/types'
+import type { MemberGender, MemberRecord } from '@/types'
 
 const UPDATE_MEMBER_WARNING = 'Member updated but device sync failed. Please try again.'
 const UPDATE_MEMBER_TIMEOUT_ERROR = 'Member update request timed out after 10 seconds.'
 
 const editMemberRequestSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
-  type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
+  member_type_id: z.string().trim().uuid().nullable().optional(),
   gender: z.enum(['Male', 'Female']).nullable().optional(),
   email: z.string().trim().email('Email must be valid.').nullable().optional(),
   phone: z.string().trim().min(1).nullable().optional(),
@@ -135,11 +136,16 @@ export async function PATCH(
     }
 
     const prefixedName = buildHikMemberName(input.name, currentMember.cardCode)
+    const memberTypeUpdateValues = await buildMemberTypeUpdateValues(
+      supabase,
+      input.member_type_id,
+      currentMember.type,
+    )
     const { data: updatedRecord, error } = await supabase
       .from('members')
       .update({
         name: prefixedName,
-        type: input.type,
+        ...memberTypeUpdateValues,
         gender: input.gender ?? null,
         email: normalizeOptionalText(input.email),
         phone: normalizeOptionalText(input.phone),

@@ -1,0 +1,202 @@
+import { z } from 'zod'
+import type {
+  MemberApprovalRequest,
+  MemberApprovalRequestStatus,
+  MemberGender,
+  MemberPaymentMethod,
+} from '@/types'
+
+const memberApprovalRequestSchema = z.object({
+  id: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  gender: z.enum(['Male', 'Female']).nullable(),
+  email: z.string().trim().nullable(),
+  phone: z.string().trim().nullable(),
+  remark: z.string().trim().nullable(),
+  beginTime: z.string().trim().min(1),
+  endTime: z.string().trim().min(1),
+  cardNo: z.string().trim().min(1),
+  cardCode: z.string().trim().min(1),
+  memberTypeId: z.string().trim().min(1),
+  memberTypeName: z.string().trim().min(1),
+  photoUrl: z.string().trim().nullable(),
+  status: z.enum(['pending', 'approved', 'denied']),
+  submittedBy: z.string().trim().min(1),
+  submittedByName: z.string().trim().nullable(),
+  reviewedBy: z.string().trim().nullable(),
+  reviewedAt: z.string().trim().nullable(),
+  reviewNote: z.string().trim().nullable(),
+  memberId: z.string().trim().nullable(),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+})
+
+const memberApprovalRequestsResponseSchema = z.object({
+  requests: z.array(memberApprovalRequestSchema).default([]),
+})
+
+const memberApprovalRequestResponseSchema = z.object({
+  request: memberApprovalRequestSchema,
+})
+
+type MemberApprovalRequestsSuccessResponse = {
+  ok: true
+  requests: MemberApprovalRequest[]
+}
+
+type MemberApprovalRequestSuccessResponse = {
+  ok: true
+  request: MemberApprovalRequest
+}
+
+type ErrorResponse = {
+  ok?: false
+  error: string
+}
+
+export type CreateMemberApprovalRequestInput = {
+  name: string
+  gender?: MemberGender | null
+  email?: string | null
+  phone?: string | null
+  remark?: string | null
+  beginTime: string
+  endTime: string
+  cardNo: string
+  cardCode: string
+  member_type_id: string
+}
+
+export type ReviewMemberApprovalRequestInput =
+  | {
+      status: 'denied'
+      review_note?: string | null
+    }
+  | {
+      status: 'approved'
+      selected_card_no: string
+      member_type_id: string
+      payment_method: MemberPaymentMethod
+      amount_paid: number
+      promotion?: string | null
+      payment_date: string
+      notes?: string | null
+      review_note?: string | null
+    }
+
+function getErrorMessage(responseBody: unknown, fallback: string) {
+  if (
+    typeof responseBody === 'object' &&
+    responseBody !== null &&
+    'error' in responseBody &&
+    typeof responseBody.error === 'string'
+  ) {
+    return responseBody.error
+  }
+
+  return fallback
+}
+
+export async function fetchMemberApprovalRequests(
+  status: MemberApprovalRequestStatus = 'pending',
+): Promise<MemberApprovalRequest[]> {
+  const searchParams = new URLSearchParams({ status })
+  const response = await fetch(`/api/member-approval-requests?${searchParams.toString()}`, {
+    method: 'GET',
+    cache: 'no-store',
+  })
+
+  let responseBody: MemberApprovalRequestsSuccessResponse | ErrorResponse | null = null
+
+  try {
+    responseBody = (await response.json()) as MemberApprovalRequestsSuccessResponse | ErrorResponse
+  } catch {
+    responseBody = null
+  }
+
+  if (!response.ok || !responseBody || responseBody.ok === false) {
+    throw new Error(getErrorMessage(responseBody, 'Failed to load member approval requests.'))
+  }
+
+  return memberApprovalRequestsResponseSchema.parse(responseBody).requests
+}
+
+export async function createMemberApprovalRequest(
+  input: CreateMemberApprovalRequestInput,
+): Promise<MemberApprovalRequest> {
+  const response = await fetch('/api/member-approval-requests', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  let responseBody: MemberApprovalRequestSuccessResponse | ErrorResponse | null = null
+
+  try {
+    responseBody = (await response.json()) as MemberApprovalRequestSuccessResponse | ErrorResponse
+  } catch {
+    responseBody = null
+  }
+
+  if (!response.ok || !responseBody || responseBody.ok === false) {
+    throw new Error(getErrorMessage(responseBody, 'Failed to submit the member request.'))
+  }
+
+  return memberApprovalRequestResponseSchema.parse(responseBody).request
+}
+
+export async function reviewMemberApprovalRequest(
+  id: string,
+  input: ReviewMemberApprovalRequestInput,
+): Promise<MemberApprovalRequest> {
+  const response = await fetch(`/api/member-approval-requests/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  let responseBody: MemberApprovalRequestSuccessResponse | ErrorResponse | null = null
+
+  try {
+    responseBody = (await response.json()) as MemberApprovalRequestSuccessResponse | ErrorResponse
+  } catch {
+    responseBody = null
+  }
+
+  if (!response.ok || !responseBody || responseBody.ok === false) {
+    throw new Error(getErrorMessage(responseBody, 'Failed to review the member request.'))
+  }
+
+  return memberApprovalRequestResponseSchema.parse(responseBody).request
+}
+
+export async function uploadMemberApprovalRequestPhoto(
+  requestId: string,
+  photo: Blob,
+): Promise<MemberApprovalRequest> {
+  const formData = new FormData()
+  formData.append('photo', photo, `${requestId}.jpg`)
+
+  const response = await fetch(`/api/member-approval-requests/${encodeURIComponent(requestId)}/photo`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  let responseBody: MemberApprovalRequestSuccessResponse | ErrorResponse | null = null
+
+  try {
+    responseBody = (await response.json()) as MemberApprovalRequestSuccessResponse | ErrorResponse
+  } catch {
+    responseBody = null
+  }
+
+  if (!response.ok || !responseBody || responseBody.ok === false) {
+    throw new Error(getErrorMessage(responseBody, 'Failed to upload the request photo.'))
+  }
+
+  return memberApprovalRequestResponseSchema.parse(responseBody).request
+}

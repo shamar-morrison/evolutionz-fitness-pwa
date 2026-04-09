@@ -11,13 +11,18 @@ import {
   type AccessControlJobsClient,
   createAndWaitForAccessControlJob,
 } from '@/lib/access-control-jobs'
+import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { MEMBER_RECORD_SELECT, readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
 import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import type { MemberType } from '@/types'
 
-const reactivateMemberRequestSchema = z.object({
-  status: z.literal('Active'),
-})
+const updateMemberRequestSchema = z
+  .object({
+    status: z.literal('Active').optional(),
+    member_type_id: z.string().trim().uuid().nullable().optional(),
+  })
+  .strict()
 
 const DELETE_MEMBER_SELECT = 'id, employee_no, card_no, photo_url'
 const DELETE_USER_TIMEOUT_ERROR = 'Delete user request timed out after 10 seconds.'
@@ -171,11 +176,42 @@ export async function PATCH(
 
     const { id } = await params
     const requestBody = await request.json()
-    const input = reactivateMemberRequestSchema.parse(requestBody)
+    const input = updateMemberRequestSchema.parse(requestBody)
     const supabase = getSupabaseAdminClient() as unknown as MembersReadClient
+    const currentMember = await readMemberWithCardCode(supabase, id)
+
+    if (!currentMember) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Member not found.',
+        },
+        { status: 404 },
+      )
+    }
+
+    if (input.status === undefined && input.member_type_id === undefined) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'No supported member updates were provided.',
+        },
+        { status: 400 },
+      )
+    }
+
+    const memberTypeUpdateValues = await buildMemberTypeUpdateValues(
+      supabase,
+      input.member_type_id,
+      currentMember.type,
+    )
 
     const { data, error } = await (supabase.from('members') as unknown as {
-      update(values: { status: 'Active' }): {
+      update(values: {
+        status?: 'Active'
+        member_type_id?: string | null
+        type?: MemberType
+      }): {
         eq(column: 'id', value: string): {
           select(columns: typeof MEMBER_RECORD_SELECT): {
             maybeSingle(): PromiseLike<{
@@ -187,7 +223,8 @@ export async function PATCH(
       }
     })
       .update({
-        status: input.status,
+        ...(input.status ? { status: input.status } : {}),
+        ...memberTypeUpdateValues,
       })
       .eq('id', id)
       .select(MEMBER_RECORD_SELECT)
