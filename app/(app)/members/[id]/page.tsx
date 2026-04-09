@@ -13,6 +13,7 @@ import { MemberPtSection } from '@/components/member-pt-section'
 import { StatusBadge } from '@/components/status-badge'
 import { CheckInHistory } from '@/components/check-in-history'
 import { EditMemberModal } from '@/components/edit-member-modal'
+import { RecordMemberPaymentDialog } from '@/components/record-member-payment-dialog'
 import { RoleGuard } from '@/components/role-guard'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,7 +38,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
 import { useBackLink } from '@/hooks/use-back-link'
 import { useProgressRouter } from '@/hooks/use-progress-router'
-import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, Trash2, User } from 'lucide-react'
+import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, Trash2, User, BanknoteIcon } from 'lucide-react'
 
 export default function MemberDetailPage() {
   const params = useParams()
@@ -47,6 +48,7 @@ export default function MemberDetailPage() {
   const { member, isLoading, error } = useMember(memberId)
   const backLink = useBackLink('/members', '/trainer/clients')
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false)
   const [showAssignCardModal, setShowAssignCardModal] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null)
@@ -348,13 +350,23 @@ export default function MemberDetailPage() {
             </Badge>
 
             <div className="mt-6 w-full space-y-3">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowRecordPaymentModal(true)}
+                disabled={isActionLoading}
+              >
+                <BanknoteIcon className="h-4 w-4" />
+                Record Payment
+              </Button>
+
               <RoleGuard role="admin">
                 <Button
                   variant="outline"
                   className="w-full"
                   onClick={() => setShowEditModal(true)}
                 >
-                  <Pencil className="mr-2 h-4 w-4" />
+                  <Pencil className="h-4 w-4" />
                   Edit Member
                 </Button>
 
@@ -368,12 +380,12 @@ export default function MemberDetailPage() {
                 >
                   {member.status === 'Suspended' ? (
                     <>
-                      <RefreshCw className="mr-2 h-4 w-4" />
+                      <RefreshCw className="h-4 w-4" />
                       Reactivate
                     </>
                   ) : (
                     <>
-                      <Ban className="mr-2 h-4 w-4" />
+                      <Ban className="h-4 w-4" />
                       Suspend
                     </>
                   )}
@@ -386,7 +398,7 @@ export default function MemberDetailPage() {
                     onClick={() => setShowAssignCardModal(true)}
                     disabled={isActionLoading}
                   >
-                    <CreditCard className="mr-2 h-4 w-4" />
+                    <CreditCard className="h-4 w-4" />
                     Assign Card
                   </Button>
                 ) : null}
@@ -401,7 +413,7 @@ export default function MemberDetailPage() {
                           onClick={() => setActiveDialog('unassign')}
                           disabled={isActionLoading || cardActionState.disableUnassignCard}
                         >
-                          <CreditCard className="mr-2 h-4 w-4" />
+                          <CreditCard className="h-4 w-4" />
                           Unassign Card
                         </Button>
                       </span>
@@ -420,7 +432,7 @@ export default function MemberDetailPage() {
                           onClick={() => setActiveDialog('report-lost')}
                           disabled={isActionLoading || cardActionState.disableReportCardLost}
                         >
-                          <CreditCard className="mr-2 h-4 w-4" />
+                          <CreditCard className="h-4 w-4" />
                           Report Card Lost
                         </Button>
                       </span>
@@ -437,7 +449,7 @@ export default function MemberDetailPage() {
                     onClick={() => setActiveDialog('recover-card')}
                     disabled={isActionLoading}
                   >
-                    <RefreshCw className="mr-2 h-4 w-4" />
+                    <RefreshCw className="h-4 w-4" />
                     Card Recovered
                   </Button>
                 ) : null}
@@ -455,7 +467,7 @@ export default function MemberDetailPage() {
                     onClick={() => setActiveDialog('release-slot')}
                     disabled={isActionLoading || member.deviceAccessState === 'released'}
                   >
-                    <CreditCard className="mr-2 h-4 w-4" />
+                    <CreditCard className="h-4 w-4" />
                     Release Slot
                   </Button>
                 ) : null}
@@ -680,6 +692,12 @@ export default function MemberDetailPage() {
         member={member}
         open={showEditModal}
         onOpenChange={setShowEditModal}
+      />
+
+      <RecordMemberPaymentDialog
+        member={member}
+        open={showRecordPaymentModal}
+        onOpenChange={setShowRecordPaymentModal}
       />
     </div>
   )

@@ -10,12 +10,14 @@ const {
   toastMock,
   updateMemberMock,
   uploadMemberPhotoMock,
+  useMemberTypesMock,
 } = vi.hoisted(() => ({
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   onOpenChangeMock: vi.fn(),
   toastMock: vi.fn(),
   updateMemberMock: vi.fn(),
   uploadMemberPhotoMock: vi.fn(),
+  useMemberTypesMock: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -26,6 +28,10 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
+}))
+
+vi.mock('@/hooks/use-member-types', () => ({
+  useMemberTypes: useMemberTypesMock,
 }))
 
 vi.mock('@/lib/member-actions', async () => {
@@ -75,6 +81,16 @@ vi.mock('@/components/ui/calendar', () => ({
   Calendar: () => <div data-testid="calendar" />,
 }))
 
+vi.mock('@/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <div data-testid="tooltip-root">{children}</div>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-content">{children}</div>
+  ),
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-trigger">{children}</div>
+  ),
+}))
+
 vi.mock('@/components/ui/select', () => ({
   Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SelectContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
@@ -88,7 +104,7 @@ vi.mock('@/components/ui/select', () => ({
 }))
 
 import { EditMemberModal } from '@/components/edit-member-modal'
-import type { Member } from '@/types'
+import type { Member, MemberTypeRecord } from '@/types'
 
 function createMember(overrides: Partial<Member> = {}): Member {
   return {
@@ -100,6 +116,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     cardStatus: overrides.cardStatus ?? 'assigned',
     cardLostAt: overrides.cardLostAt ?? null,
     type: overrides.type ?? 'General',
+    memberTypeId: overrides.memberTypeId ?? null,
     status: overrides.status ?? 'Active',
     deviceAccessState: overrides.deviceAccessState ?? 'ready',
     gender: overrides.gender ?? 'Female',
@@ -109,6 +126,16 @@ function createMember(overrides: Partial<Member> = {}): Member {
     photoUrl: overrides.photoUrl ?? null,
     beginTime: overrides.beginTime ?? '2026-04-02T00:00:00.000Z',
     endTime: overrides.endTime ?? '2026-05-01T23:59:59.000Z',
+  }
+}
+
+function createMemberType(overrides: Partial<MemberTypeRecord> = {}): MemberTypeRecord {
+  return {
+    id: overrides.id ?? 'type-1',
+    name: overrides.name ?? 'General',
+    monthly_rate: overrides.monthly_rate ?? 12000,
+    is_active: overrides.is_active ?? true,
+    created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
   }
 }
 
@@ -151,6 +178,15 @@ describe('EditMemberModal UI', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    useMemberTypesMock.mockReturnValue({
+      memberTypes: [
+        createMemberType(),
+        createMemberType({ id: 'type-2', name: 'Civil Servant', monthly_rate: 7500 }),
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
   })
 
   afterEach(async () => {
@@ -229,5 +265,58 @@ describe('EditMemberModal UI', () => {
 
     deferred.resolve({ member: createMember({ name: 'Jane Smith' }) })
     await flushAsyncWork()
+  })
+
+  it('renders membership type guidance in a tooltip and leaves load errors below the field', async () => {
+    await act(async () => {
+      root.render(
+        <EditMemberModal
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    const infoTrigger = container.querySelector('button[aria-label="Membership type information"]')
+
+    if (!(infoTrigger instanceof HTMLButtonElement)) {
+      throw new Error('Membership type info trigger not found.')
+    }
+
+    const helperParagraphs = Array.from(container.querySelectorAll('p')).filter((paragraph) =>
+      paragraph.textContent?.includes(
+        'Leave blank for legacy members who do not have a membership type assigned yet.',
+      ),
+    )
+
+    expect(infoTrigger.textContent).toBe('i')
+    expect(helperParagraphs).toHaveLength(0)
+    expect(
+      Array.from(container.querySelectorAll('[data-testid="tooltip-content"]')).some((element) =>
+        element.textContent?.includes(
+          'Leave blank for legacy members who do not have a membership type assigned yet.',
+        ),
+      ),
+    ).toBe(true)
+
+    useMemberTypesMock.mockReturnValue({
+      memberTypes: [],
+      isLoading: false,
+      error: new Error('Failed to load membership types.'),
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(
+        <EditMemberModal
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('Failed to load membership types.')
   })
 })

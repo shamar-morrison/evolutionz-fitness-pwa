@@ -9,6 +9,7 @@ import { AddMemberModal } from '@/components/add-member-modal'
 import { RoleGuard } from '@/components/role-guard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -41,8 +42,14 @@ function MembersPageLoading() {
       </div>
       <div className="flex flex-wrap items-center gap-4">
         <Skeleton className="h-10 min-w-[200px] max-w-sm flex-1" />
-        <Skeleton className="h-10 w-[140px]" />
-        <Skeleton className="h-10 w-[160px]" />
+        <div className="flex shrink-0 items-center gap-2">
+          <Skeleton className="h-4 w-12" />
+          <Skeleton className="h-10 w-[140px]" />
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Skeleton className="h-4 w-9" />
+          <Skeleton className="h-10 w-[160px]" />
+        </div>
       </div>
       <div className="space-y-4">
         <Skeleton className="h-12 w-full" />
@@ -140,38 +147,36 @@ function MembersPageContent() {
         </div>
         <div className="flex items-center gap-2">
           <RoleGuard role="admin">
-            <>
-              {config.features.showSyncButtons && (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleSyncCards()}
-                    disabled={isSyncingCards}
-                  >
-                    {isSyncingCards ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
-                    Sync Cards
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleSyncMembers()}
-                    disabled={isSyncingMembers}
-                  >
-                    {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
-                    Sync Members
-                  </Button>
-                </>
-              )}
-              <Button
-                onClick={() => setShowAddModal(true)}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                <UserPlus className="h-4 w-4" />
-                Add Member
-              </Button>
-            </>
+            {config.features.showSyncButtons ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleSyncCards()}
+                  disabled={isSyncingCards}
+                >
+                  {isSyncingCards ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
+                  Sync Cards
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleSyncMembers()}
+                  disabled={isSyncingMembers}
+                >
+                  {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
+                  Sync Members
+                </Button>
+              </>
+            ) : null}
           </RoleGuard>
+          <Button
+            onClick={() => setShowAddModal(true)}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add Member
+          </Button>
         </div>
       </div>
 
@@ -186,36 +191,46 @@ function MembersPageContent() {
             className="pl-9"
           />
         </div>
-        <Select
-          value={statusFilter}
-          onValueChange={(value: MemberStatus | 'All') => setStatusFilter(value)}
-        >
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            {statusOptions.map((status) => (
-              <SelectItem key={status} value={status}>
-                {status}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={typeFilter}
-          onValueChange={(value: MemberType | 'All') => setTypeFilter(value)}
-        >
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Type" />
-          </SelectTrigger>
-          <SelectContent>
-            {typeOptions.map((type) => (
-              <SelectItem key={type} value={type}>
-                {type}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex shrink-0 items-center gap-2">
+          <Label htmlFor="members-status-filter" className="text-muted-foreground">
+            Status
+          </Label>
+          <Select
+            value={statusFilter}
+            onValueChange={(value: MemberStatus | 'All') => setStatusFilter(value)}
+          >
+            <SelectTrigger id="members-status-filter" className="w-[140px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              {statusOptions.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Label htmlFor="members-type-filter" className="text-muted-foreground">
+            Type
+          </Label>
+          <Select
+            value={typeFilter}
+            onValueChange={(value: MemberType | 'All') => setTypeFilter(value)}
+          >
+            <SelectTrigger id="members-type-filter" className="w-[160px]">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              {typeOptions.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Members Table */}
@@ -230,12 +245,10 @@ function MembersPageContent() {
         <MembersTable members={members} />
       )}
 
-      <RoleGuard role="admin">
-        <AddMemberModal
-          open={showAddModal}
-          onOpenChange={setShowAddModal}
-        />
-      </RoleGuard>
+      <AddMemberModal
+        open={showAddModal}
+        onOpenChange={setShowAddModal}
+      />
     </div>
   )
 }

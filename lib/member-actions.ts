@@ -326,7 +326,7 @@ export async function releaseMemberSlot(member: Member): Promise<Member> {
 
 export type UpdateMemberData = {
   name: string
-  type: MemberType
+  memberTypeId?: string | null
   gender?: MemberGender | null
   email?: string | null
   phone?: string | null
@@ -344,18 +344,23 @@ export async function updateMember(
   id: string,
   data: UpdateMemberData,
 ): Promise<UpdateMemberResult> {
+  const body: Record<string, unknown> = {
+    name: data.name,
+    gender: data.gender ?? null,
+    email: data.email ?? null,
+    phone: data.phone ?? null,
+    remark: data.remark ?? null,
+    beginTime: data.beginTime,
+    endTime: data.endTime,
+  }
+
+  if (Object.prototype.hasOwnProperty.call(data, 'memberTypeId')) {
+    body.member_type_id = data.memberTypeId ?? null
+  }
+
   return requestMemberMutation(`/api/members/${encodeURIComponent(id)}/edit`, {
     method: 'PATCH',
-    body: {
-      name: data.name,
-      type: data.type,
-      gender: data.gender ?? null,
-      email: data.email ?? null,
-      phone: data.phone ?? null,
-      remark: data.remark ?? null,
-      beginTime: data.beginTime,
-      endTime: data.endTime,
-    },
+    body,
     errorMessage: 'Failed to update member.',
   })
 }

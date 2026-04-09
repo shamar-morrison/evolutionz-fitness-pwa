@@ -13,28 +13,27 @@ import {
 import { DialogStepForm, type DialogStep } from '@/components/dialog-step-form'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useAvailableCards } from '@/hooks/use-available-cards'
+import { useMemberTypes } from '@/hooks/use-member-types'
 import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { toast } from '@/hooks/use-toast'
 import { compressImage } from '@/lib/compress-image'
+import {
+  createMemberApprovalRequest,
+  uploadMemberApprovalRequestPhoto,
+} from '@/lib/member-approval-requests'
 import {
   buildBeginTimeValue,
   buildEndTimeValue,
   calculateInclusiveEndDate,
   formatDateInputValue,
 } from '@/lib/member-access-time'
-import {
-  addMember,
-  MemberProvisioningError,
-  uploadMemberPhoto,
-} from '@/lib/member-actions'
-import { buildMemberDisplayName, hasUsableCardCode } from '@/lib/member-name'
+import { hasUsableCardCode } from '@/lib/member-name'
 import { queryKeys } from '@/lib/query-keys'
-import type { Member } from '@/types'
 
 type AddMemberModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSuccess?: (member: Member) => void
+  onSuccess?: () => void
 }
 
 const emailSchema = z.string().trim().email('Enter a valid email address.')
@@ -47,7 +46,7 @@ function revokePreviewUrl(previewUrl: string | null | undefined) {
 
 export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModalProps) {
   const queryClient = useQueryClient()
-  const [submissionStep, setSubmissionStep] = useState<'idle' | 'provisioning_member'>('idle')
+  const [submissionStep, setSubmissionStep] = useState<'idle' | 'submitting_request'>('idle')
   const [formData, setFormData] = useState(() => createInitialMemberFormState())
   const [photoFile, setPhotoFile] = useState<FileWithPreview | null>(null)
   const [isStartDatePickerOpen, setIsStartDatePickerOpen] = useState(false)
@@ -58,6 +57,11 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     error: cardsError,
     refetch: refetchAvailableCards,
   } = useAvailableCards({ enabled: open })
+  const {
+    memberTypes,
+    isLoading: isMemberTypesLoading,
+    error: memberTypesError,
+  } = useMemberTypes({ enabled: open })
 
   const isSubmitting = submissionStep !== 'idle'
   const hasNoAvailableCards = !isCardsLoading && availableCards.length === 0 && !cardsError
@@ -161,6 +165,15 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       return false
     }
 
+    if (!formData.memberTypeId) {
+      toast({
+        title: 'Membership type required',
+        description: 'Select the submitted membership type before saving.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
     if (formData.email && !emailSchema.safeParse(formData.email).success) {
       toast({
         title: 'Invalid email',
@@ -249,40 +262,34 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       return
     }
 
-    setSubmissionStep('provisioning_member')
+    setSubmissionStep('submitting_request')
 
     try {
-      const member = await addMember(
-        {
-          name: formData.name.trim(),
-          type: formData.type,
-          ...(formData.gender ? { gender: formData.gender } : {}),
-          ...(formData.email.trim() ? { email: formData.email.trim() } : {}),
-          ...(formData.phone.trim() ? { phone: formData.phone.trim() } : {}),
-          ...(formData.remark.trim() ? { remark: formData.remark.trim() } : {}),
-          beginTime: calculatedBeginTime,
-          endTime: calculatedEndTime,
-          cardNo: selectedInventoryCard.cardNo,
-          cardCode: selectedCardCode,
-        },
-        {
-          onStepChange: setSubmissionStep,
-        },
-      )
+      const createdRequest = await createMemberApprovalRequest({
+        name: formData.name.trim(),
+        member_type_id: formData.memberTypeId,
+        ...(formData.gender ? { gender: formData.gender } : {}),
+        ...(formData.email.trim() ? { email: formData.email.trim() } : {}),
+        ...(formData.phone.trim() ? { phone: formData.phone.trim() } : {}),
+        ...(formData.remark.trim() ? { remark: formData.remark.trim() } : {}),
+        beginTime: calculatedBeginTime,
+        endTime: calculatedEndTime,
+        cardNo: selectedInventoryCard.cardNo,
+        cardCode: selectedCardCode,
+      })
 
       if (photoFile) {
         try {
           const compressedPhoto = await compressImage(photoFile.file)
-          await uploadMemberPhoto(member.id, compressedPhoto)
-          void queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) })
+          await uploadMemberApprovalRequestPhoto(createdRequest.id, compressedPhoto)
         } catch (photoError) {
-          console.error('Failed to upload member photo:', photoError)
+          console.error('Failed to upload member request photo:', photoError)
           toast({
             title: 'Photo upload failed',
             description:
               photoError instanceof Error
-                ? `${photoError.message} The member was saved without a photo.`
-                : 'The member was saved without a photo.',
+                ? `${photoError.message} The request was submitted without a photo.`
+                : 'The request was submitted without a photo.',
             variant: 'destructive',
           })
         }
@@ -290,32 +297,21 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
 
       handleOpenChange(false)
       void Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.recentMembers }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.pending }),
       ])
-      onSuccess?.(member)
+      onSuccess?.()
       toast({
-        title: 'Member added',
-        description: `${buildMemberDisplayName(member.name, member.cardCode)} was provisioned with card ${member.cardNo}.`,
+        title: 'Request submitted',
+        description: `${createdRequest.name} was submitted for admin approval.`,
       })
     } catch (error) {
-      if (error instanceof MemberProvisioningError) {
-        toast({
-          title: 'Member creation failed',
-          description: error.message,
-          variant: 'destructive',
-        })
-      } else {
-        console.error('Failed to add member:', error)
-        toast({
-          title: 'Member creation failed',
-          description: error instanceof Error ? error.message : 'Failed to add member.',
-          variant: 'destructive',
-        })
-      }
+      console.error('Failed to submit member request:', error)
+      toast({
+        title: 'Request submission failed',
+        description: error instanceof Error ? error.message : 'Failed to submit the member request.',
+        variant: 'destructive',
+      })
     } finally {
       setSubmissionStep('idle')
     }
@@ -342,6 +338,9 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           isCardsLoading={isCardsLoading}
           cardsError={cardsError}
           hasNoAvailableCards={hasNoAvailableCards}
+          memberTypes={memberTypes}
+          memberTypesError={memberTypesError instanceof Error ? memberTypesError.message : null}
+          isMemberTypesLoading={isMemberTypesLoading}
           onRefreshCards={() => {
             void refetchAvailableCards()
           }}
@@ -367,9 +366,9 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     {
       title: 'Add New Member',
       description:
-        submissionStep === 'provisioning_member'
-          ? 'Creating the Hik member record and assigning the selected card.'
-          : 'Add an optional photo and notes, then save the member.',
+        submissionStep === 'submitting_request'
+          ? 'Submitting the member request for admin approval.'
+          : 'Add an optional photo and notes, then submit the request.',
       content: (
         <MemberExtrasFields
           idPrefix="member"
@@ -395,13 +394,15 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           onBack={() => setStep((currentStep) => (currentStep === 3 ? 2 : 1))}
           onNext={handleNextStep}
           onSubmit={handleSubmit}
-          submitLabel="Save Member"
-          submitLoadingLabel="Provisioning Access..."
+          submitLabel="Submit Request"
+          submitLoadingLabel="Submitting Request..."
           submitDisabled={
             isSubmitting ||
             !selectedInventoryCard ||
             !hasSelectedCardCode ||
             isCardsLoading ||
+            isMemberTypesLoading ||
+            !formData.memberTypeId ||
             !formData.duration ||
             !calculatedBeginTime ||
             !calculatedEndTime

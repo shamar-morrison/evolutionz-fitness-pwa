@@ -24,6 +24,9 @@ vi.mock('@/lib/server-auth', async () => {
 
 import { GET as getMembers } from '@/app/api/members/route'
 import { GET as getMember, PATCH as patchMember } from '@/app/api/members/[id]/route'
+import { MEMBER_RECORD_SELECT } from '@/lib/members'
+
+const MEMBER_TYPE_ID_CIVIL_SERVANT = '22222222-2222-4222-8222-222222222222'
 
 function createMembersAdminClient({
   listRows = [],
@@ -163,6 +166,7 @@ describe('members API routes', () => {
           cardStatus: 'assigned',
           cardLostAt: null,
           type: 'General',
+          memberTypeId: null,
           status: 'Expired',
           deviceAccessState: 'ready',
           gender: 'Female',
@@ -229,6 +233,7 @@ describe('members API routes', () => {
         cardStatus: 'assigned',
         cardLostAt: null,
         type: 'Student/BPO',
+        memberTypeId: null,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: null,
@@ -282,6 +287,7 @@ describe('members API routes', () => {
         cardStatus: 'assigned',
         cardLostAt: null,
         type: 'Student/BPO',
+        memberTypeId: null,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: null,
@@ -365,6 +371,7 @@ describe('members API routes', () => {
         cardStatus: 'assigned',
         cardLostAt: null,
         type: 'Student/BPO',
+        memberTypeId: null,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: null,
@@ -442,9 +449,7 @@ describe('members API routes', () => {
 
                   return {
                     select(columns: string) {
-                      expect(columns).toBe(
-                        'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, updated_at',
-                      )
+                      expect(columns).toBe(MEMBER_RECORD_SELECT)
 
                       return {
                         maybeSingle() {
@@ -508,6 +513,207 @@ describe('members API routes', () => {
         cardStatus: null,
         cardLostAt: null,
         type: 'Student/BPO',
+        memberTypeId: null,
+        status: 'Active',
+        deviceAccessState: 'ready',
+        gender: null,
+        email: null,
+        phone: null,
+        remark: 'Requires weekend access',
+        photoUrl: null,
+        beginTime: '2026-03-01T00:00:00.000Z',
+        endTime: '2026-07-15T23:59:59.000Z',
+      },
+    })
+  })
+
+  it('updates the member type and keeps the legacy type field in sync on PATCH', async () => {
+    const memberUpdates: Array<Record<string, unknown>> = []
+    let memberReadCount = 0
+
+    getSupabaseAdminClientMock.mockReturnValue({
+      from(table: string) {
+        if (table === 'members') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe(MEMBER_RECORD_SELECT)
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('id')
+                  expect(value).toBe('member-2')
+
+                  return {
+                    maybeSingle() {
+                      memberReadCount += 1
+
+                      return Promise.resolve({
+                        data:
+                          memberReadCount === 1
+                            ? {
+                                id: 'member-2',
+                                employee_no: '000777',
+                                name: 'A1 Marcus Brown',
+                                card_no: '0102857149',
+                                type: 'General',
+                                member_type_id: null,
+                                status: 'Active',
+                                gender: null,
+                                email: null,
+                                phone: null,
+                                remark: 'Requires weekend access',
+                                photo_url: null,
+                                begin_time: '2026-03-01T00:00:00Z',
+                                end_time: '2026-07-15T23:59:59Z',
+                                updated_at: '2026-03-01T10:00:00Z',
+                              }
+                            : {
+                                id: 'member-2',
+                                employee_no: '000777',
+                                name: 'A1 Marcus Brown',
+                                card_no: '0102857149',
+                                type: 'Civil Servant',
+                                member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+                                status: 'Active',
+                                gender: null,
+                                email: null,
+                                phone: null,
+                                remark: 'Requires weekend access',
+                                photo_url: null,
+                                begin_time: '2026-03-01T00:00:00Z',
+                                end_time: '2026-07-15T23:59:59Z',
+                                updated_at: '2026-03-01T10:05:00Z',
+                              },
+                        error: null,
+                      })
+                    },
+                  }
+                },
+              }
+            },
+            update(values: Record<string, unknown>) {
+              memberUpdates.push(values)
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('id')
+                  expect(value).toBe('member-2')
+
+                  return {
+                    select(columns: string) {
+                      expect(columns).toBe(MEMBER_RECORD_SELECT)
+
+                      return {
+                        maybeSingle() {
+                          return Promise.resolve({
+                            data: { id: 'member-2' },
+                            error: null,
+                          })
+                        },
+                      }
+                    },
+                  }
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'member_types') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('*')
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('id')
+                  expect(value).toBe(MEMBER_TYPE_ID_CIVIL_SERVANT)
+
+                  return {
+                    maybeSingle() {
+                      return Promise.resolve({
+                        data: {
+                          id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+                          name: 'Civil Servant',
+                          monthly_rate: 7500,
+                          is_active: true,
+                          created_at: '2026-04-01T00:00:00.000Z',
+                        },
+                        error: null,
+                      })
+                    },
+                  }
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'cards') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('card_no, card_code, status, lost_at')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('card_no')
+                  expect(values).toEqual(['0102857149'])
+
+                  return Promise.resolve({
+                    data: [
+                      {
+                        card_no: '0102857149',
+                        card_code: 'A1',
+                        status: 'assigned',
+                        lost_at: null,
+                      },
+                    ],
+                    error: null,
+                  })
+                },
+              }
+            },
+          }
+        }
+
+        throw new Error(`Unexpected table: ${table}`)
+      },
+    })
+
+    const response = await patchMember(
+      new Request('http://localhost/api/members/member-2', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-2' }),
+      },
+    )
+
+    expect(memberUpdates).toEqual([
+      {
+        member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        type: 'Civil Servant',
+      },
+    ])
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      member: {
+        id: 'member-2',
+        employeeNo: '000777',
+        name: 'Marcus Brown',
+        cardNo: '0102857149',
+        cardCode: 'A1',
+        cardStatus: 'assigned',
+        cardLostAt: null,
+        type: 'Civil Servant',
+        memberTypeId: MEMBER_TYPE_ID_CIVIL_SERVANT,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: null,

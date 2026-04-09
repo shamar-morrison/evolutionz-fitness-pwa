@@ -11,6 +11,7 @@ const member = {
   cardStatus: 'assigned' as const,
   cardLostAt: null,
   type: 'General' as const,
+  memberTypeId: null,
   status: 'Active' as const,
   deviceAccessState: 'ready' as const,
   gender: null,

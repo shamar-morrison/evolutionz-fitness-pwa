@@ -51,9 +51,9 @@ describe('updateSession', () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
   })
 
-  it('uses the page-only matcher that excludes /api routes entirely', () => {
+  it('uses the page-only matcher that excludes APIs and public PWA assets', () => {
     expect(config.matcher).toEqual([
-      '/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+      '/((?!_next/static|_next/image|favicon.ico|api/|offline(?:/.*)?$|manifest\\.json$|manifest\\.webmanifest$|sw\\.js$|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
     ])
   })
 

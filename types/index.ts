@@ -21,6 +21,55 @@ export type AvailableAccessCard = {
   cardCode: string | null
 }
 
+export type MemberTypeRecord = {
+  id: string
+  name: string
+  monthly_rate: number
+  is_active: boolean
+  created_at: string
+}
+
+export type MemberPaymentMethod = 'cash' | 'fygaro' | 'bank_transfer' | 'point_of_sale'
+export type MemberApprovalRequestStatus = 'pending' | 'approved' | 'denied'
+
+export type MemberPayment = {
+  id: string
+  member_id: string
+  member_type_id: string
+  payment_method: MemberPaymentMethod
+  amount_paid: number
+  promotion: string | null
+  recorded_by: string | null
+  payment_date: string
+  notes: string | null
+  created_at: string
+}
+
+export type MemberApprovalRequest = {
+  id: string
+  name: string
+  gender: MemberGender | null
+  email: string | null
+  phone: string | null
+  remark: string | null
+  beginTime: string
+  endTime: string
+  cardNo: string
+  cardCode: string
+  memberTypeId: string
+  memberTypeName: string
+  photoUrl: string | null
+  status: MemberApprovalRequestStatus
+  submittedBy: string
+  submittedByName: string | null
+  reviewedBy: string | null
+  reviewedAt: string | null
+  reviewNote: string | null
+  memberId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export type Member = {
   id: string
   employeeNo: string
@@ -31,6 +80,7 @@ export type Member = {
   cardLostAt: string | null
   slotPlaceholderName?: string
   type: MemberType
+  memberTypeId: string | null
   status: MemberStatus
   deviceAccessState: DeviceAccessState
   gender: MemberGender | null
@@ -48,6 +98,7 @@ export type MemberRecord = {
   name: string
   card_no: string | null
   type: MemberType
+  member_type_id: string | null
   status: MemberStatus
   gender: MemberGender | null
   email: string | null
@@ -87,6 +138,86 @@ export type Profile = {
   photoUrl: string | null
   archivedAt: string | null
   created_at: string
+}
+
+// Group Classes Types
+export type GuestProfile = {
+  id: string
+  name: string
+  phone: string | null
+  email: string | null
+  remark: string | null
+  created_at: string
+}
+
+export type Class = {
+  id: string
+  name: string
+  schedule_description: string
+  per_session_fee: number | null
+  monthly_fee: number | null
+  trainer_compensation_pct: number
+  current_period_start: string | null
+  created_at: string
+}
+
+export type ClassTrainer = {
+  class_id: string
+  profile_id: string
+  created_at: string
+}
+
+export type ClassRegistration = {
+  id: string
+  class_id: string
+  member_id: string | null
+  guest_profile_id: string | null
+  month_start: string
+  status: 'pending' | 'approved' | 'denied'
+  amount_paid: number
+  payment_recorded_at: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  review_note: string | null
+  created_at: string
+}
+
+export type ClassScheduleRuleDay = 0 | 1 | 2 | 3 | 4 | 5 | 6
+
+export type ClassScheduleRule = {
+  id: string
+  class_id: string
+  day_of_week: ClassScheduleRuleDay
+  session_time: string
+  created_at: string
+}
+
+export type ClassSession = {
+  id: string
+  class_id: string
+  scheduled_at: string
+  period_start: string
+  created_at: string
+}
+
+export type ClassAttendance = {
+  id: string
+  session_id: string
+  member_id: string | null
+  guest_profile_id: string | null
+  marked_by: string | null
+  marked_at: string | null
+  created_at: string
+}
+
+export type ClassSessionSummary = ClassSession & {
+  marked_count: number
+  total_count: number
+}
+
+export type ClassAttendanceListItem = ClassAttendance & {
+  registrant_name: string
+  registrant_type: 'member' | 'guest'
 }
 
 // Dashboard Types

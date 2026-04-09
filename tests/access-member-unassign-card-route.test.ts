@@ -222,6 +222,7 @@ describe('POST /api/access/members/[id]/unassign-card', () => {
         cardStatus: null,
         cardLostAt: null,
         type: 'General',
+        memberTypeId: null,
         status: 'Suspended',
         deviceAccessState: 'ready',
         gender: null,

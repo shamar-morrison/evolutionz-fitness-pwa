@@ -8,6 +8,7 @@ import { Calendar as CalendarIcon, Pencil } from 'lucide-react'
 import { Pattern } from '@/components/ui/file-upload'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
+import { FieldInfoTooltip } from '@/components/ui/field-info-tooltip'
 import {
   Dialog,
   DialogContent,
@@ -42,12 +43,13 @@ import {
   type MemberDurationValue,
 } from '@/lib/member-access-time'
 import { compressImage } from '@/lib/compress-image'
+import { useMemberTypes } from '@/hooks/use-member-types'
 import { updateMember, uploadMemberPhoto, type UpdateMemberData } from '@/lib/member-actions'
 import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
 import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
-import type { Member, MemberGender, MemberType } from '@/types'
+import type { Member, MemberGender } from '@/types'
 
 type EditMemberModalProps = {
   member: Member
@@ -61,16 +63,16 @@ type EditMemberFormState = {
   gender: MemberGender | ''
   email: string
   phone: string
-  type: MemberType
+  memberTypeId: string
   remark: string
   startDate: string
   startTime: string
   duration: MemberDurationValue | ''
 }
 
-const memberTypes: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
 const memberGenders: MemberGender[] = ['Male', 'Female']
 const emailSchema = z.string().trim().email('Enter a valid email address.')
+const EMPTY_MEMBER_TYPE_VALUE = '__none__'
 
 function normalizeEditMemberFormState(formState: EditMemberFormState) {
   return {
@@ -78,7 +80,7 @@ function normalizeEditMemberFormState(formState: EditMemberFormState) {
     gender: formState.gender,
     email: formState.email.trim(),
     phone: formState.phone.trim(),
-    type: formState.type,
+    memberTypeId: formState.memberTypeId,
     remark: formState.remark.trim(),
     startDate: formState.startDate,
     startTime: formState.startTime,
@@ -107,7 +109,7 @@ function createInitialFormState(member: Member): EditMemberFormState {
     gender: member.gender ?? '',
     email: member.email ?? '',
     phone: member.phone ?? '',
-    type: member.type,
+    memberTypeId: member.memberTypeId ?? '',
     remark: member.remark ?? '',
     startDate: getAccessDateInputValue(member.beginTime) || formatDateInputValue(new Date()),
     startTime: getAccessTimeInputValue(member.beginTime) || '00:00:00',
@@ -117,6 +119,9 @@ function createInitialFormState(member: Member): EditMemberFormState {
 
 export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditMemberModalProps) {
   const queryClient = useQueryClient()
+  const { memberTypes, isLoading: isMemberTypesLoading, error: memberTypesError } = useMemberTypes({
+    enabled: open,
+  })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isStartDatePickerOpen, setIsStartDatePickerOpen] = useState(false)
   const [photoFile, setPhotoFile] = useState<FileWithPreview | null>(null)
@@ -287,7 +292,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
     try {
       const payload: UpdateMemberData = {
         name: formData.name.trim(),
-        type: formData.type,
+        memberTypeId: formData.memberTypeId || null,
         gender: formData.gender || null,
         email: formData.email.trim() || null,
         phone: formData.phone.trim() || null,
@@ -408,27 +413,44 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="edit-type">Membership Type</Label>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="edit-type">Membership Type</Label>
+                  <FieldInfoTooltip
+                    label="Membership type information"
+                    content="Leave blank for legacy members who do not have a membership type assigned yet."
+                  />
+                </div>
                 <Select
-                  value={formData.type}
-                  onValueChange={(value: MemberType) =>
+                  value={formData.memberTypeId || EMPTY_MEMBER_TYPE_VALUE}
+                  onValueChange={(value) =>
                     setFormData((currentFormData) => ({
                       ...currentFormData,
-                      type: value,
+                      memberTypeId: value === EMPTY_MEMBER_TYPE_VALUE ? '' : value,
                     }))
                   }
+                  disabled={isSubmitting || isMemberTypesLoading}
                 >
                   <SelectTrigger id="edit-type">
-                    <SelectValue placeholder="Select type" />
+                    <SelectValue
+                      placeholder={isMemberTypesLoading ? 'Loading membership types...' : 'Select type'}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    {memberTypes.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
+                    <SelectItem value={EMPTY_MEMBER_TYPE_VALUE}>Not set</SelectItem>
+                    {memberTypes.map((memberType) => (
+                      <SelectItem key={memberType.id} value={memberType.id}>
+                        {memberType.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {memberTypesError ? (
+                  <p className="text-xs text-destructive">
+                    {memberTypesError instanceof Error
+                      ? memberTypesError.message
+                      : 'Failed to load membership types.'}
+                  </p>
+                ) : null}
               </div>
             </div>
 

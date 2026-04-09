@@ -9,10 +9,40 @@ export const queryKeys = {
     detail: (id: string) => ['members', 'detail', id] as const,
     events: (id: string, page: number) => ['members', 'events', id, page] as const,
   },
+  memberTypes: {
+    all: ['memberTypes'] as const,
+  },
+  memberApprovalRequests: {
+    all: ['memberApprovalRequests'] as const,
+    pending: ['memberApprovalRequests', 'pending'] as const,
+    status: (status: 'pending' | 'approved' | 'denied') =>
+      ['memberApprovalRequests', status] as const,
+  },
+  memberPayments: {
+    all: ['memberPayments'] as const,
+    member: (memberId: string) => ['memberPayments', memberId] as const,
+  },
   staff: {
     all: ['staff'] as const,
     archived: ['staff', 'archived'] as const,
     detail: (id: string) => ['staff', id] as const,
+  },
+  classes: {
+    all: ['classes'] as const,
+    detail: (id: string) => ['classes', 'detail', id] as const,
+    registrations: (classId: string, monthStart: string) =>
+      ['classes', 'registrations', classId, monthStart] as const,
+    sessions: (classId: string, periodStart: string) =>
+      ['classes', 'sessions', classId, periodStart] as const,
+    attendance: (sessionId: string) =>
+      ['classes', 'attendance', sessionId] as const,
+    scheduleRules: (classId: string) =>
+      ['classes', 'scheduleRules', classId] as const,
+    trainers: (classId: string) => ['classes', 'trainers', classId] as const,
+  },
+  guestProfiles: {
+    all: ['guestProfiles'] as const,
+    detail: (id: string) => ['guestProfiles', id] as const,
   },
   ptScheduling: {
     assignments: ['pt-assignments'] as const,
@@ -40,6 +70,16 @@ export const queryKeys = {
   reports: {
     ptPayments: (startDate: string, endDate: string) =>
       ['reports', 'pt-payments', startDate, endDate] as const,
+    classPayments: (
+      startDate: string,
+      endDate: string,
+      status: 'approved' | 'include-pending',
+      includeZero: boolean,
+    ) => ['reports', 'class-payments', startDate, endDate, status, includeZero] as const,
+    membershipRevenue: (filters: Record<string, string>) =>
+      ['reports', 'membershipRevenue', filters] as const,
+    overallRevenue: (filters: Record<string, string>) =>
+      ['reports', 'overallRevenue', filters] as const,
   },
   cards: {
     available: ['cards', 'available'] as const,

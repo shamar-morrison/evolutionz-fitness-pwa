@@ -6,6 +6,7 @@ import { type Dispatch, type SetStateAction } from 'react'
 import { Pattern } from '@/components/ui/file-upload'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
+import { FieldInfoTooltip } from '@/components/ui/field-info-tooltip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -27,7 +28,7 @@ import {
   type MemberDurationValue,
 } from '@/lib/member-access-time'
 import { hasUsableCardCode } from '@/lib/member-name'
-import type { AvailableAccessCard, MemberGender, MemberType } from '@/types'
+import type { AvailableAccessCard, MemberGender, MemberTypeRecord } from '@/types'
 
 export type MemberFormState = {
   name: string
@@ -35,7 +36,7 @@ export type MemberFormState = {
   email: string
   phone: string
   selectedInventoryCardNo: string
-  type: MemberType
+  memberTypeId: string
   remark: string
   startDate: string
   startTime: string
@@ -55,6 +56,9 @@ type MemberBasicFieldsProps = SharedMemberFieldsProps & {
   cardsError: string | null
   hasNoAvailableCards: boolean
   isCardsLoading: boolean
+  memberTypes: MemberTypeRecord[]
+  memberTypesError: string | null
+  isMemberTypesLoading: boolean
   onRefreshCards: () => void
   selectedInventoryCard: AvailableAccessCard | null
 }
@@ -74,7 +78,6 @@ type MemberExtrasFieldsProps = Pick<
   setPhotoFile: (file: FileWithPreview | null) => void
 }
 
-const MEMBER_TYPES: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
 const MEMBER_GENDERS: MemberGender[] = ['Male', 'Female']
 
 export function createInitialMemberFormState(now: Date = new Date()): MemberFormState {
@@ -84,7 +87,7 @@ export function createInitialMemberFormState(now: Date = new Date()): MemberForm
     email: '',
     phone: '',
     selectedInventoryCardNo: '',
-    type: 'General',
+    memberTypeId: '',
     remark: '',
     startDate: formatDateInputValue(now),
     startTime: '00:00:00',
@@ -104,7 +107,10 @@ export function MemberBasicFields({
   hasNoAvailableCards,
   idPrefix,
   isCardsLoading,
+  isMemberTypesLoading,
   isSubmitting,
+  memberTypes,
+  memberTypesError,
   onRefreshCards,
   selectedInventoryCard,
   setFormData,
@@ -233,28 +239,37 @@ export function MemberBasicFields({
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}-type`}>Membership Type</Label>
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor={`${idPrefix}-type`}>Membership Type</Label>
+            <FieldInfoTooltip
+              label="Membership type information"
+              content="Select the submitted membership type. Payment is recorded during approval."
+            />
+          </div>
           <Select
-            value={formData.type}
-            onValueChange={(value: MemberType) =>
+            value={formData.memberTypeId}
+            onValueChange={(value) =>
               setFormData((currentFormData) => ({
                 ...currentFormData,
-                type: value,
+                memberTypeId: value,
               }))
             }
-            disabled={isSubmitting}
+            disabled={isSubmitting || isMemberTypesLoading}
           >
             <SelectTrigger id={`${idPrefix}-type`}>
-              <SelectValue placeholder="Select type" />
+              <SelectValue
+                placeholder={isMemberTypesLoading ? 'Loading membership types...' : 'Select type'}
+              />
             </SelectTrigger>
             <SelectContent>
-              {MEMBER_TYPES.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type}
+              {memberTypes.map((memberType) => (
+                <SelectItem key={memberType.id} value={memberType.id}>
+                  {memberType.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {memberTypesError ? <p className="text-xs text-destructive">{memberTypesError}</p> : null}
         </div>
       </div>
 

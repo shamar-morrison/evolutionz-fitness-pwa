@@ -11,11 +11,14 @@ import {
   ClipboardList,
   ClipboardCheck,
   DoorOpen,
+  GraduationCap,
   LayoutDashboard,
   LogOut,
+  Settings,
   Users,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
+import { useMemberApprovalRequests } from '@/hooks/use-member-approval-requests'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import {
   useRescheduleRequests,
@@ -28,6 +31,14 @@ import { cn } from '@/lib/utils'
 import { RoleGuard } from '@/components/role-guard'
 import { Button } from '@/components/ui/button'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -36,7 +47,6 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -82,11 +92,21 @@ const adminNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/members', label: 'Members', icon: Users },
   { href: '/staff', label: 'Staff', icon: Users },
+  { href: '/classes', label: 'Classes', icon: GraduationCap },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
-  { href: '/reports', label: 'Reports', icon: BarChart3 },
+]
+
+const adminReportItems: NavItem[] = [
+  { href: '/reports/pt-payments', label: 'PT Trainer Payments', icon: BarChart3 },
+  { href: '/reports/class-payments', label: 'Group Class Payments', icon: BarChart3 },
 ]
 
 const adminApprovalItems: NavItem[] = [
+  {
+    href: '/pending-approvals/member-requests',
+    label: 'Member Requests',
+    icon: ClipboardCheck,
+  },
   {
     href: '/pending-approvals/reschedule-requests',
     label: 'Reschedule Requests',
@@ -102,8 +122,11 @@ const adminApprovalItems: NavItem[] = [
 const trainerNavItems: NavItem[] = [
   { href: '/trainer/schedule', label: 'My Schedule', icon: CalendarDays },
   { href: '/trainer/clients', label: 'My Clients', icon: Users },
+  { href: '/members', label: 'Members', icon: Users },
   { href: '/trainer/requests', label: 'My Requests', icon: ClipboardList },
 ]
+
+const trainerClassesNavItems: NavItem[] = [{ href: '/classes', label: 'Classes', icon: GraduationCap }]
 
 function getInitials(name: string) {
   return name
@@ -135,10 +158,15 @@ export function AppSidebar() {
   const pendingSessionUpdateRequests = useSessionUpdateRequests('pending', {
     enabled: role === 'admin',
   })
+  const pendingMemberApprovalRequests = useMemberApprovalRequests('pending', {
+    enabled: role === 'admin',
+  })
   const navItems = role === 'staff' ? trainerNavItems : adminNavItems
+  const secondaryNavItems = role === 'staff' ? trainerClassesNavItems : []
   const homeHref = role === 'staff' ? '/trainer/schedule' : '/dashboard'
   const displayName = profile?.name ?? user?.email ?? 'Account'
   const subtitle = profile ? formatStaffTitles(profile.titles) || 'Signed in' : user?.email ?? null
+  const userEmail = profile?.email ?? user?.email ?? 'No email available'
 
   const handleNavigationClick = () => {
     if (isMobile) {
@@ -189,6 +217,11 @@ export function AppSidebar() {
     }
   }
 
+  const handleSettingsClick = () => {
+    handleNavigationClick()
+    router.push('/settings')
+  }
+
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="p-3">
@@ -236,6 +269,54 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {secondaryNavItems.length > 0 ? (
+          <SidebarGroup>
+            <SidebarGroupLabel>Classes</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {secondaryNavItems.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActivePath(pathname, item.href)}
+                      tooltip={item.label}
+                    >
+                      <Link data-progress href={item.href} onClick={handleNavigationClick}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
+
+        {role === 'admin' ? (
+          <SidebarGroup>
+            <SidebarGroupLabel>Reports</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminReportItems.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActivePath(pathname, item.href)}
+                      tooltip={item.label}
+                    >
+                      <Link data-progress href={item.href} onClick={handleNavigationClick}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
+
         {role === 'admin' ? (
           <SidebarGroup>
             <SidebarGroupLabel>Notifications</SidebarGroupLabel>
@@ -243,7 +324,9 @@ export function AppSidebar() {
               <SidebarMenu>
                 {adminApprovalItems.map((item) => {
                   const count =
-                    item.href === '/pending-approvals/reschedule-requests'
+                    item.href === '/pending-approvals/member-requests'
+                      ? pendingMemberApprovalRequests.requests.length
+                      : item.href === '/pending-approvals/reschedule-requests'
                       ? pendingRescheduleRequests.requests.length
                       : pendingSessionUpdateRequests.requests.length
 
@@ -309,27 +392,57 @@ export function AppSidebar() {
         {user && !loading ? (
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild size="lg" tooltip={displayName}>
-                <div>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-foreground/10 text-sm font-semibold">
-                    {getInitials(displayName)}
-                  </div>
-                  <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-                    <span className="truncate font-medium">{displayName}</span>
-                    <span className="truncate text-xs text-sidebar-foreground/65">
-                      {subtitle ?? 'Signed in'}
-                    </span>
-                  </div>
-                </div>
-              </SidebarMenuButton>
-              <SidebarMenuAction
-                aria-label="Sign out"
-                title="Sign out"
-                onClick={() => void handleSignOut()}
-                disabled={isSigningOut}
-              >
-                <LogOut className="h-4 w-4" />
-              </SidebarMenuAction>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton
+                    size="lg"
+                    title={displayName}
+                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-foreground/10 text-sm font-semibold">
+                      {getInitials(displayName)}
+                    </div>
+                    <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                      <span className="truncate font-medium">{displayName}</span>
+                      <span className="truncate text-xs text-sidebar-foreground/65">
+                        {subtitle ?? 'Signed in'}
+                      </span>
+                    </div>
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  className="w-56 min-w-56 rounded-lg"
+                  side={isMobile ? 'bottom' : 'right'}
+                  align="end"
+                  sideOffset={4}
+                >
+                  <DropdownMenuLabel className="p-0 font-normal">
+                    <div className="flex flex-col gap-1 px-2 py-1.5">
+                      <p className="truncate text-sm font-medium leading-none">{displayName}</p>
+                      <p className="truncate text-xs leading-none text-muted-foreground">
+                        {userEmail}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {role === 'admin' ? (
+                    <>
+                      <DropdownMenuItem onClick={handleSettingsClick} disabled={isSigningOut}>
+                        <Settings className="h-4 w-4" />
+                        <span>Settings</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  ) : null}
+                  <DropdownMenuItem
+                    onClick={() => void handleSignOut()}
+                    disabled={isSigningOut}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </SidebarMenuItem>
           </SidebarMenu>
         ) : null}

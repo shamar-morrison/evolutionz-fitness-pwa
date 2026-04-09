@@ -33,6 +33,7 @@ const persistedMember: Member = {
   cardStatus: 'assigned',
   cardLostAt: null,
   type: 'General',
+  memberTypeId: null,
   status: 'Active',
   deviceAccessState: 'ready',
   gender: null,

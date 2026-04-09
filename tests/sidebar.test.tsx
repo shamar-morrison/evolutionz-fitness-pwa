@@ -10,6 +10,7 @@ const {
   pushMock,
   refreshMock,
   signOutMock,
+  useMemberApprovalRequestsMock,
   useRescheduleRequestsMock,
   useSessionUpdateRequestsMock,
 } = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ const {
   pushMock: vi.fn(),
   refreshMock: vi.fn(),
   signOutMock: vi.fn().mockResolvedValue({ error: null }),
+  useMemberApprovalRequestsMock: vi.fn(),
   useRescheduleRequestsMock: vi.fn(),
   useSessionUpdateRequestsMock: vi.fn(),
 }))
@@ -74,12 +76,33 @@ vi.mock('@/hooks/use-pt-scheduling', () => ({
   useSessionUpdateRequests: useSessionUpdateRequestsMock,
 }))
 
+vi.mock('@/hooks/use-member-approval-requests', () => ({
+  useMemberApprovalRequests: useMemberApprovalRequestsMock,
+}))
+
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
     auth: {
       signOut: signOutMock,
     },
   }),
+}))
+
+vi.mock('@/components/ui/dropdown-menu', () => ({
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  DropdownMenuItem: ({
+    children,
+    onClick,
+    disabled,
+  }: React.ComponentProps<'button'>) => (
+    <button type="button" onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  ),
+  DropdownMenuLabel: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  DropdownMenuSeparator: () => <hr />,
 }))
 
 import { AppSidebar } from '@/components/app-sidebar'
@@ -100,6 +123,7 @@ describe('Sidebar', () => {
   beforeEach(() => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
+    signOutMock.mockResolvedValue({ error: null })
     setViewport(1024)
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -127,6 +151,11 @@ describe('Sidebar', () => {
       isLoading: false,
       error: null,
     })
+    useMemberApprovalRequestsMock.mockReturnValue({
+      requests: [],
+      isLoading: false,
+      error: null,
+    })
   })
 
   afterEach(async () => {
@@ -140,6 +169,22 @@ describe('Sidebar', () => {
       false
     vi.clearAllMocks()
   })
+
+  async function clickButtonByLabel(label: string) {
+    const button = Array.from(document.body.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.replace(/\s+/gu, ' ').trim() === label,
+    )
+
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error(`${label} button not found.`)
+    }
+
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
 
   it('shows the trainer-only navigation for staff users', async () => {
     pathnameState.value = '/trainer/schedule'
@@ -162,9 +207,21 @@ describe('Sidebar', () => {
 
     expect(container.textContent).toContain('My Schedule')
     expect(container.textContent).toContain('My Clients')
+    expect(container.textContent).toContain('Members')
     expect(container.textContent).toContain('My Requests')
+    expect(container.textContent).toContain('Classes')
+    expect(container.textContent).toContain('Trainer')
+    expect(container.textContent).toContain('Log out')
+    expect(container.textContent).not.toContain('Settings')
     expect(container.textContent).not.toContain('Dashboard')
     expect(container.textContent).not.toContain('Pending Approvals')
+
+    const groupLabels = Array.from(container.querySelectorAll('[data-sidebar="group-label"]')).map(
+      (label) => label.textContent?.trim(),
+    )
+
+    expect(groupLabels).toContain('Trainer')
+    expect(groupLabels).toContain('Classes')
   })
 
   it('shows the admin navigation and caps the pending approvals badge at 9+', async () => {
@@ -187,6 +244,11 @@ describe('Sidebar', () => {
       isLoading: false,
       error: null,
     })
+    useMemberApprovalRequestsMock.mockReturnValue({
+      requests: new Array(3).fill(null).map((_, index) => ({ id: `member-request-${index}` })),
+      isLoading: false,
+      error: null,
+    })
 
     await act(async () => {
       root.render(
@@ -197,21 +259,72 @@ describe('Sidebar', () => {
     })
 
     expect(container.textContent).toContain('Dashboard')
+    expect(container.textContent).toContain('Classes')
+    expect(container.textContent).toContain('Reports')
+    expect(container.textContent).toContain('PT Trainer Payments')
+    expect(container.textContent).toContain('Group Class Payments')
     expect(container.textContent).toContain('Notifications')
+    expect(container.textContent).toContain('Member Requests')
     expect(container.textContent).toContain('Reschedule Requests')
     expect(container.textContent).toContain('Session Updates')
+    expect(container.textContent).toContain('Settings')
+    expect(container.textContent).toContain('Log out')
+    expect(container.querySelector('[data-sidebar="menu-action"]')).toBeNull()
 
     const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
 
+    expect(links).toContain('/classes')
+    expect(links).toContain('/reports/pt-payments')
+    expect(links).toContain('/reports/class-payments')
+    expect(links).toContain('/pending-approvals/member-requests')
     expect(links).toContain('/pending-approvals/reschedule-requests')
     expect(links).toContain('/pending-approvals/session-updates')
+
+    const groupLabels = Array.from(container.querySelectorAll('[data-sidebar="group-label"]')).map(
+      (label) => label.textContent?.trim(),
+    )
+
+    expect(groupLabels).toContain('Application')
+    expect(groupLabels).toContain('Reports')
+    expect(groupLabels).toContain('Notifications')
 
     const badges = Array.from(container.querySelectorAll('[data-sidebar="menu-badge"]')).map(
       (badge) => badge.textContent?.trim(),
     )
 
     expect(badges).toContain('9+')
+    expect(badges).toContain('3')
     expect(badges).toContain('5')
+  })
+
+  it('navigates to settings from the footer user menu for admins', async () => {
+    await act(async () => {
+      root.render(
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>,
+      )
+    })
+
+    await clickButtonByLabel('Settings')
+
+    expect(pushMock).toHaveBeenCalledWith('/settings')
+  })
+
+  it('signs out from the footer user menu', async () => {
+    await act(async () => {
+      root.render(
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>,
+      )
+    })
+
+    await clickButtonByLabel('Log out')
+
+    expect(signOutMock).toHaveBeenCalledTimes(1)
+    expect(pushMock).toHaveBeenCalledWith('/login')
+    expect(refreshMock).toHaveBeenCalledTimes(1)
   })
 
   it('closes the mobile sidebar after clicking a navigation link', async () => {
