@@ -996,7 +996,7 @@ export default function ClassDetailPage() {
                 <div>
                   <CardTitle>Schedule</CardTitle>
                   <CardDescription>
-                    Manage recurring class rules used to preview and generate current-period sessions.
+                    Manage recurring class rules.
                   </CardDescription>
                 </div>
                 <Button type="button" className="w-full" onClick={() => setShowAddRuleDialog(true)}>

@@ -1,6 +1,6 @@
 'use client'
 
-import { usePathname, useRouter as useNextRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter as useNextRouter } from 'next/navigation'
 import { startNavigationProgress } from '@/lib/navigation-progress'
 
 function buildRouteKey(pathname: string, search: string) {
@@ -24,8 +24,10 @@ function getDestinationRouteKey(href: string) {
 export function useProgressRouter() {
   const router = useNextRouter()
   const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const currentRouteKey = buildRouteKey(pathname, searchParams.toString())
+  const currentRouteKey =
+    typeof window === 'undefined'
+      ? pathname
+      : buildRouteKey(pathname, window.location.search.replace(/^\?/u, ''))
 
   return {
     ...router,
