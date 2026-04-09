@@ -246,6 +246,8 @@ function createClassPatchClient() {
 
 function createRegistrationPostClient(options: {
   registrationError?: { message: string; code?: string } | null
+  existingGuestProfile?: Record<string, unknown> | null
+  existingGuestProfileError?: { message: string } | null
   futureSessions?: Array<Record<string, unknown>>
   futureSessionsError?: { message: string } | null
   attendanceInsertError?: { message: string } | null
@@ -254,12 +256,25 @@ function createRegistrationPostClient(options: {
   const registrationValues: Array<Record<string, unknown>> = []
   const guestDeletes: string[] = []
   const guestInserts: Array<Record<string, unknown>> = []
+  const guestLookupFilters: Array<{
+    operator: 'eq' | 'is'
+    column: string
+    value: unknown
+  }> = []
+  const guestLookupOrders: Array<{
+    column: string
+    ascending: boolean
+  }> = []
+  const guestLookupLimits: number[] = []
   const attendanceInserts: Array<Record<string, unknown>> = []
 
   return {
     registrationValues,
     guestDeletes,
     guestInserts,
+    guestLookupFilters,
+    guestLookupOrders,
+    guestLookupLimits,
     attendanceInserts,
     client: {
       from(table: string) {
@@ -287,6 +302,48 @@ function createRegistrationPostClient(options: {
 
         if (table === 'guest_profiles') {
           return {
+            select(columns: string) {
+              expect(columns).toBe('id')
+
+              const chain = {
+                eq(column: string, value: unknown) {
+                  guestLookupFilters.push({
+                    operator: 'eq',
+                    column,
+                    value,
+                  })
+
+                  return chain
+                },
+                is(column: string, value: null) {
+                  guestLookupFilters.push({
+                    operator: 'is',
+                    column,
+                    value,
+                  })
+
+                  return chain
+                },
+                order(column: string, orderOptions: { ascending: boolean }) {
+                  guestLookupOrders.push({
+                    column,
+                    ascending: orderOptions.ascending,
+                  })
+
+                  return chain
+                },
+                limit(value: number) {
+                  guestLookupLimits.push(value)
+                  return chain
+                },
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: options.existingGuestProfile ?? null,
+                  error: options.existingGuestProfileError ?? null,
+                }),
+              }
+
+              return chain
+            },
             insert(values: Record<string, unknown>) {
               guestInserts.push(values)
 
@@ -699,13 +756,67 @@ function createAttendancePatchClient() {
 
 function createRegistrationReviewClient(options: {
   reviewState?: { id: string; class_id: string; status: string } | null
+  futureSessions?: Array<Record<string, unknown>>
+  futureSessionsError?: { message: string } | null
+  attendanceInsertError?: { message: string } | null
 } = {}) {
   const updateValues: Array<Record<string, unknown>> = []
+  const attendanceInserts: Array<Record<string, unknown>> = []
 
   return {
     updateValues,
+    attendanceInserts,
     client: {
       from(table: string) {
+        if (table === 'class_sessions') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('id, scheduled_at, period_start')
+
+              const chain = {
+                eq(column: string, value: string) {
+                  if (column === 'class_id') {
+                    expect(value).toBe('class-1')
+                  }
+
+                  if (column === 'period_start') {
+                    expect(value).toBe('2026-04-01')
+                  }
+
+                  return chain
+                },
+                gt(column: string) {
+                  expect(column).toBe('scheduled_at')
+                  return chain
+                },
+                order(column: string, orderOptions: { ascending: boolean }) {
+                  expect(column).toBe('scheduled_at')
+                  expect(orderOptions.ascending).toBe(true)
+
+                  return Promise.resolve({
+                    data: options.futureSessions ?? [],
+                    error: options.futureSessionsError ?? null,
+                  })
+                },
+              }
+
+              return chain
+            },
+          }
+        }
+
+        if (table === 'class_attendance') {
+          return {
+            insert(values: Record<string, unknown> | Array<Record<string, unknown>>) {
+              attendanceInserts.push(...(Array.isArray(values) ? values : [values]))
+
+              return Promise.resolve({
+                error: options.attendanceInsertError ?? null,
+              })
+            },
+          }
+        }
+
         expect(table).toBe('class_registrations')
 
         return {
@@ -964,6 +1075,122 @@ describe('classes routes', () => {
     expect(body.registration.status).toBe('approved')
   })
 
+  it('reuses an existing guest profile when normalized lookup fields match', async () => {
+    mockAuthenticatedUser()
+    readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'admin', titles: ['Owner'] }))
+    readClassByIdMock.mockResolvedValue(buildClass())
+    readClassRegistrationByIdMock.mockResolvedValue(
+      buildRegistration({
+        member_id: null,
+        guest_profile_id: 'guest-existing',
+        registrant_name: 'Guest One',
+        registrant_type: 'guest',
+      }),
+    )
+    const {
+      client,
+      guestInserts,
+      guestLookupFilters,
+      guestLookupLimits,
+      guestLookupOrders,
+      registrationValues,
+    } = createRegistrationPostClient({
+      existingGuestProfile: {
+        id: 'guest-existing',
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await postClassRegistration(
+      new Request('http://localhost/api/classes/class-1/registrations', {
+        method: 'POST',
+        body: JSON.stringify({
+          registrant_type: 'guest',
+          guest: {
+            name: '  Guest One  ',
+            phone: '   ',
+            email: null,
+            remark: 'Has a prior visit note.',
+          },
+          month_start: '2026-04-10',
+          amount_paid: 3000,
+          payment_received: true,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(registrationValues[0]?.guest_profile_id).toBe('guest-existing')
+    expect(guestInserts).toEqual([])
+    expect(guestLookupFilters).toEqual([
+      {
+        operator: 'eq',
+        column: 'name',
+        value: 'Guest One',
+      },
+      {
+        operator: 'is',
+        column: 'phone',
+        value: null,
+      },
+      {
+        operator: 'is',
+        column: 'email',
+        value: null,
+      },
+    ])
+    expect(guestLookupOrders).toEqual([
+      {
+        column: 'created_at',
+        ascending: true,
+      },
+      {
+        column: 'id',
+        ascending: true,
+      },
+    ])
+    expect(guestLookupLimits).toEqual([1])
+  })
+
+  it('does not backfill attendance for pending staff-created registrations', async () => {
+    mockAuthenticatedUser()
+    readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'staff', titles: ['Assistant'] }))
+    readClassByIdMock.mockResolvedValue(buildClass())
+    readClassRegistrationByIdMock.mockResolvedValue(buildRegistration({ status: 'pending' }))
+    const { client, attendanceInserts } = createRegistrationPostClient({
+      futureSessions: [
+        {
+          id: 'session-1',
+          scheduled_at: '2026-04-12T09:00:00-05:00',
+          period_start: '2026-04-01',
+        },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await postClassRegistration(
+      new Request('http://localhost/api/classes/class-1/registrations', {
+        method: 'POST',
+        body: JSON.stringify({
+          registrant_type: 'member',
+          member_id: '11111111-1111-1111-1111-111111111111',
+          month_start: '2026-04-10',
+          amount_paid: 3000,
+          payment_received: true,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(attendanceInserts).toEqual([])
+  })
+
   it('rolls back a guest profile if registration creation fails after the guest insert', async () => {
     mockAuthenticatedUser()
     readStaffProfileMock.mockResolvedValue(buildProfile())
@@ -1000,6 +1227,48 @@ describe('classes routes', () => {
     expect(body.error).toContain('A registration already exists')
   })
 
+  it('does not roll back a reused guest profile if registration creation fails', async () => {
+    mockAuthenticatedUser()
+    readStaffProfileMock.mockResolvedValue(buildProfile())
+    readClassByIdMock.mockResolvedValue(buildClass())
+    const { client, guestDeletes, guestInserts } = createRegistrationPostClient({
+      existingGuestProfile: {
+        id: 'guest-existing',
+      },
+      registrationError: {
+        message: 'duplicate key value violates unique constraint',
+        code: '23505',
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await postClassRegistration(
+      new Request('http://localhost/api/classes/class-1/registrations', {
+        method: 'POST',
+        body: JSON.stringify({
+          registrant_type: 'guest',
+          guest: {
+            name: 'Guest One',
+            phone: null,
+            email: null,
+          },
+          month_start: '2026-04-10',
+          amount_paid: 3000,
+          payment_received: true,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(guestInserts).toEqual([])
+    expect(guestDeletes).toEqual([])
+    expect(body.error).toContain('A registration already exists')
+  })
+
   it('requires a denial reason when denying a registration', async () => {
     mockAdminUser()
 
@@ -1024,6 +1293,7 @@ describe('classes routes', () => {
         id: 'admin-1',
       },
     })
+    readClassByIdMock.mockResolvedValue(buildClass())
     readClassRegistrationByIdMock.mockResolvedValue(
       buildRegistration({
         status: 'approved',
@@ -1057,6 +1327,57 @@ describe('classes routes', () => {
       reviewed_by: 'admin-1',
     })
     expect(body.registration.amount_paid).toBe(3200)
+  })
+
+  it('backfills attendance when approving a pending registration', async () => {
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+      },
+    })
+    readClassByIdMock.mockResolvedValue(buildClass())
+    readClassRegistrationByIdMock.mockResolvedValue(
+      buildRegistration({
+        status: 'approved',
+        amount_paid: 3200,
+        review_note: 'Paid at the desk.',
+      }),
+    )
+    const { attendanceInserts, client } = createRegistrationReviewClient({
+      futureSessions: [
+        {
+          id: 'session-1',
+          scheduled_at: '2026-04-12T09:00:00-05:00',
+          period_start: '2026-04-01',
+        },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await patchClassRegistration(
+      new Request('http://localhost/api/classes/class-1/registrations/registration-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'approved',
+          amount_paid: 3200,
+          review_note: 'Paid at the desk.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1', registrationId: 'registration-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(attendanceInserts).toEqual([
+      {
+        session_id: 'session-1',
+        member_id: 'member-1',
+        guest_profile_id: null,
+        marked_at: null,
+        marked_by: null,
+      },
+    ])
   })
 
   it('returns class trainers for admins', async () => {

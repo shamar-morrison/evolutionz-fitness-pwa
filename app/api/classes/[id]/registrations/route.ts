@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import {
-  getUtcDateFromDateValue,
-  isClassRegistrationEligibleForSession,
-} from '@/lib/classes'
+import { backfillRegistrationAttendanceForCurrentPeriod } from '@/app/api/classes/_registration-attendance'
+import { getUtcDateFromDateValue } from '@/lib/classes'
 import {
   readClassById,
   readClassRegistrationById,
@@ -76,70 +74,37 @@ function isUniqueViolation(error: unknown) {
   )
 }
 
+async function findExistingGuestProfileId(
+  supabase: any,
+  guest: {
+    name: string
+    phone: string | null
+    email: string | null
+  },
+) {
+  let query = supabase.from('guest_profiles').select('id').eq('name', guest.name)
+
+  query = guest.phone === null ? query.is('phone', null) : query.eq('phone', guest.phone)
+  query = guest.email === null ? query.is('email', null) : query.eq('email', guest.email)
+
+  const { data: guestProfile, error: guestProfileError } = await query
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (guestProfileError) {
+    throw new Error(`Failed to read an existing guest profile: ${guestProfileError.message}`)
+  }
+
+  return (guestProfile?.id as string | undefined) ?? null
+}
+
 async function rollbackGuestProfile(supabase: any, guestProfileId: string) {
   const { error } = await supabase.from('guest_profiles').delete().eq('id', guestProfileId)
 
   if (error) {
     throw new Error(`Registration failed and guest rollback also failed: ${error.message}`)
-  }
-}
-
-async function backfillCurrentPeriodAttendance({
-  supabase,
-  classId,
-  currentPeriodStart,
-  memberId,
-  guestProfileId,
-  registrationStart,
-}: {
-  supabase: any
-  classId: string
-  currentPeriodStart: string
-  memberId: string | null
-  guestProfileId: string | null
-  registrationStart: string
-}) {
-  const nowIso = new Date().toISOString()
-  const { data: sessions, error: sessionsError } = await supabase
-    .from('class_sessions')
-    .select('id, scheduled_at, period_start')
-    .eq('class_id', classId)
-    .eq('period_start', currentPeriodStart)
-    .gt('scheduled_at', nowIso)
-    .order('scheduled_at', { ascending: true })
-
-  if (sessionsError) {
-    throw new Error(`Failed to read current-period sessions for attendance backfill: ${sessionsError.message}`)
-  }
-
-  const attendanceRows = ((sessions ?? []) as Array<{
-    id: string
-    scheduled_at: string
-    period_start: string
-  }>)
-    .filter((session) =>
-      isClassRegistrationEligibleForSession(
-        registrationStart,
-        String(session.scheduled_at),
-        String(session.period_start ?? currentPeriodStart),
-      ),
-    )
-    .map((session) => ({
-      session_id: String(session.id),
-      member_id: memberId,
-      guest_profile_id: guestProfileId,
-      marked_at: null,
-      marked_by: null,
-    }))
-
-  if (attendanceRows.length === 0) {
-    return
-  }
-
-  const { error: attendanceError } = await supabase.from('class_attendance').insert(attendanceRows)
-
-  if (attendanceError) {
-    throw new Error(`Failed to create class attendance rows: ${attendanceError.message}`)
   }
 }
 
@@ -230,6 +195,8 @@ export async function POST(
 
     let memberId: string | null = null
     let guestProfileId: string | null = null
+    let createdGuestProfileId: string | null = null
+    const registrationStatus = profile.role === 'admin' ? 'approved' : 'pending'
 
     if (input.registrant_type === 'member') {
       const { data: member, error: memberError } = await supabase
@@ -248,28 +215,34 @@ export async function POST(
 
       memberId = member.id as string
     } else {
-      const { data: guestProfile, error: guestError } = await supabase
-        .from('guest_profiles')
-        .insert({
-          name: input.guest.name.trim(),
-          phone: normalizeOptionalText(input.guest.phone),
-          email: normalizeOptionalText(input.guest.email),
-          remark: normalizeOptionalText(input.guest.remark),
-        })
-        .select('id')
-        .maybeSingle()
-
-      if (guestError) {
-        throw new Error(`Failed to create the guest profile: ${guestError.message}`)
+      const normalizedGuest = {
+        name: input.guest.name.trim(),
+        phone: normalizeOptionalText(input.guest.phone),
+        email: normalizeOptionalText(input.guest.email),
+        remark: normalizeOptionalText(input.guest.remark),
       }
 
-      const createdGuestProfileId = guestProfile?.id as string | undefined
+      guestProfileId = await findExistingGuestProfileId(supabase, normalizedGuest)
 
-      if (!createdGuestProfileId) {
-        throw new Error('Failed to create the guest profile.')
+      if (!guestProfileId) {
+        const { data: guestProfile, error: guestError } = await supabase
+          .from('guest_profiles')
+          .insert(normalizedGuest)
+          .select('id')
+          .maybeSingle()
+
+        if (guestError) {
+          throw new Error(`Failed to create the guest profile: ${guestError.message}`)
+        }
+
+        createdGuestProfileId = (guestProfile?.id as string | undefined) ?? null
+
+        if (!createdGuestProfileId) {
+          throw new Error('Failed to create the guest profile.')
+        }
+
+        guestProfileId = createdGuestProfileId
       }
-
-      guestProfileId = createdGuestProfileId
     }
 
     const { data: insertedRegistration, error: insertError } = await supabase
@@ -281,14 +254,14 @@ export async function POST(
         month_start: input.month_start,
         amount_paid: input.payment_received ? input.amount_paid : 0,
         payment_recorded_at: input.payment_received ? new Date().toISOString() : null,
-        status: profile.role === 'admin' ? 'approved' : 'pending',
+        status: registrationStatus,
       })
       .select('id')
       .maybeSingle()
 
     if (insertError) {
-      if (guestProfileId) {
-        await rollbackGuestProfile(supabase, guestProfileId)
+      if (createdGuestProfileId) {
+        await rollbackGuestProfile(supabase, createdGuestProfileId)
       }
 
       if (isUniqueViolation(insertError)) {
@@ -304,8 +277,8 @@ export async function POST(
     const registrationId = insertedRegistration?.id as string | undefined
 
     if (!registrationId) {
-      if (guestProfileId) {
-        await rollbackGuestProfile(supabase, guestProfileId)
+      if (createdGuestProfileId) {
+        await rollbackGuestProfile(supabase, createdGuestProfileId)
       }
 
       throw new Error('Failed to create the class registration.')
@@ -317,15 +290,13 @@ export async function POST(
       throw new Error('Failed to load the created class registration.')
     }
 
-    if (classItem.current_period_start) {
+    if (classItem.current_period_start && registration.status === 'approved') {
       try {
-        await backfillCurrentPeriodAttendance({
+        await backfillRegistrationAttendanceForCurrentPeriod({
           supabase,
           classId: id,
           currentPeriodStart: classItem.current_period_start,
-          memberId: registration.member_id,
-          guestProfileId: registration.guest_profile_id,
-          registrationStart: registration.month_start,
+          registration,
         })
       } catch (attendanceError) {
         console.error('Failed to backfill class attendance rows after registration:', attendanceError)
