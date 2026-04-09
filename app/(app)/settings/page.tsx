@@ -118,8 +118,8 @@ function SettingsPageContent() {
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
       </div>
 
-      <Card className="mt-8">
-        <CardHeader>
+      <Card className="mt-8 overflow-hidden gap-4 py-0">
+        <CardHeader className="pt-6">
           <CardTitle>Membership Types</CardTitle>
           <CardDescription>
             Configure monthly rates for each membership type. Rates apply to new payments going
@@ -128,13 +128,13 @@ function SettingsPageContent() {
         </CardHeader>
         <CardContent className="px-0">
           {isLoading ? (
-            <div className="space-y-3 px-6">
+            <div className="space-y-3 px-6 pb-6">
               {Array.from({ length: 3 }).map((_, index) => (
                 <Skeleton key={index} className="h-12 w-full" />
               ))}
             </div>
           ) : error ? (
-            <div className="px-6">
+            <div className="px-6 pb-6">
               <p className="text-sm text-destructive">
                 {error instanceof Error
                   ? error.message
@@ -142,11 +142,11 @@ function SettingsPageContent() {
               </p>
             </div>
           ) : memberTypes.length === 0 ? (
-            <div className="px-6">
+            <div className="px-6 pb-6">
               <p className="text-sm text-muted-foreground">No membership types found.</p>
             </div>
           ) : (
-            <Table>
+            <Table size="compact">
               <TableHeader>
                 <TableRow>
                   <TableHead>Type name</TableHead>

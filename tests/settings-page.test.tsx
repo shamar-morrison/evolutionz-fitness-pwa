@@ -250,6 +250,7 @@ describe('SettingsPage', () => {
     expect(container.textContent).toContain(
       'Configure monthly rates for each membership type. Rates apply to new payments going forward.',
     )
+    expect(container.querySelectorAll('table[data-size="compact"]')).toHaveLength(1)
     expect(container.textContent).toContain('General')
     expect(container.textContent).toContain('JMD $12,000')
     expect(container.textContent).toContain('Civil Servant')
