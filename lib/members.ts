@@ -4,7 +4,7 @@ import { getCleanMemberName } from '@/lib/member-name'
 import type { Card, CardRecord, Member, MemberRecord } from '@/types'
 
 export const MEMBER_RECORD_SELECT =
-  'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, updated_at'
+  'id, employee_no, name, card_no, type, member_type_id, status, gender, email, phone, remark, photo_url, begin_time, end_time, updated_at'
 
 type CardLookupEntry = Pick<Card, 'cardCode' | 'status' | 'lostAt'>
 
@@ -18,6 +18,7 @@ const memberSchema = z.object({
   cardLostAt: z.string().trim().min(1).nullable(),
   slotPlaceholderName: z.string().trim().min(1).optional(),
   type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
+  memberTypeId: z.string().trim().min(1).nullable().default(null),
   status: z.enum(['Active', 'Expired', 'Suspended']),
   deviceAccessState: z.enum(['ready', 'released']),
   gender: z.enum(['Male', 'Female']).nullable(),
@@ -145,6 +146,7 @@ export function mapMemberRecordToMemberWithCardCode(
     cardStatus: card?.status ?? null,
     cardLostAt: card?.lostAt ?? null,
     type: record.type,
+    memberTypeId: normalizeNullableText(record.member_type_id),
     status: record.status,
     deviceAccessState: 'ready',
     gender: record.gender,

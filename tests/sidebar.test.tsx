@@ -82,6 +82,23 @@ vi.mock('@/lib/supabase/client', () => ({
   }),
 }))
 
+vi.mock('@/components/ui/dropdown-menu', () => ({
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  DropdownMenuItem: ({
+    children,
+    onClick,
+    disabled,
+  }: React.ComponentProps<'button'>) => (
+    <button type="button" onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  ),
+  DropdownMenuLabel: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  DropdownMenuSeparator: () => <hr />,
+}))
+
 import { AppSidebar } from '@/components/app-sidebar'
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 
@@ -100,6 +117,7 @@ describe('Sidebar', () => {
   beforeEach(() => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
+    signOutMock.mockResolvedValue({ error: null })
     setViewport(1024)
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -141,6 +159,22 @@ describe('Sidebar', () => {
     vi.clearAllMocks()
   })
 
+  async function clickButtonByLabel(label: string) {
+    const button = Array.from(document.body.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.replace(/\s+/gu, ' ').trim() === label,
+    )
+
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error(`${label} button not found.`)
+    }
+
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
+
   it('shows the trainer-only navigation for staff users', async () => {
     pathnameState.value = '/trainer/schedule'
     authState.role = 'staff'
@@ -165,6 +199,8 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('My Requests')
     expect(container.textContent).toContain('Classes')
     expect(container.textContent).toContain('Trainer')
+    expect(container.textContent).toContain('Log out')
+    expect(container.textContent).not.toContain('Settings')
     expect(container.textContent).not.toContain('Dashboard')
     expect(container.textContent).not.toContain('Pending Approvals')
 
@@ -213,6 +249,9 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('Notifications')
     expect(container.textContent).toContain('Reschedule Requests')
     expect(container.textContent).toContain('Session Updates')
+    expect(container.textContent).toContain('Settings')
+    expect(container.textContent).toContain('Log out')
+    expect(container.querySelector('[data-sidebar="menu-action"]')).toBeNull()
 
     const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
 
@@ -236,6 +275,36 @@ describe('Sidebar', () => {
 
     expect(badges).toContain('9+')
     expect(badges).toContain('5')
+  })
+
+  it('navigates to settings from the footer user menu for admins', async () => {
+    await act(async () => {
+      root.render(
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>,
+      )
+    })
+
+    await clickButtonByLabel('Settings')
+
+    expect(pushMock).toHaveBeenCalledWith('/settings')
+  })
+
+  it('signs out from the footer user menu', async () => {
+    await act(async () => {
+      root.render(
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>,
+      )
+    })
+
+    await clickButtonByLabel('Log out')
+
+    expect(signOutMock).toHaveBeenCalledTimes(1)
+    expect(pushMock).toHaveBeenCalledWith('/login')
+    expect(refreshMock).toHaveBeenCalledTimes(1)
   })
 
   it('closes the mobile sidebar after clicking a navigation link', async () => {

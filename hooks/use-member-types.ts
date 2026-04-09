@@ -1,0 +1,25 @@
+'use client'
+
+import { useQuery } from '@tanstack/react-query'
+import { fetchMemberTypes } from '@/lib/member-types'
+import { queryKeys } from '@/lib/query-keys'
+import type { MemberTypeRecord } from '@/types'
+
+const FIVE_MINUTES_MS = 5 * 60 * 1000
+
+export function useMemberTypes(options: { enabled?: boolean } = {}) {
+  const enabled = options.enabled ?? true
+  const query = useQuery({
+    queryKey: queryKeys.memberTypes.all,
+    queryFn: fetchMemberTypes,
+    enabled,
+    staleTime: FIVE_MINUTES_MS,
+  })
+
+  return {
+    memberTypes: (query.data ?? []) as MemberTypeRecord[],
+    isLoading: enabled ? query.isLoading : false,
+    error: query.error ?? null,
+    refetch: () => query.refetch(),
+  }
+}

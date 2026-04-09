@@ -24,6 +24,7 @@ vi.mock('@/lib/server-auth', async () => {
 
 import { GET as getMembers } from '@/app/api/members/route'
 import { GET as getMember, PATCH as patchMember } from '@/app/api/members/[id]/route'
+import { MEMBER_RECORD_SELECT } from '@/lib/members'
 
 function createMembersAdminClient({
   listRows = [],
@@ -163,6 +164,7 @@ describe('members API routes', () => {
           cardStatus: 'assigned',
           cardLostAt: null,
           type: 'General',
+          memberTypeId: null,
           status: 'Expired',
           deviceAccessState: 'ready',
           gender: 'Female',
@@ -229,6 +231,7 @@ describe('members API routes', () => {
         cardStatus: 'assigned',
         cardLostAt: null,
         type: 'Student/BPO',
+        memberTypeId: null,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: null,
@@ -282,6 +285,7 @@ describe('members API routes', () => {
         cardStatus: 'assigned',
         cardLostAt: null,
         type: 'Student/BPO',
+        memberTypeId: null,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: null,
@@ -365,6 +369,7 @@ describe('members API routes', () => {
         cardStatus: 'assigned',
         cardLostAt: null,
         type: 'Student/BPO',
+        memberTypeId: null,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: null,
@@ -442,9 +447,7 @@ describe('members API routes', () => {
 
                   return {
                     select(columns: string) {
-                      expect(columns).toBe(
-                        'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, updated_at',
-                      )
+                      expect(columns).toBe(MEMBER_RECORD_SELECT)
 
                       return {
                         maybeSingle() {
@@ -508,6 +511,7 @@ describe('members API routes', () => {
         cardStatus: null,
         cardLostAt: null,
         type: 'Student/BPO',
+        memberTypeId: null,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: null,

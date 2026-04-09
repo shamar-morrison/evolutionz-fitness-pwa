@@ -21,6 +21,27 @@ export type AvailableAccessCard = {
   cardCode: string | null
 }
 
+export type MemberTypeRecord = {
+  id: string
+  name: string
+  monthly_rate: number
+  is_active: boolean
+  created_at: string
+}
+
+export type MemberPayment = {
+  id: string
+  member_id: string
+  member_type_id: string
+  payment_method: 'cash' | 'fygaro' | 'bank_transfer' | 'point_of_sale'
+  amount_paid: number
+  promotion: string | null
+  recorded_by: string | null
+  payment_date: string
+  notes: string | null
+  created_at: string
+}
+
 export type Member = {
   id: string
   employeeNo: string
@@ -31,6 +52,7 @@ export type Member = {
   cardLostAt: string | null
   slotPlaceholderName?: string
   type: MemberType
+  memberTypeId: string | null
   status: MemberStatus
   deviceAccessState: DeviceAccessState
   gender: MemberGender | null
@@ -48,6 +70,7 @@ export type MemberRecord = {
   name: string
   card_no: string | null
   type: MemberType
+  member_type_id: string | null
   status: MemberStatus
   gender: MemberGender | null
   email: string | null

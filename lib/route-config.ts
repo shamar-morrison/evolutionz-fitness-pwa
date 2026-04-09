@@ -27,6 +27,9 @@ export const routeConfig: Record<string, RouteConfig> = {
   '/dashboard': {
     allowedRoles: ['admin'],
   },
+  '/settings': {
+    allowedRoles: ['admin'],
+  },
   '/classes': {
     allowedRoles: ['admin', 'staff'],
   },

@@ -41,6 +41,7 @@ describe('route config helpers', () => {
   it('configures both admin report routes', () => {
     expect(routeConfig['/reports/pt-payments']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports/class-payments']?.allowedRoles).toEqual(['admin'])
+    expect(routeConfig['/settings']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports']).toBeUndefined()
   })
 })

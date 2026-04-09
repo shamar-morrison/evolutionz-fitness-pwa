@@ -320,6 +320,7 @@ describe('POST /api/access/members/[id]/assign-card', () => {
         cardStatus: 'assigned',
         cardLostAt: null,
         type: 'General',
+        memberTypeId: null,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: null,

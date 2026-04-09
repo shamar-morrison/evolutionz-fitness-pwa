@@ -20,6 +20,7 @@ vi.mock('@/lib/server-auth', async () => {
 })
 
 import { POST } from '@/app/api/access/members/provision/route'
+import { MEMBER_RECORD_SELECT } from '@/lib/members'
 
 const FIXED_NOW = new Date('2026-03-30T14:15:16.000Z')
 const PAST_END_TIME_VALIDATION_NOW = new Date('2026-03-30T17:00:01.000Z')
@@ -192,9 +193,7 @@ function createProvisioningAdminClient({
 
             return {
               select(columns: string) {
-                expect(columns).toBe(
-                  'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, updated_at',
-                )
+                expect(columns).toBe(MEMBER_RECORD_SELECT)
 
                 return {
                   single: () => Promise.resolve(insertMemberResult),
@@ -308,6 +307,7 @@ describe('POST /api/access/members/provision', () => {
         cardStatus: 'assigned',
         cardLostAt: null,
         type: 'General',
+        memberTypeId: null,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: 'Female',

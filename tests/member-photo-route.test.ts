@@ -19,6 +19,7 @@ vi.mock('@/lib/server-auth', async () => {
 })
 
 import { DELETE, POST } from '@/app/api/members/[id]/photo/route'
+import { MEMBER_RECORD_SELECT } from '@/lib/members'
 
 type QueryResult<T> = {
   data: T | null
@@ -89,9 +90,7 @@ function createMemberPhotoAdminClient({
         if (table === 'members') {
           return {
             select(columns: string) {
-              expect(columns).toBe(
-                'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, updated_at',
-              )
+              expect(columns).toBe(MEMBER_RECORD_SELECT)
 
               return {
                 eq(column: string, value: string) {
@@ -122,9 +121,7 @@ function createMemberPhotoAdminClient({
 
                   return {
                     select(columns: string) {
-                      expect(columns).toBe(
-                        'id, employee_no, name, card_no, type, status, gender, email, phone, remark, photo_url, begin_time, end_time, updated_at',
-                      )
+                      expect(columns).toBe(MEMBER_RECORD_SELECT)
 
                       return {
                         maybeSingle() {
@@ -223,6 +220,7 @@ describe('/api/members/[id]/photo', () => {
         cardStatus: null,
         cardLostAt: null,
         type: 'General',
+        memberTypeId: null,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: null,
@@ -329,6 +327,7 @@ describe('/api/members/[id]/photo', () => {
         cardStatus: null,
         cardLostAt: null,
         type: 'General',
+        memberTypeId: null,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: null,

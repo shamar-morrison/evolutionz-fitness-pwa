@@ -9,6 +9,13 @@ export const queryKeys = {
     detail: (id: string) => ['members', 'detail', id] as const,
     events: (id: string, page: number) => ['members', 'events', id, page] as const,
   },
+  memberTypes: {
+    all: ['memberTypes'] as const,
+  },
+  memberPayments: {
+    all: ['memberPayments'] as const,
+    member: (memberId: string) => ['memberPayments', memberId] as const,
+  },
   staff: {
     all: ['staff'] as const,
     archived: ['staff', 'archived'] as const,
@@ -63,6 +70,10 @@ export const queryKeys = {
       status: 'approved' | 'include-pending',
       includeZero: boolean,
     ) => ['reports', 'class-payments', startDate, endDate, status, includeZero] as const,
+    membershipRevenue: (filters: Record<string, string>) =>
+      ['reports', 'membershipRevenue', filters] as const,
+    overallRevenue: (filters: Record<string, string>) =>
+      ['reports', 'overallRevenue', filters] as const,
   },
   cards: {
     available: ['cards', 'available'] as const,

@@ -198,6 +198,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     cardStatus: overrides.cardStatus ?? 'assigned',
     cardLostAt: overrides.cardLostAt ?? null,
     type: overrides.type ?? 'General',
+    memberTypeId: overrides.memberTypeId ?? null,
     status: overrides.status ?? 'Active',
     deviceAccessState: overrides.deviceAccessState ?? 'ready',
     gender: overrides.gender ?? 'Female',
