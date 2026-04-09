@@ -207,6 +207,9 @@ describe('Sidebar', () => {
 
     expect(container.textContent).toContain('Dashboard')
     expect(container.textContent).toContain('Classes')
+    expect(container.textContent).toContain('Reports')
+    expect(container.textContent).toContain('PT Trainer Payments')
+    expect(container.textContent).toContain('Group Class Payments')
     expect(container.textContent).toContain('Notifications')
     expect(container.textContent).toContain('Reschedule Requests')
     expect(container.textContent).toContain('Session Updates')
@@ -214,8 +217,18 @@ describe('Sidebar', () => {
     const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
 
     expect(links).toContain('/classes')
+    expect(links).toContain('/reports/pt-payments')
+    expect(links).toContain('/reports/class-payments')
     expect(links).toContain('/pending-approvals/reschedule-requests')
     expect(links).toContain('/pending-approvals/session-updates')
+
+    const groupLabels = Array.from(container.querySelectorAll('[data-sidebar="group-label"]')).map(
+      (label) => label.textContent?.trim(),
+    )
+
+    expect(groupLabels).toContain('Application')
+    expect(groupLabels).toContain('Reports')
+    expect(groupLabels).toContain('Notifications')
 
     const badges = Array.from(container.querySelectorAll('[data-sidebar="menu-badge"]')).map(
       (badge) => badge.textContent?.trim(),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getBackLink, resolveRouteKey } from '@/lib/route-config'
+import { getBackLink, resolveRouteKey, routeConfig } from '@/lib/route-config'
 
 describe('route config helpers', () => {
   it('resolves UUID member detail paths to the dynamic route key', () => {
@@ -36,5 +36,11 @@ describe('route config helpers', () => {
     expect(getBackLink('/trainer/clients/member-42', 'staff', '/trainer/clients')).toBe(
       '/trainer/clients',
     )
+  })
+
+  it('configures both admin report routes', () => {
+    expect(routeConfig['/reports/pt-payments']?.allowedRoles).toEqual(['admin'])
+    expect(routeConfig['/reports/class-payments']?.allowedRoles).toEqual(['admin'])
+    expect(routeConfig['/reports']).toBeUndefined()
   })
 })

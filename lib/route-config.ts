@@ -49,7 +49,10 @@ export const routeConfig: Record<string, RouteConfig> = {
   '/pending-approvals': {
     allowedRoles: ['admin'],
   },
-  '/reports': {
+  '/reports/pt-payments': {
+    allowedRoles: ['admin'],
+  },
+  '/reports/class-payments': {
     allowedRoles: ['admin'],
   },
 }

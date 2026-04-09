@@ -167,6 +167,28 @@ const generateSessionsResponseSchema = z.object({
   count: countValueSchema,
 })
 
+const classPaymentsReportResponseSchema = z.array(
+  z.object({
+    trainerId: z.string().trim().min(1),
+    trainerName: z.string().trim().min(1),
+    trainerTitles: z.array(z.string()).default([]),
+    classes: z
+      .array(
+        z.object({
+          classId: z.string().trim().min(1),
+          className: z.string().trim().min(1),
+          registrationCount: countValueSchema,
+          totalCollected: countValueSchema,
+          compensationPct: z.number().finite(),
+          trainerCount: z.number().int().positive(),
+          payout: z.number().int(),
+        }),
+      )
+      .default([]),
+    totalPayout: countValueSchema,
+  }),
+)
+
 const errorResponseSchema = z.object({
   ok: z.literal(false).optional(),
   error: z.string().trim().min(1),
@@ -206,6 +228,24 @@ export type ClassSessionPreviewItem = {
   day_of_week: ClassScheduleRuleDay
   session_time: string
   scheduled_at: string
+}
+export const CLASS_PAYMENTS_REPORT_STATUSES = ['approved', 'include-pending'] as const
+export type ClassPaymentsReportStatus = typeof CLASS_PAYMENTS_REPORT_STATUSES[number]
+export type ClassPaymentsReportClass = {
+  classId: string
+  className: string
+  registrationCount: number
+  totalCollected: number
+  compensationPct: number
+  trainerCount: number
+  payout: number
+}
+export type ClassPaymentsReportTrainer = {
+  trainerId: string
+  trainerName: string
+  trainerTitles: string[]
+  classes: ClassPaymentsReportClass[]
+  totalPayout: number
 }
 export type CreateClassRegistrationInput =
   | {
@@ -595,6 +635,20 @@ export function getDefaultClassDateValue(now = new Date()) {
   return getJamaicaDateInputValue(now)
 }
 
+export function getCurrent28DayDateRangeInJamaica(now = new Date()) {
+  const endDate = getJamaicaDateInputValue(now)
+  const startDate = addDaysToDateValue(endDate, -27)
+
+  if (!startDate) {
+    throw new Error('Failed to resolve the current 28-day Jamaica date range.')
+  }
+
+  return {
+    startDate,
+    endDate,
+  }
+}
+
 export async function fetchClasses() {
   const response = await fetch('/api/classes', {
     method: 'GET',
@@ -943,4 +997,35 @@ export async function reviewClassRegistration(
   }
 
   return parsed.data.registration as ClassRegistrationListItem
+}
+
+export async function fetchClassPaymentsReport(
+  startDate: string,
+  endDate: string,
+  status: ClassPaymentsReportStatus,
+  includeZero: boolean,
+) {
+  const searchParams = buildSearchParams({
+    start: startDate,
+    end: endDate,
+    status,
+    includeZero: String(includeZero),
+  })
+  const response = await fetch(`/api/reports/class-payments?${searchParams.toString()}`, {
+    method: 'GET',
+    cache: 'no-store',
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to load the class payments report.'))
+  }
+
+  const parsed = classPaymentsReportResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to load the class payments report.')
+  }
+
+  return parsed.data as ClassPaymentsReportTrainer[]
 }

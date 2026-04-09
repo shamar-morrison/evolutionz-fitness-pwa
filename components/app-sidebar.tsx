@@ -85,7 +85,11 @@ const adminNavItems: NavItem[] = [
   { href: '/staff', label: 'Staff', icon: Users },
   { href: '/classes', label: 'Classes', icon: GraduationCap },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
-  { href: '/reports', label: 'Reports', icon: BarChart3 },
+]
+
+const adminReportItems: NavItem[] = [
+  { href: '/reports/pt-payments', label: 'PT Trainer Payments', icon: BarChart3 },
+  { href: '/reports/class-payments', label: 'Group Class Payments', icon: BarChart3 },
 ]
 
 const adminApprovalItems: NavItem[] = [
@@ -247,6 +251,30 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {secondaryNavItems.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActivePath(pathname, item.href)}
+                      tooltip={item.label}
+                    >
+                      <Link data-progress href={item.href} onClick={handleNavigationClick}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
+
+        {role === 'admin' ? (
+          <SidebarGroup>
+            <SidebarGroupLabel>Reports</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminReportItems.map((item) => (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
                       asChild

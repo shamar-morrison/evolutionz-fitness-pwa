@@ -1,5 +1,7 @@
 import type {
   ClassAttendanceRow,
+  ClassPaymentsReportStatus,
+  ClassPaymentsReportTrainer,
   ClassRegistrationListItem,
   ClassRegistrationStatus,
   ClassScheduleRule,
@@ -9,6 +11,7 @@ import type {
 } from '@/lib/classes'
 import { isClassRegistrationEligibleForSession } from '@/lib/classes'
 import { normalizeTimeInputValue } from '@/lib/member-access-time'
+import { getDateRangeBoundsInJamaica } from '@/lib/pt-scheduling'
 import { normalizeStaffTitles } from '@/lib/staff'
 import type { ClassScheduleRuleDay } from '@/types'
 
@@ -20,6 +23,9 @@ const CLASS_SCHEDULE_RULE_SELECT = 'id, class_id, day_of_week, session_time, cre
 const CLASS_SESSION_SELECT = 'id, class_id, scheduled_at, period_start, created_at'
 const CLASS_ATTENDANCE_SELECT =
   'id, session_id, member_id, guest_profile_id, marked_by, marked_at, created_at'
+const CLASS_PAYMENTS_TRAINER_SELECT =
+  'class_id, profile_id, profiles:profile_id ( id, name, titles ), classes:class_id ( id, name, trainer_compensation_pct )'
+const CLASS_PAYMENTS_REGISTRATION_SELECT = 'class_id, amount_paid, status, created_at'
 
 type ClassesAdminClient = {
   from(table: string): any
@@ -39,6 +45,25 @@ type ClassRow = {
 type ClassTrainerRow = {
   class_id: string
   profile_id: string
+}
+
+type ClassPaymentTrainerProfileRow = {
+  id: string
+  name: string
+  titles: string[] | null
+}
+
+type ClassPaymentTrainerClassRow = {
+  id: string
+  name: string
+  trainer_compensation_pct: number | string
+}
+
+type ClassPaymentTrainerJoinRow = {
+  class_id: string
+  profile_id: string
+  profiles: ClassPaymentTrainerProfileRow | ClassPaymentTrainerProfileRow[] | null
+  classes: ClassPaymentTrainerClassRow | ClassPaymentTrainerClassRow[] | null
 }
 
 type TrainerProfileRow = {
@@ -98,6 +123,11 @@ type ClassAttendanceRowRecord = {
   created_at: string
 }
 
+type ClassPaymentsRegistrationRow = Pick<
+  ClassRegistrationRow,
+  'class_id' | 'amount_paid' | 'status' | 'created_at'
+>
+
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -129,6 +159,14 @@ function normalizeNullableNumber(value: unknown) {
   }
 
   return normalizeNumber(value)
+}
+
+function getJoinedRow<T>(value: T | T[] | null | undefined) {
+  if (Array.isArray(value)) {
+    return value[0] ?? null
+  }
+
+  return value ?? null
 }
 
 function getClassRegistrantKey({
@@ -621,4 +659,163 @@ export async function readClassAttendance(
 
     return left.registrant_name.localeCompare(right.registrant_name)
   })
+}
+
+export async function readClassPaymentsReport(
+  supabase: ClassesAdminClient,
+  filters: {
+    startDate: string
+    endDate: string
+    status: ClassPaymentsReportStatus
+    includeZero: boolean
+  },
+): Promise<ClassPaymentsReportTrainer[]> {
+  const dateRange = getDateRangeBoundsInJamaica(filters.startDate, filters.endDate)
+
+  if (!dateRange) {
+    throw new Error('Class payment report dates must use valid YYYY-MM-DD values.')
+  }
+
+  const { data: trainerData, error: trainerError } = await supabase
+    .from('class_trainers')
+    .select(CLASS_PAYMENTS_TRAINER_SELECT)
+
+  if (trainerError) {
+    throw new Error(`Failed to read class trainers for the payments report: ${trainerError.message}`)
+  }
+
+  const trainerRows = (trainerData ?? []) as ClassPaymentTrainerJoinRow[]
+
+  if (trainerRows.length === 0) {
+    return []
+  }
+
+  const uniqueTrainerIdsByClassId = new Map<string, Set<string>>()
+  const classIds = new Set<string>()
+
+  for (const row of trainerRows) {
+    const classId = normalizeText(row.class_id)
+    const trainerId = normalizeText(row.profile_id)
+
+    if (!classId || !trainerId) {
+      continue
+    }
+
+    classIds.add(classId)
+
+    const trainerIds = uniqueTrainerIdsByClassId.get(classId) ?? new Set<string>()
+    trainerIds.add(trainerId)
+    uniqueTrainerIdsByClassId.set(classId, trainerIds)
+  }
+
+  if (classIds.size === 0) {
+    return []
+  }
+
+  let registrationsQuery = supabase
+    .from('class_registrations')
+    .select(CLASS_PAYMENTS_REGISTRATION_SELECT)
+    .in('class_id', Array.from(classIds))
+    .gte('created_at', dateRange.startInclusive)
+    .lt('created_at', dateRange.endExclusive)
+
+  registrationsQuery =
+    filters.status === 'approved'
+      ? registrationsQuery.eq('status', 'approved')
+      : registrationsQuery.in('status', ['approved', 'pending'])
+
+  const { data: registrationData, error: registrationError } = await registrationsQuery
+
+  if (registrationError) {
+    throw new Error(
+      `Failed to read class registrations for the payments report: ${registrationError.message}`,
+    )
+  }
+
+  const registrations = ((registrationData ?? []) as ClassPaymentsRegistrationRow[]).filter((row) =>
+    filters.includeZero ? true : normalizeNumber(row.amount_paid) !== 0,
+  )
+  const registrationTotalsByClassId = new Map<
+    string,
+    {
+      registrationCount: number
+      totalCollected: number
+    }
+  >()
+
+  for (const row of registrations) {
+    const classId = normalizeText(row.class_id)
+
+    if (!classId) {
+      continue
+    }
+
+    const currentTotals = registrationTotalsByClassId.get(classId) ?? {
+      registrationCount: 0,
+      totalCollected: 0,
+    }
+
+    currentTotals.registrationCount += 1
+    currentTotals.totalCollected += normalizeNumber(row.amount_paid)
+    registrationTotalsByClassId.set(classId, currentTotals)
+  }
+
+  const trainersById = new Map<string, ClassPaymentsReportTrainer>()
+  const seenTrainerClassKeys = new Set<string>()
+
+  for (const row of trainerRows) {
+    const trainerId = normalizeText(row.profile_id)
+    const classId = normalizeText(row.class_id)
+    const trainerProfile = getJoinedRow(row.profiles)
+    const classItem = getJoinedRow(row.classes)
+
+    if (!trainerId || !classId) {
+      continue
+    }
+
+    const seenKey = `${trainerId}:${classId}`
+
+    if (seenTrainerClassKeys.has(seenKey)) {
+      continue
+    }
+
+    seenTrainerClassKeys.add(seenKey)
+
+    const trainerCount = uniqueTrainerIdsByClassId.get(classId)?.size ?? 1
+    const classTotals = registrationTotalsByClassId.get(classId) ?? {
+      registrationCount: 0,
+      totalCollected: 0,
+    }
+    const compensationPct = normalizeNumber(classItem?.trainer_compensation_pct)
+    const payout = Math.round((classTotals.totalCollected * compensationPct) / 100 / trainerCount)
+    const existingTrainer = trainersById.get(trainerId)
+    const trainer =
+      existingTrainer ??
+      ({
+        trainerId,
+        trainerName: normalizeText(trainerProfile?.name) || 'Unknown trainer',
+        trainerTitles: normalizeStaffTitles(trainerProfile?.titles),
+        classes: [],
+        totalPayout: 0,
+      } satisfies ClassPaymentsReportTrainer)
+
+    trainer.classes.push({
+      classId,
+      className: normalizeText(classItem?.name) || 'Unknown class',
+      registrationCount: classTotals.registrationCount,
+      totalCollected: classTotals.totalCollected,
+      compensationPct,
+      trainerCount,
+      payout,
+    })
+    trainer.totalPayout += payout
+    trainersById.set(trainerId, trainer)
+  }
+
+  return Array.from(trainersById.values())
+    .map((trainer) => ({
+      ...trainer,
+      classes: [...trainer.classes].sort((left, right) => left.className.localeCompare(right.className)),
+    }))
+    .sort((left, right) => left.trainerName.localeCompare(right.trainerName))
 }

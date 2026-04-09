@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import {
+  fetchClassPaymentsReport,
   fetchClassAttendance,
   fetchClassDetail,
   fetchClassRegistrations,
@@ -9,6 +10,8 @@ import {
   fetchClassSessions,
   fetchClasses,
   type ClassAttendanceRow,
+  type ClassPaymentsReportStatus,
+  type ClassPaymentsReportTrainer,
   type ClassRegistrationStatus,
   type ClassSessionListItem,
 } from '@/lib/classes'
@@ -130,6 +133,30 @@ export function useClassAttendance(
   return {
     attendance: (query.data ?? []) as ClassAttendanceRow[],
     isLoading: enabled ? query.isLoading : false,
+    error: query.error ?? null,
+    refetch: () => query.refetch(),
+  }
+}
+
+export function useClassPaymentsReport(
+  startDate: string,
+  endDate: string,
+  status: ClassPaymentsReportStatus,
+  includeZero: boolean,
+  options: { enabled?: boolean } = {},
+) {
+  const enabled = Boolean(startDate) && Boolean(endDate) && (options.enabled ?? false)
+  const query = useQuery({
+    queryKey: queryKeys.reports.classPayments(startDate, endDate, status, includeZero),
+    queryFn: () => fetchClassPaymentsReport(startDate, endDate, status, includeZero),
+    enabled,
+    staleTime: FIVE_MINUTES_MS,
+  })
+
+  return {
+    report: (query.data ?? null) as ClassPaymentsReportTrainer[] | null,
+    isLoading: query.isFetching && !query.data,
+    isFetching: query.isFetching,
     error: query.error ?? null,
     refetch: () => query.refetch(),
   }

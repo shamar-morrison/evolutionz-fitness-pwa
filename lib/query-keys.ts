@@ -57,6 +57,12 @@ export const queryKeys = {
   reports: {
     ptPayments: (startDate: string, endDate: string) =>
       ['reports', 'pt-payments', startDate, endDate] as const,
+    classPayments: (
+      startDate: string,
+      endDate: string,
+      status: 'approved' | 'include-pending',
+      includeZero: boolean,
+    ) => ['reports', 'class-payments', startDate, endDate, status, includeZero] as const,
   },
   cards: {
     available: ['cards', 'available'] as const,
