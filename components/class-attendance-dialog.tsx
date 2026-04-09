@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Spinner } from '@/components/ui/spinner'
 import {
   Table,
   TableBody,
@@ -78,7 +79,7 @@ export function ClassAttendanceDialog({
   onOpenChange,
 }: ClassAttendanceDialogProps) {
   const queryClient = useQueryClient()
-  const [pendingKeys, setPendingKeys] = useState<string[]>([])
+  const [pendingKeys, setPendingKeys] = useState<Set<string>>(() => new Set())
   const { attendance, isLoading, error } = useClassAttendance(classId, session?.id ?? '', {
     enabled: open && Boolean(session),
   })
@@ -131,11 +132,17 @@ export function ClassAttendanceDialog({
   const canEdit = !readOnly && Boolean(profileId)
 
   const updatePendingState = (registrantKey: string, isPending: boolean) => {
-    setPendingKeys((current) =>
-      isPending
-        ? [...current, registrantKey]
-        : current.filter((currentRegistrantKey) => currentRegistrantKey !== registrantKey),
-    )
+    setPendingKeys((current) => {
+      const next = new Set(current)
+
+      if (isPending) {
+        next.add(registrantKey)
+      } else {
+        next.delete(registrantKey)
+      }
+
+      return next
+    })
   }
 
   const handleToggle = async (row: RosterRow, nextChecked: boolean) => {
@@ -206,7 +213,7 @@ export function ClassAttendanceDialog({
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
-          setPendingKeys([])
+          setPendingKeys(new Set())
         }
 
         onOpenChange(nextOpen)
@@ -250,7 +257,7 @@ export function ClassAttendanceDialog({
             </TableHeader>
             <TableBody>
               {rosterRows.map((row) => {
-                const isPending = pendingKeys.includes(row.key)
+                const isPending = pendingKeys.has(row.key)
 
                 return (
                   <TableRow key={row.key}>
@@ -261,7 +268,7 @@ export function ClassAttendanceDialog({
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end">
+                      <div className="flex items-center justify-end gap-2">
                         <Checkbox
                           checked={Boolean(row.attendance?.marked_at)}
                           disabled={!canEdit || isPending}
@@ -270,6 +277,7 @@ export function ClassAttendanceDialog({
                             void handleToggle(row, checked === true)
                           }}
                         />
+                        {isPending ? <Spinner className="size-4" /> : null}
                       </div>
                     </TableCell>
                   </TableRow>

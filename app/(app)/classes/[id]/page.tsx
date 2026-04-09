@@ -321,8 +321,13 @@ export default function ClassDetailPage() {
   const [pendingAction, setPendingAction] = useState<
     null | 'period' | 'approve' | 'deny' | 'schedule-rule' | 'generate'
   >(null)
-  const [trainerAction, setTrainerAction] = useState<null | 'add' | 'remove'>(null)
-  const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null)
+  const [trainerAction, setTrainerAction] = useState<null | 'add'>(null)
+  const [pendingTrainerRemovalIds, setPendingTrainerRemovalIds] = useState<Set<string>>(
+    () => new Set(),
+  )
+  const [pendingScheduleRuleIds, setPendingScheduleRuleIds] = useState<Set<string>>(
+    () => new Set(),
+  )
   const [previewItems, setPreviewItems] = useState<ClassSessionPreviewItem[]>([])
   const [selectedSession, setSelectedSession] = useState<ClassSessionListItem | null>(null)
   const [trainerToRemove, setTrainerToRemove] = useState<ClassTrainerProfile | null>(null)
@@ -422,7 +427,6 @@ export default function ClassDetailPage() {
   const isSavingScheduleRule = pendingAction === 'schedule-rule'
   const isGeneratingSessions = pendingAction === 'generate'
   const isSavingTrainer = trainerAction === 'add'
-  const isRemovingTrainer = trainerAction === 'remove'
   const sessionsErrorLabel = sessionsQuery.error
     ? sessionsQuery.error instanceof Error
       ? sessionsQuery.error.message
@@ -458,6 +462,34 @@ export default function ClassDetailPage() {
         queryKey: queryKeys.classes.detail(classId),
       }),
     ])
+  }
+
+  const updatePendingTrainerRemovalState = (trainerId: string, isPending: boolean) => {
+    setPendingTrainerRemovalIds((current) => {
+      const next = new Set(current)
+
+      if (isPending) {
+        next.add(trainerId)
+      } else {
+        next.delete(trainerId)
+      }
+
+      return next
+    })
+  }
+
+  const updatePendingScheduleRuleState = (ruleId: string, isPending: boolean) => {
+    setPendingScheduleRuleIds((current) => {
+      const next = new Set(current)
+
+      if (isPending) {
+        next.add(ruleId)
+      } else {
+        next.delete(ruleId)
+      }
+
+      return next
+    })
   }
 
   const openApproveDialog = (registration: ClassRegistrationListItem) => {
@@ -637,7 +669,7 @@ export default function ClassDetailPage() {
   }
 
   const handleDeleteScheduleRule = async (ruleId: string) => {
-    setDeletingRuleId(ruleId)
+    updatePendingScheduleRuleState(ruleId, true)
 
     try {
       await deleteClassScheduleRule(classId, ruleId)
@@ -658,7 +690,7 @@ export default function ClassDetailPage() {
         variant: 'destructive',
       })
     } finally {
-      setDeletingRuleId(null)
+      updatePendingScheduleRuleState(ruleId, false)
     }
   }
 
@@ -703,15 +735,16 @@ export default function ClassDetailPage() {
       return
     }
 
-    setTrainerAction('remove')
+    const trainer = trainerToRemove
+    updatePendingTrainerRemovalState(trainer.id, true)
+    setTrainerToRemove(null)
 
     try {
-      await removeClassTrainer(classId, trainerToRemove.id)
+      await removeClassTrainer(classId, trainer.id)
       await invalidateTrainerQueries()
-      setTrainerToRemove(null)
       toast({
         title: 'Trainer removed',
-        description: `${trainerToRemove.name} was removed from ${classItem.name}.`,
+        description: `${trainer.name} was removed from ${classItem.name}.`,
       })
     } catch (trainerError) {
       toast({
@@ -723,7 +756,7 @@ export default function ClassDetailPage() {
         variant: 'destructive',
       })
     } finally {
-      setTrainerAction(null)
+      updatePendingTrainerRemovalState(trainer.id, false)
     }
   }
 
@@ -881,133 +914,146 @@ export default function ClassDetailPage() {
         </Card>
 
         {isAdmin ? (
-          <Card>
-            <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle>Trainers</CardTitle>
-                <CardDescription>
-                  Assign or remove trainer-title staff for this class.
-                </CardDescription>
-              </div>
-              <Button
-                type="button"
-                onClick={() => setShowAddTrainerDialog(true)}
-                disabled={trainersQuery.isLoading || staffQuery.isLoading}
-              >
-                <Plus className="h-4 w-4" />
-                Add Trainer
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {trainersQuery.isLoading ? (
-                <>
-                  <Skeleton className="h-16 w-full" />
-                  <Skeleton className="h-16 w-full" />
-                </>
-              ) : trainersQuery.error ? (
-                <p className="text-sm text-destructive">
-                  {trainersQuery.error instanceof Error
-                    ? trainersQuery.error.message
-                    : 'Failed to load class trainers.'}
-                </p>
-              ) : trainersQuery.trainers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No trainers assigned to this class
-                </p>
-              ) : (
-                trainersQuery.trainers.map((trainer) => (
-                  <div
-                    key={trainer.id}
-                    className="flex items-start justify-between gap-4 rounded-lg border p-3"
-                  >
-                    <div className="space-y-2">
-                      <p className="font-medium">{trainer.name}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {trainer.titles.length > 0 ? (
-                          trainer.titles.map((title) => (
-                            <Badge key={title} variant="outline">
-                              {title}
-                            </Badge>
-                          ))
-                        ) : (
-                          <Badge variant="outline">No title assigned</Badge>
-                        )}
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setTrainerToRemove(trainer)}
-                      disabled={isRemovingTrainer}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Remove
-                    </Button>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        ) : null}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="flex flex-col">
+              <CardHeader className="gap-4">
+                <div>
+                  <CardTitle>Trainers</CardTitle>
+                  <CardDescription>
+                    Assign or remove trainer-title staff for this class.
+                  </CardDescription>
+                </div>
+                <Button
+                  type="button"
+                  className="w-full"
+                  onClick={() => setShowAddTrainerDialog(true)}
+                  disabled={trainersQuery.isLoading || staffQuery.isLoading}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Trainer
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {trainersQuery.isLoading ? (
+                  <>
+                    <Skeleton className="h-16 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                  </>
+                ) : trainersQuery.error ? (
+                  <p className="text-sm text-destructive">
+                    {trainersQuery.error instanceof Error
+                      ? trainersQuery.error.message
+                      : 'Failed to load class trainers.'}
+                  </p>
+                ) : trainersQuery.trainers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No trainers assigned to this class
+                  </p>
+                ) : (
+                  trainersQuery.trainers.map((trainer) => {
+                    const isRemovingTrainer = pendingTrainerRemovalIds.has(trainer.id)
 
-        {isAdmin ? (
-          <Card>
-            <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle>Schedule</CardTitle>
-                <CardDescription>
-                  Manage recurring class rules used to preview and generate current-period sessions.
-                </CardDescription>
-              </div>
-              <Button type="button" onClick={() => setShowAddRuleDialog(true)}>
-                <Plus className="h-4 w-4" />
-                Add Rule
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {scheduleRulesQuery.isLoading ? (
-                <>
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                </>
-              ) : scheduleRulesQuery.error ? (
-                <p className="text-sm text-destructive">
-                  {scheduleRulesQuery.error instanceof Error
-                    ? scheduleRulesQuery.error.message
-                    : 'Failed to load schedule rules.'}
-                </p>
-              ) : sortedScheduleRules.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No schedule rules added for this class yet.
-                </p>
-              ) : (
-                sortedScheduleRules.map((rule) => (
-                  <div
-                    key={rule.id}
-                    className="flex items-center justify-between gap-4 rounded-lg border p-3"
-                  >
-                    <div>
-                      <p className="font-medium">{getClassDayOfWeekLabel(rule.day_of_week)}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatClassTime(rule.session_time)}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Delete ${getClassDayOfWeekLabel(rule.day_of_week)} schedule rule`}
-                      disabled={deletingRuleId === rule.id}
-                      onClick={() => void handleDeleteScheduleRule(rule.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+                    return (
+                      <div
+                        key={trainer.id}
+                        className="flex items-start justify-between gap-4 rounded-lg border p-3"
+                      >
+                        <div className="space-y-2">
+                          <p className="font-medium">{trainer.name}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {trainer.titles.length > 0 ? (
+                              trainer.titles.map((title) => (
+                                <Badge key={title} variant="outline">
+                                  {title}
+                                </Badge>
+                              ))
+                            ) : (
+                              <Badge variant="outline">No title assigned</Badge>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          aria-label={`Remove trainer ${trainer.name}`}
+                          onClick={() => setTrainerToRemove(trainer)}
+                          disabled={isRemovingTrainer}
+                          loading={isRemovingTrainer}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Remove
+                        </Button>
+                      </div>
+                    )
+                  })
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="flex flex-col">
+              <CardHeader className="gap-4">
+                <div>
+                  <CardTitle>Schedule</CardTitle>
+                  <CardDescription>
+                    Manage recurring class rules used to preview and generate current-period sessions.
+                  </CardDescription>
+                </div>
+                <Button type="button" className="w-full" onClick={() => setShowAddRuleDialog(true)}>
+                  <Plus className="h-4 w-4" />
+                  Add Rule
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {scheduleRulesQuery.isLoading ? (
+                  <>
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                  </>
+                ) : scheduleRulesQuery.error ? (
+                  <p className="text-sm text-destructive">
+                    {scheduleRulesQuery.error instanceof Error
+                      ? scheduleRulesQuery.error.message
+                      : 'Failed to load schedule rules.'}
+                  </p>
+                ) : sortedScheduleRules.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No schedule rules added for this class yet.
+                  </p>
+                ) : (
+                  sortedScheduleRules.map((rule) => {
+                    const isDeletingRule = pendingScheduleRuleIds.has(rule.id)
+
+                    return (
+                      <div
+                        key={rule.id}
+                        className="flex items-center justify-between gap-4 rounded-lg border p-3"
+                      >
+                        <div>
+                          <p className="font-medium">{getClassDayOfWeekLabel(rule.day_of_week)}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {formatClassTime(rule.session_time)}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          aria-label={`Remove ${getClassDayOfWeekLabel(rule.day_of_week)} schedule rule`}
+                          disabled={isDeletingRule}
+                          loading={isDeletingRule}
+                          onClick={() => void handleDeleteScheduleRule(rule.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Remove
+                        </Button>
+                      </div>
+                    )
+                  })
+                )}
+              </CardContent>
+            </Card>
+          </div>
         ) : null}
 
         {isAdmin ? (
@@ -1254,7 +1300,6 @@ export default function ClassDetailPage() {
         cancelLabel="Cancel"
         onConfirm={() => void handleRemoveTrainer()}
         onCancel={() => setTrainerToRemove(null)}
-        isLoading={isRemovingTrainer}
         variant="destructive"
       />
 

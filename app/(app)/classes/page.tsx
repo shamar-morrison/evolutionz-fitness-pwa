@@ -8,7 +8,6 @@ import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
@@ -59,9 +58,8 @@ export default function ClassesPage() {
         <div className="grid gap-4 xl:grid-cols-3">
           {classes.map((classItem) => (
             <Card key={classItem.id} className="h-full">
-              <CardHeader>
+              <CardHeader className="items-center">
                 <CardTitle>{classItem.name}</CardTitle>
-                <CardDescription>{classItem.schedule_description}</CardDescription>
                 <CardAction>
                   <Button asChild variant="outline" size="sm">
                     <Link data-progress href={`/classes/${classItem.id}`}>

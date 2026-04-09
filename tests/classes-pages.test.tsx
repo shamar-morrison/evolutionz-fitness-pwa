@@ -373,6 +373,18 @@ function getButton(container: HTMLDivElement, label: string) {
   return button
 }
 
+function getButtonByAriaLabel(container: HTMLDivElement, label: string) {
+  const button = Array.from(container.querySelectorAll('button')).find(
+    (candidate) => candidate.getAttribute('aria-label') === label,
+  )
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`${label} button not found.`)
+  }
+
+  return button
+}
+
 function getInputByLabel(container: HTMLDivElement, label: string) {
   const field = Array.from(container.querySelectorAll('input, select')).find((candidate) => {
     if (!(candidate instanceof HTMLElement)) {
@@ -409,17 +421,20 @@ async function clickButton(container: HTMLDivElement, label: string) {
 }
 
 async function clickButtonByAriaLabel(container: HTMLDivElement, label: string) {
-  const button = Array.from(container.querySelectorAll('button')).find(
-    (candidate) => candidate.getAttribute('aria-label') === label,
-  )
-
-  if (!(button instanceof HTMLButtonElement)) {
-    throw new Error(`${label} button not found.`)
-  }
-
   await act(async () => {
-    button.click()
+    getButtonByAriaLabel(container, label).click()
   })
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+
+  return { promise, resolve, reject }
 }
 
 async function setInputValue(
@@ -574,10 +589,18 @@ describe('classes pages', () => {
       root.render(<ClassDetailPage />)
     })
 
+    expect(getButton(container, 'Add Trainer').className).toContain('w-full')
+    expect(getButton(container, 'Add Rule').className).toContain('w-full')
     expect(container.textContent).toContain('Assign or remove trainer-title staff for this class.')
     expect(container.textContent).toContain('Add Trainer')
     expect(container.textContent).toContain('Schedule')
     expect(container.textContent).toContain('Add Rule')
+    expect(getButtonByAriaLabel(container, 'Remove trainer Jordan Trainer').textContent).toContain(
+      'Remove',
+    )
+    expect(getButtonByAriaLabel(container, 'Remove Monday schedule rule').textContent).toContain(
+      'Remove',
+    )
     expect(container.textContent).toContain('Generate Sessions')
     expect(container.textContent).toContain('Set Period Start')
     expect(container.textContent).toContain('Register')
@@ -685,7 +708,7 @@ describe('classes pages', () => {
       root.render(<ClassDetailPage />)
     })
 
-    await clickButton(container, 'Remove')
+    await clickButtonByAriaLabel(container, 'Remove trainer Jordan Trainer')
 
     expect(container.textContent).toContain('Remove trainer from class?')
 
@@ -697,6 +720,54 @@ describe('classes pages', () => {
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['classes', 'detail', 'class-1'],
+    })
+  })
+
+  it('shows row-scoped loading state while removing a trainer', async () => {
+    const trainers = [
+      {
+        id: 'trainer-1',
+        name: 'Jordan Trainer',
+        titles: ['Trainer'],
+      },
+      {
+        id: 'trainer-2',
+        name: 'Alex Coach',
+        titles: ['Trainer', 'Medical'],
+      },
+    ]
+    const deferred = createDeferred<void>()
+
+    useClassDetailMock.mockReturnValue({
+      classItem: buildClass({ trainers }),
+      isLoading: false,
+      error: null,
+    })
+    useClassTrainersMock.mockReturnValue({
+      trainers,
+      isLoading: false,
+      error: null,
+    })
+    removeClassTrainerMock.mockImplementationOnce(() => deferred.promise)
+
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    await clickButtonByAriaLabel(container, 'Remove trainer Jordan Trainer')
+    await clickButton(container, 'Remove Trainer')
+
+    const pendingButton = getButtonByAriaLabel(container, 'Remove trainer Jordan Trainer')
+    const idleButton = getButtonByAriaLabel(container, 'Remove trainer Alex Coach')
+
+    expect(pendingButton.disabled).toBe(true)
+    expect(pendingButton.querySelector('[aria-label="Loading"]')).not.toBeNull()
+    expect(idleButton.disabled).toBe(false)
+    expect(idleButton.querySelector('[aria-label="Loading"]')).toBeNull()
+
+    await act(async () => {
+      deferred.resolve(undefined)
+      await deferred.promise
     })
   })
 
@@ -716,6 +787,39 @@ describe('classes pages', () => {
     expect(createClassScheduleRuleMock).toHaveBeenCalledWith('class-1', {
       day_of_week: 4,
       session_time: '11:30',
+    })
+  })
+
+  it('shows row-scoped loading state while deleting a schedule rule', async () => {
+    const deferred = createDeferred<void>()
+
+    useClassScheduleRulesMock.mockReturnValue({
+      scheduleRules: [
+        buildScheduleRule({ id: 'rule-1', day_of_week: 1 }),
+        buildScheduleRule({ id: 'rule-2', day_of_week: 2, session_time: '11:00:00' }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+    deleteClassScheduleRuleMock.mockImplementationOnce(() => deferred.promise)
+
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    await clickButtonByAriaLabel(container, 'Remove Monday schedule rule')
+
+    const pendingButton = getButtonByAriaLabel(container, 'Remove Monday schedule rule')
+    const idleButton = getButtonByAriaLabel(container, 'Remove Tuesday schedule rule')
+
+    expect(pendingButton.disabled).toBe(true)
+    expect(pendingButton.querySelector('[aria-label="Loading"]')).not.toBeNull()
+    expect(idleButton.disabled).toBe(false)
+    expect(idleButton.querySelector('[aria-label="Loading"]')).toBeNull()
+
+    await act(async () => {
+      deferred.resolve(undefined)
+      await deferred.promise
     })
   })
 
