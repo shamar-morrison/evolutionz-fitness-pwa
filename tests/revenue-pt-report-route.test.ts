@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mockForbidden, resetServerAuthMocks } from '@/tests/support/server-auth'
+import {
+  mockAuthenticatedProfile,
+  mockForbidden,
+  resetServerAuthMocks,
+} from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -13,7 +17,7 @@ vi.mock('@/lib/server-auth', async () => {
   const mod = await import('@/tests/support/server-auth')
 
   return {
-    requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -88,7 +92,7 @@ describe('GET /api/reports/revenue/pt', () => {
     resetServerAuthMocks()
   })
 
-  it('returns the admin auth response when the user is forbidden', async () => {
+  it('returns the auth response when the user is forbidden', async () => {
     mockForbidden()
 
     const response = await GET(
@@ -96,6 +100,25 @@ describe('GET /api/reports/revenue/pt', () => {
     )
 
     expect(response.status).toBe(403)
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 when the authenticated profile lacks report permissions', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await GET(
+      new Request('http://localhost/api/reports/revenue/pt?from=2026-04-01&to=2026-04-30'),
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Forbidden',
+    })
     expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
   })
 
@@ -126,6 +149,24 @@ describe('GET /api/reports/revenue/pt', () => {
     await expect(reversedResponse.json()).resolves.toEqual({
       ok: false,
       error: 'From date must be on or before to date.',
+    })
+  })
+
+  it('returns a stable validation error payload for malformed query params', async () => {
+    const response = await GET(
+      new Request('http://localhost/api/reports/revenue/pt?from=bad&to=2026-04-30'),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Revenue report filters are invalid.',
+      details: [
+        {
+          field: 'from',
+          message: 'From date must use YYYY-MM-DD format.',
+        },
+      ],
     })
   })
 
@@ -281,5 +322,24 @@ describe('GET /api/reports/revenue/pt', () => {
       sessions: [],
       totalsByTrainer: [],
     })
+  })
+
+  it('returns a generic 500 response when an unexpected error occurs', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    getSupabaseAdminClientMock.mockImplementation(() => {
+      throw new Error('secret pt failure')
+    })
+
+    const response = await GET(
+      new Request('http://localhost/api/reports/revenue/pt?from=2026-04-01&to=2026-04-30'),
+    )
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Unexpected server error while loading the PT revenue report.',
+    })
+    expect(consoleErrorSpy).toHaveBeenCalled()
   })
 })
