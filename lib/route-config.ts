@@ -58,6 +58,9 @@ export const routeConfig: Record<string, RouteConfig> = {
   '/reports/class-payments': {
     allowedRoles: ['admin'],
   },
+  '/reports/revenue': {
+    allowedRoles: ['admin'],
+  },
   '/settings': {
     allowedRoles: ['admin'],
   },

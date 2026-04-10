@@ -76,10 +76,12 @@ export const queryKeys = {
       status: 'approved' | 'include-pending',
       includeZero: boolean,
     ) => ['reports', 'class-payments', startDate, endDate, status, includeZero] as const,
-    membershipRevenue: (filters: Record<string, string>) =>
-      ['reports', 'membershipRevenue', filters] as const,
-    overallRevenue: (filters: Record<string, string>) =>
-      ['reports', 'overallRevenue', filters] as const,
+    membershipRevenue: (from: string, to: string) =>
+      ['reports', 'membership-revenue', from, to] as const,
+    ptRevenue: (from: string, to: string) =>
+      ['reports', 'pt-revenue', from, to] as const,
+    overallRevenue: (from: string, to: string) =>
+      ['reports', 'overall-revenue', from, to] as const,
   },
   cards: {
     available: ['cards', 'available'] as const,

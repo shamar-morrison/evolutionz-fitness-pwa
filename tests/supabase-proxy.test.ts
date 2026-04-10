@@ -113,7 +113,7 @@ describe('updateSession', () => {
       titles: ['Owner'],
     })
 
-    const response = await updateSession(createRequest('/reports/pt-payments'))
+    const response = await updateSession(createRequest('/reports/revenue'))
 
     expect(response.status).toBe(200)
     expect(response.headers.get('location')).toBeNull()

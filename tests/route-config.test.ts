@@ -37,6 +37,7 @@ describe('route config helpers', () => {
     expect(isRouteAllowed('/dashboard', 'staff', ['Trainer'])).toBe(false)
     expect(isRouteAllowed('/reports/pt-payments', 'staff', ['Trainer'])).toBe(false)
     expect(isRouteAllowed('/reports/class-payments', 'staff', ['Trainer'])).toBe(false)
+    expect(isRouteAllowed('/reports/revenue', 'staff', ['Trainer'])).toBe(false)
   })
 
   it('allows administrative assistants on members and classes but not trainer or admin pages', () => {
@@ -59,6 +60,7 @@ describe('route config helpers', () => {
     expect(isRouteAllowed('/reports/class-payments', 'staff', ['Administrative Assistant'])).toBe(
       false,
     )
+    expect(isRouteAllowed('/reports/revenue', 'staff', ['Administrative Assistant'])).toBe(false)
     expect(isRouteAllowed('/trainer/schedule', 'staff', ['Administrative Assistant'])).toBe(
       false,
     )
@@ -126,6 +128,7 @@ describe('route config helpers', () => {
   it('keeps the admin-only report and settings routes configured', () => {
     expect(routeConfig['/reports/pt-payments']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports/class-payments']?.allowedRoles).toEqual(['admin'])
+    expect(routeConfig['/reports/revenue']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/settings']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports']).toBeUndefined()
   })

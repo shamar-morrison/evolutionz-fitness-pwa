@@ -99,6 +99,7 @@ const adminNavItems: NavItem[] = [
 const adminReportItems: NavItem[] = [
   { href: '/reports/pt-payments', label: 'PT Trainer Payments', icon: BarChart3 },
   { href: '/reports/class-payments', label: 'Group Class Payments', icon: BarChart3 },
+  { href: '/reports/revenue', label: 'Revenue Reports', icon: BarChart3 },
 ]
 
 const adminApprovalItems: NavItem[] = [
