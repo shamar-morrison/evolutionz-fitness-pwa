@@ -365,6 +365,78 @@ describe('membership expiry email reminder helpers', () => {
     })
   })
 
+  it('does not release the reservation when marking a successful send as sent fails', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T11:00:00.000Z'))
+
+    const { store, writtenLastRuns, markedSendRecords, releasedSendRecords } = createReminderStore({
+      settings: {
+        enabled: true,
+        dayOffsets: [3],
+        subjectTemplate: 'Expires soon',
+        bodyTemplate: 'Hi {{member_name}}',
+        lastRun: null,
+      },
+      recipientsByOffset: {
+        3: [
+          {
+            memberId: 'member-1',
+            memberName: 'Jane Doe',
+            email: 'jane@example.com',
+            endTime: '2026-04-13T23:59:59Z',
+          },
+        ],
+      },
+    })
+    const sendEmail = vi.fn().mockResolvedValue({
+      id: 'resend-1',
+    })
+
+    store.markSendRecordSent.mockRejectedValueOnce(new Error('Failed to persist sent status'))
+
+    await expect(
+      runMembershipExpiryEmailReminders({
+        store,
+        sendEmail,
+        now: new Date(),
+      }),
+    ).rejects.toThrow('Failed to persist sent status')
+
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(store.markSendRecordSent).toHaveBeenCalledWith({
+      memberId: 'member-1',
+      memberEndTime: '2026-04-13T23:59:59Z',
+      offsetDays: 3,
+      providerMessageId: 'resend-1',
+      sentAt: '2026-04-10T11:00:00.000Z',
+    })
+    expect(store.releaseReservedSendRecord).not.toHaveBeenCalled()
+    expect(markedSendRecords).toEqual([])
+    expect(releasedSendRecords).toEqual([])
+    expect(writtenLastRuns).toEqual([
+      {
+        status: 'running',
+        startedAt: '2026-04-10T11:00:00.000Z',
+        completedAt: null,
+        sentCount: 0,
+        skippedCount: 0,
+        duplicateCount: 0,
+        errorCount: 0,
+        message: 'Membership expiry reminder run in progress.',
+      },
+      {
+        status: 'failed',
+        startedAt: '2026-04-10T11:00:00.000Z',
+        completedAt: '2026-04-10T11:00:00.000Z',
+        sentCount: 0,
+        skippedCount: 0,
+        duplicateCount: 0,
+        errorCount: 0,
+        message: 'Failed to persist sent status',
+      },
+    ])
+  })
+
   it('writes a failed final summary when the store throws during the run', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-10T11:00:00.000Z'))

@@ -264,6 +264,8 @@ export async function runMembershipExpiryEmailReminders(input: {
           continue
         }
 
+        let providerMessageId: string | null = null
+
         try {
           const emailContent = renderMembershipExpiryEmailContent({
             subjectTemplate: settings.subjectTemplate,
@@ -278,17 +280,7 @@ export async function runMembershipExpiryEmailReminders(input: {
             text: emailContent.text,
             html: emailContent.html,
           })
-          const sentAt = new Date().toISOString()
-
-          await input.store.markSendRecordSent({
-            memberId: recipient.memberId,
-            memberEndTime: recipient.endTime,
-            offsetDays,
-            providerMessageId: sendResult.id,
-            sentAt,
-          })
-
-          sentCount += 1
+          providerMessageId = sendResult.id
         } catch (error) {
           await input.store.releaseReservedSendRecord({
             memberId: recipient.memberId,
@@ -298,7 +290,20 @@ export async function runMembershipExpiryEmailReminders(input: {
 
           errorCount += 1
           lastErrorMessage = error instanceof Error ? error.message : 'Unexpected reminder email error.'
+          continue
         }
+
+        const sentAt = new Date().toISOString()
+
+        await input.store.markSendRecordSent({
+          memberId: recipient.memberId,
+          memberEndTime: recipient.endTime,
+          offsetDays,
+          providerMessageId,
+          sentAt,
+        })
+
+        sentCount += 1
       }
     }
 

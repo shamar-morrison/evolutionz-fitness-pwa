@@ -1,7 +1,7 @@
 'use client'
 
 import { format } from 'date-fns'
-import { Calendar as CalendarIcon } from 'lucide-react'
+import { Calendar as CalendarIcon, CreditCard, RefreshCw } from 'lucide-react'
 import { type Dispatch, type SetStateAction } from 'react'
 import { Pattern } from '@/components/ui/file-upload'
 import { Button } from '@/components/ui/button'
@@ -123,15 +123,29 @@ export function MemberBasicFields({
       <div className="grid gap-2">
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor={`${idPrefix}-card-number`}>Available Access Card</Label>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onRefreshCards}
-            disabled={isSubmitting || isCardsLoading}
-          >
-            Refresh
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              disabled={isSubmitting}
+            >
+              <CreditCard className="h-3.5 w-3.5" />
+              Add Access Card
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={onRefreshCards}
+              disabled={isSubmitting || isCardsLoading}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
+            </Button>
+          </div>
         </div>
         <Select
           value={formData.selectedInventoryCardNo}
