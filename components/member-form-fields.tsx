@@ -53,6 +53,7 @@ type SharedMemberFieldsProps = {
 
 type MemberBasicFieldsProps = SharedMemberFieldsProps & {
   availableCards: AvailableAccessCard[]
+  canAddCard: boolean
   cardsError: string | null
   hasNoAvailableCards: boolean
   isCardsLoading: boolean
@@ -60,6 +61,7 @@ type MemberBasicFieldsProps = SharedMemberFieldsProps & {
   memberTypesError: string | null
   isMemberTypesLoading: boolean
   onRefreshCards: () => void
+  onAddCard: () => void
   selectedInventoryCard: AvailableAccessCard | null
 }
 
@@ -102,6 +104,7 @@ export function getDefaultMemberCardNo(cards: AvailableAccessCard[]) {
 
 export function MemberBasicFields({
   availableCards,
+  canAddCard,
   cardsError,
   formData,
   hasNoAvailableCards,
@@ -111,6 +114,7 @@ export function MemberBasicFields({
   isSubmitting,
   memberTypes,
   memberTypesError,
+  onAddCard,
   onRefreshCards,
   selectedInventoryCard,
   setFormData,
@@ -124,16 +128,19 @@ export function MemberBasicFields({
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor={`${idPrefix}-card-number`}>Available Access Card</Label>
           <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              disabled={isSubmitting}
-            >
-              <CreditCard className="h-3.5 w-3.5" />
-              Add Access Card
-            </Button>
+            {canAddCard ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={onAddCard}
+                disabled={isSubmitting}
+              >
+                <CreditCard className="h-3.5 w-3.5" />
+                Add Access Card
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="ghost"
@@ -177,12 +184,12 @@ export function MemberBasicFields({
           </SelectContent>
         </Select>
         {isCardsLoading ? (
-          <p className="text-xs text-muted-foreground">Fetching unassigned card records from Hik.</p>
+          <p className="text-xs text-muted-foreground">Fetching available unassigned cards.</p>
         ) : cardsError ? (
           <p className="text-xs text-destructive">{cardsError}</p>
         ) : hasNoAvailableCards ? (
           <p className="text-xs text-muted-foreground">
-            No unassigned cards are currently available from the imported inventory.
+            No unassigned cards are currently available.
           </p>
         ) : selectedInventoryCard && !hasSelectedCardCode ? (
           <p className="text-xs text-destructive">
@@ -190,7 +197,7 @@ export function MemberBasicFields({
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            {availableCards.length} unassigned card{availableCards.length === 1 ? '' : 's'} loaded from Hik.
+            {availableCards.length} unassigned card{availableCards.length === 1 ? '' : 's'} available.
           </p>
         )}
       </div>

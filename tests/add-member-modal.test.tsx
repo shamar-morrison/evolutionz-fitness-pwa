@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  createManualAccessCardMock,
   createMemberApprovalRequestMock,
   invalidateQueriesMock,
   onOpenChangeMock,
@@ -13,7 +14,9 @@ const {
   uploadMemberApprovalRequestPhotoMock,
   useAvailableCardsMock,
   useMemberTypesMock,
+  usePermissionsMock,
 } = vi.hoisted(() => ({
+  createManualAccessCardMock: vi.fn(),
   createMemberApprovalRequestMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   onOpenChangeMock: vi.fn(),
@@ -22,6 +25,7 @@ const {
   uploadMemberApprovalRequestPhotoMock: vi.fn(),
   useAvailableCardsMock: vi.fn(),
   useMemberTypesMock: vi.fn(),
+  usePermissionsMock: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -38,9 +42,24 @@ vi.mock('@/hooks/use-member-types', () => ({
   useMemberTypes: useMemberTypesMock,
 }))
 
+vi.mock('@/hooks/use-permissions', () => ({
+  usePermissions: usePermissionsMock,
+}))
+
 vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
 }))
+
+vi.mock('@/lib/available-cards', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/available-cards')>(
+    '@/lib/available-cards',
+  )
+
+  return {
+    ...actual,
+    createManualAccessCard: createManualAccessCardMock,
+  }
+})
 
 vi.mock('@/lib/member-approval-requests', async () => {
   const actual = await vi.importActual<typeof import('@/lib/member-approval-requests')>(
@@ -305,6 +324,15 @@ function mockMemberTypes(
   })
 }
 
+function mockPermissions(role: 'admin' | 'staff' = 'admin') {
+  usePermissionsMock.mockReturnValue({
+    can: vi.fn(),
+    requiresApproval: vi.fn(),
+    role,
+    permissions: new Set(),
+  })
+}
+
 describe('AddMemberModal', () => {
   let container: HTMLDivElement
   let root: Root
@@ -331,6 +359,7 @@ describe('AddMemberModal', () => {
       },
     ])
     mockMemberTypes()
+    mockPermissions()
   })
 
   afterEach(async () => {
@@ -417,6 +446,103 @@ describe('AddMemberModal', () => {
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Request submitted',
       description: 'Jane Doe was submitted for admin approval.',
+    })
+  })
+
+  it('opens the add access card modal, creates a card, and preselects it in Step 1', async () => {
+    createManualAccessCardMock.mockResolvedValue({
+      cardNo: '98765',
+      cardCode: 'N39',
+    })
+
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    await clickButton(container, 'Add Access Card')
+
+    const manualCardNumberInput = container.querySelector('#manual-card-number')
+    const manualCardCodeInput = container.querySelector('#manual-card-code')
+
+    if (
+      !(manualCardNumberInput instanceof HTMLInputElement) ||
+      !(manualCardCodeInput instanceof HTMLInputElement)
+    ) {
+      throw new Error('Manual card inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(manualCardNumberInput, ' 98765 ')
+      setInputValue(manualCardCodeInput, ' N39 ')
+    })
+
+    await clickButton(container, 'Create Card')
+    await flushAsyncWork()
+
+    expect(createManualAccessCardMock).toHaveBeenCalledWith({
+      cardNo: '98765',
+      cardCode: 'N39',
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['cards', 'manual-create'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['cards', 'available'],
+    })
+    expect(container.querySelector('#manual-card-number')).toBeNull()
+
+    const selectedCardTrigger = container.querySelector('#member-card-number')
+
+    if (!(selectedCardTrigger instanceof HTMLButtonElement)) {
+      throw new Error('Selected card trigger not found.')
+    }
+
+    expect(selectedCardTrigger.textContent).toContain('98765')
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Card added',
+      description: 'N39 — 98765 is now available.',
+    })
+  })
+
+  it('keeps the add access card modal open when manual card creation fails', async () => {
+    createManualAccessCardMock.mockRejectedValue(
+      new Error('A card with this number already exists.'),
+    )
+
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    await clickButton(container, 'Add Access Card')
+
+    const manualCardNumberInput = container.querySelector('#manual-card-number')
+    const manualCardCodeInput = container.querySelector('#manual-card-code')
+
+    if (
+      !(manualCardNumberInput instanceof HTMLInputElement) ||
+      !(manualCardCodeInput instanceof HTMLInputElement)
+    ) {
+      throw new Error('Manual card inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(manualCardNumberInput, '12345')
+      setInputValue(manualCardCodeInput, 'N39')
+    })
+
+    await clickButton(container, 'Create Card')
+    await flushAsyncWork()
+
+    expect(container.querySelector('#manual-card-number')).not.toBeNull()
+    expect(invalidateQueriesMock).not.toHaveBeenCalledWith({
+      queryKey: ['cards', 'manual-create'],
+    })
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Card creation failed',
+      description: 'A card with this number already exists.',
+      variant: 'destructive',
     })
   })
 

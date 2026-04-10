@@ -10,10 +10,12 @@ import {
   MemberBasicFields,
   MemberExtrasFields,
 } from '@/components/member-form-fields'
+import { AddAccessCardModal } from '@/components/add-access-card-modal'
 import { DialogStepForm, type DialogStep } from '@/components/dialog-step-form'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useAvailableCards } from '@/hooks/use-available-cards'
 import { useMemberTypes } from '@/hooks/use-member-types'
+import { usePermissions } from '@/hooks/use-permissions'
 import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { toast } from '@/hooks/use-toast'
 import { compressImage } from '@/lib/compress-image'
@@ -46,10 +48,16 @@ function revokePreviewUrl(previewUrl: string | null | undefined) {
 
 export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModalProps) {
   const queryClient = useQueryClient()
+  const { role } = usePermissions()
   const [submissionStep, setSubmissionStep] = useState<'idle' | 'submitting_request'>('idle')
   const [formData, setFormData] = useState(() => createInitialMemberFormState())
+  const [manuallyAddedCard, setManuallyAddedCard] = useState<{
+    cardNo: string
+    cardCode: string | null
+  } | null>(null)
   const [photoFile, setPhotoFile] = useState<FileWithPreview | null>(null)
   const [isStartDatePickerOpen, setIsStartDatePickerOpen] = useState(false)
+  const [isAddAccessCardModalOpen, setIsAddAccessCardModalOpen] = useState(false)
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const {
     cards: availableCards,
@@ -68,8 +76,9 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
   const minimumStartDate = useMemo(() => formatDateInputValue(new Date()), [open])
   const selectedInventoryCard = useMemo(
     () =>
-      availableCards.find((card) => card.cardNo === formData.selectedInventoryCardNo) ?? null,
-    [availableCards, formData.selectedInventoryCardNo],
+      availableCards.find((card) => card.cardNo === formData.selectedInventoryCardNo) ??
+      (manuallyAddedCard?.cardNo === formData.selectedInventoryCardNo ? manuallyAddedCard : null),
+    [availableCards, formData.selectedInventoryCardNo, manuallyAddedCard],
   )
   const hasSelectedCardCode = hasUsableCardCode(selectedInventoryCard?.cardCode)
   const calculatedEndDate = useMemo(
@@ -121,7 +130,9 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
 
   const resetModalState = () => {
     setSubmissionStep('idle')
+    setManuallyAddedCard(null)
     setIsStartDatePickerOpen(false)
+    setIsAddAccessCardModalOpen(false)
     setPhotoFile(null)
     setFormData(createInitialMemberFormState())
     setStep(1)
@@ -321,12 +332,12 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     {
       title: 'Add New Member',
       description: isCardsLoading
-        ? 'Loading imported unassigned cards.'
+        ? 'Loading available unassigned cards.'
         : cardsError
-          ? 'Could not load imported cards. Refresh the inventory and try again.'
+          ? 'Could not load available cards. Refresh the inventory and try again.'
           : hasNoAvailableCards
-            ? 'No imported unassigned cards are available. Import more cards into iVMS-4200 and re-sync.'
-            : 'Choose an imported unassigned card and enter the member’s basic profile.',
+            ? 'No unassigned cards are available. Sync cards from iVMS or add one manually.'
+            : 'Choose an available unassigned card and enter the member’s basic profile.',
       content: (
         <MemberBasicFields
           idPrefix="member"
@@ -334,6 +345,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           setFormData={setFormData}
           isSubmitting={isSubmitting}
           availableCards={availableCards}
+          canAddCard={role === 'admin'}
           selectedInventoryCard={selectedInventoryCard}
           isCardsLoading={isCardsLoading}
           cardsError={cardsError}
@@ -341,6 +353,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           memberTypes={memberTypes}
           memberTypesError={memberTypesError instanceof Error ? memberTypesError.message : null}
           isMemberTypesLoading={isMemberTypesLoading}
+          onAddCard={() => setIsAddAccessCardModalOpen(true)}
           onRefreshCards={() => {
             void refetchAvailableCards()
           }}
@@ -381,34 +394,48 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
   ]
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]"
-        isLoading={isSubmitting}
-      >
-        <DialogStepForm
-          steps={steps}
-          currentStep={step}
-          isSubmitting={isSubmitting}
-          onCancel={() => handleOpenChange(false)}
-          onBack={() => setStep((currentStep) => (currentStep === 3 ? 2 : 1))}
-          onNext={handleNextStep}
-          onSubmit={handleSubmit}
-          submitLabel="Submit Request"
-          submitLoadingLabel="Submitting Request..."
-          submitDisabled={
-            isSubmitting ||
-            !selectedInventoryCard ||
-            !hasSelectedCardCode ||
-            isCardsLoading ||
-            isMemberTypesLoading ||
-            !formData.memberTypeId ||
-            !formData.duration ||
-            !calculatedBeginTime ||
-            !calculatedEndTime
-          }
-        />
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent
+          className="max-h-[90vh] overflow-y-auto sm:max-w-[600px]"
+          isLoading={isSubmitting}
+        >
+          <DialogStepForm
+            steps={steps}
+            currentStep={step}
+            isSubmitting={isSubmitting}
+            onCancel={() => handleOpenChange(false)}
+            onBack={() => setStep((currentStep) => (currentStep === 3 ? 2 : 1))}
+            onNext={handleNextStep}
+            onSubmit={handleSubmit}
+            submitLabel="Submit Request"
+            submitLoadingLabel="Submitting Request..."
+            submitDisabled={
+              isSubmitting ||
+              !selectedInventoryCard ||
+              !hasSelectedCardCode ||
+              isCardsLoading ||
+              isMemberTypesLoading ||
+              !formData.memberTypeId ||
+              !formData.duration ||
+              !calculatedBeginTime ||
+              !calculatedEndTime
+            }
+          />
+        </DialogContent>
+      </Dialog>
+
+      <AddAccessCardModal
+        open={isAddAccessCardModalOpen}
+        onOpenChange={setIsAddAccessCardModalOpen}
+        onSuccess={(card) => {
+          setManuallyAddedCard(card)
+          setFormData((currentFormData) => ({
+            ...currentFormData,
+            selectedInventoryCardNo: card.cardNo,
+          }))
+        }}
+      />
+    </>
   )
 }

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  createManualAccessCard,
   fetchAvailableAccessCards,
   formatAvailableAccessCardLabel,
   normalizeAvailableAccessCards,
@@ -103,6 +104,64 @@ describe('available card helpers', () => {
       method: 'POST',
       cache: 'no-store',
     })
+  })
+
+  it('creates a manual access card through the manual cards route', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          card: {
+            cardNo: '1234567890',
+            cardCode: 'N39',
+          },
+        },
+        201,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      createManualAccessCard({
+        cardNo: ' 1234567890 ',
+        cardCode: ' N39 ',
+      }),
+    ).resolves.toEqual({
+      cardNo: '1234567890',
+      cardCode: 'N39',
+    })
+    expect(fetchMock).toHaveBeenCalledWith('/api/cards/manual', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        card_no: '1234567890',
+        card_code: 'N39',
+      }),
+    })
+  })
+
+  it('throws when manual card creation fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: false,
+          error: 'A card with this number already exists.',
+        },
+        409,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      createManualAccessCard({
+        cardNo: '1234567890',
+        cardCode: 'N39',
+      }),
+    ).rejects.toThrow('A card with this number already exists.')
   })
 
   it('throws when syncing available cards fails', async () => {

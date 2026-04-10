@@ -37,6 +37,16 @@ type SyncAvailableCardsErrorResponse = {
   error: string
 }
 
+type CreateManualAccessCardSuccessResponse = {
+  ok: true
+  card: AvailableAccessCard
+}
+
+type ErrorResponse = {
+  ok?: false
+  error: string
+}
+
 function compareCards(left: AvailableAccessCard, right: AvailableAccessCard) {
   return left.cardNo.localeCompare(right.cardNo)
 }
@@ -100,6 +110,19 @@ export function formatAvailableAccessCardLabel(card: AvailableAccessCard) {
   return card.cardCode ? `${card.cardCode} — ${card.cardNo}` : card.cardNo
 }
 
+function getErrorMessage(responseBody: unknown, fallback: string) {
+  if (
+    typeof responseBody === 'object' &&
+    responseBody !== null &&
+    'error' in responseBody &&
+    typeof responseBody.error === 'string'
+  ) {
+    return responseBody.error
+  }
+
+  return fallback
+}
+
 export async function fetchAvailableAccessCards(): Promise<AvailableAccessCard[]> {
   const response = await fetch('/api/access/cards/available', {
     method: 'GET',
@@ -125,6 +148,38 @@ export async function fetchAvailableAccessCards(): Promise<AvailableAccessCard[]
   return normalizeAvailableAccessCards({ cards: responseBody.cards })
 }
 
+export async function createManualAccessCard(input: {
+  cardNo: string
+  cardCode: string
+}): Promise<AvailableAccessCard> {
+  const response = await fetch('/api/cards/manual', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      card_no: input.cardNo.trim(),
+      card_code: input.cardCode.trim(),
+    }),
+  })
+
+  let responseBody: CreateManualAccessCardSuccessResponse | ErrorResponse | null = null
+
+  try {
+    responseBody = (await response.json()) as CreateManualAccessCardSuccessResponse | ErrorResponse
+  } catch {
+    responseBody = null
+  }
+
+  if (!response.ok || !responseBody || responseBody.ok === false) {
+    throw new Error(getErrorMessage(responseBody, 'Failed to create the access card.'))
+  }
+
+  const successResponse = responseBody as CreateManualAccessCardSuccessResponse
+
+  return normalizeAvailableAccessCards({ cards: [successResponse.card] })[0] ?? successResponse.card
+}
+
 export async function syncAvailableAccessCards(): Promise<number> {
   const response = await fetch('/api/access/cards/available', {
     method: 'POST',
@@ -142,11 +197,7 @@ export async function syncAvailableAccessCards(): Promise<number> {
   }
 
   if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(
-      responseBody && responseBody.ok === false
-        ? responseBody.error
-        : 'Failed to sync available cards.',
-    )
+    throw new Error(getErrorMessage(responseBody, 'Failed to sync available cards.'))
   }
 
   return normalizeSyncedAvailableCardsCount(responseBody)

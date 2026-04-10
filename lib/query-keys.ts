@@ -88,5 +88,6 @@ export const queryKeys = {
   },
   cards: {
     available: ['cards', 'available'] as const,
+    manualCreate: ['cards', 'manual-create'] as const,
   },
 } as const
