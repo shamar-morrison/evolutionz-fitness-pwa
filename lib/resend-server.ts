@@ -43,23 +43,42 @@ function getResendErrorMessage(responseBody: unknown) {
   return null
 }
 
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === 'AbortError'
+}
+
 export async function sendResendEmail(input: SendResendEmailInput): Promise<ResendSuccessResponse> {
   const apiKey = getRequiredServerEnv('RESEND_API_KEY')
   const fromAddress = getRequiredServerEnv('MEMBERSHIP_EXPIRY_EMAIL_FROM')
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: fromAddress,
-      to: [input.to],
-      subject: input.subject,
-      text: input.text,
-      html: input.html,
-    }),
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 10_000)
+  let response: Response
+
+  try {
+    response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: fromAddress,
+        to: [input.to],
+        subject: input.subject,
+        text: input.text,
+        html: input.html,
+      }),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error('Timed out while sending the reminder email.')
+    }
+
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
 
   let responseBody: ResendSuccessResponse | ResendErrorResponse | null = null
 

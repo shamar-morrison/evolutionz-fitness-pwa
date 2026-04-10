@@ -15,11 +15,11 @@ async function authorizeRequest(request: Request) {
   const authResult = await requireAdminUser()
 
   if ('response' in authResult) {
-    if (!cronSecret) {
-      throw new Error('Missing required server environment variable: CRON_SECRET')
-    }
-
     return authResult.response
+  }
+
+  if (!cronSecret) {
+    throw new Error('Missing required server environment variable: CRON_SECRET')
   }
 
   return null

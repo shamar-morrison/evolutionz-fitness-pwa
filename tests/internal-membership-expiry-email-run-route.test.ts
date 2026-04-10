@@ -92,8 +92,8 @@ describe('GET /api/internal/membership-expiry-emails/run', () => {
     })
   })
 
-  it('allows an authenticated admin to run the job without the cron bearer header', async () => {
-    delete process.env.CRON_SECRET
+  it('allows an authenticated admin to run the job without the cron bearer header when CRON_SECRET is configured', async () => {
+    process.env.CRON_SECRET = 'cron-secret'
     mockAdminUser()
     const supabase = { tag: 'supabase-client' }
     const store = { tag: 'store' }
@@ -142,9 +142,21 @@ describe('GET /api/internal/membership-expiry-emails/run', () => {
     expect(runMembershipExpiryEmailRemindersMock).not.toHaveBeenCalled()
   })
 
-  it('returns 500 when CRON_SECRET is missing and admin auth also fails', async () => {
+  it('returns 401 when CRON_SECRET is missing and admin auth fails', async () => {
     delete process.env.CRON_SECRET
     mockUnauthorized()
+
+    const response = await GET(new Request('http://localhost/api/internal/membership-expiry-emails/run'))
+
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Unauthorized',
+    })
+  })
+
+  it('returns 500 when CRON_SECRET is missing after admin auth succeeds', async () => {
+    delete process.env.CRON_SECRET
+    mockAdminUser()
 
     const response = await GET(new Request('http://localhost/api/internal/membership-expiry-emails/run'))
 

@@ -6,7 +6,6 @@ import { formatClassDate, formatOptionalJmd } from '@/lib/classes'
 import { Button } from '@/components/ui/button'
 import {
   Card,
-  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
@@ -58,15 +57,8 @@ export default function ClassesPage() {
         <div className="grid gap-4 xl:grid-cols-3">
           {classes.map((classItem) => (
             <Card key={classItem.id} className="h-full">
-              <CardHeader className="items-center">
+              <CardHeader>
                 <CardTitle>{classItem.name}</CardTitle>
-                <CardAction>
-                  <Button asChild variant="outline" size="sm">
-                    <Link data-progress href={`/classes/${classItem.id}`}>
-                      View
-                    </Link>
-                  </Button>
-                </CardAction>
               </CardHeader>
               <CardContent className="space-y-3">
                 <ClassSummaryRow
@@ -93,6 +85,11 @@ export default function ClassesPage() {
                   label="Current period start"
                   value={formatClassDate(classItem.current_period_start)}
                 />
+                <Button asChild variant="outline" className="w-full mt-2">
+                  <Link data-progress href={`/classes/${classItem.id}`}>
+                    View
+                  </Link>
+                </Button>
               </CardContent>
             </Card>
           ))}

@@ -40,18 +40,23 @@ export type MembershipExpiryEmailReminderStore = {
     startInclusive: string
     endExclusive: string
   }): Promise<MembershipExpiryEmailReminderRecipient[]>
-  hasSendRecord(input: {
-    memberId: string
-    memberEndTime: string
-    offsetDays: number
-  }): Promise<boolean>
-  createSendRecord(input: {
+  reserveSendRecord(input: {
     memberId: string
     recipientEmail: string
     memberEndTime: string
     offsetDays: number
+  }): Promise<boolean>
+  markSendRecordSent(input: {
+    memberId: string
+    memberEndTime: string
+    offsetDays: number
     providerMessageId: string | null
     sentAt: string
+  }): Promise<void>
+  releaseReservedSendRecord(input: {
+    memberId: string
+    memberEndTime: string
+    offsetDays: number
   }): Promise<void>
 }
 
@@ -107,40 +112,76 @@ export function createSupabaseMembershipExpiryEmailReminderStore(
         endTime: normalizeText(row.end_time),
       }))
     },
-    async hasSendRecord({ memberId, memberEndTime, offsetDays }) {
+    async reserveSendRecord({
+      memberId,
+      recipientEmail,
+      memberEndTime,
+      offsetDays,
+    }) {
       const { data, error } = await supabase
         .from(MEMBERSHIP_EXPIRY_EMAIL_SENDS_TABLE)
+        .upsert(
+          {
+            member_id: memberId,
+            recipient_email: recipientEmail,
+            member_end_time: memberEndTime,
+            offset_days: offsetDays,
+            status: 'pending',
+          },
+          {
+            onConflict: 'member_id,member_end_time,offset_days',
+            ignoreDuplicates: true,
+          },
+        )
         .select('id')
-        .eq('member_id', memberId)
-        .eq('member_end_time', memberEndTime)
-        .eq('offset_days', offsetDays)
         .maybeSingle()
 
       if (error) {
-        throw new Error(`Failed to read membership expiry email send records: ${error.message}`)
+        throw new Error(`Failed to reserve membership expiry email send: ${error.message}`)
       }
 
       return Boolean(data)
     },
-    async createSendRecord({
+    async markSendRecordSent({
       memberId,
-      recipientEmail,
       memberEndTime,
       offsetDays,
       providerMessageId,
       sentAt,
     }) {
-      const { error } = await supabase.from(MEMBERSHIP_EXPIRY_EMAIL_SENDS_TABLE).insert({
-        member_id: memberId,
-        recipient_email: recipientEmail,
-        member_end_time: memberEndTime,
-        offset_days: offsetDays,
-        provider_message_id: providerMessageId,
-        sent_at: sentAt,
-      })
+      const { data, error } = await supabase
+        .from(MEMBERSHIP_EXPIRY_EMAIL_SENDS_TABLE)
+        .update({
+          provider_message_id: providerMessageId,
+          sent_at: sentAt,
+          status: 'sent',
+        })
+        .eq('member_id', memberId)
+        .eq('member_end_time', memberEndTime)
+        .eq('offset_days', offsetDays)
+        .eq('status', 'pending')
+        .select('id')
+        .maybeSingle()
 
       if (error) {
-        throw new Error(`Failed to record membership expiry email send: ${error.message}`)
+        throw new Error(`Failed to mark membership expiry email send as sent: ${error.message}`)
+      }
+
+      if (!data) {
+        throw new Error('Failed to mark membership expiry email send as sent: reservation not found.')
+      }
+    },
+    async releaseReservedSendRecord({ memberId, memberEndTime, offsetDays }) {
+      const { error } = await supabase
+        .from(MEMBERSHIP_EXPIRY_EMAIL_SENDS_TABLE)
+        .delete()
+        .eq('member_id', memberId)
+        .eq('member_end_time', memberEndTime)
+        .eq('offset_days', offsetDays)
+        .eq('status', 'pending')
+
+      if (error) {
+        throw new Error(`Failed to release reserved membership expiry email send: ${error.message}`)
       }
     },
   }
@@ -153,8 +194,6 @@ export async function runMembershipExpiryEmailReminders(input: {
 }) {
   const now = input.now ?? new Date()
   const startedAt = now.toISOString()
-  const settings = await input.store.readSettings()
-
   const runningSummary = createMembershipExpiryEmailLastRun({
     status: 'running',
     startedAt,
@@ -162,116 +201,139 @@ export async function runMembershipExpiryEmailReminders(input: {
     message: 'Membership expiry reminder run in progress.',
   })
 
-  await input.store.writeLastRun(runningSummary)
+  try {
+    await input.store.writeLastRun(runningSummary)
 
-  if (!settings.enabled) {
-    const completedSummary = createMembershipExpiryEmailLastRun({
-      status: 'success',
-      startedAt,
-      completedAt: new Date().toISOString(),
-      message: 'Membership expiry email reminders are disabled.',
-    })
+    const settings = await input.store.readSettings()
 
-    await input.store.writeLastRun(completedSummary)
-
-    return completedSummary
-  }
-
-  if (settings.dayOffsets.length === 0) {
-    const completedSummary = createMembershipExpiryEmailLastRun({
-      status: 'success',
-      startedAt,
-      completedAt: new Date().toISOString(),
-      message: 'No membership expiry email day offsets are configured.',
-    })
-
-    await input.store.writeLastRun(completedSummary)
-
-    return completedSummary
-  }
-
-  let sentCount = 0
-  let skippedCount = 0
-  let duplicateCount = 0
-  let errorCount = 0
-  let lastErrorMessage: string | null = null
-
-  for (const offsetDays of settings.dayOffsets) {
-    const { startInclusive, endExclusive } = getJamaicaDayWindow(now, offsetDays)
-    const recipients = await input.store.readRecipientsForOffset({
-      offsetDays,
-      startInclusive,
-      endExclusive,
-    })
-
-    for (const recipient of recipients) {
-      if (!recipient.email) {
-        skippedCount += 1
-        continue
-      }
-
-      const alreadySent = await input.store.hasSendRecord({
-        memberId: recipient.memberId,
-        memberEndTime: recipient.endTime,
-        offsetDays,
+    if (!settings.enabled) {
+      const completedSummary = createMembershipExpiryEmailLastRun({
+        status: 'success',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        message: 'Membership expiry email reminders are disabled.',
       })
 
-      if (alreadySent) {
-        duplicateCount += 1
-        continue
-      }
+      await input.store.writeLastRun(completedSummary)
 
-      try {
-        const emailContent = renderMembershipExpiryEmailContent({
-          subjectTemplate: settings.subjectTemplate,
-          bodyTemplate: settings.bodyTemplate,
-          memberName: recipient.memberName,
-          endTime: recipient.endTime,
-          now,
-        })
-        const sendResult = await input.sendEmail({
-          to: recipient.email,
-          subject: emailContent.subject,
-          text: emailContent.text,
-          html: emailContent.html,
-        })
-        const sentAt = new Date().toISOString()
+      return completedSummary
+    }
 
-        await input.store.createSendRecord({
+    if (settings.dayOffsets.length === 0) {
+      const completedSummary = createMembershipExpiryEmailLastRun({
+        status: 'success',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        message: 'No membership expiry email day offsets are configured.',
+      })
+
+      await input.store.writeLastRun(completedSummary)
+
+      return completedSummary
+    }
+
+    let sentCount = 0
+    let skippedCount = 0
+    let duplicateCount = 0
+    let errorCount = 0
+    let lastErrorMessage: string | null = null
+
+    for (const offsetDays of settings.dayOffsets) {
+      const { startInclusive, endExclusive } = getJamaicaDayWindow(now, offsetDays)
+      const recipients = await input.store.readRecipientsForOffset({
+        offsetDays,
+        startInclusive,
+        endExclusive,
+      })
+
+      for (const recipient of recipients) {
+        if (!recipient.email) {
+          skippedCount += 1
+          continue
+        }
+
+        const reserved = await input.store.reserveSendRecord({
           memberId: recipient.memberId,
           recipientEmail: recipient.email,
           memberEndTime: recipient.endTime,
           offsetDays,
-          providerMessageId: sendResult.id,
-          sentAt,
         })
 
-        sentCount += 1
-      } catch (error) {
-        errorCount += 1
-        lastErrorMessage = error instanceof Error ? error.message : 'Unexpected reminder email error.'
+        if (!reserved) {
+          duplicateCount += 1
+          continue
+        }
+
+        try {
+          const emailContent = renderMembershipExpiryEmailContent({
+            subjectTemplate: settings.subjectTemplate,
+            bodyTemplate: settings.bodyTemplate,
+            memberName: recipient.memberName,
+            endTime: recipient.endTime,
+            now,
+          })
+          const sendResult = await input.sendEmail({
+            to: recipient.email,
+            subject: emailContent.subject,
+            text: emailContent.text,
+            html: emailContent.html,
+          })
+          const sentAt = new Date().toISOString()
+
+          await input.store.markSendRecordSent({
+            memberId: recipient.memberId,
+            memberEndTime: recipient.endTime,
+            offsetDays,
+            providerMessageId: sendResult.id,
+            sentAt,
+          })
+
+          sentCount += 1
+        } catch (error) {
+          await input.store.releaseReservedSendRecord({
+            memberId: recipient.memberId,
+            memberEndTime: recipient.endTime,
+            offsetDays,
+          })
+
+          errorCount += 1
+          lastErrorMessage = error instanceof Error ? error.message : 'Unexpected reminder email error.'
+        }
       }
     }
-  }
 
-  const completedAt = new Date().toISOString()
-  const status =
-    errorCount > 0 ? (sentCount > 0 ? 'partial' : 'failed') : 'success'
-  const finalSummary = createMembershipExpiryEmailLastRun({
-    status,
-    startedAt,
-    completedAt,
-    sentCount,
-    skippedCount,
-    duplicateCount,
-    errorCount,
-    message: lastErrorMessage,
-  })
+    const completedAt = new Date().toISOString()
+    const status =
+      errorCount > 0 ? (sentCount > 0 ? 'partial' : 'failed') : 'success'
+    const finalSummary = createMembershipExpiryEmailLastRun({
+      status,
+      startedAt,
+      completedAt,
+      sentCount,
+      skippedCount,
+      duplicateCount,
+      errorCount,
+      message: lastErrorMessage,
+    })
 
-  await input.store.writeLastRun(finalSummary)
+    await input.store.writeLastRun(finalSummary)
 
-  return {
-    ...finalSummary,
-    message: buildRunMessage(finalSummary),
+    return {
+      ...finalSummary,
+      message: buildRunMessage(finalSummary),
+    }
+  } catch (error) {
+    const completedAt = new Date().toISOString()
+
+    await input.store.writeLastRun(
+      createMembershipExpiryEmailLastRun({
+        status: 'failed',
+        startedAt,
+        completedAt,
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    )
+
+    throw error
   }
 }

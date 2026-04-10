@@ -23,19 +23,32 @@ function createReminderStore(options: {
   existingSendKeys?: string[]
 } = {}) {
   const writtenLastRuns: MembershipExpiryEmailLastRun[] = []
-  const createdSendRecords: Array<{
+  const reservedSendRecords: Array<{
     memberId: string
     recipientEmail: string
+    memberEndTime: string
+    offsetDays: number
+  }> = []
+  const markedSendRecords: Array<{
+    memberId: string
     memberEndTime: string
     offsetDays: number
     providerMessageId: string | null
     sentAt: string
   }> = []
-  const sendKeys = new Set(options.existingSendKeys ?? [])
+  const releasedSendRecords: Array<{
+    memberId: string
+    memberEndTime: string
+    offsetDays: number
+  }> = []
+  const reservedKeys = new Set<string>()
+  const completedKeys = new Set(options.existingSendKeys ?? [])
 
   return {
     writtenLastRuns,
-    createdSendRecords,
+    reservedSendRecords,
+    markedSendRecords,
+    releasedSendRecords,
     store: {
       readSettings: vi.fn().mockResolvedValue(
         options.settings ?? {
@@ -53,28 +66,50 @@ function createReminderStore(options: {
         async ({ offsetDays }: { offsetDays: number }) =>
           options.recipientsByOffset?.[offsetDays] ?? [],
       ),
-      hasSendRecord: vi.fn(
-        async ({
-          memberId,
-          memberEndTime,
-          offsetDays,
-        }: {
-          memberId: string
-          memberEndTime: string
-          offsetDays: number
-        }) => sendKeys.has(buildDuplicateKey(memberId, memberEndTime, offsetDays)),
-      ),
-      createSendRecord: vi.fn(
+      reserveSendRecord: vi.fn(
         async (record: {
           memberId: string
           recipientEmail: string
           memberEndTime: string
           offsetDays: number
+        }) => {
+          const key = buildDuplicateKey(record.memberId, record.memberEndTime, record.offsetDays)
+
+          if (completedKeys.has(key) || reservedKeys.has(key)) {
+            return false
+          }
+
+          reservedSendRecords.push(record)
+          reservedKeys.add(key)
+
+          return true
+        },
+      ),
+      markSendRecordSent: vi.fn(
+        async (record: {
+          memberId: string
+          memberEndTime: string
+          offsetDays: number
           providerMessageId: string | null
           sentAt: string
         }) => {
-          createdSendRecords.push(record)
-          sendKeys.add(buildDuplicateKey(record.memberId, record.memberEndTime, record.offsetDays))
+          const key = buildDuplicateKey(record.memberId, record.memberEndTime, record.offsetDays)
+
+          reservedKeys.delete(key)
+          completedKeys.add(key)
+          markedSendRecords.push(record)
+        },
+      ),
+      releaseReservedSendRecord: vi.fn(
+        async (record: {
+          memberId: string
+          memberEndTime: string
+          offsetDays: number
+        }) => {
+          const key = buildDuplicateKey(record.memberId, record.memberEndTime, record.offsetDays)
+
+          reservedKeys.delete(key)
+          releasedSendRecords.push(record)
         },
       ),
     },
@@ -169,7 +204,7 @@ describe('membership expiry email reminder helpers', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-10T11:00:00.000Z'))
 
-    const { store, createdSendRecords } = createReminderStore({
+    const { store, reservedSendRecords, markedSendRecords, releasedSendRecords } = createReminderStore({
       settings: {
         enabled: true,
         dayOffsets: [7, 1],
@@ -229,15 +264,23 @@ describe('membership expiry email reminder helpers', () => {
       text: 'Hi Jane Doe',
       html: 'Hi Jane Doe',
     })
-    expect(createdSendRecords).toEqual([
+    expect(reservedSendRecords).toEqual([
       expect.objectContaining({
         memberId: 'member-1',
         recipientEmail: 'jane@example.com',
         memberEndTime: '2026-04-17T23:59:59Z',
         offsetDays: 7,
+      }),
+    ])
+    expect(markedSendRecords).toEqual([
+      expect.objectContaining({
+        memberId: 'member-1',
+        memberEndTime: '2026-04-17T23:59:59Z',
+        offsetDays: 7,
         providerMessageId: 'resend-1',
       }),
     ])
+    expect(releasedSendRecords).toEqual([])
     expect(summary).toEqual({
       status: 'success',
       startedAt: '2026-04-10T11:00:00.000Z',
@@ -254,7 +297,7 @@ describe('membership expiry email reminder helpers', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-10T11:00:00.000Z'))
 
-    const { store, writtenLastRuns, createdSendRecords } = createReminderStore({
+    const { store, writtenLastRuns, markedSendRecords, releasedSendRecords } = createReminderStore({
       settings: {
         enabled: true,
         dayOffsets: [3],
@@ -292,7 +335,14 @@ describe('membership expiry email reminder helpers', () => {
       now: new Date(),
     })
 
-    expect(createdSendRecords).toHaveLength(1)
+    expect(markedSendRecords).toHaveLength(1)
+    expect(releasedSendRecords).toEqual([
+      {
+        memberId: 'member-2',
+        memberEndTime: '2026-04-13T23:59:59Z',
+        offsetDays: 3,
+      },
+    ])
     expect(summary).toEqual({
       status: 'partial',
       startedAt: '2026-04-10T11:00:00.000Z',
@@ -313,5 +363,53 @@ describe('membership expiry email reminder helpers', () => {
       errorCount: 1,
       message: 'Resend unavailable',
     })
+  })
+
+  it('writes a failed final summary when the store throws during the run', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T11:00:00.000Z'))
+
+    const { store, writtenLastRuns } = createReminderStore({
+      settings: {
+        enabled: true,
+        dayOffsets: [7],
+        subjectTemplate: 'Expires soon',
+        bodyTemplate: 'Hi {{member_name}}',
+        lastRun: null,
+      },
+    })
+
+    store.readRecipientsForOffset.mockRejectedValueOnce(new Error('Database unavailable'))
+
+    await expect(
+      runMembershipExpiryEmailReminders({
+        store,
+        sendEmail: vi.fn(),
+        now: new Date(),
+      }),
+    ).rejects.toThrow('Database unavailable')
+
+    expect(writtenLastRuns).toEqual([
+      {
+        status: 'running',
+        startedAt: '2026-04-10T11:00:00.000Z',
+        completedAt: null,
+        sentCount: 0,
+        skippedCount: 0,
+        duplicateCount: 0,
+        errorCount: 0,
+        message: 'Membership expiry reminder run in progress.',
+      },
+      {
+        status: 'failed',
+        startedAt: '2026-04-10T11:00:00.000Z',
+        completedAt: '2026-04-10T11:00:00.000Z',
+        sentCount: 0,
+        skippedCount: 0,
+        duplicateCount: 0,
+        errorCount: 0,
+        message: 'Database unavailable',
+      },
+    ])
   })
 })
