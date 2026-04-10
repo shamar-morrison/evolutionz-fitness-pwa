@@ -68,7 +68,7 @@ describe('updateSession', () => {
     expect(response.headers.get('location')).toBe('http://localhost/login')
   })
 
-  it('redirects authenticated /login requests to /dashboard', async () => {
+  it('redirects authenticated /login requests to /dashboard for admins', async () => {
     mockSupabaseUser({
       id: 'user-1',
       email: 'admin@evolutionzfitness.com',
@@ -76,6 +76,7 @@ describe('updateSession', () => {
     readStaffProfileMock.mockResolvedValue({
       id: 'user-1',
       role: 'admin',
+      titles: ['Owner'],
     })
 
     const response = await updateSession(createRequest('/login'))
@@ -84,7 +85,7 @@ describe('updateSession', () => {
     expect(response.headers.get('location')).toBe('http://localhost/dashboard')
   })
 
-  it('redirects authenticated staff /login requests to /trainer/schedule', async () => {
+  it('redirects authenticated /login requests to /trainer/schedule for staff', async () => {
     mockSupabaseUser({
       id: 'user-2',
       email: 'trainer@evolutionzfitness.com',
@@ -92,6 +93,7 @@ describe('updateSession', () => {
     readStaffProfileMock.mockResolvedValue({
       id: 'user-2',
       role: 'staff',
+      titles: ['Trainer'],
     })
 
     const response = await updateSession(createRequest('/login'))
@@ -100,7 +102,7 @@ describe('updateSession', () => {
     expect(response.headers.get('location')).toBe('http://localhost/trainer/schedule')
   })
 
-  it('allows authenticated non-login page requests through', async () => {
+  it('allows admins through protected routes', async () => {
     mockSupabaseUser({
       id: 'user-1',
       email: 'admin@evolutionzfitness.com',
@@ -108,12 +110,64 @@ describe('updateSession', () => {
     readStaffProfileMock.mockResolvedValue({
       id: 'user-1',
       role: 'admin',
+      titles: ['Owner'],
+    })
+
+    const response = await updateSession(createRequest('/reports/pt-payments'))
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('location')).toBeNull()
+  })
+
+  it('redirects trainers away from members list to /trainer/schedule', async () => {
+    mockSupabaseUser({
+      id: 'trainer-1',
+      email: 'trainer@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'trainer-1',
+      role: 'staff',
+      titles: ['Trainer'],
     })
 
     const response = await updateSession(createRequest('/members'))
 
-    expect(response.status).toBe(200)
-    expect(response.headers.get('location')).toBeNull()
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/trainer/schedule')
+  })
+
+  it('redirects administrative assistants away from trainer routes to /members', async () => {
+    mockSupabaseUser({
+      id: 'assistant-1',
+      email: 'assistant@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'assistant-1',
+      role: 'staff',
+      titles: ['Administrative Assistant'],
+    })
+
+    const response = await updateSession(createRequest('/trainer/requests'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/members')
+  })
+
+  it('redirects staff without permitted titles to /unauthorized', async () => {
+    mockSupabaseUser({
+      id: 'assistant-2',
+      email: 'assistant2@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'assistant-2',
+      role: 'staff',
+      titles: ['Assistant'],
+    })
+
+    const response = await updateSession(createRequest('/classes'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/unauthorized')
   })
 
   it('redirects archived or missing-profile sessions back to /login', async () => {
