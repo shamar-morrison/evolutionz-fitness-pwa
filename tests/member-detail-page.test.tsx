@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   currentPathnameState,
+  currentProfileState,
   currentRoleState,
   invalidateQueriesMock,
   pushMock,
@@ -15,6 +16,14 @@ const {
 } = vi.hoisted(() => ({
   currentPathnameState: {
     pathname: '/members/123e4567-e89b-12d3-a456-426614174000',
+  },
+  currentProfileState: {
+    profile: {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin' as 'admin' | 'staff',
+      titles: ['Owner'],
+    },
   },
   currentRoleState: { role: 'admin' as 'admin' | 'staff' },
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
@@ -45,7 +54,7 @@ vi.mock('@/hooks/use-progress-router', () => ({
 vi.mock('@/contexts/auth-context', () => ({
   useAuth: () => ({
     user: null,
-    profile: null,
+    profile: currentProfileState.profile,
     role: currentRoleState.role,
     loading: false,
   }),
@@ -265,6 +274,12 @@ describe('Member detail page tabs', () => {
     root = createRoot(container)
     currentPathnameState.pathname = '/members/123e4567-e89b-12d3-a456-426614174000'
     currentRoleState.role = 'admin'
+    currentProfileState.profile = {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin',
+      titles: ['Owner'],
+    }
     useMemberMock.mockReturnValue({
       member: createMember(),
       isLoading: false,
@@ -306,6 +321,12 @@ describe('Member detail page tabs', () => {
 
   it('hides the PT Attendance tab and avoids PT attendance queries for non-admin users', async () => {
     currentRoleState.role = 'staff'
+    currentProfileState.profile = {
+      id: 'trainer-1',
+      name: 'Jordan Trainer',
+      role: 'staff',
+      titles: ['Trainer'],
+    }
 
     await act(async () => {
       root.render(<MemberDetailPage />)
@@ -315,8 +336,32 @@ describe('Member detail page tabs', () => {
     expect(usePtSessionsMock).not.toHaveBeenCalled()
   })
 
-  it('routes the header back button to the shared members list for staff users', async () => {
+  it('uses permissions instead of auth role alone for migrated member detail controls', async () => {
+    currentRoleState.role = 'admin'
+    currentProfileState.profile = {
+      id: 'trainer-1',
+      name: 'Jordan Trainer',
+      role: 'admin',
+      titles: ['Trainer'],
+    }
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    expect(container.textContent).not.toContain('Edit Member')
+    expect(container.textContent).not.toContain('PT Attendance')
+    expect(usePtSessionsMock).not.toHaveBeenCalled()
+  })
+
+  it('routes the header back button to the shared members list for administrative assistants', async () => {
     currentRoleState.role = 'staff'
+    currentProfileState.profile = {
+      id: 'assistant-1',
+      name: 'Avery Assistant',
+      role: 'staff',
+      titles: ['Administrative Assistant'],
+    }
 
     await act(async () => {
       root.render(<MemberDetailPage />)
@@ -329,8 +374,14 @@ describe('Member detail page tabs', () => {
     expect(pushMock).toHaveBeenCalledWith('/members')
   })
 
-  it('routes the error-state back button to the shared members list for staff users', async () => {
+  it('routes the error-state back button to the shared members list for administrative assistants', async () => {
     currentRoleState.role = 'staff'
+    currentProfileState.profile = {
+      id: 'assistant-1',
+      name: 'Avery Assistant',
+      role: 'staff',
+      titles: ['Administrative Assistant'],
+    }
     useMemberMock.mockReturnValue({
       member: null,
       isLoading: false,

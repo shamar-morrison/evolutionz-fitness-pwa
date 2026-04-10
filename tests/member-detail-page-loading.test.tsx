@@ -5,12 +5,24 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  authState,
   deleteMemberMock,
   invalidateQueriesMock,
   replaceMock,
   toastMock,
   useMemberMock,
 } = vi.hoisted(() => ({
+  authState: {
+    user: null,
+    profile: {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin' as 'admin' | 'staff',
+      titles: ['Owner'],
+    },
+    role: 'admin' as 'admin' | 'staff',
+    loading: false,
+  },
   deleteMemberMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   replaceMock: vi.fn(),
@@ -41,6 +53,10 @@ vi.mock('@/hooks/use-back-link', () => ({
 
 vi.mock('@/hooks/use-members', () => ({
   useMember: useMemberMock,
+}))
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => authState,
 }))
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -202,6 +218,14 @@ describe('MemberDetailPage async confirm loading', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    authState.profile = {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin',
+      titles: ['Owner'],
+    }
+    authState.role = 'admin'
+    authState.loading = false
     useMemberMock.mockReturnValue({
       member: createMember(),
       isLoading: false,

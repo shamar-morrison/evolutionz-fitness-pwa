@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useMemberApprovalRequests } from '@/hooks/use-member-approval-requests'
+import { usePermissions } from '@/hooks/use-permissions'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import {
   useRescheduleRequests,
@@ -28,7 +29,6 @@ import { toast } from '@/hooks/use-toast'
 import { createClient } from '@/lib/supabase/client'
 import { formatStaffTitles } from '@/lib/staff'
 import { cn } from '@/lib/utils'
-import { RoleGuard } from '@/components/role-guard'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -99,6 +99,7 @@ const adminNavItems: NavItem[] = [
 const adminReportItems: NavItem[] = [
   { href: '/reports/pt-payments', label: 'PT Trainer Payments', icon: BarChart3 },
   { href: '/reports/class-payments', label: 'Group Class Payments', icon: BarChart3 },
+  { href: '/reports/revenue', label: 'Revenue Reports', icon: BarChart3 },
 ]
 
 const adminApprovalItems: NavItem[] = [
@@ -149,17 +150,18 @@ export function AppSidebar() {
   const pathname = usePathname()
   const router = useProgressRouter()
   const { user, profile, role, loading } = useAuth()
+  const { can } = usePermissions()
   const { isMobile, setOpenMobile } = useSidebar()
   const [unlockState, setUnlockState] = useState<'idle' | 'unlocking' | 'unlocked'>('idle')
   const [isSigningOut, setIsSigningOut] = useState(false)
   const pendingRescheduleRequests = useRescheduleRequests('pending', {
-    enabled: role === 'admin',
+    enabled: can('reports.view'),
   })
   const pendingSessionUpdateRequests = useSessionUpdateRequests('pending', {
-    enabled: role === 'admin',
+    enabled: can('reports.view'),
   })
   const pendingMemberApprovalRequests = useMemberApprovalRequests('pending', {
-    enabled: role === 'admin',
+    enabled: can('reports.view'),
   })
   const navItems = role === 'staff' ? trainerNavItems : adminNavItems
   const secondaryNavItems = role === 'staff' ? trainerClassesNavItems : []
@@ -293,7 +295,7 @@ export function AppSidebar() {
           </SidebarGroup>
         ) : null}
 
-        {role === 'admin' ? (
+        {can('reports.view') ? (
           <SidebarGroup>
             <SidebarGroupLabel>Reports</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -317,7 +319,7 @@ export function AppSidebar() {
           </SidebarGroup>
         ) : null}
 
-        {role === 'admin' ? (
+        {can('dashboard.view') ? (
           <SidebarGroup>
             <SidebarGroupLabel>Notifications</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -355,7 +357,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-3">
-        <RoleGuard role="admin">
+        {can('door.unlock') ? (
           <Button
             type="button"
             onClick={() => void handleUnlock()}
@@ -387,7 +389,7 @@ export function AppSidebar() {
               </>
             )}
           </Button>
-        </RoleGuard>
+        ) : null}
 
         {user && !loading ? (
           <SidebarMenu>
@@ -425,7 +427,7 @@ export function AppSidebar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {role === 'admin' ? (
+                  {can('settings.manage') ? (
                     <>
                       <DropdownMenuItem onClick={handleSettingsClick} disabled={isSigningOut}>
                         <Settings className="h-4 w-4" />

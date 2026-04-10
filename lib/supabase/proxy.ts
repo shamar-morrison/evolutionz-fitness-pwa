@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
+import { isRouteAllowed, type AppRole } from '@/lib/route-config'
 import { readStaffProfile } from '@/lib/staff'
 
 function getSupabaseUrl() {
@@ -29,6 +30,22 @@ function copyCookies(from: NextResponse, to: NextResponse) {
   }
 
   return to
+}
+
+function getDeniedRedirectPath(role: AppRole, titles: string[]) {
+  if (role === 'admin') {
+    return '/dashboard'
+  }
+
+  if (titles.includes('Trainer')) {
+    return '/trainer/schedule'
+  }
+
+  if (titles.includes('Administrative Assistant')) {
+    return '/members'
+  }
+
+  return '/unauthorized'
 }
 
 export async function updateSession(request: NextRequest) {
@@ -89,7 +106,19 @@ export async function updateSession(request: NextRequest) {
     }
 
     if (request.nextUrl.pathname !== '/login') {
-      return response
+      const titles = Array.isArray(profile.titles) ? profile.titles : []
+      const role: AppRole =
+        profile.role === 'admin' || titles.includes('Owner') ? 'admin' : 'staff'
+
+      if (isRouteAllowed(request.nextUrl.pathname, role, titles)) {
+        return response
+      }
+
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = getDeniedRedirectPath(role, titles)
+      redirectUrl.search = ''
+
+      return copyCookies(response, NextResponse.redirect(redirectUrl))
     }
 
     const redirectUrl = request.nextUrl.clone()

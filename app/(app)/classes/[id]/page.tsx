@@ -65,6 +65,7 @@ import {
   useClassSessions,
   useClassTrainers,
 } from '@/hooks/use-classes'
+import { usePermissions } from '@/hooks/use-permissions'
 import { useStaff } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
 import {
@@ -270,11 +271,12 @@ export default function ClassDetailPage() {
   const params = useParams()
   const router = useProgressRouter()
   const queryClient = useQueryClient()
-  const { role, profile, loading } = useAuth()
+  const { profile, loading } = useAuth()
+  const { can } = usePermissions()
   const classId = params.id as string
-  const isAdmin = role === 'admin'
+  const canManageSchedule = can('classes.manageSchedule')
   const isTrainerTitle = hasStaffTitle(profile?.titles, 'Trainer')
-  const canManageAttendance = isAdmin || (role === 'staff' && !isTrainerTitle)
+  const canManageAttendance = can('classes.markAttendance')
   const attendanceActionLabel = isTrainerTitle ? 'View Attendance' : 'Mark Attendance'
   const backLink = useBackLink('/classes', '/classes')
   const { classItem, isLoading, error } = useClassDetail(classId, {
@@ -284,20 +286,20 @@ export default function ClassDetailPage() {
     enabled: !loading,
   })
   const scheduleRulesQuery = useClassScheduleRules(classId, {
-    enabled: !loading && isAdmin,
+    enabled: !loading && canManageSchedule,
   })
   const [activeTab, setActiveTab] = useState<ClassesTab>('registrations')
   const pendingRegistrationsQuery = useClassRegistrations(classId, 'pending', {
-    enabled: !loading && isAdmin && activeTab === 'pending',
+    enabled: !loading && canManageSchedule && activeTab === 'pending',
   })
   const sessionsQuery = useClassSessions(classId, classItem?.current_period_start ?? null, {
     enabled: !loading && Boolean(classItem?.current_period_start),
   })
   const trainersQuery = useClassTrainers(classId, {
-    enabled: !loading && isAdmin,
+    enabled: !loading && canManageSchedule,
   })
   const staffQuery = useStaff({
-    enabled: !loading && isAdmin,
+    enabled: !loading && canManageSchedule,
   })
   const [showRegistrationDialog, setShowRegistrationDialog] = useState(false)
   const [showPeriodDialog, setShowPeriodDialog] = useState(false)
@@ -342,12 +344,12 @@ export default function ClassDetailPage() {
   }, [classItem?.current_period_start])
 
   useEffect(() => {
-    if (isAdmin || activeTab !== 'pending') {
+    if (canManageSchedule || activeTab !== 'pending') {
       return
     }
 
     setActiveTab('registrations')
-  }, [activeTab, isAdmin])
+  }, [activeTab, canManageSchedule])
 
   useEffect(() => {
     if (showAddRuleDialog) {
@@ -872,7 +874,7 @@ export default function ClassDetailPage() {
               <CardDescription>{classItem.schedule_description}</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
-              {isAdmin ? (
+              {canManageSchedule ? (
                 <>
                   <Button type="button" variant="outline" onClick={() => setShowPeriodDialog(true)}>
                     Set Period Start
@@ -913,7 +915,7 @@ export default function ClassDetailPage() {
           </CardContent>
         </Card>
 
-        {isAdmin ? (
+        {canManageSchedule ? (
           <div className="grid gap-6 lg:grid-cols-2">
             <Card className="flex flex-col">
               <CardHeader className="gap-4">
@@ -1056,7 +1058,7 @@ export default function ClassDetailPage() {
           </div>
         ) : null}
 
-        {isAdmin ? (
+        {canManageSchedule ? (
           <Tabs
             value={activeTab}
             onValueChange={(value) => setActiveTab(value as ClassesTab)}

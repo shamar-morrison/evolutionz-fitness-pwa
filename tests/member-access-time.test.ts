@@ -5,6 +5,7 @@ import {
   formatAccessDate,
   getAccessDateInputValue,
   getAccessTimeInputValue,
+  getJamaicaDayWindow,
   getJamaicaExpiringWindow,
 } from '@/lib/member-access-time'
 
@@ -42,6 +43,14 @@ describe('member access time helpers', () => {
     expect(getJamaicaExpiringWindow(new Date('2026-04-02T10:15:30.000Z'))).toEqual({
       startInclusive: '2026-04-02T00:00:00-05:00',
       endExclusive: '2026-04-10T00:00:00-05:00',
+    })
+  })
+
+  it('builds a single Jamaica-local day window for a specific reminder offset', () => {
+    expect(getJamaicaDayWindow(new Date('2026-04-10T13:15:30.000Z'), 7)).toEqual({
+      targetDateValue: '2026-04-17',
+      startInclusive: '2026-04-17T00:00:00-05:00',
+      endExclusive: '2026-04-18T00:00:00-05:00',
     })
   })
 

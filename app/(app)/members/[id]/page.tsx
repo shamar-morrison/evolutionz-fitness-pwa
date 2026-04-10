@@ -37,6 +37,7 @@ import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
 import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
 import { useBackLink } from '@/hooks/use-back-link'
+import { usePermissions } from '@/hooks/use-permissions'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, Trash2, User, BanknoteIcon } from 'lucide-react'
 
@@ -47,6 +48,7 @@ export default function MemberDetailPage() {
   const queryClient = useQueryClient()
   const { member, isLoading, error } = useMember(memberId)
   const backLink = useBackLink('/members', '/trainer/clients')
+  const { can } = usePermissions()
   const [showEditModal, setShowEditModal] = useState(false)
   const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false)
   const [showAssignCardModal, setShowAssignCardModal] = useState(false)
@@ -291,6 +293,8 @@ export default function MemberDetailPage() {
 
   const memberDisplayName = buildMemberDisplayName(member.name, member.cardCode)
   const memberHasAssignedCard = hasAssignedCard(member.cardNo)
+  const canEditMember = can('members.edit')
+  const canViewAllPtSchedules = can('pt.viewAllSchedules')
   const cardActionState = getMemberCardActionState({
     cardNo: member.cardNo,
     cardStatus: member.cardStatus,
@@ -328,21 +332,19 @@ export default function MemberDetailPage() {
                 size="lg"
                 className="h-28 w-28 text-2xl"
               />
-              <RoleGuard role="admin">
-                {avatarPhotoUrl ? (
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    className="absolute bottom-0 right-0 z-10 size-8 rounded-full border-2 border-background shadow-sm"
-                    onClick={() => setActiveDialog('delete-photo')}
-                    disabled={isActionLoading}
-                    aria-label="Delete member photo"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                ) : null}
-              </RoleGuard>
+              {canEditMember && avatarPhotoUrl ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="absolute bottom-0 right-0 z-10 size-8 rounded-full border-2 border-background shadow-sm"
+                  onClick={() => setActiveDialog('delete-photo')}
+                  disabled={isActionLoading}
+                  aria-label="Delete member photo"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              ) : null}
             </div>
             <h2 className="mt-4 text-xl font-bold">{memberDisplayName}</h2>
             <Badge variant="outline" className="mt-2">
@@ -360,7 +362,7 @@ export default function MemberDetailPage() {
                 Record Payment
               </Button>
 
-              <RoleGuard role="admin">
+              {canEditMember ? (
                 <Button
                   variant="outline"
                   className="w-full"
@@ -369,7 +371,9 @@ export default function MemberDetailPage() {
                   <Pencil className="h-4 w-4" />
                   Edit Member
                 </Button>
+              ) : null}
 
+              <RoleGuard role="admin">
                 <Button
                   variant="outline"
                   className="w-full"
@@ -485,11 +489,11 @@ export default function MemberDetailPage() {
               <TabsTrigger value="checkin" className="px-3 py-1.5">
                 Check-in History
               </TabsTrigger>
-              <RoleGuard role="admin">
+              {canViewAllPtSchedules ? (
                 <TabsTrigger value="pt-attendance" className="px-3 py-1.5">
                   PT Attendance
                 </TabsTrigger>
-              </RoleGuard>
+              ) : null}
             </TabsList>
           </div>
 
@@ -568,17 +572,15 @@ export default function MemberDetailPage() {
             <CheckInHistory memberId={memberId} />
           </TabsContent>
 
-          <RoleGuard role="admin">
+          {canViewAllPtSchedules ? (
             <TabsContent value="pt-attendance">
               <MemberPtAttendance memberId={memberId} />
             </TabsContent>
-          </RoleGuard>
+          ) : null}
         </Tabs>
       </div>
 
-      <RoleGuard role="admin">
-        <MemberPtSection memberId={memberId} />
-      </RoleGuard>
+      {canViewAllPtSchedules ? <MemberPtSection memberId={memberId} /> : null}
 
       <AssignCardModal
         member={member}

@@ -125,8 +125,14 @@ function AuthHarness() {
           loading,
         })}
       </output>
-      <RoleGuard role="admin" fallback={<span data-testid="guard">hidden</span>}>
-        <span data-testid="guard">visible</span>
+      <RoleGuard role="admin" fallback={<span data-testid="role-guard">hidden</span>}>
+        <span data-testid="role-guard">visible</span>
+      </RoleGuard>
+      <RoleGuard
+        permission="door.unlock"
+        fallback={<span data-testid="permission-guard">hidden</span>}
+      >
+        <span data-testid="permission-guard">visible</span>
       </RoleGuard>
     </>
   )
@@ -160,6 +166,13 @@ async function flushAsyncWork() {
   })
 }
 
+function readGuardText(
+  container: HTMLDivElement,
+  testId: 'role-guard' | 'permission-guard',
+) {
+  return container.querySelector(`[data-testid="${testId}"]`)?.textContent ?? null
+}
+
 describe('AuthProvider', () => {
   let container: HTMLDivElement
   let root: Root
@@ -184,7 +197,7 @@ describe('AuthProvider', () => {
     vi.restoreAllMocks()
   })
 
-  it('loads the active session profile and exposes the current role to RoleGuard', async () => {
+  it('loads the active session profile and exposes role and permission guards', async () => {
     const adminProfile = createProfile()
     const supabase = createSupabaseBrowserClient({
       session: {
@@ -221,26 +234,27 @@ describe('AuthProvider', () => {
       loading: false,
     })
     expect(supabase.client.from).toHaveBeenCalledTimes(1)
-    expect(container.querySelector('[data-testid="guard"]')?.textContent).toBe('visible')
+    expect(readGuardText(container, 'role-guard')).toBe('visible')
+    expect(readGuardText(container, 'permission-guard')).toBe('visible')
   })
 
-  it('keeps the session in sync when Supabase auth state changes', async () => {
-    const staffProfile = createProfile({
+  it('keeps role and permission guards in sync when auth state changes', async () => {
+    const administrativeAssistantProfile = createProfile({
       id: 'user-2',
       name: 'Front Desk',
       email: 'staff@evolutionzfitness.com',
       role: 'staff',
-      titles: ['Assistant'],
+      titles: ['Administrative Assistant'],
     })
     const adminProfile = createProfile()
     const supabase = createSupabaseBrowserClient({
       session: {
         user: {
-          id: staffProfile.id,
-          email: staffProfile.email,
+          id: administrativeAssistantProfile.id,
+          email: administrativeAssistantProfile.email,
         },
       },
-      profiles: [staffProfile, adminProfile],
+      profiles: [administrativeAssistantProfile, adminProfile],
     })
 
     createClientMock.mockReturnValue(supabase.client)
@@ -260,7 +274,8 @@ describe('AuthProvider', () => {
       role: 'staff',
       loading: false,
     })
-    expect(container.querySelector('[data-testid="guard"]')?.textContent).toBe('hidden')
+    expect(readGuardText(container, 'role-guard')).toBe('hidden')
+    expect(readGuardText(container, 'permission-guard')).toBe('visible')
 
     await act(async () => {
       await supabase.emitAuthStateChange('SIGNED_IN', {
@@ -278,8 +293,48 @@ describe('AuthProvider', () => {
       role: 'admin',
       loading: false,
     })
-    expect(container.querySelector('[data-testid="guard"]')?.textContent).toBe('visible')
+    expect(readGuardText(container, 'role-guard')).toBe('visible')
+    expect(readGuardText(container, 'permission-guard')).toBe('visible')
     expect(supabase.client.from).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders fallback for role and permission guards when a trainer lacks access', async () => {
+    const trainerProfile = createProfile({
+      id: 'user-3',
+      name: 'Jordan Trainer',
+      email: 'trainer@evolutionzfitness.com',
+      role: 'staff',
+      titles: ['Trainer'],
+    })
+    const supabase = createSupabaseBrowserClient({
+      session: {
+        user: {
+          id: trainerProfile.id,
+          email: trainerProfile.email,
+        },
+      },
+      profiles: [trainerProfile],
+    })
+
+    createClientMock.mockReturnValue(supabase.client)
+
+    await act(async () => {
+      root.render(
+        <AuthProvider>
+          <AuthHarness />
+        </AuthProvider>,
+      )
+    })
+
+    await flushAsyncWork()
+
+    expect(readAuthState(container)).toMatchObject({
+      userId: 'user-3',
+      role: 'staff',
+      loading: false,
+    })
+    expect(readGuardText(container, 'role-guard')).toBe('hidden')
+    expect(readGuardText(container, 'permission-guard')).toBe('hidden')
   })
 
   it('does not refetch the profile for repeated auth events from the same user', async () => {
@@ -320,6 +375,8 @@ describe('AuthProvider', () => {
       role: 'admin',
       loading: false,
     })
+    expect(readGuardText(container, 'role-guard')).toBe('visible')
+    expect(readGuardText(container, 'permission-guard')).toBe('visible')
     expect(supabase.client.from).toHaveBeenCalledTimes(1)
   })
 })
