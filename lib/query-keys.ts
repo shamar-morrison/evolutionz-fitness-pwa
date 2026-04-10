@@ -12,6 +12,9 @@ export const queryKeys = {
   memberTypes: {
     all: ['memberTypes'] as const,
   },
+  membershipExpiryEmails: {
+    settings: ['membershipExpiryEmails', 'settings'] as const,
+  },
   memberApprovalRequests: {
     all: ['memberApprovalRequests'] as const,
     pending: ['memberApprovalRequests', 'pending'] as const,

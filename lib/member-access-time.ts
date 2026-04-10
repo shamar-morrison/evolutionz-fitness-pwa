@@ -110,6 +110,25 @@ export function getJamaicaExpiringWindow(now: Date) {
   }
 }
 
+export function getJamaicaDayWindow(now: Date, daysFromToday = 0) {
+  const todayDateValue = getJamaicaDateInputValue(now)
+  const todayDate = parseDateInputValue(todayDateValue)
+
+  if (!todayDate) {
+    throw new Error('Failed to build the Jamaica calendar day window start date.')
+  }
+
+  const targetDate = addDays(todayDate, daysFromToday)
+  const targetDateValue = formatDateInputValue(targetDate)
+  const endExclusiveDateValue = formatDateInputValue(addDays(targetDate, 1))
+
+  return {
+    targetDateValue,
+    startInclusive: `${targetDateValue}T00:00:00${JAMAICA_OFFSET}`,
+    endExclusive: `${endExclusiveDateValue}T00:00:00${JAMAICA_OFFSET}`,
+  }
+}
+
 export function normalizeTimeInputValue(value: string) {
   const match = timePattern.exec(value.trim())
 

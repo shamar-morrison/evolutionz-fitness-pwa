@@ -29,6 +29,32 @@ export type MemberTypeRecord = {
   created_at: string
 }
 
+export type MembershipExpiryEmailLastRunStatus =
+  | 'idle'
+  | 'running'
+  | 'success'
+  | 'partial'
+  | 'failed'
+
+export type MembershipExpiryEmailLastRun = {
+  status: MembershipExpiryEmailLastRunStatus
+  startedAt: string | null
+  completedAt: string | null
+  sentCount: number
+  skippedCount: number
+  duplicateCount: number
+  errorCount: number
+  message: string | null
+}
+
+export type MembershipExpiryEmailSettings = {
+  enabled: boolean
+  dayOffsets: number[]
+  subjectTemplate: string
+  bodyTemplate: string
+  lastRun: MembershipExpiryEmailLastRun | null
+}
+
 export type MemberPaymentMethod = 'cash' | 'fygaro' | 'bank_transfer' | 'point_of_sale'
 export type MemberApprovalRequestStatus = 'pending' | 'approved' | 'denied'
 
