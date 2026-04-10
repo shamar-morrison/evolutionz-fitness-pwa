@@ -1,30 +1,29 @@
 'use client'
 
 import { useAuth } from '@/contexts/auth-context'
-import type { UserRole } from '@/types'
+import { usePermissions } from '@/hooks/use-permissions'
+import type { Permission } from '@/lib/permissions'
 import type { ReactNode } from 'react'
 
 type RoleGuardProps = {
-  role: UserRole
   children: ReactNode
   fallback?: ReactNode
-}
+} & (
+  | { role: 'admin' | 'staff'; permission?: never }
+  | { permission: Permission; role?: never }
+)
 
-export function RoleGuard({ role, children, fallback = null }: RoleGuardProps) {
+export function RoleGuard(props: RoleGuardProps) {
   const { role: currentRole, loading } = useAuth()
+  const { can } = usePermissions()
+  const { children, fallback = null } = props
 
   if (loading) {
     return null
   }
 
-  if (!currentRole) {
-    return fallback
-  }
+  const isAllowed =
+    'role' in props ? currentRole === props.role : can(props.permission)
 
-  // Admin can see everything, staff only sees staff-level content
-  if (role === 'admin' && currentRole !== 'admin') {
-    return fallback
-  }
-
-  return <>{children}</>
+  return isAllowed ? <>{children}</> : (fallback ?? null)
 }

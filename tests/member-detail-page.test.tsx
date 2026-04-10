@@ -336,6 +336,24 @@ describe('Member detail page tabs', () => {
     expect(usePtSessionsMock).not.toHaveBeenCalled()
   })
 
+  it('uses permissions instead of auth role alone for migrated member detail controls', async () => {
+    currentRoleState.role = 'admin'
+    currentProfileState.profile = {
+      id: 'trainer-1',
+      name: 'Jordan Trainer',
+      role: 'admin',
+      titles: ['Trainer'],
+    }
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    expect(container.textContent).not.toContain('Edit Member')
+    expect(container.textContent).not.toContain('PT Attendance')
+    expect(usePtSessionsMock).not.toHaveBeenCalled()
+  })
+
   it('routes the header back button to the shared members list for administrative assistants', async () => {
     currentRoleState.role = 'staff'
     currentProfileState.profile = {

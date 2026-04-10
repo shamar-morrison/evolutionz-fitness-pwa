@@ -18,6 +18,7 @@ const {
     user: { id: 'user-1', email: 'admin@evolutionzfitness.com' },
     profile: {
       id: 'user-1',
+      email: 'admin@evolutionzfitness.com',
       name: 'Admin User',
       role: 'admin' as 'admin' | 'staff',
       titles: ['Owner'],
@@ -116,6 +117,31 @@ function setViewport(width: number) {
   })
 }
 
+function setAuthState({
+  id,
+  email,
+  name,
+  role,
+  titles,
+}: {
+  id: string
+  email: string
+  name: string
+  role: 'admin' | 'staff'
+  titles: string[]
+}) {
+  authState.user = { id, email }
+  authState.profile = {
+    id,
+    email,
+    name,
+    role,
+    titles,
+  }
+  authState.role = role
+  authState.loading = false
+}
+
 describe('Sidebar', () => {
   let container: HTMLDivElement
   let root: Root
@@ -124,6 +150,14 @@ describe('Sidebar', () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
     signOutMock.mockResolvedValue({ error: null })
+    setAuthState({
+      id: 'user-1',
+      email: 'admin@evolutionzfitness.com',
+      name: 'Admin User',
+      role: 'admin',
+      titles: ['Owner'],
+    })
+    pathnameState.value = '/pending-approvals/session-updates'
     setViewport(1024)
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -188,14 +222,13 @@ describe('Sidebar', () => {
 
   it('shows the trainer-only navigation for staff users', async () => {
     pathnameState.value = '/trainer/schedule'
-    authState.role = 'staff'
-    authState.profile = {
+    setAuthState({
       id: 'trainer-1',
+      email: 'trainer@evolutionzfitness.com',
       name: 'Jordan Trainer',
       role: 'staff',
       titles: ['Trainer'],
-    }
-    authState.user = { id: 'trainer-1', email: 'trainer@evolutionzfitness.com' }
+    })
 
     await act(async () => {
       root.render(
@@ -212,6 +245,9 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('Classes')
     expect(container.textContent).toContain('Trainer')
     expect(container.textContent).toContain('Log out')
+    expect(container.textContent).not.toContain('Unlock Door')
+    expect(container.textContent).not.toContain('Reports')
+    expect(container.textContent).not.toContain('Notifications')
     expect(container.textContent).not.toContain('Settings')
     expect(container.textContent).not.toContain('Dashboard')
     expect(container.textContent).not.toContain('Pending Approvals')
@@ -222,18 +258,65 @@ describe('Sidebar', () => {
 
     expect(groupLabels).toContain('Trainer')
     expect(groupLabels).toContain('Classes')
+    expect(useRescheduleRequestsMock).toHaveBeenCalledWith(
+      'pending',
+      expect.objectContaining({ enabled: false }),
+    )
+    expect(useSessionUpdateRequestsMock).toHaveBeenCalledWith(
+      'pending',
+      expect.objectContaining({ enabled: false }),
+    )
+    expect(useMemberApprovalRequestsMock).toHaveBeenCalledWith(
+      'pending',
+      expect.objectContaining({ enabled: false }),
+    )
+  })
+
+  it('shows unlock door for administrative assistants without reports or settings', async () => {
+    pathnameState.value = '/trainer/schedule'
+    setAuthState({
+      id: 'assistant-1',
+      email: 'assistant@evolutionzfitness.com',
+      name: 'Admin Assistant',
+      role: 'staff',
+      titles: ['Administrative Assistant'],
+    })
+
+    await act(async () => {
+      root.render(
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>,
+      )
+    })
+
+    expect(container.textContent).toContain('Unlock Door')
+    expect(container.textContent).not.toContain('Reports')
+    expect(container.textContent).not.toContain('Notifications')
+    expect(container.textContent).not.toContain('Settings')
+    expect(useRescheduleRequestsMock).toHaveBeenCalledWith(
+      'pending',
+      expect.objectContaining({ enabled: false }),
+    )
+    expect(useSessionUpdateRequestsMock).toHaveBeenCalledWith(
+      'pending',
+      expect.objectContaining({ enabled: false }),
+    )
+    expect(useMemberApprovalRequestsMock).toHaveBeenCalledWith(
+      'pending',
+      expect.objectContaining({ enabled: false }),
+    )
   })
 
   it('shows the admin navigation and caps the pending approvals badge at 9+', async () => {
     pathnameState.value = '/pending-approvals/session-updates'
-    authState.role = 'admin'
-    authState.profile = {
+    setAuthState({
       id: 'user-1',
+      email: 'admin@evolutionzfitness.com',
       name: 'Admin User',
       role: 'admin',
       titles: ['Owner'],
-    }
-    authState.user = { id: 'user-1', email: 'admin@evolutionzfitness.com' }
+    })
     useRescheduleRequestsMock.mockReturnValue({
       requests: new Array(11).fill(null).map((_, index) => ({ id: `reschedule-${index}` })),
       isLoading: false,
@@ -268,6 +351,7 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('Reschedule Requests')
     expect(container.textContent).toContain('Session Updates')
     expect(container.textContent).toContain('Settings')
+    expect(container.textContent).toContain('Unlock Door')
     expect(container.textContent).toContain('Log out')
     expect(container.querySelector('[data-sidebar="menu-action"]')).toBeNull()
 
@@ -295,6 +379,18 @@ describe('Sidebar', () => {
     expect(badges).toContain('9+')
     expect(badges).toContain('3')
     expect(badges).toContain('5')
+    expect(useRescheduleRequestsMock).toHaveBeenCalledWith(
+      'pending',
+      expect.objectContaining({ enabled: true }),
+    )
+    expect(useSessionUpdateRequestsMock).toHaveBeenCalledWith(
+      'pending',
+      expect.objectContaining({ enabled: true }),
+    )
+    expect(useMemberApprovalRequestsMock).toHaveBeenCalledWith(
+      'pending',
+      expect.objectContaining({ enabled: true }),
+    )
   })
 
   it('navigates to settings from the footer user menu for admins', async () => {
@@ -329,14 +425,13 @@ describe('Sidebar', () => {
 
   it('closes the mobile sidebar after clicking a navigation link', async () => {
     pathnameState.value = '/dashboard'
-    authState.role = 'admin'
-    authState.profile = {
+    setAuthState({
       id: 'user-1',
+      email: 'admin@evolutionzfitness.com',
       name: 'Admin User',
       role: 'admin',
       titles: ['Owner'],
-    }
-    authState.user = { id: 'user-1', email: 'admin@evolutionzfitness.com' }
+    })
     setViewport(390)
 
     await act(async () => {

@@ -4,9 +4,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useMembers } from '@/hooks/use-members'
+import { usePermissions } from '@/hooks/use-permissions'
 import { MembersTable } from '@/components/members-table'
 import { AddMemberModal } from '@/components/add-member-modal'
-import { RoleGuard } from '@/components/role-guard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -70,6 +70,7 @@ function MembersPageContent() {
   const [isSyncingMembers, setIsSyncingMembers] = useState(false)
   const [isSyncingCards, setIsSyncingCards] = useState(false)
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const { members, isLoading, error } = useMembers({
     search,
@@ -146,30 +147,28 @@ function MembersPageContent() {
           <p className="text-muted-foreground">Manage your gym members and their subscriptions.</p>
         </div>
         <div className="flex items-center gap-2">
-          <RoleGuard role="admin">
-            {config.features.showSyncButtons ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void handleSyncCards()}
-                  disabled={isSyncingCards}
-                >
-                  {isSyncingCards ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
-                  Sync Cards
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void handleSyncMembers()}
-                  disabled={isSyncingMembers}
-                >
-                  {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
-                  Sync Members
-                </Button>
-              </>
-            ) : null}
-          </RoleGuard>
+          {can('members.edit') && config.features.showSyncButtons ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleSyncCards()}
+                disabled={isSyncingCards}
+              >
+                {isSyncingCards ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
+                Sync Cards
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleSyncMembers()}
+                disabled={isSyncingMembers}
+              >
+                {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
+                Sync Members
+              </Button>
+            </>
+          ) : null}
           <Button
             onClick={() => setShowAddModal(true)}
             className="bg-primary text-primary-foreground hover:bg-primary/90"

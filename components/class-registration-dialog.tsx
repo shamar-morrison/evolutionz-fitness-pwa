@@ -18,8 +18,8 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
-import { useAuth } from '@/contexts/auth-context'
 import { useMembers } from '@/hooks/use-members'
+import { usePermissions } from '@/hooks/use-permissions'
 import { toast } from '@/hooks/use-toast'
 import {
   calculateClassRegistrationAmount,
@@ -63,7 +63,7 @@ export function ClassRegistrationDialog({
   onOpenChange,
 }: ClassRegistrationDialogProps) {
   const queryClient = useQueryClient()
-  const { role } = useAuth()
+  const { requiresApproval } = usePermissions()
   const { members, isLoading: isMembersLoading, error: membersError } = useMembers({
     status: 'Active',
   })
@@ -116,6 +116,7 @@ export function ClassRegistrationDialog({
       })
     : 0
   const effectiveAmountPaid = isFreeRegistration ? 0 : paymentReceived ? calculatedAmount : 0
+  const registrationNeedsApproval = requiresApproval('classes.register')
 
   useEffect(() => {
     if (open) {
@@ -220,11 +221,11 @@ export function ClassRegistrationDialog({
       ])
       onOpenChange(false)
       toast({
-        title: role === 'admin' ? 'Registration added' : 'Registration submitted',
+        title: registrationNeedsApproval ? 'Registration submitted' : 'Registration added',
         description:
-          role === 'admin'
-            ? `${registrantLabel} was registered for ${classItem.name}.`
-            : `${registrantLabel}'s registration was submitted for approval.`,
+          registrationNeedsApproval
+            ? `${registrantLabel}'s registration was submitted for approval.`
+            : `${registrantLabel} was registered for ${classItem.name}.`,
       })
     } catch (error) {
       toast({
@@ -431,8 +432,8 @@ export function ClassRegistrationDialog({
           onNext={() => setCurrentStep(2)}
           onSubmit={handleSubmit}
           nextDisabled={!canContinue}
-          submitLabel={role === 'admin' ? 'Register' : 'Submit for Approval'}
-          submitLoadingLabel={role === 'admin' ? 'Registering...' : 'Submitting...'}
+          submitLabel={registrationNeedsApproval ? 'Submit for Approval' : 'Register'}
+          submitLoadingLabel={registrationNeedsApproval ? 'Submitting...' : 'Registering...'}
         />
       </DialogContent>
     </Dialog>

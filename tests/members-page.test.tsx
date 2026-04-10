@@ -6,9 +6,21 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  authState,
   invalidateQueriesMock,
   useMembersMock,
 } = vi.hoisted(() => ({
+  authState: {
+    user: null,
+    profile: {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin' as 'admin' | 'staff',
+      titles: ['Owner'],
+    },
+    role: 'admin' as 'admin' | 'staff',
+    loading: false,
+  },
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   useMembersMock: vi.fn(),
 }))
@@ -25,6 +37,10 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/hooks/use-members', () => ({
   useMembers: useMembersMock,
+}))
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => authState,
 }))
 
 vi.mock('@/components/add-member-modal', () => ({
@@ -124,6 +140,14 @@ describe('MembersPage', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    authState.profile = {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin',
+      titles: ['Owner'],
+    }
+    authState.role = 'admin'
+    authState.loading = false
 
     useMembersMock.mockReturnValue({
       members: [],

@@ -16,6 +16,7 @@ describe('permissions', () => {
     const permissions = resolvePermissions('admin', ['Owner'])
 
     expect(sortPermissions(permissions)).toEqual(sortPermissions(ROLE_PRESETS.admin))
+    expect(permissions.has('door.unlock')).toBe(true)
   })
 
   it('never requires approval for admins', () => {
@@ -28,6 +29,7 @@ describe('permissions', () => {
     const permissions = resolvePermissions('staff', ['Trainer'])
 
     expect(sortPermissions(permissions)).toEqual(sortPermissions(ROLE_PRESETS.trainer))
+    expect(permissions.has('door.unlock')).toBe(false)
   })
 
   it('requires trainer approval for marking and rescheduling PT sessions', () => {
@@ -49,11 +51,21 @@ describe('permissions', () => {
     expect(sortPermissions(permissions)).toEqual(
       sortPermissions(ROLE_PRESETS.administrativeAssistant),
     )
+    expect(permissions.has('door.unlock')).toBe(true)
   })
 
   it('requires administrative assistant approval for member creation and payments', () => {
     expect(requiresApproval('members.create', 'staff')).toBe(true)
     expect(requiresApproval('members.recordPayment', 'staff')).toBe(true)
+  })
+
+  it('requires staff approval for class registrations', () => {
+    expect(requiresApproval('classes.register', 'staff')).toBe(true)
+  })
+
+  it('never requires approval to unlock the door', () => {
+    expect(requiresApproval('door.unlock', 'admin')).toBe(false)
+    expect(requiresApproval('door.unlock', 'staff')).toBe(false)
   })
 
   it('does not let administrative assistants access staff management, reports, or member delete permissions', () => {
@@ -90,6 +102,7 @@ describe('permissions', () => {
         'members.view',
         'members.create',
         'members.recordPayment',
+        'door.unlock',
         'classes.register',
         'classes.markAttendance',
       ]),
@@ -148,7 +161,7 @@ describe('resolvePermissionsForProfile', () => {
         name: 'owner',
         profile: { titles: ['Owner'], role: 'staff' },
         expectedRole: 'admin',
-        allowed: ['members.delete', 'reports.view', 'dashboard.view'],
+        allowed: ['members.delete', 'reports.view', 'dashboard.view', 'door.unlock'],
         denied: [],
       },
       {
@@ -156,13 +169,13 @@ describe('resolvePermissionsForProfile', () => {
         profile: { titles: ['Trainer'], role: 'staff' },
         expectedRole: 'staff',
         allowed: ['pt.viewOwnSchedule', 'pt.markSession', 'classes.view'],
-        denied: ['members.view', 'reports.view', 'dashboard.view'],
+        denied: ['members.view', 'reports.view', 'dashboard.view', 'door.unlock'],
       },
       {
         name: 'administrative assistant',
         profile: { titles: ['Administrative Assistant'], role: 'staff' },
         expectedRole: 'staff',
-        allowed: ['members.view', 'members.create', 'members.recordPayment'],
+        allowed: ['members.view', 'members.create', 'members.recordPayment', 'door.unlock'],
         denied: ['staff.manage', 'members.delete', 'reports.view'],
       },
       {
@@ -174,6 +187,7 @@ describe('resolvePermissionsForProfile', () => {
           'pt.markSession',
           'members.view',
           'members.recordPayment',
+          'door.unlock',
           'classes.register',
         ],
         denied: ['staff.manage', 'reports.view', 'dashboard.view'],
