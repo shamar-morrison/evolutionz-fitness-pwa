@@ -459,6 +459,41 @@ describe('member approval request routes', () => {
     })
   })
 
+  it('returns 400 when required profile fields are missing on a new request', async () => {
+    const { client } = createMemberApprovalRequestsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAuthenticatedProfile({
+      user: { id: 'staff-auth-1' },
+      profile: { id: 'staff-1', role: 'staff', name: 'Jordan Staff' },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/member-approval-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Jane Doe',
+          member_type_id: MEMBER_TYPE_ID_GENERAL,
+          gender: 'Female',
+          email: 'jane@example.com',
+          phone: '',
+          beginTime: '2026-04-10T09:00:00',
+          endTime: '2026-05-09T23:59:59',
+          cardNo: '0102857149',
+          cardCode: 'LOCAL-CODE',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining('Phone is required.'),
+    })
+  })
+
   it('fails approval when recording the payment fails', async () => {
     const existingRequest = createRequestRecord({
       photo_url: 'pending-member-requests/request-1.jpg',

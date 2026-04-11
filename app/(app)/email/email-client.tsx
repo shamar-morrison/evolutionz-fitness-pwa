@@ -378,13 +378,12 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
         <div className="lg:col-span-4 lg:sticky lg:top-6 space-y-6">
           <section className="space-y-6 flex flex-col rounded-2xl border border-border bg-card p-6 shadow-sm">
             <div className="space-y-1">
-              <div className="flex items-center gap-2 text-primary">
+              <div className="flex items-center gap-2 text-foreground">
                 <Users className="h-5 w-5" />
                 <h2 className="text-xl font-semibold tracking-tight">Recipients</h2>
               </div>
               <p className="text-sm text-muted-foreground">
-                Combine group filters and specific members. Duplicate email addresses are removed
-                automatically.
+                Combine filters and members. Duplicates are removed.
               </p>
             </div>
 
@@ -554,7 +553,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
         <div className="lg:col-span-8 flex flex-col gap-6">
           <section className="space-y-6 rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-sm">
             <div className="space-y-1">
-              <div className="flex items-center gap-2 text-primary">
+              <div className="flex items-center gap-2 text-foreground">
                 <PenLine className="h-5 w-5" />
                 <h2 className="text-xl font-semibold tracking-tight">Compose</h2>
               </div>
@@ -658,7 +657,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
                     type="file"
                     onChange={handleAttachmentChange}
                     disabled={isSending}
-                    className="max-w-md h-10 shadow-sm file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                    className="max-w-md h-10 shadow-sm file:mr-4 file:py-1 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
                   />
                   {!attachment && !attachmentError && (
                     <span className="text-xs text-muted-foreground">Up to 15MB</span>

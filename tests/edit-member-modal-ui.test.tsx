@@ -119,10 +119,10 @@ function createMember(overrides: Partial<Member> = {}): Member {
     memberTypeId: overrides.memberTypeId ?? null,
     status: overrides.status ?? 'Active',
     deviceAccessState: overrides.deviceAccessState ?? 'ready',
-    gender: overrides.gender ?? 'Female',
-    email: overrides.email ?? 'jane@example.com',
-    phone: overrides.phone ?? '555-0100',
-    remark: overrides.remark ?? 'Existing member',
+    gender: overrides.gender === undefined ? 'Female' : overrides.gender,
+    email: overrides.email === undefined ? 'jane@example.com' : overrides.email,
+    phone: overrides.phone === undefined ? '555-0100' : overrides.phone,
+    remark: overrides.remark === undefined ? 'Existing member' : overrides.remark,
     photoUrl: overrides.photoUrl ?? null,
     beginTime: overrides.beginTime ?? '2026-04-02T00:00:00.000Z',
     endTime: overrides.endTime ?? '2026-05-01T23:59:59.000Z',
@@ -265,6 +265,68 @@ describe('EditMemberModal UI', () => {
 
     deferred.resolve({ member: createMember({ name: 'Jane Smith' }) })
     await flushAsyncWork()
+  })
+
+  it('allows saving a legacy member without requiring missing profile fields', async () => {
+    updateMemberMock.mockResolvedValue({
+      member: createMember({
+        name: 'Legacy Member Updated',
+        memberTypeId: null,
+        gender: null,
+        email: null,
+        phone: null,
+        remark: null,
+      }),
+    })
+
+    await act(async () => {
+      root.render(
+        <EditMemberModal
+          member={createMember({
+            name: 'Legacy Member',
+            memberTypeId: null,
+            gender: null,
+            email: null,
+            phone: null,
+            remark: null,
+          })}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    const nameInput = container.querySelector('#edit-name')
+
+    if (!(nameInput instanceof HTMLInputElement)) {
+      throw new Error('Name input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(nameInput, 'Legacy Member Updated')
+    })
+
+    const submitButton = container.querySelector('button[type="submit"]')
+
+    if (!(submitButton instanceof HTMLButtonElement)) {
+      throw new Error('Submit button not found.')
+    }
+
+    await act(async () => {
+      submitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await flushAsyncWork()
+
+    expect(updateMemberMock).toHaveBeenCalledWith('member-1', {
+      name: 'Legacy Member Updated',
+      memberTypeId: null,
+      gender: null,
+      email: null,
+      phone: null,
+      remark: null,
+      beginTime: '2026-04-02T00:00:00',
+      endTime: '2026-05-01T23:59:59',
+    })
   })
 
   it('renders membership type guidance in a tooltip and leaves load errors below the field', async () => {

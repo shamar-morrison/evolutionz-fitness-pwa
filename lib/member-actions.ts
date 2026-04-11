@@ -13,10 +13,10 @@ import type { Member, MemberGender, MemberType } from '@/types'
 export type AddMemberData = {
   name: string
   type: MemberType
-  memberTypeId?: string | null
-  gender?: MemberGender
-  email?: string
-  phone?: string
+  memberTypeId: string
+  gender: MemberGender
+  email: string
+  phone: string
   remark?: string
   beginTime: string
   endTime: string
@@ -245,18 +245,15 @@ export async function addMember(data: AddMemberData, options: AddMemberOptions =
     const requestBody: Record<string, unknown> = {
       name: data.name,
       type: data.type,
-      ...(data.gender ? { gender: data.gender } : {}),
-      ...(data.email ? { email: data.email } : {}),
-      ...(data.phone ? { phone: data.phone } : {}),
+      member_type_id: data.memberTypeId,
+      gender: data.gender,
+      email: data.email.trim(),
+      phone: data.phone.trim(),
       ...(data.remark ? { remark: data.remark } : {}),
       beginTime: data.beginTime,
       endTime: data.endTime,
       cardNo: normalizedCardNo,
       cardCode: data.cardCode,
-    }
-
-    if (Object.prototype.hasOwnProperty.call(data, 'memberTypeId')) {
-      requestBody.member_type_id = data.memberTypeId ?? null
     }
 
     const response = await fetch('/api/access/members/provision', {

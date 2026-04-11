@@ -309,8 +309,9 @@ export function MemberBasicFields({
                 email: event.target.value,
               }))
             }
-            placeholder="Optional email"
+            placeholder="Enter email address"
             disabled={isSubmitting}
+            required
           />
         </div>
 
@@ -325,8 +326,9 @@ export function MemberBasicFields({
                 phone: event.target.value,
               }))
             }
-            placeholder="Optional phone number"
+            placeholder="Enter phone number"
             disabled={isSubmitting}
+            required
           />
         </div>
       </div>

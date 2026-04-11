@@ -344,6 +344,44 @@ async function flushAsyncWork() {
   })
 }
 
+async function fillRequiredBasicStep(
+  container: HTMLDivElement,
+  {
+    name = 'Jane Doe',
+    email = 'jane@example.com',
+    phone = '876-555-1111',
+    gender = 'Female',
+    membershipType = 'General',
+  }: {
+    name?: string
+    email?: string
+    phone?: string
+    gender?: 'Male' | 'Female'
+    membershipType?: string
+  } = {},
+) {
+  const nameInput = container.querySelector('#member-name')
+  const emailInput = container.querySelector('#member-email')
+  const phoneInput = container.querySelector('#member-phone')
+
+  if (
+    !(nameInput instanceof HTMLInputElement) ||
+    !(emailInput instanceof HTMLInputElement) ||
+    !(phoneInput instanceof HTMLInputElement)
+  ) {
+    throw new Error('Step 1 inputs not found.')
+  }
+
+  await act(async () => {
+    setInputValue(nameInput, name)
+    setInputValue(emailInput, email)
+    setInputValue(phoneInput, phone)
+  })
+
+  await clickButton(container, gender)
+  await clickButton(container, membershipType)
+}
+
 function mockAvailableCards(cards: AvailableAccessCard[], error: string | null = null) {
   useAvailableCardsMock.mockReturnValue({
     cards,
@@ -437,20 +475,7 @@ describe('AddMemberModal', () => {
     })
     await flushAsyncWork()
 
-    const nameInput = container.querySelector('#member-name')
-    const emailInput = container.querySelector('#member-email')
-
-    if (!(nameInput instanceof HTMLInputElement) || !(emailInput instanceof HTMLInputElement)) {
-      throw new Error('Step 1 inputs not found.')
-    }
-
-    await act(async () => {
-      setInputValue(nameInput, 'Jane Doe')
-      setInputValue(emailInput, 'jane@example.com')
-    })
-
-    await clickButton(container, 'Female')
-    await clickButton(container, 'General')
+    await fillRequiredBasicStep(container)
     await clickButton(container, 'Next')
 
     const startTimeInput = container.querySelector('#member-start-time')
@@ -477,6 +502,7 @@ describe('AddMemberModal', () => {
         member_type_id: 'type-1',
         gender: 'Female',
         email: 'jane@example.com',
+        phone: '876-555-1111',
         beginTime: '2026-04-08T09:30:00',
         endTime: '2026-05-05T23:59:59',
         cardNo: '12345',
@@ -510,20 +536,7 @@ describe('AddMemberModal', () => {
     })
     await flushAsyncWork()
 
-    const nameInput = container.querySelector('#member-name')
-    const emailInput = container.querySelector('#member-email')
-
-    if (!(nameInput instanceof HTMLInputElement) || !(emailInput instanceof HTMLInputElement)) {
-      throw new Error('Step 1 inputs not found.')
-    }
-
-    await act(async () => {
-      setInputValue(nameInput, 'Jane Doe')
-      setInputValue(emailInput, 'jane@example.com')
-    })
-
-    await clickButton(container, 'Female')
-    await clickButton(container, 'General')
+    await fillRequiredBasicStep(container)
     await clickButton(container, 'Next')
 
     const startTimeInput = container.querySelector('#member-start-time')
@@ -548,6 +561,7 @@ describe('AddMemberModal', () => {
       memberTypeId: 'type-1',
       gender: 'Female',
       email: 'jane@example.com',
+      phone: '876-555-1111',
       beginTime: '2026-04-08T09:30:00',
       endTime: '2026-05-05T23:59:59',
       cardNo: '12345',
@@ -589,17 +603,7 @@ describe('AddMemberModal', () => {
     })
     await flushAsyncWork()
 
-    const nameInput = container.querySelector('#member-name')
-
-    if (!(nameInput instanceof HTMLInputElement)) {
-      throw new Error('Step 1 name input not found.')
-    }
-
-    await act(async () => {
-      setInputValue(nameInput, 'Jane Doe')
-    })
-
-    await clickButton(container, 'General')
+    await fillRequiredBasicStep(container)
     await clickButton(container, 'Next')
 
     const startTimeInput = container.querySelector('#member-start-time')
@@ -631,17 +635,7 @@ describe('AddMemberModal', () => {
     })
     await flushAsyncWork()
 
-    const nameInput = container.querySelector('#member-name')
-
-    if (!(nameInput instanceof HTMLInputElement)) {
-      throw new Error('Step 1 name input not found.')
-    }
-
-    await act(async () => {
-      setInputValue(nameInput, 'Jane Doe')
-    })
-
-    await clickButton(container, 'VIP')
+    await fillRequiredBasicStep(container, { membershipType: 'VIP' })
     await clickButton(container, 'Next')
 
     const startTimeInput = container.querySelector('#member-start-time')
@@ -807,17 +801,7 @@ describe('AddMemberModal', () => {
     })
     await flushAsyncWork()
 
-    const nameInput = container.querySelector('#member-name')
-
-    if (!(nameInput instanceof HTMLInputElement)) {
-      throw new Error('Step 1 name input not found.')
-    }
-
-    await act(async () => {
-      setInputValue(nameInput, 'Jane Doe')
-    })
-
-    await clickButton(container, 'General')
+    await fillRequiredBasicStep(container)
     await clickButton(container, 'Next')
     await clickButton(container, 'Next')
 
@@ -836,18 +820,12 @@ describe('AddMemberModal', () => {
     })
     await flushAsyncWork()
 
-    const nameInput = container.querySelector('#member-name')
-
-    if (!(nameInput instanceof HTMLInputElement)) {
-      throw new Error('Step 1 name input not found.')
-    }
-
-    await act(async () => {
-      setInputValue(nameInput, 'Jordan Member')
+    await fillRequiredBasicStep(container, {
+      name: 'Jordan Member',
+      email: 'jordan@example.com',
+      phone: '876-555-2222',
+      gender: 'Male',
     })
-
-    await clickButton(container, 'Male')
-    await clickButton(container, 'General')
     await clickButton(container, 'Next')
     await clickButton(container, '2 Weeks')
     await clickButton(container, 'Next')
@@ -881,17 +859,11 @@ describe('AddMemberModal', () => {
     })
     await flushAsyncWork()
 
-    const nameInput = container.querySelector('#member-name')
-
-    if (!(nameInput instanceof HTMLInputElement)) {
-      throw new Error('Step 1 name input not found.')
-    }
-
-    await act(async () => {
-      setInputValue(nameInput, 'Jordan Member')
+    await fillRequiredBasicStep(container, {
+      name: 'Jordan Member',
+      email: 'jordan@example.com',
+      phone: '876-555-3333',
     })
-
-    await clickButton(container, 'General')
     await clickButton(container, 'Next')
     await clickButton(container, '2 Weeks')
     await clickButton(container, 'Next')
@@ -973,5 +945,100 @@ describe('AddMemberModal', () => {
     await flushAsyncWork()
 
     expect(container.textContent).toContain('Failed to load membership types.')
+  })
+
+  it('blocks Step 1 progression when gender is missing', async () => {
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    const nameInput = container.querySelector('#member-name')
+    const emailInput = container.querySelector('#member-email')
+    const phoneInput = container.querySelector('#member-phone')
+
+    if (
+      !(nameInput instanceof HTMLInputElement) ||
+      !(emailInput instanceof HTMLInputElement) ||
+      !(phoneInput instanceof HTMLInputElement)
+    ) {
+      throw new Error('Step 1 inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(nameInput, 'Jane Doe')
+      setInputValue(emailInput, 'jane@example.com')
+      setInputValue(phoneInput, '876-555-1111')
+    })
+
+    await clickButton(container, 'General')
+    await clickButton(container, 'Next')
+
+    expect(container.textContent).toContain('Step 1 of 3')
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Gender required',
+      description: 'Select the member’s gender before saving.',
+      variant: 'destructive',
+    })
+  })
+
+  it('blocks Step 1 progression when email is missing', async () => {
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    const nameInput = container.querySelector('#member-name')
+    const phoneInput = container.querySelector('#member-phone')
+
+    if (!(nameInput instanceof HTMLInputElement) || !(phoneInput instanceof HTMLInputElement)) {
+      throw new Error('Step 1 inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(nameInput, 'Jane Doe')
+      setInputValue(phoneInput, '876-555-1111')
+    })
+
+    await clickButton(container, 'Female')
+    await clickButton(container, 'General')
+    await clickButton(container, 'Next')
+
+    expect(container.textContent).toContain('Step 1 of 3')
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Email required',
+      description: 'Enter the member’s email address before saving.',
+      variant: 'destructive',
+    })
+  })
+
+  it('blocks Step 1 progression when phone is missing', async () => {
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    const nameInput = container.querySelector('#member-name')
+    const emailInput = container.querySelector('#member-email')
+
+    if (!(nameInput instanceof HTMLInputElement) || !(emailInput instanceof HTMLInputElement)) {
+      throw new Error('Step 1 inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(nameInput, 'Jane Doe')
+      setInputValue(emailInput, 'jane@example.com')
+    })
+
+    await clickButton(container, 'Female')
+    await clickButton(container, 'General')
+    await clickButton(container, 'Next')
+
+    expect(container.textContent).toContain('Step 1 of 3')
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Phone required',
+      description: 'Enter the member’s phone number before saving.',
+      variant: 'destructive',
+    })
   })
 })

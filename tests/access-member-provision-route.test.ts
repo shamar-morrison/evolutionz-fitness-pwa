@@ -24,6 +24,7 @@ import { MEMBER_RECORD_SELECT } from '@/lib/members'
 
 const FIXED_NOW = new Date('2026-03-30T14:15:16.000Z')
 const PAST_END_TIME_VALIDATION_NOW = new Date('2026-03-30T17:00:01.000Z')
+const MEMBER_TYPE_ID_GENERAL = '11111111-1111-4111-8111-111111111111'
 const EXPECTED_INCREMENTED_EMPLOYEE_NO = '912'
 const EXPECTED_FALLBACK_EMPLOYEE_NO = '880116000'
 const DEFAULT_MEMBER_ROWS = [
@@ -34,6 +35,7 @@ const DEFAULT_MEMBER_ROWS = [
 const VALID_PROVISION_REQUEST_BODY = {
   name: 'Jane Doe',
   type: 'General',
+  member_type_id: MEMBER_TYPE_ID_GENERAL,
   gender: 'Female',
   email: 'jane@example.com',
   phone: '876-555-1212',
@@ -109,6 +111,7 @@ function createProvisioningAdminClient({
       name: 'A18 Jane Doe',
       card_no: '0102857149',
       type: 'General',
+      member_type_id: MEMBER_TYPE_ID_GENERAL,
       status: 'Active',
       gender: 'Female',
       email: 'jane@example.com',
@@ -286,7 +289,7 @@ describe('POST /api/access/members/provision', () => {
         name: 'A18 Jane Doe',
         card_no: '0102857149',
         type: 'General',
-        member_type_id: null,
+        member_type_id: MEMBER_TYPE_ID_GENERAL,
         status: 'Active',
         gender: 'Female',
         email: 'jane@example.com',
@@ -308,7 +311,7 @@ describe('POST /api/access/members/provision', () => {
         cardStatus: 'assigned',
         cardLostAt: null,
         type: 'General',
-        memberTypeId: null,
+        memberTypeId: MEMBER_TYPE_ID_GENERAL,
         status: 'Active',
         deviceAccessState: 'ready',
         gender: 'Female',
@@ -335,6 +338,7 @@ describe('POST /api/access/members/provision', () => {
           name: 'A18 Jane Doe',
           card_no: '0102857149',
           type: 'General',
+          member_type_id: MEMBER_TYPE_ID_GENERAL,
           status: 'Active',
           gender: 'Female',
           email: 'jane@example.com',
@@ -430,6 +434,29 @@ describe('POST /api/access/members/provision', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: expect.stringContaining('Card code is required.'),
+    })
+  })
+
+  it('returns 400 when required member profile fields are missing from the create request', async () => {
+    getSupabaseAdminClientMock.mockReturnValue(createProvisioningAdminClient().client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/provision', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...VALID_PROVISION_REQUEST_BODY,
+          phone: '',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining('Phone is required.'),
     })
   })
 
@@ -601,7 +628,7 @@ describe('POST /api/access/members/provision', () => {
         name: 'A18 Jane Doe',
         card_no: '0102857149',
         type: 'General',
-        member_type_id: null,
+        member_type_id: MEMBER_TYPE_ID_GENERAL,
         status: 'Active',
         gender: 'Female',
         email: 'jane@example.com',

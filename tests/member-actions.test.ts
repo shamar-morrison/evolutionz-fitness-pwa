@@ -49,6 +49,7 @@ describe('member actions', () => {
             cardStatus: 'assigned',
             cardLostAt: null,
             type: 'General',
+            memberTypeId: 'type-1',
             status: 'Active',
             deviceAccessState: 'ready',
             gender: 'Female',
@@ -71,6 +72,7 @@ describe('member actions', () => {
       {
         name: 'Jane Doe',
         type: 'General',
+        memberTypeId: 'type-1',
         gender: 'Female',
         email: 'jane@example.com',
         phone: '876-555-1212',
@@ -91,6 +93,7 @@ describe('member actions', () => {
       cardCode: 'A18',
       name: 'Jane Doe',
       type: 'General',
+      member_type_id: 'type-1',
       gender: 'Female',
       email: 'jane@example.com',
       phone: '876-555-1212',
@@ -107,7 +110,7 @@ describe('member actions', () => {
       cardStatus: 'assigned',
       cardLostAt: null,
       type: 'General',
-      memberTypeId: null,
+      memberTypeId: 'type-1',
       status: 'Active',
       deviceAccessState: 'ready',
       gender: 'Female',
@@ -154,12 +157,15 @@ describe('member actions', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await addMember({
-      name: 'Jane Doe',
-      type: 'Civil Servant',
-      memberTypeId: 'type-2',
-      beginTime: '2026-03-30T00:00:00',
-      endTime: '2026-07-15T23:59:59',
-      cardNo: '0102857149',
+        name: 'Jane Doe',
+        type: 'Civil Servant',
+        memberTypeId: 'type-2',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        beginTime: '2026-03-30T00:00:00',
+        endTime: '2026-07-15T23:59:59',
+        cardNo: '0102857149',
       cardCode: 'A18',
     })
 
@@ -169,6 +175,9 @@ describe('member actions', () => {
       name: 'Jane Doe',
       type: 'Civil Servant',
       member_type_id: 'type-2',
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
       beginTime: '2026-03-30T00:00:00',
       endTime: '2026-07-15T23:59:59',
     })
@@ -188,6 +197,10 @@ describe('member actions', () => {
       addMember({
         name: 'Jane Doe',
         type: 'General',
+        memberTypeId: 'type-1',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
         beginTime: '2026-03-30T00:00:00',
         endTime: '2026-07-15T23:59:59',
         cardNo: '0102857149',
