@@ -15,6 +15,8 @@ export interface RouteConfig {
   backLink?: Partial<Record<AppRole, string>>
 }
 
+export const publicRoutes = ['/login', '/forgot-password', '/auth/reset-password'] as const
+
 export const routeConfig: Record<string, RouteConfig> = {
   '/dashboard': {
     allowedRoles: ['admin'],
@@ -160,6 +162,12 @@ export function resolveRouteKey(pathname: string): string {
       return segment
     })
     .join('/')
+}
+
+export function isPublicRoute(pathname: string): boolean {
+  const routeKey = resolveRouteKey(pathname)
+
+  return publicRoutes.includes(routeKey as (typeof publicRoutes)[number])
 }
 
 export function isRouteAllowed(

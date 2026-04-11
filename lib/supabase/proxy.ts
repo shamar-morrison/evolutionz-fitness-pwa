@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
-import { isRouteAllowed, type AppRole } from '@/lib/route-config'
+import { isPublicRoute, isRouteAllowed, type AppRole } from '@/lib/route-config'
 import { readStaffProfile } from '@/lib/staff'
 
 function getSupabaseUrl() {
@@ -52,6 +52,7 @@ export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
     request,
   })
+  const isPublicPath = isPublicRoute(request.nextUrl.pathname)
 
   const supabase = createServerClient(getSupabaseUrl(), getSupabasePublishableKey(), {
     cookies: {
@@ -78,7 +79,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user && request.nextUrl.pathname !== '/login') {
+  if (!user && !isPublicPath) {
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = '/login'
     loginUrl.search = ''
@@ -94,7 +95,7 @@ export async function updateSession(request: NextRequest) {
         await supabase.auth.signOut()
       }
 
-      if (request.nextUrl.pathname === '/login') {
+      if (isPublicPath) {
         return response
       }
 
@@ -105,7 +106,7 @@ export async function updateSession(request: NextRequest) {
       return copyCookies(response, NextResponse.redirect(loginUrl))
     }
 
-    if (request.nextUrl.pathname !== '/login') {
+    if (!isPublicPath) {
       const titles = Array.isArray(profile.titles) ? profile.titles : []
       const role: AppRole =
         profile.role === 'admin' || titles.includes('Owner') ? 'admin' : 'staff'
@@ -119,6 +120,10 @@ export async function updateSession(request: NextRequest) {
       redirectUrl.search = ''
 
       return copyCookies(response, NextResponse.redirect(redirectUrl))
+    }
+
+    if (request.nextUrl.pathname !== '/login') {
+      return response
     }
 
     const redirectUrl = request.nextUrl.clone()

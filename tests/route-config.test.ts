@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { getBackLink, isRouteAllowed, resolveRouteKey, routeConfig } from '@/lib/route-config'
+import {
+  getBackLink,
+  isPublicRoute,
+  isRouteAllowed,
+  resolveRouteKey,
+  routeConfig,
+} from '@/lib/route-config'
 
 describe('route config helpers', () => {
   it('resolves UUID member detail paths to the dynamic route key', () => {
@@ -76,6 +82,13 @@ describe('route config helpers', () => {
   it('returns false when staff does not have a matching title on a restricted route', () => {
     expect(isRouteAllowed('/members', 'staff', ['Assistant'])).toBe(false)
     expect(isRouteAllowed('/trainer/requests', 'staff', ['Medical'])).toBe(false)
+  })
+
+  it('marks auth recovery routes as public', () => {
+    expect(isPublicRoute('/login')).toBe(true)
+    expect(isPublicRoute('/forgot-password')).toBe(true)
+    expect(isPublicRoute('/auth/reset-password')).toBe(true)
+    expect(isPublicRoute('/dashboard')).toBe(false)
   })
 
   it('inherits access rules from the nearest configured parent route', () => {
