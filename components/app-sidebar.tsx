@@ -27,6 +27,7 @@ import {
 } from '@/hooks/use-pt-scheduling'
 import { toast } from '@/hooks/use-toast'
 import { createClient } from '@/lib/supabase/client'
+import { isRouteAllowed } from '@/lib/route-config'
 import { formatStaffTitles } from '@/lib/staff'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -163,8 +164,15 @@ export function AppSidebar() {
   const pendingMemberApprovalRequests = useMemberApprovalRequests('pending', {
     enabled: can('reports.view'),
   })
-  const navItems = role === 'staff' ? trainerNavItems : adminNavItems
-  const secondaryNavItems = role === 'staff' ? trainerClassesNavItems : []
+  const staffTitles = profile?.titles ?? []
+  const staffNavItems = trainerNavItems.filter((item) =>
+    isRouteAllowed(item.href, 'staff', staffTitles),
+  )
+  const staffSecondaryNavItems = trainerClassesNavItems.filter((item) =>
+    isRouteAllowed(item.href, 'staff', staffTitles),
+  )
+  const navItems = role === 'staff' ? staffNavItems : adminNavItems
+  const secondaryNavItems = role === 'staff' ? staffSecondaryNavItems : []
   const homeHref = role === 'staff' ? '/trainer/schedule' : '/dashboard'
   const displayName = profile?.name ?? user?.email ?? 'Account'
   const subtitle = profile ? formatStaffTitles(profile.titles) || 'Signed in' : user?.email ?? null

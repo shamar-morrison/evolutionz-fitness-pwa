@@ -240,17 +240,25 @@ describe('Sidebar', () => {
 
     expect(container.textContent).toContain('My Schedule')
     expect(container.textContent).toContain('My Clients')
-    expect(container.textContent).toContain('Members')
     expect(container.textContent).toContain('My Requests')
     expect(container.textContent).toContain('Classes')
     expect(container.textContent).toContain('Trainer')
     expect(container.textContent).toContain('Log out')
+    expect(container.textContent).not.toContain('Members')
     expect(container.textContent).not.toContain('Unlock Door')
     expect(container.textContent).not.toContain('Reports')
     expect(container.textContent).not.toContain('Notifications')
     expect(container.textContent).not.toContain('Settings')
     expect(container.textContent).not.toContain('Dashboard')
     expect(container.textContent).not.toContain('Pending Approvals')
+
+    const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
+
+    expect(links).toContain('/trainer/schedule')
+    expect(links).toContain('/trainer/clients')
+    expect(links).toContain('/trainer/requests')
+    expect(links).toContain('/classes')
+    expect(links).not.toContain('/members')
 
     const groupLabels = Array.from(container.querySelectorAll('[data-sidebar="group-label"]')).map(
       (label) => label.textContent?.trim(),
@@ -272,8 +280,8 @@ describe('Sidebar', () => {
     )
   })
 
-  it('shows unlock door for administrative assistants without reports or settings', async () => {
-    pathnameState.value = '/trainer/schedule'
+  it('shows only accessible staff links for administrative assistants', async () => {
+    pathnameState.value = '/members'
     setAuthState({
       id: 'assistant-1',
       email: 'assistant@evolutionzfitness.com',
@@ -290,10 +298,22 @@ describe('Sidebar', () => {
       )
     })
 
+    expect(container.textContent).toContain('Members')
+    expect(container.textContent).toContain('Classes')
+    expect(container.textContent).not.toContain('My Schedule')
+    expect(container.textContent).not.toContain('My Clients')
+    expect(container.textContent).not.toContain('My Requests')
     expect(container.textContent).toContain('Unlock Door')
     expect(container.textContent).not.toContain('Reports')
     expect(container.textContent).not.toContain('Notifications')
     expect(container.textContent).not.toContain('Settings')
+
+    const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
+
+    expect(links).toContain('/members')
+    expect(links).toContain('/classes')
+    expect(links).not.toContain('/trainer/clients')
+    expect(links).not.toContain('/trainer/requests')
     expect(useRescheduleRequestsMock).toHaveBeenCalledWith(
       'pending',
       expect.objectContaining({ enabled: false }),
