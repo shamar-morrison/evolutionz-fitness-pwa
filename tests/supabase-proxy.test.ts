@@ -13,9 +13,14 @@ const { readStaffProfileMock } = vi.hoisted(() => ({
   readStaffProfileMock: vi.fn(),
 }))
 
-vi.mock('@/lib/staff', () => ({
-  readStaffProfile: readStaffProfileMock,
-}))
+vi.mock('@/lib/staff', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/staff')>('@/lib/staff')
+
+  return {
+    ...actual,
+    readStaffProfile: readStaffProfileMock,
+  }
+})
 
 import { config } from '@/proxy'
 import { updateSession } from '@/lib/supabase/proxy'
@@ -102,6 +107,23 @@ describe('updateSession', () => {
     expect(response.headers.get('location')).toBe('http://localhost/trainer/schedule')
   })
 
+  it('redirects authenticated /login requests to /members for front desk staff', async () => {
+    mockSupabaseUser({
+      id: 'user-4',
+      email: 'assistant@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'user-4',
+      role: 'staff',
+      titles: ['Assistant'],
+    })
+
+    const response = await updateSession(createRequest('/login'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/members')
+  })
+
   it('allows admins through protected routes', async () => {
     mockSupabaseUser({
       id: 'user-1',
@@ -155,13 +177,13 @@ describe('updateSession', () => {
 
   it('redirects staff without permitted titles to /unauthorized', async () => {
     mockSupabaseUser({
-      id: 'assistant-2',
-      email: 'assistant2@evolutionzfitness.com',
+      id: 'medical-1',
+      email: 'medical@evolutionzfitness.com',
     })
     readStaffProfileMock.mockResolvedValue({
-      id: 'assistant-2',
+      id: 'medical-1',
       role: 'staff',
-      titles: ['Assistant'],
+      titles: ['Medical'],
     })
 
     const response = await updateSession(createRequest('/classes'))

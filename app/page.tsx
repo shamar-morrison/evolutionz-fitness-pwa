@@ -14,5 +14,5 @@ export default async function HomePage() {
     redirect('/login')
   }
 
-  redirect(getAuthenticatedHomePath(profile?.role))
+  redirect(getAuthenticatedHomePath(profile.role, profile.titles))
 }

@@ -123,7 +123,7 @@ vi.mock('@/lib/available-cards', () => ({
 vi.mock('@/lib/config', () => ({
   config: {
     features: {
-      showSyncButtons: false,
+      showSyncButtons: true,
     },
   },
 }))
@@ -183,5 +183,23 @@ describe('MembersPage', () => {
 
     const searchField = container.querySelector('input[placeholder="Search by name or card ID..."]')
     expect(searchField).not.toBeNull()
+  })
+
+  it('hides sync buttons for front desk staff while keeping Add Member visible', async () => {
+    authState.profile = {
+      id: 'assistant-1',
+      name: 'Avery Assistant',
+      role: 'staff',
+      titles: ['Administrative Assistant'],
+    }
+    authState.role = 'staff'
+
+    await act(async () => {
+      root.render(<MembersPage />)
+    })
+
+    expect(container.textContent).toContain('Add Member')
+    expect(container.textContent).not.toContain('Sync Cards')
+    expect(container.textContent).not.toContain('Sync Members')
   })
 })

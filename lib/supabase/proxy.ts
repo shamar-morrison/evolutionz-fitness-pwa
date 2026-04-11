@@ -32,22 +32,6 @@ function copyCookies(from: NextResponse, to: NextResponse) {
   return to
 }
 
-function getDeniedRedirectPath(role: AppRole, titles: string[]) {
-  if (role === 'admin') {
-    return '/dashboard'
-  }
-
-  if (titles.includes('Trainer')) {
-    return '/trainer/schedule'
-  }
-
-  if (titles.includes('Administrative Assistant')) {
-    return '/members'
-  }
-
-  return '/unauthorized'
-}
-
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
     request,
@@ -116,7 +100,7 @@ export async function updateSession(request: NextRequest) {
       }
 
       const redirectUrl = request.nextUrl.clone()
-      redirectUrl.pathname = getDeniedRedirectPath(role, titles)
+      redirectUrl.pathname = getAuthenticatedHomePath(role, titles)
       redirectUrl.search = ''
 
       return copyCookies(response, NextResponse.redirect(redirectUrl))
@@ -127,7 +111,7 @@ export async function updateSession(request: NextRequest) {
     }
 
     const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = getAuthenticatedHomePath(profile?.role)
+    redirectUrl.pathname = getAuthenticatedHomePath(profile?.role, profile?.titles)
     redirectUrl.search = ''
 
     return copyCookies(response, NextResponse.redirect(redirectUrl))

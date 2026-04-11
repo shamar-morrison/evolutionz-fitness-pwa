@@ -1,15 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  mockAuthenticatedUser,
+  mockAdminUser,
+  mockForbidden,
   resetServerAuthMocks,
 } from '@/tests/support/server-auth'
 
 const {
   getSupabaseAdminClientMock,
-  readStaffProfileMock,
 } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
-  readStaffProfileMock: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase-admin', () => ({
@@ -20,16 +19,7 @@ vi.mock('@/lib/server-auth', async () => {
   const mod = await import('@/tests/support/server-auth')
 
   return {
-    requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
-  }
-})
-
-vi.mock('@/lib/staff', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/staff')>('@/lib/staff')
-
-  return {
-    ...actual,
-    readStaffProfile: readStaffProfileMock,
+    requireAdminUser: mod.requireAdminUserMock,
   }
 })
 
@@ -186,17 +176,19 @@ describe('POST /api/members/[id]/payments', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
-    readStaffProfileMock.mockReset()
     resetServerAuthMocks()
   })
 
   it('records a payment and syncs the member type from the authenticated profile', async () => {
     const { client, memberUpdates, paymentInserts } = createPaymentsRouteClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
-    mockAuthenticatedUser({ id: 'auth-user-1' })
-    readStaffProfileMock.mockResolvedValue({
-      id: 'profile-1',
-      role: 'staff',
+    mockAdminUser({
+      user: { id: 'auth-user-1' },
+      profile: {
+        id: 'profile-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
     })
 
     const response = await POST(
@@ -219,7 +211,6 @@ describe('POST /api/members/[id]/payments', () => {
       },
     )
 
-    expect(readStaffProfileMock).toHaveBeenCalledWith(client, 'auth-user-1')
     expect(memberUpdates).toEqual([
       {
         member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
@@ -256,6 +247,35 @@ describe('POST /api/members/[id]/payments', () => {
     })
   })
 
+  it('rejects non-admin staff from recording payments directly', async () => {
+    mockForbidden()
+
+    const response = await POST(
+      new Request('http://localhost/api/members/member-1/payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+          payment_method: 'cash',
+          amount_paid: 7500,
+          promotion: null,
+          payment_date: '2026-04-09',
+          notes: null,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Forbidden',
+    })
+  })
+
   it('skips the member update when the submitted type already matches the current member', async () => {
     const { client, memberUpdates, paymentInserts } = createPaymentsRouteClient({
       existingMemberRow: {
@@ -265,9 +285,12 @@ describe('POST /api/members/[id]/payments', () => {
       },
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
-    readStaffProfileMock.mockResolvedValue({
-      id: 'profile-9',
-      role: 'admin',
+    mockAdminUser({
+      profile: {
+        id: 'profile-9',
+        role: 'admin',
+        titles: ['Owner'],
+      },
     })
 
     const response = await POST(

@@ -26,8 +26,8 @@ vi.mock('@/components/role-guard', () => ({
   }) => (role === 'admin' && currentRoleState.role !== 'admin' ? <>{fallback}</> : <>{children}</>),
 }))
 
-vi.mock('@/components/redirect-on-mount', () => ({
-  RedirectOnMount: ({ href }: { href: string }) => <div>{`redirect:${href}`}</div>,
+vi.mock('@/components/authenticated-home-redirect', () => ({
+  AuthenticatedHomeRedirect: () => <div>redirect:home</div>,
 }))
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -356,7 +356,7 @@ describe('SettingsPage', () => {
     expect(container.textContent).toContain('7 days before expiry')
   })
 
-  it('redirects staff users to the trainer schedule', async () => {
+  it('redirects staff users to their authenticated home', async () => {
     currentRoleState.role = 'staff'
 
     await act(async () => {
@@ -367,7 +367,7 @@ describe('SettingsPage', () => {
       )
     })
 
-    expect(container.textContent).toContain('redirect:/trainer/schedule')
+    expect(container.textContent).toContain('redirect:home')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

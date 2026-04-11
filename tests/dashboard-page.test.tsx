@@ -21,8 +21,8 @@ vi.mock('@/components/role-guard', () => ({
   }) => (role === 'admin' && currentRoleState.role !== 'admin' ? <>{fallback}</> : <>{children}</>),
 }))
 
-vi.mock('@/components/redirect-on-mount', () => ({
-  RedirectOnMount: ({ href }: { href: string }) => <div>{`redirect:${href}`}</div>,
+vi.mock('@/components/authenticated-home-redirect', () => ({
+  AuthenticatedHomeRedirect: () => <div>redirect:home</div>,
 }))
 
 vi.mock('@/hooks/use-dashboard-stats', () => ({
@@ -88,14 +88,14 @@ describe('DashboardPage', () => {
     expect(container.textContent).toContain('Quick Actions Content')
   })
 
-  it('redirects staff users to the trainer schedule', async () => {
+  it('redirects staff users to their authenticated home', async () => {
     currentRoleState.role = 'staff'
 
     await act(async () => {
       root.render(<DashboardPage />)
     })
 
-    expect(container.textContent).toContain('redirect:/trainer/schedule')
+    expect(container.textContent).toContain('redirect:home')
     expect(container.textContent).not.toContain('Quick Actions Content')
   })
 })

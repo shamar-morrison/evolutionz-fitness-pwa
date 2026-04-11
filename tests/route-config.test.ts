@@ -46,7 +46,7 @@ describe('route config helpers', () => {
     expect(isRouteAllowed('/reports/revenue', 'staff', ['Trainer'])).toBe(false)
   })
 
-  it('allows administrative assistants on members and classes but not trainer or admin pages', () => {
+  it('allows administrative assistants on member routes only', () => {
     expect(isRouteAllowed('/members', 'staff', ['Administrative Assistant'])).toBe(true)
     expect(
       isRouteAllowed(
@@ -55,11 +55,11 @@ describe('route config helpers', () => {
         ['Administrative Assistant'],
       ),
     ).toBe(true)
-    expect(isRouteAllowed('/classes', 'staff', ['Administrative Assistant'])).toBe(true)
-    expect(isRouteAllowed('/classes/123', 'staff', ['Administrative Assistant'])).toBe(true)
 
     expect(isRouteAllowed('/dashboard', 'staff', ['Administrative Assistant'])).toBe(false)
     expect(isRouteAllowed('/staff', 'staff', ['Administrative Assistant'])).toBe(false)
+    expect(isRouteAllowed('/classes', 'staff', ['Administrative Assistant'])).toBe(false)
+    expect(isRouteAllowed('/classes/123', 'staff', ['Administrative Assistant'])).toBe(false)
     expect(isRouteAllowed('/reports/pt-payments', 'staff', ['Administrative Assistant'])).toBe(
       false,
     )
@@ -80,7 +80,8 @@ describe('route config helpers', () => {
   })
 
   it('returns false when staff does not have a matching title on a restricted route', () => {
-    expect(isRouteAllowed('/members', 'staff', ['Assistant'])).toBe(false)
+    expect(isRouteAllowed('/members', 'staff', ['Assistant'])).toBe(true)
+    expect(isRouteAllowed('/classes', 'staff', ['Assistant'])).toBe(false)
     expect(isRouteAllowed('/trainer/requests', 'staff', ['Medical'])).toBe(false)
   })
 
@@ -135,15 +136,15 @@ describe('route config helpers', () => {
 
     expect(
       getBackLink('/trainer/clients/member-42', 'staff', ['Assistant'], '/trainer/clients'),
-    ).toBe('/unauthorized')
+    ).toBe('/members')
   })
 
   it('keeps the admin-only report and settings routes configured', () => {
+    expect(routeConfig['/reports']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports/pt-payments']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports/class-payments']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports/revenue']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/email']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/settings']?.allowedRoles).toEqual(['admin'])
-    expect(routeConfig['/reports']).toBeUndefined()
   })
 })

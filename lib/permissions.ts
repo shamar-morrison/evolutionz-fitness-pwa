@@ -6,6 +6,7 @@ export type Permission =
   | 'members.suspend'
   | 'members.recordPayment'
   | 'door.unlock'
+  | 'pt.assign'
   | 'pt.viewOwnSchedule'
   | 'pt.viewAllSchedules'
   | 'pt.markSession'
@@ -29,6 +30,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'members.suspend',
     'members.recordPayment',
     'door.unlock',
+    'pt.assign',
     'pt.viewOwnSchedule',
     'pt.viewAllSchedules',
     'pt.markSession',
@@ -52,20 +54,25 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
   administrativeAssistant: [
     'members.view',
     'members.create',
+    'members.edit',
     'members.recordPayment',
     'door.unlock',
-    'classes.view',
-    'classes.register',
-    'classes.markAttendance',
   ],
   medical: [],
-  assistant: [],
+  assistant: [
+    'members.view',
+    'members.create',
+    'members.edit',
+    'members.recordPayment',
+    'door.unlock',
+  ],
   physiotherapistNutritionist: [],
 }
 
 const APPROVAL_REQUIRED: Set<Permission> = new Set([
   'classes.register',
   'members.create',
+  'members.edit',
   'members.recordPayment',
   'pt.markSession',
   'pt.requestReschedule',

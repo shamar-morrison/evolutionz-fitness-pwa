@@ -336,6 +336,26 @@ describe('Member detail page tabs', () => {
     expect(usePtSessionsMock).not.toHaveBeenCalled()
   })
 
+  it('shows front desk staff the PT attendance tab while hiding direct edit and payment controls', async () => {
+    currentRoleState.role = 'staff'
+    currentProfileState.profile = {
+      id: 'assistant-1',
+      name: 'Avery Assistant',
+      role: 'staff',
+      titles: ['Administrative Assistant'],
+    }
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    expect(container.textContent).toContain('PT Attendance')
+    expect(container.textContent).toContain('PT Assignment Section')
+    expect(container.textContent).not.toContain('Edit Member')
+    expect(container.textContent).not.toContain('Record Payment')
+    expect(container.textContent).not.toContain('Membership Type')
+  })
+
   it('uses permissions instead of auth role alone for migrated member detail controls', async () => {
     currentRoleState.role = 'admin'
     currentProfileState.profile = {

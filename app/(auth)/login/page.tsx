@@ -82,7 +82,7 @@ export default function LoginPage() {
         return
       }
 
-      router.push(getAuthenticatedHomePath(profile?.role))
+      router.push(getAuthenticatedHomePath(profile?.role, profile?.titles))
       router.refresh()
     } catch (error) {
       console.error('Failed to sign in:', error)

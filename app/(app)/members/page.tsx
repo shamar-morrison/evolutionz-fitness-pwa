@@ -3,6 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { useAuth } from '@/contexts/auth-context'
 import { useMembers } from '@/hooks/use-members'
 import { usePermissions } from '@/hooks/use-permissions'
 import { MembersTable } from '@/components/members-table'
@@ -24,6 +25,7 @@ import { syncMembersFromDevice } from '@/lib/hik-sync'
 import { syncAvailableAccessCards } from '@/lib/available-cards'
 import { config } from '@/lib/config'
 import { queryKeys } from '@/lib/query-keys'
+import { isFrontDeskStaff } from '@/lib/staff'
 import { RefreshCw, Search, UserPlus } from 'lucide-react'
 import type { MemberStatus, MemberType } from '@/types'
 
@@ -70,7 +72,9 @@ function MembersPageContent() {
   const [isSyncingMembers, setIsSyncingMembers] = useState(false)
   const [isSyncingCards, setIsSyncingCards] = useState(false)
   const queryClient = useQueryClient()
+  const { profile } = useAuth()
   const { can } = usePermissions()
+  const isFrontDesk = isFrontDeskStaff(profile?.titles)
 
   const { members, isLoading, error } = useMembers({
     search,
@@ -147,7 +151,7 @@ function MembersPageContent() {
           <p className="text-muted-foreground">Manage your gym members and their subscriptions.</p>
         </div>
         <div className="flex items-center gap-2">
-          {can('members.edit') && config.features.showSyncButtons ? (
+          {can('members.edit') && !isFrontDesk && config.features.showSyncButtons ? (
             <>
               <Button
                 type="button"
@@ -169,13 +173,15 @@ function MembersPageContent() {
               </Button>
             </>
           ) : null}
-          <Button
-            onClick={() => setShowAddModal(true)}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            <UserPlus className="h-4 w-4" />
-            Add Member
-          </Button>
+          {can('members.create') ? (
+            <Button
+              onClick={() => setShowAddModal(true)}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <UserPlus className="h-4 w-4" />
+              Add Member
+            </Button>
+          ) : null}
         </div>
       </div>
 

@@ -1,10 +1,10 @@
 import { PendingMemberRequestsPage } from '@/components/pending-member-requests-page'
-import { RedirectOnMount } from '@/components/redirect-on-mount'
+import { AuthenticatedHomeRedirect } from '@/components/authenticated-home-redirect'
 import { RoleGuard } from '@/components/role-guard'
 
 export default function PendingMemberRequestsRoute() {
   return (
-    <RoleGuard role="admin" fallback={<RedirectOnMount href="/trainer/schedule" />}>
+    <RoleGuard role="admin" fallback={<AuthenticatedHomeRedirect />}>
       <PendingMemberRequestsPage />
     </RoleGuard>
   )

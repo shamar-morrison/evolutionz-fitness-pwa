@@ -299,7 +299,8 @@ describe('Sidebar', () => {
     })
 
     expect(container.textContent).toContain('Members')
-    expect(container.textContent).toContain('Classes')
+    expect(container.textContent).toContain('Front desk workspace')
+    expect(container.textContent).not.toContain('Classes')
     expect(container.textContent).not.toContain('My Schedule')
     expect(container.textContent).not.toContain('My Clients')
     expect(container.textContent).not.toContain('My Requests')
@@ -311,9 +312,15 @@ describe('Sidebar', () => {
     const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
 
     expect(links).toContain('/members')
-    expect(links).toContain('/classes')
     expect(links).not.toContain('/trainer/clients')
     expect(links).not.toContain('/trainer/requests')
+
+    const groupLabels = Array.from(container.querySelectorAll('[data-sidebar="group-label"]')).map(
+      (label) => label.textContent?.trim(),
+    )
+
+    expect(groupLabels).toContain('Application')
+    expect(groupLabels).not.toContain('Classes')
     expect(useRescheduleRequestsMock).toHaveBeenCalledWith(
       'pending',
       expect.objectContaining({ enabled: false }),

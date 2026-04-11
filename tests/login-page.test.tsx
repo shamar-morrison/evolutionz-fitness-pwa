@@ -24,9 +24,14 @@ vi.mock('@/lib/supabase/client', () => ({
   createClient: createClientMock,
 }))
 
-vi.mock('@/lib/staff', () => ({
-  readStaffProfile: readStaffProfileMock,
-}))
+vi.mock('@/lib/staff', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/staff')>('@/lib/staff')
+
+  return {
+    ...actual,
+    readStaffProfile: readStaffProfileMock,
+  }
+})
 
 vi.mock('@/hooks/use-progress-router', () => ({
   useProgressRouter: () => ({
@@ -124,7 +129,7 @@ describe('LoginPage', () => {
     vi.restoreAllMocks()
   })
 
-  it('signs in and redirects staff to /trainer/schedule with a loading state while the request is in flight', async () => {
+  it('signs in and redirects trainers to /trainer/schedule with a loading state while the request is in flight', async () => {
     const supabase = createSupabaseBrowserClient()
     const pendingSignIn = createDeferred<{
       data: { user: { id: string } }
@@ -136,6 +141,7 @@ describe('LoginPage', () => {
     readStaffProfileMock.mockResolvedValue({
       id: 'trainer-1',
       role: 'staff',
+      titles: ['Trainer'],
     })
 
     await renderLoginPage(root)
@@ -189,6 +195,52 @@ describe('LoginPage', () => {
     expect(pushMock).toHaveBeenCalledWith('/trainer/schedule')
     expect(refreshMock).toHaveBeenCalledOnce()
     expect(container.textContent).not.toContain('Unable to sign in')
+  })
+
+  it('redirects front desk staff to /members after sign-in', async () => {
+    const supabase = createSupabaseBrowserClient()
+
+    supabase.auth.signInWithPassword.mockResolvedValue({
+      data: {
+        user: { id: 'assistant-1' },
+      },
+      error: null,
+    })
+    createClientMock.mockReturnValue(supabase)
+    readStaffProfileMock.mockResolvedValue({
+      id: 'assistant-1',
+      role: 'staff',
+      titles: ['Assistant'],
+    })
+
+    await renderLoginPage(root)
+
+    const emailInput = container.querySelector('#email')
+    const passwordInput = container.querySelector('#password')
+    const form = container.querySelector('form')
+
+    if (!(emailInput instanceof HTMLInputElement)) {
+      throw new Error('Email input not found.')
+    }
+
+    if (!(passwordInput instanceof HTMLInputElement)) {
+      throw new Error('Password input not found.')
+    }
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('Login form not found.')
+    }
+
+    await act(async () => {
+      setInputValue(emailInput, 'assistant@evolutionzfitness.com')
+      setInputValue(passwordInput, 'secret-password')
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+
+    await flushAsyncWork()
+
+    expect(pushMock).toHaveBeenCalledWith('/members')
+    expect(refreshMock).toHaveBeenCalledOnce()
   })
 
   it('redirects admins to /dashboard after sign-in', async () => {

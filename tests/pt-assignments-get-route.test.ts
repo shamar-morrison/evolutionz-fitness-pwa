@@ -88,4 +88,48 @@ describe('GET /api/pt/assignments', () => {
       error: 'Forbidden',
     })
   })
+
+  it('allows front desk staff to read assignments by memberId', async () => {
+    const supabase = { from: vi.fn() }
+
+    getSupabaseAdminClientMock.mockReturnValue(supabase)
+    readTrainerClientsMock.mockResolvedValue([])
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'assistant-1',
+        role: 'staff',
+        titles: ['Assistant'],
+      },
+    })
+
+    const response = await GET(
+      new Request(
+        'http://localhost/api/pt/assignments?memberId=77777777-7777-4777-8777-777777777777&status=active',
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    expect(readTrainerClientsMock).toHaveBeenCalledWith(supabase, {
+      memberId: '77777777-7777-4777-8777-777777777777',
+      status: 'active',
+    })
+  })
+
+  it('rejects front desk requests that are not scoped to a member', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+
+    const response = await GET(new Request('http://localhost/api/pt/assignments?status=active'))
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+  })
 })

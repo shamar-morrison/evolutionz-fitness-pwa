@@ -1,6 +1,6 @@
 'use client'
 
-import { RedirectOnMount } from '@/components/redirect-on-mount'
+import { AuthenticatedHomeRedirect } from '@/components/authenticated-home-redirect'
 import { RoleGuard } from '@/components/role-guard'
 import { useDashboardStats } from '@/hooks/use-dashboard-stats'
 import {
@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 export default function DashboardPage() {
   return (
-    <RoleGuard role="admin" fallback={<RedirectOnMount href="/trainer/schedule" />}>
+    <RoleGuard role="admin" fallback={<AuthenticatedHomeRedirect />}>
       <DashboardPageContent />
     </RoleGuard>
   )

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, Pencil, Trash2, UserRoundPlus } from 'lucide-react'
+import { useAuth } from '@/contexts/auth-context'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { PtAssignmentDialog } from '@/components/pt-assignment-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -17,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { usePermissions } from '@/hooks/use-permissions'
 import { usePtAssignments, useMemberPtAssignment } from '@/hooks/use-pt-scheduling'
 import { useStaff } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
@@ -32,7 +34,7 @@ import {
   type TrainerClient,
 } from '@/lib/pt-scheduling'
 import { queryKeys } from '@/lib/query-keys'
-import { hasStaffTitle } from '@/lib/staff'
+import { hasStaffTitle, isFrontDeskStaff } from '@/lib/staff'
 
 type MemberPtSectionProps = {
   memberId: string
@@ -75,11 +77,15 @@ async function invalidatePtQueries(
 
 export function MemberPtSection({ memberId }: MemberPtSectionProps) {
   const queryClient = useQueryClient()
+  const { profile } = useAuth()
+  const { can } = usePermissions()
   const currentMonthValue = getMonthValueInJamaica()
   const currentMonth = parseMonthValue(currentMonthValue)
+  const isFrontDesk = isFrontDeskStaff(profile?.titles)
+  const canAssignTrainer = can('pt.assign')
   const { assignment, isLoading, error } = useMemberPtAssignment(memberId)
   const allAssignmentsQuery = usePtAssignments({ memberId })
-  const { staff, isLoading: isStaffLoading } = useStaff()
+  const { staff, isLoading: isStaffLoading } = useStaff({ enabled: canAssignTrainer })
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false)
   const [showRemoveDialog, setShowRemoveDialog] = useState(false)
   const [pendingGenerateAssignment, setPendingGenerateAssignment] = useState<TrainerClient | null>(null)
@@ -87,6 +93,10 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
   const [isGenerating, setIsGenerating] = useState(false)
   const isRemoving = removalAction !== null
   const availableTrainers = useMemo(() => {
+    if (!canAssignTrainer) {
+      return []
+    }
+
     const unavailableTrainerIds = new Set(
       (allAssignmentsQuery.data ?? []).map((existingAssignment) => existingAssignment.trainerId),
     )
@@ -95,7 +105,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
       (profile) =>
         hasStaffTitle(profile.titles, 'Trainer') && !unavailableTrainerIds.has(profile.id),
     )
-  }, [allAssignmentsQuery.data, staff])
+  }, [allAssignmentsQuery.data, canAssignTrainer, staff])
 
   const handleAssignmentSaved = async (nextAssignment: TrainerClient, mode: 'create' | 'edit') => {
     await invalidatePtQueries(queryClient, memberId, nextAssignment.id, [
@@ -182,7 +192,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
     }
   }
 
-  if (isLoading || isStaffLoading || allAssignmentsQuery.isLoading) {
+  if (isLoading || allAssignmentsQuery.isLoading || (canAssignTrainer && isStaffLoading)) {
     return (
       <Card>
         <CardHeader className="flex flex-row items-center gap-2">
@@ -260,10 +270,12 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
                     <p className="font-medium">Not set</p>
                   )}
                 </div>
-                <div className="space-y-1">
-                  <p className="text-muted-foreground text-sm">PT Fee</p>
-                  <p className="font-medium">{formatJmdCurrency(assignment.ptFee)}</p>
-                </div>
+                {!isFrontDesk ? (
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground text-sm">PT Fee</p>
+                    <p className="font-medium">{formatJmdCurrency(assignment.ptFee)}</p>
+                  </div>
+                ) : null}
                 {assignment.notes ? (
                   <div className="space-y-1 sm:col-span-2">
                     <p className="text-muted-foreground text-sm">Notes</p>
@@ -272,115 +284,125 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
                 ) : null}
               </div>
 
-              <div className="flex flex-wrap gap-3">
-                <Button variant="outline" onClick={() => setShowAssignmentDialog(true)}>
-                  <Pencil className="h-4 w-4" />
-                  Edit Assignment
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => setShowRemoveDialog(true)}
-                  disabled={isRemoving}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Remove Assignment
-                </Button>
-              </div>
+              {canAssignTrainer ? (
+                <div className="flex flex-wrap gap-3">
+                  <Button variant="outline" onClick={() => setShowAssignmentDialog(true)}>
+                    <Pencil className="h-4 w-4" />
+                    Edit Assignment
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowRemoveDialog(true)}
+                    disabled={isRemoving}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Remove Assignment
+                  </Button>
+                </div>
+              ) : null}
             </>
           ) : (
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-medium">No trainer assigned</p>
                 <p className="text-muted-foreground text-sm">
-                  Assign a trainer to configure recurring PT sessions for this member.
+                  {canAssignTrainer
+                    ? 'Assign a trainer to configure recurring PT sessions for this member.'
+                    : 'Trainer assignments are managed by administrators.'}
                 </p>
               </div>
-              <Button onClick={() => setShowAssignmentDialog(true)}>
-                <UserRoundPlus className="h-4 w-4" />
-                Assign Trainer
-              </Button>
+              {canAssignTrainer ? (
+                <Button onClick={() => setShowAssignmentDialog(true)}>
+                  <UserRoundPlus className="h-4 w-4" />
+                  Assign Trainer
+                </Button>
+              ) : null}
             </div>
           )}
         </CardContent>
       </Card>
 
-      <PtAssignmentDialog
-        open={showAssignmentDialog}
-        onOpenChange={setShowAssignmentDialog}
-        mode={assignment ? 'edit' : 'create'}
-        memberId={memberId}
-        assignment={assignment}
-        trainers={availableTrainers}
-        onSaved={handleAssignmentSaved}
-      />
+      {canAssignTrainer ? (
+        <>
+          <PtAssignmentDialog
+            open={showAssignmentDialog}
+            onOpenChange={setShowAssignmentDialog}
+            mode={assignment ? 'edit' : 'create'}
+            memberId={memberId}
+            assignment={assignment}
+            trainers={availableTrainers}
+            onSaved={handleAssignmentSaved}
+          />
 
-      <Dialog
-        open={showRemoveDialog}
-        onOpenChange={(open) => {
-          setShowRemoveDialog(open)
+          <Dialog
+            open={showRemoveDialog}
+            onOpenChange={(open) => {
+              setShowRemoveDialog(open)
 
-          if (!open) {
-            setRemovalAction(null)
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-[560px]" isLoading={isRemoving}>
-          <DialogHeader>
-            <DialogTitle>Remove trainer assignment?</DialogTitle>
-            <DialogDescription>
-              Choose whether to keep the member&apos;s existing PT sessions or cancel all future scheduled sessions when the assignment is marked inactive.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleRemoveAssignment(false)}
-              disabled={isRemoving}
-              loading={removalAction === 'keep'}
-            >
-              Keep existing sessions
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => void handleRemoveAssignment(true)}
-              disabled={isRemoving}
-              loading={removalAction === 'cancel-future'}
-            >
-              Remove assignment and cancel all future sessions
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setShowRemoveDialog(false)}
-              disabled={isRemoving}
-            >
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              if (!open) {
+                setRemovalAction(null)
+              }
+            }}
+          >
+            <DialogContent className="sm:max-w-[560px]" isLoading={isRemoving}>
+              <DialogHeader>
+                <DialogTitle>Remove trainer assignment?</DialogTitle>
+                <DialogDescription>
+                  Choose whether to keep the member&apos;s existing PT sessions or cancel all future scheduled sessions when the assignment is marked inactive.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleRemoveAssignment(false)}
+                  disabled={isRemoving}
+                  loading={removalAction === 'keep'}
+                >
+                  Keep existing sessions
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => void handleRemoveAssignment(true)}
+                  disabled={isRemoving}
+                  loading={removalAction === 'cancel-future'}
+                >
+                  Remove assignment and cancel all future sessions
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setShowRemoveDialog(false)}
+                  disabled={isRemoving}
+                >
+                  Cancel
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
-      <ConfirmDialog
-        open={Boolean(pendingGenerateAssignment)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPendingGenerateAssignment(null)
-          }
-        }}
-        title="Generate sessions now?"
-        description={
-          currentMonth
-            ? `Would you like to generate sessions for ${getMonthLabel(currentMonth.month, currentMonth.year)}?`
-            : 'Would you like to generate sessions for the current month?'
-        }
-        confirmLabel="Yes, Generate"
-        cancelLabel="No"
-        onConfirm={() => void handleGenerateCurrentMonth()}
-        onCancel={() => setPendingGenerateAssignment(null)}
-        isLoading={isGenerating}
-      />
+          <ConfirmDialog
+            open={Boolean(pendingGenerateAssignment)}
+            onOpenChange={(open) => {
+              if (!open) {
+                setPendingGenerateAssignment(null)
+              }
+            }}
+            title="Generate sessions now?"
+            description={
+              currentMonth
+                ? `Would you like to generate sessions for ${getMonthLabel(currentMonth.month, currentMonth.year)}?`
+                : 'Would you like to generate sessions for the current month?'
+            }
+            confirmLabel="Yes, Generate"
+            cancelLabel="No"
+            onConfirm={() => void handleGenerateCurrentMonth()}
+            onCancel={() => setPendingGenerateAssignment(null)}
+            isLoading={isGenerating}
+          />
+        </>
+      ) : null}
     </>
   )
 }

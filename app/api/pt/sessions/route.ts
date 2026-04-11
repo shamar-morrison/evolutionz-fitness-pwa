@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { PT_SESSION_FILTER_STATUSES } from '@/lib/pt-scheduling'
 import { readPtSessions } from '@/lib/pt-scheduling-server'
 import { requireAuthenticatedProfile } from '@/lib/server-auth'
+import { isFrontDeskStaff } from '@/lib/staff'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const sessionFiltersSchema = z.object({
@@ -44,11 +45,17 @@ export async function GET(request: Request) {
     const nextFilters = { ...filters }
 
     if (authResult.profile.role !== 'admin') {
-      if (filters.trainerId && filters.trainerId !== authResult.profile.id) {
-        return createErrorResponse('Forbidden', 403)
-      }
+      if (isFrontDeskStaff(authResult.profile.titles)) {
+        if (!filters.memberId || filters.trainerId) {
+          return createErrorResponse('Forbidden', 403)
+        }
+      } else {
+        if (filters.trainerId && filters.trainerId !== authResult.profile.id) {
+          return createErrorResponse('Forbidden', 403)
+        }
 
-      nextFilters.trainerId = authResult.profile.id
+        nextFilters.trainerId = authResult.profile.id
+      }
     }
 
     const supabase = getSupabaseAdminClient() as any

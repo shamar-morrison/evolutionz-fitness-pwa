@@ -5,12 +5,25 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  authState,
   deletePtAssignmentMock,
+  permissionState,
   useMemberPtAssignmentMock,
   usePtAssignmentsMock,
   useStaffMock,
 } = vi.hoisted(() => ({
+  authState: {
+    profile: {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin' as 'admin' | 'staff',
+      titles: ['Owner'],
+    },
+  },
   deletePtAssignmentMock: vi.fn(),
+  permissionState: {
+    canAssignTrainer: true,
+  },
   useMemberPtAssignmentMock: vi.fn(),
   usePtAssignmentsMock: vi.fn(),
   useStaffMock: vi.fn(),
@@ -29,6 +42,21 @@ vi.mock('@/hooks/use-pt-scheduling', () => ({
 
 vi.mock('@/hooks/use-staff', () => ({
   useStaff: useStaffMock,
+}))
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({
+    user: null,
+    profile: authState.profile,
+    role: authState.profile.role,
+    loading: false,
+  }),
+}))
+
+vi.mock('@/hooks/use-permissions', () => ({
+  usePermissions: () => ({
+    can: (permission: string) => permission === 'pt.assign' && permissionState.canAssignTrainer,
+  }),
 }))
 
 vi.mock('@/hooks/use-toast', () => ({

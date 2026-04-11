@@ -1,4 +1,5 @@
 import type { UserRole } from '@/types'
+import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
 
 export type AppRole = UserRole
 export type AppTitle =
@@ -23,11 +24,11 @@ export const routeConfig: Record<string, RouteConfig> = {
   },
   '/members': {
     allowedRoles: ['admin', 'staff'],
-    allowedTitles: ['Administrative Assistant'],
+    allowedTitles: ['Administrative Assistant', 'Assistant'],
   },
   '/members/[id]': {
     allowedRoles: ['admin', 'staff'],
-    allowedTitles: ['Trainer', 'Administrative Assistant'],
+    allowedTitles: ['Trainer', 'Administrative Assistant', 'Assistant'],
     backLink: {
       admin: '/members',
       staff: '/members',
@@ -44,17 +45,20 @@ export const routeConfig: Record<string, RouteConfig> = {
   },
   '/classes': {
     allowedRoles: ['admin', 'staff'],
-    allowedTitles: ['Trainer', 'Administrative Assistant'],
+    allowedTitles: ['Trainer'],
   },
   '/classes/[id]': {
     allowedRoles: ['admin', 'staff'],
-    allowedTitles: ['Trainer', 'Administrative Assistant'],
+    allowedTitles: ['Trainer'],
     backLink: {
       admin: '/classes',
       staff: '/classes',
     },
   },
   '/schedule': {
+    allowedRoles: ['admin'],
+  },
+  '/reports': {
     allowedRoles: ['admin'],
   },
   '/reports/pt-payments': {
@@ -108,19 +112,7 @@ function normalizeTitles(titles: string[]): AppTitle[] {
 }
 
 function getDefaultHomePath(role: AppRole, titles: string[]) {
-  if (role === 'admin') {
-    return '/dashboard'
-  }
-
-  if (titles.includes('Trainer')) {
-    return '/trainer/schedule'
-  }
-
-  if (titles.includes('Administrative Assistant')) {
-    return '/members'
-  }
-
-  return '/unauthorized'
+  return getAuthenticatedHomePath(role, titles)
 }
 
 function getRouteConfig(pathname: string): RouteConfig | undefined {
