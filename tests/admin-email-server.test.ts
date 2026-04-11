@@ -205,6 +205,84 @@ function createFakeSupabase(initialRows: AdminEmailDeliveryDbRow[] = []) {
   }
 }
 
+type SequencedSupabaseStep = {
+  operation: 'select' | 'insert' | 'delete'
+  result: SupabaseResult
+}
+
+class SequencedAdminEmailDeliveryQueryBuilder implements PromiseLike<SupabaseResult> {
+  private operation: SequencedSupabaseStep['operation'] | null = null
+
+  constructor(private readonly steps: SequencedSupabaseStep[]) {}
+
+  select(_columns: string) {
+    if (!this.operation) {
+      this.operation = 'select'
+    }
+
+    return this
+  }
+
+  insert(_input: Partial<AdminEmailDeliveryDbRow> | Array<Partial<AdminEmailDeliveryDbRow>>) {
+    this.operation = 'insert'
+    return this
+  }
+
+  delete() {
+    this.operation = 'delete'
+    return this
+  }
+
+  eq(_column: string, _value: unknown) {
+    return this
+  }
+
+  maybeSingle() {
+    return Promise.resolve(this.execute())
+  }
+
+  then<TResult1 = SupabaseResult, TResult2 = never>(
+    onfulfilled?:
+      | ((value: SupabaseResult) => TResult1 | PromiseLike<TResult1>)
+      | null
+      | undefined,
+    onrejected?:
+      | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
+      | null
+      | undefined,
+  ) {
+    return Promise.resolve(this.execute()).then(onfulfilled, onrejected)
+  }
+
+  private execute() {
+    const step = this.steps.shift()
+
+    expect(step, `Missing sequenced step for ${this.operation ?? 'unknown'} operation`).toBeTruthy()
+    expect(step?.operation).toBe(this.operation)
+
+    return step?.result ?? {
+      data: null,
+      error: {
+        message: 'Missing step.',
+      },
+    }
+  }
+}
+
+function createSequencedSupabase(steps: SequencedSupabaseStep[]) {
+  const remainingSteps = [...steps]
+
+  return {
+    assertDone() {
+      expect(remainingSteps).toHaveLength(0)
+    },
+    from(table: string) {
+      expect(table).toBe('admin_email_deliveries')
+      return new SequencedAdminEmailDeliveryQueryBuilder(remainingSteps)
+    },
+  }
+}
+
 function createDeliveryRow(
   overrides: Partial<AdminEmailDeliveryDbRow> = {},
 ): AdminEmailDeliveryDbRow {
@@ -237,6 +315,17 @@ function createProviderErrorResponse(message: string, status = 500) {
       'Content-Type': 'application/json',
     },
   })
+}
+
+function createUniqueViolationResult(): SupabaseResult {
+  return {
+    data: null,
+    error: {
+      code: '23505',
+      message:
+        'duplicate key value violates unique constraint "admin_email_deliveries_idempotency_recipient_sender_unique"',
+    },
+  }
 }
 
 describe('admin email server', () => {
@@ -445,6 +534,119 @@ describe('admin email server', () => {
     expect(supabase.rows[0]?.created_at).not.toBe(staleCreatedAt)
   })
 
+  it('returns false when a retry-after-conflict resolves to a fresh pending row', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-11T12:00:00.000Z'))
+
+    const freshCreatedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    const supabase = createSequencedSupabase([
+      {
+        operation: 'insert',
+        result: createUniqueViolationResult(),
+      },
+      {
+        operation: 'select',
+        result: {
+          data: null,
+          error: null,
+        },
+      },
+      {
+        operation: 'insert',
+        result: createUniqueViolationResult(),
+      },
+      {
+        operation: 'select',
+        result: {
+          data: {
+            id: 'delivery-1',
+            status: 'pending',
+            created_at: freshCreatedAt,
+            provider_message_id: null,
+            sent_at: null,
+          },
+          error: null,
+        },
+      },
+    ])
+    const store = createSupabaseAdminEmailDeliveryStore(supabase)
+
+    await expect(
+      store.reserveDelivery({
+        senderProfileId: 'sender-1',
+        sendDate: '2026-04-11',
+        idempotencyKey: '11111111-1111-4111-8111-111111111111',
+        recipientEmail: 'alpha@example.com',
+      }),
+    ).resolves.toBe(false)
+
+    supabase.assertDone()
+  })
+
+  it('returns false when a stale reservation recycle races with another fresh pending row', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-11T12:00:00.000Z'))
+
+    const staleCreatedAt = new Date(Date.now() - ADMIN_EMAIL_PENDING_DELIVERY_TTL_MS - 1_000)
+      .toISOString()
+    const freshCreatedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    const supabase = createSequencedSupabase([
+      {
+        operation: 'insert',
+        result: createUniqueViolationResult(),
+      },
+      {
+        operation: 'select',
+        result: {
+          data: {
+            id: 'delivery-stale',
+            status: 'pending',
+            created_at: staleCreatedAt,
+            provider_message_id: null,
+            sent_at: null,
+          },
+          error: null,
+        },
+      },
+      {
+        operation: 'delete',
+        result: {
+          data: null,
+          error: null,
+        },
+      },
+      {
+        operation: 'insert',
+        result: createUniqueViolationResult(),
+      },
+      {
+        operation: 'select',
+        result: {
+          data: {
+            id: 'delivery-fresh',
+            status: 'pending',
+            created_at: freshCreatedAt,
+            provider_message_id: null,
+            sent_at: null,
+          },
+          error: null,
+        },
+      },
+    ])
+    const store = createSupabaseAdminEmailDeliveryStore(supabase)
+
+    await expect(
+      store.reserveDelivery({
+        senderProfileId: 'sender-1',
+        sendDate: '2026-04-11',
+        idempotencyKey: '11111111-1111-4111-8111-111111111111',
+        recipientEmail: 'alpha@example.com',
+      }),
+    ).resolves.toBe(false)
+
+    supabase.assertDone()
+  })
+
   it('allows different senders to reuse the same idempotency key and recipient pair', async () => {
     const supabase = createFakeSupabase([
       createDeliveryRow({
@@ -479,6 +681,33 @@ describe('admin email server', () => {
     ])
   })
 
+  it('normalizes the recipient email before marking a delivery as sent', async () => {
+    const supabase = createFakeSupabase([
+      createDeliveryRow({
+        recipient_email: 'alpha@example.com',
+      }),
+    ])
+    const store = createSupabaseAdminEmailDeliveryStore(supabase)
+
+    await expect(
+      store.markDeliverySent({
+        senderProfileId: 'sender-1',
+        idempotencyKey: '11111111-1111-4111-8111-111111111111',
+        recipientEmail: ' ALPHA@example.com ',
+        providerMessageId: 'resend-sent',
+        sentAt: '2026-04-11T12:01:00.000Z',
+      }),
+    ).resolves.toBeUndefined()
+    expect(supabase.rows).toEqual([
+      expect.objectContaining({
+        recipient_email: 'alpha@example.com',
+        status: 'sent',
+        provider_message_id: 'resend-sent',
+        sent_at: '2026-04-11T12:01:00.000Z',
+      }),
+    ])
+  })
+
   it('treats markDeliverySent as idempotent when the row is already sent', async () => {
     const supabase = createFakeSupabase([
       createDeliveryRow({
@@ -504,5 +733,23 @@ describe('admin email server', () => {
         provider_message_id: 'resend-sent',
       }),
     ])
+  })
+
+  it('normalizes the recipient email before releasing a pending delivery', async () => {
+    const supabase = createFakeSupabase([
+      createDeliveryRow({
+        recipient_email: 'alpha@example.com',
+      }),
+    ])
+    const store = createSupabaseAdminEmailDeliveryStore(supabase)
+
+    await expect(
+      store.releasePendingDelivery({
+        senderProfileId: 'sender-1',
+        idempotencyKey: '11111111-1111-4111-8111-111111111111',
+        recipientEmail: ' ALPHA@example.com ',
+      }),
+    ).resolves.toBeUndefined()
+    expect(supabase.rows).toHaveLength(0)
   })
 })

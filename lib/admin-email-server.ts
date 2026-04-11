@@ -371,6 +371,10 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
           throw new Error('Failed to reserve admin email delivery: reservation not found.')
         }
 
+        if (retryExistingDelivery.status === 'pending' && !isPendingDeliveryStale(retryExistingDelivery)) {
+          return false
+        }
+
         return retryExistingDelivery.status !== 'sent'
       }
 
@@ -415,6 +419,10 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         throw new Error('Failed to reserve admin email delivery: reservation not found.')
       }
 
+      if (retryExistingDelivery.status === 'pending' && !isPendingDeliveryStale(retryExistingDelivery)) {
+        return false
+      }
+
       return retryExistingDelivery.status !== 'sent'
     },
     async markDeliverySent(input: {
@@ -424,6 +432,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
       providerMessageId: string | null
       sentAt: string
     }) {
+      const normalizedRecipientEmail = input.recipientEmail.trim().toLowerCase()
       const { data, error } = await supabase
         .from(ADMIN_EMAIL_DELIVERIES_TABLE)
         .update({
@@ -433,7 +442,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         })
         .eq('sender_profile_id', input.senderProfileId)
         .eq('idempotency_key', input.idempotencyKey)
-        .eq('recipient_email', input.recipientEmail)
+        .eq('recipient_email', normalizedRecipientEmail)
         .eq('status', 'pending')
         .select('id')
         .maybeSingle()
@@ -461,12 +470,13 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
       idempotencyKey: string
       recipientEmail: string
     }) {
+      const normalizedRecipientEmail = input.recipientEmail.trim().toLowerCase()
       const { error } = await supabase
         .from(ADMIN_EMAIL_DELIVERIES_TABLE)
         .delete()
         .eq('sender_profile_id', input.senderProfileId)
         .eq('idempotency_key', input.idempotencyKey)
-        .eq('recipient_email', input.recipientEmail)
+        .eq('recipient_email', normalizedRecipientEmail)
         .eq('status', 'pending')
 
       if (error) {
