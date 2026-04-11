@@ -3,7 +3,7 @@
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
-import { Bold, Italic, List, ListOrdered, Paperclip, UnderlineIcon, X } from 'lucide-react'
+import { Bold, Italic, List, ListOrdered, Paperclip, UnderlineIcon, X, Send, Users, PenLine } from 'lucide-react'
 import { useMemo, useState, type ChangeEvent } from 'react'
 import {
   ADMIN_EMAIL_ATTACHMENT_MAX_BYTES,
@@ -360,7 +360,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl space-y-8 pb-8">
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Send Email</h1>
         <p className="text-muted-foreground">
@@ -369,319 +369,359 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
       </div>
 
       <form
-        className="space-y-6"
+        className="grid grid-cols-1 gap-6 items-start lg:grid-cols-12"
         onSubmit={(event) => {
           event.preventDefault()
           void handleSend()
         }}
       >
-        <section className="space-y-5 rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="space-y-1">
-            <h2 className="text-xl font-semibold tracking-tight">Recipients</h2>
-            <p className="text-sm text-muted-foreground">
-              Combine group filters and specific members. Duplicate email addresses are removed
-              automatically before send.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  id="email-active-members"
-                  checked={includeActiveMembers}
-                  onCheckedChange={(checked) => setIncludeActiveMembers(checked === true)}
-                />
-                <div className="space-y-1">
-                  <Label htmlFor="email-active-members">All active members</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Members whose status is currently Active.
-                  </p>
-                </div>
+        <div className="lg:col-span-4 lg:sticky lg:top-6 space-y-6">
+          <section className="space-y-6 flex flex-col rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-primary">
+                <Users className="h-5 w-5" />
+                <h2 className="text-xl font-semibold tracking-tight">Recipients</h2>
               </div>
+              <p className="text-sm text-muted-foreground">
+                Combine group filters and specific members. Duplicate email addresses are removed
+                automatically.
+              </p>
+            </div>
 
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  id="email-expiring-members"
-                  checked={includeExpiringMembers}
-                  onCheckedChange={(checked) => setIncludeExpiringMembers(checked === true)}
-                />
-                <div className="space-y-1">
-                  <Label htmlFor="email-expiring-members">All expiring members</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Active members whose membership ends within the next 7 days.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-3 rounded-xl border border-border/70 bg-muted/20 p-4">
-                <div className="flex items-start gap-3">
+            <div className="space-y-5">
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 rounded-lg border border-transparent hover:bg-muted/50 p-2 -mx-2 transition-colors">
                   <Checkbox
-                    id="email-member-types"
-                    checked={includeMemberTypes}
-                    onCheckedChange={(checked) => setIncludeMemberTypes(checked === true)}
+                    id="email-active-members"
+                    checked={includeActiveMembers}
+                    onCheckedChange={(checked) => setIncludeActiveMembers(checked === true)}
+                    className="mt-1"
                   />
                   <div className="space-y-1">
-                    <Label htmlFor="email-member-types">By membership type</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Choose one or more active membership types to include.
+                    <Label htmlFor="email-active-members" className="cursor-pointer">All active members</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Members whose status is currently Active.
                     </p>
                   </div>
                 </div>
 
-                {includeMemberTypes ? (
-                  <div className="rounded-xl border border-dashed border-border bg-background/80 p-4">
-                    {isMemberTypesLoading ? (
-                      <p className="text-sm text-muted-foreground">Loading membership types...</p>
-                    ) : activeMemberTypes.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        No active membership types are available.
-                      </p>
-                    ) : (
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {activeMemberTypes.map((memberType) => {
-                          const checkboxId = `email-member-type-${memberType.id}`
-                          const isChecked = selectedMemberTypeIds.includes(memberType.id)
+                <div className="flex items-start gap-3 rounded-lg border border-transparent hover:bg-muted/50 p-2 -mx-2 transition-colors">
+                  <Checkbox
+                    id="email-expiring-members"
+                    checked={includeExpiringMembers}
+                    onCheckedChange={(checked) => setIncludeExpiringMembers(checked === true)}
+                    className="mt-1"
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="email-expiring-members" className="cursor-pointer">All expiring members</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Active members whose membership ends within the next 7 days.
+                    </p>
+                  </div>
+                </div>
 
-                          return (
-                            <label
-                              key={memberType.id}
-                              htmlFor={checkboxId}
-                              className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2"
-                            >
-                              <Checkbox
-                                id={checkboxId}
-                                checked={isChecked}
-                                onCheckedChange={(checked) =>
-                                  handleToggleMemberType(memberType.id, checked === true)
-                                }
-                              />
-                              <span className="space-y-1">
-                                <span className="block text-sm font-medium text-foreground">
-                                  {memberType.name}
+                <div className={cn("space-y-4 rounded-xl border p-4 transition-colors", includeMemberTypes ? "border-primary/20 bg-primary/5" : "border-border/70 bg-muted/20 hover:border-border")}>
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="email-member-types"
+                      checked={includeMemberTypes}
+                      onCheckedChange={(checked) => setIncludeMemberTypes(checked === true)}
+                      className="mt-1"
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="email-member-types" className="cursor-pointer">By membership type</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Choose one or more active membership types to include.
+                      </p>
+                    </div>
+                  </div>
+
+                  {includeMemberTypes ? (
+                    <div className="rounded-xl border border-dashed border-border bg-background/80 p-4">
+                      {isMemberTypesLoading ? (
+                        <p className="text-sm text-muted-foreground">Loading membership types...</p>
+                      ) : activeMemberTypes.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          No active membership types are available.
+                        </p>
+                      ) : (
+                        <div className="grid gap-3 sm:grid-cols-1">
+                          {activeMemberTypes.map((memberType) => {
+                            const checkboxId = `email-member-type-${memberType.id}`
+                            const isChecked = selectedMemberTypeIds.includes(memberType.id)
+
+                            return (
+                              <label
+                                key={memberType.id}
+                                htmlFor={checkboxId}
+                                className={cn("flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 transition-colors", isChecked ? "border-primary/50 bg-primary/10" : "border-border bg-card hover:bg-muted/50")}
+                              >
+                                <Checkbox
+                                  id={checkboxId}
+                                  checked={isChecked}
+                                  onCheckedChange={(checked) =>
+                                    handleToggleMemberType(memberType.id, checked === true)
+                                  }
+                                  className="mt-0.5"
+                                />
+                                <span className="space-y-1">
+                                  <span className="block text-sm font-medium text-foreground">
+                                    {memberType.name}
+                                  </span>
                                 </span>
-                              </span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    )}
+                              </label>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <div className="space-y-1">
+                  <Label htmlFor="email-member-picker">Add individual members</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Search members by name and add them one at a time.
+                  </p>
+                </div>
+
+                <div id="email-member-picker">
+                  <SearchableSelect
+                    value={null}
+                    onValueChange={handleSelectIndividual}
+                    options={individualPickerOptions}
+                    placeholder={isMembersLoading ? 'Loading members...' : 'Search members by name'}
+                    searchPlaceholder="Search members..."
+                    emptyMessage="No members with email addresses found."
+                    disabled={isMembersLoading || individualPickerOptions.length === 0}
+                  />
+                </div>
+
+                {selectedIndividuals.length > 0 ? (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {selectedIndividuals.map((recipient) => (
+                       <Badge
+                         key={recipient.id}
+                         variant="secondary"
+                         className="gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+                       >
+                         <span className="max-w-[180px] truncate">
+                           {recipient.name}
+                         </span>
+                         <button
+                           type="button"
+                           className="rounded-full bg-muted-foreground/20 p-0.5 text-muted-foreground transition hover:bg-destructive/20 hover:text-destructive"
+                           onClick={() => handleRemoveIndividual(recipient.id)}
+                           aria-label={`Remove ${recipient.name}`}
+                         >
+                           <X className="h-3 w-3" />
+                         </button>
+                       </Badge>
+                     ))}
                   </div>
                 ) : null}
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="email-member-picker">Add individual members</Label>
-                <p className="text-sm text-muted-foreground">
-                  Search members by name and add them one at a time.
+            <div className="mt-auto pt-6 space-y-3">
+              <div className={cn("rounded-xl p-4 text-center transition-colors", recipientCount > 0 ? "bg-primary/10 text-primary-foreground" : "bg-muted/50")}>
+                <p className={cn("text-2xl font-bold", recipientCount > 0 ? "text-primary" : "text-muted-foreground")}>
+                  {recipientCount}
+                </p>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Recipient{recipientCount === 1 ? '' : 's'} Selected
                 </p>
               </div>
-
-              <div id="email-member-picker">
-                <SearchableSelect
-                  value={null}
-                  onValueChange={handleSelectIndividual}
-                  options={individualPickerOptions}
-                  placeholder={isMembersLoading ? 'Loading members...' : 'Search members by name'}
-                  searchPlaceholder="Search members..."
-                  emptyMessage="No members with email addresses found."
-                  disabled={isMembersLoading || individualPickerOptions.length === 0}
-                />
-              </div>
-
-              {selectedIndividuals.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {selectedIndividuals.map((recipient) => (
-                    <Badge
-                      key={recipient.id}
-                      variant="secondary"
-                      className="gap-2 rounded-full px-3 py-1"
-                    >
-                      <span className="max-w-[220px] truncate">
-                        {recipient.name} ({recipient.email})
-                      </span>
-                      <button
-                        type="button"
-                        className="rounded-full text-muted-foreground transition hover:text-foreground"
-                        onClick={() => handleRemoveIndividual(recipient.id)}
-                        aria-label={`Remove ${recipient.name}`}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </Badge>
-                  ))}
+              
+              {shouldShowLimitWarning ? (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
+                  Your plan supports 100 emails per day. Only the first{' '}
+                  {resendDailyLimit} recipients will receive this email.
                 </div>
               ) : null}
+              {membersError ? (
+                <p className="text-sm text-destructive">{membersError.message}</p>
+              ) : null}
+              {memberTypesError ? (
+                <p className="text-sm text-destructive">{memberTypesError.message}</p>
+              ) : null}
             </div>
-          </div>
+          </section>
+        </div>
 
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">
-              {recipientCount} recipient{recipientCount === 1 ? '' : 's'} selected
-            </p>
-            {shouldShowLimitWarning ? (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
-                Resend&apos;s free plan supports 100 emails per day. Only the first{' '}
-                {resendDailyLimit} recipients will receive this email.
-              </div>
-            ) : null}
-            {membersError ? (
-              <p className="text-sm text-destructive">{membersError.message}</p>
-            ) : null}
-            {memberTypesError ? (
-              <p className="text-sm text-destructive">{memberTypesError.message}</p>
-            ) : null}
-          </div>
-        </section>
-
-        <section className="space-y-5 rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="space-y-1">
-            <h2 className="text-xl font-semibold tracking-tight">Compose</h2>
-            <p className="text-sm text-muted-foreground">
-              Write the subject, rich-text body, and optional attachment.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email-subject">Subject</Label>
-            <Input
-              id="email-subject"
-              type="text"
-              value={subject}
-              onChange={(event) => setSubject(event.target.value)}
-              placeholder="Enter an email subject"
-              disabled={isSending}
-              required
-            />
-          </div>
-
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label>Email body</Label>
-              <div className="flex flex-wrap gap-2 rounded-t-xl border border-border border-b-0 bg-muted/20 px-3 py-2">
-                <Toggle
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  pressed={editor?.isActive('bold') ?? false}
-                  onPressedChange={() => editor?.chain().focus().toggleBold().run()}
-                  disabled={!editor || isSending}
-                  aria-label="Bold"
-                >
-                  <Bold className="h-4 w-4" />
-                </Toggle>
-                <Toggle
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  pressed={editor?.isActive('italic') ?? false}
-                  onPressedChange={() => editor?.chain().focus().toggleItalic().run()}
-                  disabled={!editor || isSending}
-                  aria-label="Italic"
-                >
-                  <Italic className="h-4 w-4" />
-                </Toggle>
-                <Toggle
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  pressed={editor?.isActive('underline') ?? false}
-                  onPressedChange={() => editor?.chain().focus().toggleUnderline().run()}
-                  disabled={!editor || isSending}
-                  aria-label="Underline"
-                >
-                  <UnderlineIcon className="h-4 w-4" />
-                </Toggle>
-                <Toggle
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  pressed={editor?.isActive('bulletList') ?? false}
-                  onPressedChange={() => editor?.chain().focus().toggleBulletList().run()}
-                  disabled={!editor || isSending}
-                  aria-label="Bullet list"
-                >
-                  <List className="h-4 w-4" />
-                </Toggle>
-                <Toggle
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  pressed={editor?.isActive('orderedList') ?? false}
-                  onPressedChange={() => editor?.chain().focus().toggleOrderedList().run()}
-                  disabled={!editor || isSending}
-                  aria-label="Ordered list"
-                >
-                  <ListOrdered className="h-4 w-4" />
-                </Toggle>
-              </div>
-              <div
-                className={cn(
-                  'overflow-hidden rounded-b-xl border border-border bg-background',
-                  isBodyEmpty ? 'border-border' : '',
-                )}
-              >
-                <EditorContent editor={editor} />
+        <div className="lg:col-span-8 flex flex-col gap-6">
+          <section className="space-y-6 rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-sm">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-primary">
+                <PenLine className="h-5 w-5" />
+                <h2 className="text-xl font-semibold tracking-tight">Compose</h2>
               </div>
               <p className="text-sm text-muted-foreground">
-                The email body is sent as rich HTML.
+                Write the subject, rich-text body, and optional attachment.
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email-attachment">Attachment</Label>
-              <Input
-                id="email-attachment"
-                type="file"
-                onChange={handleAttachmentChange}
-                disabled={isSending}
-              />
-              {attachment ? (
-                <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 px-4 py-3 text-sm">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Paperclip className="h-4 w-4 text-muted-foreground" />
-                    <span className="truncate">
-                      {attachment.name} ({formatAttachmentSize(attachment.size)})
-                    </span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAttachment(null)}
-                    disabled={isSending}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              ) : null}
-              {attachmentError ? (
-                <p className="text-sm text-destructive">{attachmentError}</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Attach any file up to 15MB.
-                </p>
-              )}
-            </div>
-          </div>
-        </section>
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="email-subject" className="text-sm font-semibold">Subject</Label>
+                <Input
+                  id="email-subject"
+                  type="text"
+                  value={subject}
+                  onChange={(event) => setSubject(event.target.value)}
+                  placeholder="Enter an email subject"
+                  disabled={isSending}
+                  className="h-11 shadow-sm font-medium"
+                  required
+                />
+              </div>
 
-        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <h2 className="text-xl font-semibold tracking-tight">Send</h2>
+              <div className="space-y-2 flex flex-col">
+                <Label className="text-sm font-semibold">Email body</Label>
+                <div className="flex-1 flex flex-col rounded-xl border border-border shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-ring focus-within:border-ring transition-shadow">
+                  <div className="flex flex-wrap items-center gap-1 border-b border-border bg-muted/30 px-3 py-2">
+                    <Toggle
+                      type="button"
+                      size="sm"
+                      className="h-8 w-8 p-0 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+                      pressed={editor?.isActive('bold') ?? false}
+                      onPressedChange={() => editor?.chain().focus().toggleBold().run()}
+                      disabled={!editor || isSending}
+                      aria-label="Bold"
+                    >
+                      <Bold className="h-4 w-4" />
+                    </Toggle>
+                    <Toggle
+                      type="button"
+                      size="sm"
+                      className="h-8 w-8 p-0 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+                      pressed={editor?.isActive('italic') ?? false}
+                      onPressedChange={() => editor?.chain().focus().toggleItalic().run()}
+                      disabled={!editor || isSending}
+                      aria-label="Italic"
+                    >
+                      <Italic className="h-4 w-4" />
+                    </Toggle>
+                    <Toggle
+                      type="button"
+                      size="sm"
+                      className="h-8 w-8 p-0 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+                      pressed={editor?.isActive('underline') ?? false}
+                      onPressedChange={() => editor?.chain().focus().toggleUnderline().run()}
+                      disabled={!editor || isSending}
+                      aria-label="Underline"
+                    >
+                      <UnderlineIcon className="h-4 w-4" />
+                    </Toggle>
+                    <div className="mx-1 h-4 w-px bg-border" />
+                    <Toggle
+                      type="button"
+                      size="sm"
+                      className="h-8 w-8 p-0 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+                      pressed={editor?.isActive('bulletList') ?? false}
+                      onPressedChange={() => editor?.chain().focus().toggleBulletList().run()}
+                      disabled={!editor || isSending}
+                      aria-label="Bullet list"
+                    >
+                      <List className="h-4 w-4" />
+                    </Toggle>
+                    <Toggle
+                      type="button"
+                      size="sm"
+                      className="h-8 w-8 p-0 data-[state=on]:bg-primary/10 data-[state=on]:text-primary"
+                      pressed={editor?.isActive('orderedList') ?? false}
+                      onPressedChange={() => editor?.chain().focus().toggleOrderedList().run()}
+                      disabled={!editor || isSending}
+                      aria-label="Ordered list"
+                    >
+                      <ListOrdered className="h-4 w-4" />
+                    </Toggle>
+                  </div>
+                  <div
+                    className={cn(
+                      'flex-1 bg-background transition-colors',
+                      isBodyEmpty ? 'bg-muted/5' : '',
+                    )}
+                  >
+                    <EditorContent editor={editor} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <Label htmlFor="email-attachment" className="text-sm font-semibold">Attachment</Label>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <Input
+                    id="email-attachment"
+                    type="file"
+                    onChange={handleAttachmentChange}
+                    disabled={isSending}
+                    className="max-w-md h-10 shadow-sm file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                  />
+                  {!attachment && !attachmentError && (
+                    <span className="text-xs text-muted-foreground">Up to 15MB</span>
+                  )}
+                </div>
+                {attachment ? (
+                  <div className="mt-2 flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Paperclip className="h-4 w-4" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="truncate font-medium text-foreground">
+                          {attachment.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatAttachmentSize(attachment.size)}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setAttachment(null)}
+                      disabled={isSending}
+                      className="h-8 hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ) : null}
+                {attachmentError ? (
+                  <p className="text-sm font-medium text-destructive mt-2">{attachmentError}</p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-border bg-card p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 overflow-hidden relative">
+            <div className="absolute inset-0 bg-linear-to-r from-primary/5 via-transparent to-transparent pointer-events-none" />
+            
+            <div className="relative space-y-1 z-10">
+              <h3 className="text-lg font-semibold tracking-tight">Ready to send?</h3>
               <p className="text-sm text-muted-foreground">
                 The message is sent immediately and is not stored in the app.
               </p>
             </div>
-            <Button type="submit" disabled={isSendDisabled} className="sm:min-w-[160px]">
-              {isSending ? <Spinner className="mr-2" /> : null}
+            <Button 
+              type="submit" 
+              size="lg"
+              disabled={isSendDisabled} 
+              className="w-full sm:w-auto relative z-10 sm:min-w-[160px] shadow-md hover:shadow-lg transition-all"
+            >
+              {isSending ? (
+                <Spinner className="mr-2" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
               {isSending ? 'Sending...' : 'Send Email'}
             </Button>
-          </div>
-        </section>
+          </section>
+        </div>
       </form>
     </div>
   )
