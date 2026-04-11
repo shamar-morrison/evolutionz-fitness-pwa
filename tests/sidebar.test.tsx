@@ -362,6 +362,7 @@ describe('Sidebar', () => {
     })
 
     expect(container.textContent).toContain('Dashboard')
+    expect(container.textContent).toContain('Send Email')
     expect(container.textContent).toContain('Classes')
     expect(container.textContent).toContain('Reports')
     expect(container.textContent).toContain('PT Trainer Payments')
@@ -379,6 +380,7 @@ describe('Sidebar', () => {
     const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
 
     expect(links).toContain('/classes')
+    expect(links).toContain('/email')
     expect(links).toContain('/reports/pt-payments')
     expect(links).toContain('/reports/class-payments')
     expect(links).toContain('/reports/revenue')
@@ -393,6 +395,8 @@ describe('Sidebar', () => {
     expect(groupLabels).toContain('Application')
     expect(groupLabels).toContain('Reports')
     expect(groupLabels).toContain('Notifications')
+    expect(links.indexOf('/staff')).toBeLessThan(links.indexOf('/email'))
+    expect(links.indexOf('/email')).toBeLessThan(links.indexOf('/classes'))
 
     const badges = Array.from(container.querySelectorAll('[data-sidebar="menu-badge"]')).map(
       (badge) => badge.textContent?.trim(),

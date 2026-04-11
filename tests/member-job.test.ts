@@ -250,6 +250,7 @@ describe('member job payload mapping', () => {
       provisionMemberAccessRequestSchema.parse({
         name: 'Jane Doe',
         type: 'General',
+        member_type_id: '11111111-1111-4111-8111-111111111111',
         gender: 'Female',
         email: 'jane@example.com',
         phone: '876-555-1212',
@@ -262,6 +263,7 @@ describe('member job payload mapping', () => {
     ).toEqual({
       name: 'Jane Doe',
       type: 'General',
+      member_type_id: '11111111-1111-4111-8111-111111111111',
       gender: 'Female',
       email: 'jane@example.com',
       phone: '876-555-1212',
@@ -289,6 +291,10 @@ describe('member job payload mapping', () => {
       provisionMemberAccessRequestSchema.parse({
         name: 'Jane Doe',
         type: 'General',
+        member_type_id: '11111111-1111-4111-8111-111111111111',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
         beginTime: '2026-03-30T00:00:00',
         endTime: '2026-07-15T23:59:59',
         cardNo: '0102857149',
@@ -297,7 +303,7 @@ describe('member job payload mapping', () => {
     ).toThrow(/Card code is required\./)
   })
 
-  it('validates optional profile fields and access window datetimes for provisioning requests', () => {
+  it('validates profile fields and access window datetimes for provisioning requests', () => {
     expect(() =>
       addMemberRequestSchema.parse({
         name: 'Jane Doe',
@@ -314,6 +320,10 @@ describe('member job payload mapping', () => {
       provisionMemberAccessRequestSchema.parse({
         name: 'Jane Doe',
         type: 'General',
+        member_type_id: '11111111-1111-4111-8111-111111111111',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
         beginTime: '2026-03-30',
         endTime: '2026-07-15T23:59:59',
         cardNo: '0102857149',

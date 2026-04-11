@@ -56,9 +56,9 @@ type ErrorResponse = {
 
 export type CreateMemberApprovalRequestInput = {
   name: string
-  gender?: MemberGender | null
-  email?: string | null
-  phone?: string | null
+  gender: MemberGender
+  email: string
+  phone: string
   remark?: string | null
   beginTime: string
   endTime: string

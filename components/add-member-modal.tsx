@@ -208,10 +208,37 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       return false
     }
 
-    if (formData.email && !emailSchema.safeParse(formData.email).success) {
+    if (!formData.gender) {
+      toast({
+        title: 'Gender required',
+        description: 'Select the member’s gender before saving.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
+    if (!formData.email.trim()) {
+      toast({
+        title: 'Email required',
+        description: 'Enter the member’s email address before saving.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
+    if (!emailSchema.safeParse(formData.email).success) {
       toast({
         title: 'Invalid email',
-        description: 'Enter a valid email address or leave the field blank.',
+        description: 'Enter a valid email address before saving.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
+    if (!formData.phone.trim()) {
+      toast({
+        title: 'Phone required',
+        description: 'Enter the member’s phone number before saving.',
         variant: 'destructive',
       })
       return false
@@ -285,15 +312,28 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     cardCode,
     cardNo,
   }: MemberSubmissionContext) => {
+    const gender = formData.gender
+    const email = formData.email.trim()
+    const phone = formData.phone.trim()
+
+    if (!gender || !email || !phone) {
+      toast({
+        title: 'Member profile incomplete',
+        description: 'Complete the required profile fields before saving.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     setSubmissionStep('submitting_request')
 
     try {
       const createdRequest = await createMemberApprovalRequest({
         name: formData.name.trim(),
         member_type_id: formData.memberTypeId,
-        ...(formData.gender ? { gender: formData.gender } : {}),
-        ...(formData.email.trim() ? { email: formData.email.trim() } : {}),
-        ...(formData.phone.trim() ? { phone: formData.phone.trim() } : {}),
+        gender,
+        email,
+        phone,
         ...(formData.remark.trim() ? { remark: formData.remark.trim() } : {}),
         beginTime,
         endTime,
@@ -346,6 +386,19 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     cardCode,
     cardNo,
   }: MemberSubmissionContext) => {
+    const gender = formData.gender
+    const email = formData.email.trim()
+    const phone = formData.phone.trim()
+
+    if (!gender || !email || !phone) {
+      toast({
+        title: 'Member profile incomplete',
+        description: 'Complete the required profile fields before saving.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     if (!selectedMemberType) {
       toast({
         title: 'Membership type unavailable',
@@ -371,9 +424,9 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
         name: formData.name.trim(),
         type: selectedMemberType.name,
         memberTypeId: selectedMemberType.id,
-        ...(formData.gender ? { gender: formData.gender } : {}),
-        ...(formData.email.trim() ? { email: formData.email.trim() } : {}),
-        ...(formData.phone.trim() ? { phone: formData.phone.trim() } : {}),
+        gender,
+        email,
+        phone,
         ...(formData.remark.trim() ? { remark: formData.remark.trim() } : {}),
         beginTime,
         endTime,

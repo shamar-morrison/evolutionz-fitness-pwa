@@ -15,9 +15,9 @@ const createMemberApprovalRequestSchema = z
   .object({
     name: z.string().trim().min(1, 'Name is required.'),
     member_type_id: z.string().trim().uuid('Membership type is required.'),
-    gender: z.enum(['Male', 'Female']).nullable().optional(),
-    email: z.string().trim().email('Email must be valid.').nullable().optional(),
-    phone: z.string().trim().min(1).nullable().optional(),
+    gender: z.enum(['Male', 'Female']),
+    email: z.string().trim().min(1, 'Email is required.').email('Email must be valid.'),
+    phone: z.string().trim().min(1, 'Phone is required.'),
     remark: z.string().trim().min(1).nullable().optional(),
     beginTime: z
       .string()

@@ -14,6 +14,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   LogOut,
+  Mail,
   Settings,
   Users,
 } from 'lucide-react'
@@ -93,6 +94,7 @@ const adminNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/members', label: 'Members', icon: Users },
   { href: '/staff', label: 'Staff', icon: Users },
+  { href: '/email', label: 'Send Email', icon: Mail },
   { href: '/classes', label: 'Classes', icon: GraduationCap },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
 ]
