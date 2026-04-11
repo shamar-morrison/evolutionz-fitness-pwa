@@ -39,7 +39,7 @@ import { toast } from '@/hooks/use-toast'
 import { useBackLink } from '@/hooks/use-back-link'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useProgressRouter } from '@/hooks/use-progress-router'
-import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, Trash2, User, BanknoteIcon } from 'lucide-react'
+import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, Trash2, User, BanknoteIcon, X } from 'lucide-react'
 
 export default function MemberDetailPage() {
   const params = useParams()
@@ -54,6 +54,7 @@ export default function MemberDetailPage() {
   const [showAssignCardModal, setShowAssignCardModal] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
   const [activeDialog, setActiveDialog] = useState<
     | null
     | 'suspend'
@@ -326,12 +327,19 @@ export default function MemberDetailPage() {
           </RoleGuard>
           <CardContent className="flex flex-col items-center pt-6">
             <div className="relative">
-              <MemberAvatar
-                name={getCleanMemberName(member.name, member.cardCode)}
-                photoUrl={avatarPhotoUrl}
-                size="lg"
-                className="h-28 w-28 text-2xl"
-              />
+              <button
+                type="button"
+                aria-label="View member photo"
+                onClick={() => avatarPhotoUrl && setLightboxOpen(true)}
+                className={avatarPhotoUrl ? 'cursor-zoom-in rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring' : 'cursor-default'}
+              >
+                <MemberAvatar
+                  name={getCleanMemberName(member.name, member.cardCode)}
+                  photoUrl={avatarPhotoUrl}
+                  size="lg"
+                  className="h-28 w-28 text-2xl"
+                />
+              </button>
               {canEditMember && avatarPhotoUrl ? (
                 <Button
                   type="button"
@@ -689,6 +697,32 @@ export default function MemberDetailPage() {
         isLoading={isActionLoading}
         variant="destructive"
       />
+
+      {lightboxOpen && avatarPhotoUrl ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Member photo"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <button
+            type="button"
+            aria-label="Close photo"
+            className="absolute top-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+            onClick={(e) => { e.stopPropagation(); setLightboxOpen(false) }}
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={avatarPhotoUrl}
+            alt="Member photo"
+            className="h-[min(85vh,85vw)] w-[min(85vh,85vw)] rounded-xl object-cover shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      ) : null}
 
       <EditMemberModal
         member={member}
