@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { AuthCardShell } from '@/components/auth-card-shell'
 import { Button } from '@/components/ui/button'
@@ -22,12 +22,25 @@ const SUCCESS_MESSAGE_MAP = {
 const PASSWORD_TOGGLE_BUTTON_CLASS_NAME =
   'absolute right-3 top-1/2 -translate-y-1/2 rounded-md text-white/40 transition-colors hover:text-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]'
 
-export default function LoginPage() {
-  const router = useProgressRouter()
+function LoginSuccessMessage() {
   const searchParams = useSearchParams()
   const successMessageKey = searchParams.get('message')?.trim() ?? ''
   const successMessage =
     SUCCESS_MESSAGE_MAP[successMessageKey as keyof typeof SUCCESS_MESSAGE_MAP] ?? null
+
+  if (!successMessage) {
+    return null
+  }
+
+  return (
+    <div className="rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
+      {successMessage}
+    </div>
+  )
+}
+
+export default function LoginPage() {
+  const router = useProgressRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -85,11 +98,9 @@ export default function LoginPage() {
       description="Secure access to operations dashboard."
     >
       <div className="space-y-6">
-        {successMessage ? (
-          <div className="rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
-            {successMessage}
-          </div>
-        ) : null}
+        <Suspense fallback={null}>
+          <LoginSuccessMessage />
+        </Suspense>
 
         <form className="space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-2">
