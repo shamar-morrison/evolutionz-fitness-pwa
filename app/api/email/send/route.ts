@@ -5,19 +5,24 @@ import {
   ADMIN_EMAIL_ATTACHMENT_MAX_BYTES,
   dedupeRecipientsByEmail,
   emailRecipientSchema,
+  getResendDailyEmailLimit,
   hasMeaningfulHtmlContent,
-  stripHtmlToText,
 } from '@/lib/admin-email'
-import { getRequiredServerEnv } from '@/lib/server-env'
+import {
+  createSupabaseAdminEmailDeliveryStore,
+  sendAdminResendEmailToRecipient,
+} from '@/lib/admin-email-server'
+import { getJamaicaDateInputValue } from '@/lib/member-access-time'
 import { requireAdminUser } from '@/lib/server-auth'
+import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const RESEND_SEND_BATCH_SIZE = 10
-const RESEND_API_URL = 'https://api.resend.com/emails'
 
 const sendEmailFormSchema = z.object({
   subject: z.string().trim().min(1, 'Subject is required.'),
   body: z.string().trim().min(1, 'Body is required.'),
   recipients: z.string().trim().min(1, 'At least one recipient is required.'),
+  idempotencyKey: z.string().trim().uuid('Idempotency key must be a valid UUID.'),
 })
 
 export const runtime = 'nodejs'
@@ -29,97 +34,21 @@ type ResendAttachment = {
   content_type?: string
 }
 
-type ResendErrorResponse = {
-  error?: {
-    message?: string
-  }
-  message?: string
+type SendResponseCounts = {
+  sentCount?: number
+  alreadySentCount?: number
+  skippedDueToQuotaCount?: number
 }
 
-function createErrorResponse(error: string, status: number) {
+function createErrorResponse(error: string, status: number, counts: SendResponseCounts = {}) {
   return NextResponse.json(
     {
       ok: false,
       error,
+      ...counts,
     },
     { status },
   )
-}
-
-function getResendDailyEmailLimit() {
-  const configuredLimit = parseInt(process.env.RESEND_DAILY_EMAIL_LIMIT ?? '100', 10)
-
-  if (!Number.isFinite(configuredLimit) || configuredLimit <= 0) {
-    return 100
-  }
-
-  return configuredLimit
-}
-
-function getResendErrorMessage(responseBody: unknown) {
-  if (
-    typeof responseBody === 'object' &&
-    responseBody !== null &&
-    'error' in responseBody &&
-    responseBody.error &&
-    typeof responseBody.error === 'object' &&
-    'message' in responseBody.error &&
-    typeof responseBody.error.message === 'string'
-  ) {
-    return responseBody.error.message
-  }
-
-  if (
-    typeof responseBody === 'object' &&
-    responseBody !== null &&
-    'message' in responseBody &&
-    typeof responseBody.message === 'string'
-  ) {
-    return responseBody.message
-  }
-
-  return null
-}
-
-async function parseResendError(response: Response) {
-  let responseBody: ResendErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as ResendErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  return getResendErrorMessage(responseBody) ?? 'Failed to send the email.'
-}
-
-async function sendResendEmailToRecipient(input: {
-  apiKey: string
-  from: string
-  recipientEmail: string
-  subject: string
-  body: string
-  attachments?: ResendAttachment[]
-}) {
-  const response = await fetch(RESEND_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${input.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: input.from,
-      to: [input.recipientEmail],
-      subject: input.subject,
-      html: input.body,
-      text: stripHtmlToText(input.body),
-      attachments: input.attachments,
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error(await parseResendError(response))
-  }
 }
 
 async function buildAttachment(file: File | null) {
@@ -158,6 +87,7 @@ export async function POST(request: Request) {
       subject: formData.get('subject'),
       body: formData.get('body'),
       recipients: formData.get('recipients'),
+      idempotencyKey: formData.get('idempotencyKey'),
     })
 
     if (!hasMeaningfulHtmlContent(parsedForm.body)) {
@@ -173,7 +103,7 @@ export async function POST(request: Request) {
     }
 
     const parsedRecipients = z.array(emailRecipientSchema).min(1).parse(rawRecipients)
-    const recipients = dedupeRecipientsByEmail(parsedRecipients).slice(0, getResendDailyEmailLimit())
+    const recipients = dedupeRecipientsByEmail(parsedRecipients)
 
     if (recipients.length === 0) {
       return createErrorResponse('At least one recipient is required.', 400)
@@ -189,29 +119,73 @@ export async function POST(request: Request) {
       return createErrorResponse('Attachment must be 15MB or under.', 400)
     }
 
-    const apiKey = getRequiredServerEnv('RESEND_API_KEY')
-    const fromAddress = getRequiredServerEnv('MEMBERSHIP_EXPIRY_EMAIL_FROM')
     const attachments = await buildAttachment(attachmentValue instanceof File ? attachmentValue : null)
+    const sendDate = getJamaicaDateInputValue(new Date())
+    const senderProfileId = authResult.profile.id
+    const deliveryStore = createSupabaseAdminEmailDeliveryStore(getSupabaseAdminClient())
+    const alreadySentRecipients = new Set(
+      await deliveryStore.readSentRecipientEmails({
+        senderProfileId,
+        idempotencyKey: parsedForm.idempotencyKey,
+      }),
+    )
+    const pendingRecipients = recipients.filter(
+      (recipient) => !alreadySentRecipients.has(recipient.email),
+    )
+    const sentTodayCount = await deliveryStore.countSentDeliveriesForDate({
+      senderProfileId,
+      sendDate,
+    })
+    const remainingQuota = Math.max(0, getResendDailyEmailLimit() - sentTodayCount)
+    const recipientsToAttempt = pendingRecipients.slice(0, remainingQuota)
+    const skippedDueToQuotaCount = Math.max(0, pendingRecipients.length - recipientsToAttempt.length)
     let sentCount = 0
+    let alreadySentCount = alreadySentRecipients.size
     let failedCount = 0
     let lastErrorMessage = 'Failed to send the email.'
 
-    for (let startIndex = 0; startIndex < recipients.length; startIndex += RESEND_SEND_BATCH_SIZE) {
-      const batch = recipients.slice(startIndex, startIndex + RESEND_SEND_BATCH_SIZE)
+    for (
+      let startIndex = 0;
+      startIndex < recipientsToAttempt.length;
+      startIndex += RESEND_SEND_BATCH_SIZE
+    ) {
+      const batch = recipientsToAttempt.slice(startIndex, startIndex + RESEND_SEND_BATCH_SIZE)
       const results = await Promise.all(
         batch.map(async (recipient) => {
+          const reserved = await deliveryStore.reserveDelivery({
+            senderProfileId,
+            sendDate,
+            idempotencyKey: parsedForm.idempotencyKey,
+            recipientEmail: recipient.email,
+          })
+
+          if (!reserved) {
+            return { ok: true as const, alreadySent: true as const }
+          }
+
           try {
-            await sendResendEmailToRecipient({
-              apiKey,
-              from: fromAddress,
+            const providerMessageId = await sendAdminResendEmailToRecipient({
               recipientEmail: recipient.email,
               subject: parsedForm.subject,
               body: parsedForm.body,
               attachments,
             })
+            await deliveryStore.markDeliverySent({
+              senderProfileId,
+              idempotencyKey: parsedForm.idempotencyKey,
+              recipientEmail: recipient.email,
+              providerMessageId,
+              sentAt: new Date().toISOString(),
+            })
 
-            return { ok: true as const }
+            return { ok: true as const, alreadySent: false as const }
           } catch (error) {
+            await deliveryStore.releasePendingDelivery({
+              senderProfileId,
+              idempotencyKey: parsedForm.idempotencyKey,
+              recipientEmail: recipient.email,
+            })
+
             return {
               ok: false as const,
               error:
@@ -223,6 +197,11 @@ export async function POST(request: Request) {
 
       for (const result of results) {
         if (result.ok) {
+          if (result.alreadySent) {
+            alreadySentCount += 1
+            continue
+          }
+
           sentCount += 1
           continue
         }
@@ -236,12 +215,19 @@ export async function POST(request: Request) {
       return createErrorResponse(
         `${lastErrorMessage} ${sentCount} email${sentCount === 1 ? '' : 's'} sent, ${failedCount} failed.`,
         502,
+        {
+          sentCount,
+          alreadySentCount,
+          skippedDueToQuotaCount,
+        },
       )
     }
 
     return NextResponse.json({
       ok: true,
       sentCount,
+      alreadySentCount,
+      skippedDueToQuotaCount,
     })
   } catch (error) {
     if (error instanceof Error && error.name === 'ZodError') {

@@ -79,4 +79,19 @@ describe('EmailPage', () => {
     expect(page.props.resendDailyLimit).toBe(125)
     expect(redirectMock).not.toHaveBeenCalled()
   })
+
+  it('falls back to the default daily limit when the configured value is invalid', async () => {
+    process.env.RESEND_DAILY_EMAIL_LIMIT = 'invalid'
+    createClientMock.mockResolvedValue(createSupabaseClient({ id: 'admin-1' }))
+    readStaffProfileMock.mockResolvedValue({
+      id: 'admin-1',
+      role: 'admin',
+      titles: ['Owner'],
+    })
+
+    const page = await EmailPage()
+
+    expect(isValidElement(page)).toBe(true)
+    expect(page.props.resendDailyLimit).toBe(100)
+  })
 })

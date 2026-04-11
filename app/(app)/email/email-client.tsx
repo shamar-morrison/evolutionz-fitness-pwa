@@ -44,11 +44,71 @@ type RecipientsSuccessResponse = {
 type SendSuccessResponse = {
   ok: true
   sentCount: number
+  alreadySentCount: number
+  skippedDueToQuotaCount: number
 }
 
 function formatAttachmentSize(size: number) {
   const sizeInMegabytes = size / (1024 * 1024)
   return `${sizeInMegabytes.toFixed(sizeInMegabytes >= 10 ? 0 : 1)} MB`
+}
+
+function formatRecipientLabel(count: number) {
+  return `${count} recipient${count === 1 ? '' : 's'}`
+}
+
+function createIdempotencyKey() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID()
+  }
+
+  if (typeof globalThis.crypto?.getRandomValues === 'function') {
+    const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  }
+
+  throw new Error('Unable to generate an email send key.')
+}
+
+function getSendSuccessToast(input: SendSuccessResponse) {
+  const descriptionParts: string[] = []
+
+  if (input.sentCount > 0) {
+    descriptionParts.push(`Sent to ${formatRecipientLabel(input.sentCount)}.`)
+  }
+
+  if (input.alreadySentCount > 0) {
+    descriptionParts.push(
+      `${formatRecipientLabel(input.alreadySentCount)} already sent for this draft.`,
+    )
+  }
+
+  if (input.skippedDueToQuotaCount > 0) {
+    descriptionParts.push(
+      `${formatRecipientLabel(input.skippedDueToQuotaCount)} skipped because the daily limit was reached.`,
+    )
+  }
+
+  if (descriptionParts.length === 0) {
+    descriptionParts.push('No new emails were sent.')
+  }
+
+  let title = 'Email sent'
+
+  if (input.sentCount === 0) {
+    title = 'No new emails sent'
+  } else if (input.skippedDueToQuotaCount > 0) {
+    title = 'Email partially sent'
+  }
+
+  return {
+    title,
+    description: descriptionParts.join(' '),
+  }
 }
 
 function getResponseErrorMessage(responseBody: unknown, fallback: string) {
@@ -102,6 +162,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   const [bodyHtml, setBodyHtml] = useState('')
   const [attachment, setAttachment] = useState<File | null>(null)
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
+  const [draftIdempotencyKey, setDraftIdempotencyKey] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
   const { members, isLoading: isMembersLoading, error: membersError } = useMembers()
   const { memberTypes, isLoading: isMemberTypesLoading, error: memberTypesError } = useMemberTypes()
@@ -163,6 +224,10 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   const isSendDisabled =
     isSending || recipientCount === 0 || !subject.trim() || isBodyEmpty || isMembersLoading
 
+  const handleDraftChanged = () => {
+    setDraftIdempotencyKey(null)
+  }
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -182,6 +247,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
       },
     },
     onUpdate({ editor: nextEditor }) {
+      handleDraftChanged()
       setBodyHtml(nextEditor.getHTML())
     },
   })
@@ -199,6 +265,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
       return
     }
 
+    handleDraftChanged()
     setSelectedIndividuals((currentRecipients) => {
       if (currentRecipients.some((recipient) => recipient.id === recipientToAdd.id)) {
         return currentRecipients
@@ -209,12 +276,14 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   }
 
   const handleRemoveIndividual = (memberId: string) => {
+    handleDraftChanged()
     setSelectedIndividuals((currentRecipients) =>
       currentRecipients.filter((recipient) => recipient.id !== memberId),
     )
   }
 
   const handleToggleMemberType = (memberTypeId: string, checked: boolean) => {
+    handleDraftChanged()
     setSelectedMemberTypeIds((currentIds) => {
       if (checked) {
         return currentIds.includes(memberTypeId) ? currentIds : [...currentIds, memberTypeId]
@@ -228,6 +297,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     const file = event.target.files?.[0] ?? null
 
     if (!file) {
+      handleDraftChanged()
       setAttachment(null)
       setAttachmentError(null)
       return
@@ -240,6 +310,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
       return
     }
 
+    handleDraftChanged()
     setAttachment(file)
     setAttachmentError(null)
   }
@@ -253,6 +324,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     setSubject('')
     setAttachment(null)
     setAttachmentError(null)
+    setDraftIdempotencyKey(null)
     setBodyHtml('')
     editor?.commands.clearContent()
   }
@@ -265,6 +337,12 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     setIsSending(true)
 
     try {
+      const idempotencyKey = draftIdempotencyKey ?? createIdempotencyKey()
+
+      if (draftIdempotencyKey !== idempotencyKey) {
+        setDraftIdempotencyKey(idempotencyKey)
+      }
+
       const recipientsResponse = await fetch(
         buildRecipientsLookupUrl({
           activeMembers: includeActiveMembers,
@@ -305,10 +383,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
         name,
         email,
       }))
-      const recipientsToSend: EmailRecipient[] = dedupeRecipientsByEmail(resolvedRecipients).slice(
-        0,
-        resendDailyLimit,
-      )
+      const recipientsToSend: EmailRecipient[] = dedupeRecipientsByEmail(resolvedRecipients)
 
       if (recipientsToSend.length === 0) {
         throw new Error('Select at least one recipient before sending.')
@@ -318,6 +393,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
       formData.set('subject', subject.trim())
       formData.set('body', bodyHtml)
       formData.set('recipients', JSON.stringify(recipientsToSend))
+      formData.set('idempotencyKey', idempotencyKey)
 
       if (attachment) {
         formData.set('attachment', attachment)
@@ -343,10 +419,12 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
       }
 
       toast({
-        title: 'Email sent',
-        description: `Email sent to ${sendResponseBody.sentCount} recipients.`,
+        ...getSendSuccessToast(sendResponseBody),
       })
-      resetForm()
+
+      if (sendResponseBody.skippedDueToQuotaCount === 0) {
+        resetForm()
+      }
     } catch (error) {
       toast({
         title: 'Send failed',
@@ -393,7 +471,10 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
                   <Checkbox
                     id="email-active-members"
                     checked={includeActiveMembers}
-                    onCheckedChange={(checked) => setIncludeActiveMembers(checked === true)}
+                    onCheckedChange={(checked) => {
+                      handleDraftChanged()
+                      setIncludeActiveMembers(checked === true)
+                    }}
                     className="mt-1"
                   />
                   <div className="space-y-1">
@@ -408,7 +489,10 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
                   <Checkbox
                     id="email-expiring-members"
                     checked={includeExpiringMembers}
-                    onCheckedChange={(checked) => setIncludeExpiringMembers(checked === true)}
+                    onCheckedChange={(checked) => {
+                      handleDraftChanged()
+                      setIncludeExpiringMembers(checked === true)
+                    }}
                     className="mt-1"
                   />
                   <div className="space-y-1">
@@ -424,7 +508,10 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
                     <Checkbox
                       id="email-member-types"
                       checked={includeMemberTypes}
-                      onCheckedChange={(checked) => setIncludeMemberTypes(checked === true)}
+                      onCheckedChange={(checked) => {
+                        handleDraftChanged()
+                        setIncludeMemberTypes(checked === true)
+                      }}
                       className="mt-1"
                     />
                     <div className="space-y-1">
@@ -536,8 +623,8 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
               
               {shouldShowLimitWarning ? (
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
-                  Your plan supports 100 emails per day. Only the first{' '}
-                  {resendDailyLimit} recipients will receive this email.
+                  You can send up to {formatRecipientLabel(resendDailyLimit)} per day. Only the
+                  first {formatRecipientLabel(resendDailyLimit)} will receive this email.
                 </div>
               ) : null}
               {membersError ? (
@@ -569,7 +656,10 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
                   id="email-subject"
                   type="text"
                   value={subject}
-                  onChange={(event) => setSubject(event.target.value)}
+                  onChange={(event) => {
+                    handleDraftChanged()
+                    setSubject(event.target.value)
+                  }}
                   placeholder="Enter an email subject"
                   disabled={isSending}
                   className="h-11 shadow-sm font-medium"
@@ -682,7 +772,10 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => setAttachment(null)}
+                      onClick={() => {
+                        handleDraftChanged()
+                        setAttachment(null)
+                      }}
                       disabled={isSending}
                       className="h-8 hover:bg-destructive/10 hover:text-destructive"
                     >

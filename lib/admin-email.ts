@@ -29,6 +29,16 @@ function normalizeEmailAddress(value: string | null | undefined) {
   return normalizedValue ? normalizedValue.toLowerCase() : null
 }
 
+export function getResendDailyEmailLimit() {
+  const configuredLimit = parseInt(process.env.RESEND_DAILY_EMAIL_LIMIT ?? '100', 10)
+
+  if (!Number.isFinite(configuredLimit) || configuredLimit <= 0) {
+    return 100
+  }
+
+  return configuredLimit
+}
+
 export function stripHtmlToText(html: string) {
   return html
     .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/giu, ' ')
@@ -84,11 +94,13 @@ export function toEmailRecipient(member: Pick<Member, 'id' | 'name' | 'email'>) 
     return null
   }
 
-  return {
+  const parsedRecipient = emailRecipientWithIdSchema.safeParse({
     id,
     name,
     email,
-  } satisfies EmailRecipientWithId
+  })
+
+  return parsedRecipient.success ? parsedRecipient.data : null
 }
 
 function isMemberExpiringSoon(member: Pick<Member, 'status' | 'endTime'>, now: Date) {
