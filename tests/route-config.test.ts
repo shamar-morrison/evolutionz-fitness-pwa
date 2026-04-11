@@ -142,6 +142,7 @@ describe('route config helpers', () => {
     expect(routeConfig['/reports/pt-payments']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports/class-payments']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports/revenue']?.allowedRoles).toEqual(['admin'])
+    expect(routeConfig['/email']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/settings']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports']).toBeUndefined()
   })
