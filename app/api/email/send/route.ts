@@ -5,7 +5,6 @@ import {
   ADMIN_EMAIL_ATTACHMENT_MAX_BYTES,
   dedupeRecipientsByEmail,
   emailRecipientSchema,
-  getResendDailyEmailLimit,
   hasMeaningfulHtmlContent,
 } from '@/lib/admin-email'
 import {
@@ -133,12 +132,12 @@ export async function POST(request: Request) {
     const pendingRecipients = recipients.filter(
       (recipient) => !alreadySentRecipients.has(recipient.email),
     )
-    const sentTodayCount = await deliveryStore.countSentDeliveriesForDate({
+    const availableQuotaCount = await deliveryStore.reserveDailyQuota({
       senderProfileId,
       sendDate,
+      requestedCount: pendingRecipients.length,
     })
-    const remainingQuota = Math.max(0, getResendDailyEmailLimit() - sentTodayCount)
-    const recipientsToAttempt = pendingRecipients.slice(0, remainingQuota)
+    const recipientsToAttempt = pendingRecipients.slice(0, availableQuotaCount)
     const skippedDueToQuotaCount = Math.max(0, pendingRecipients.length - recipientsToAttempt.length)
     let sentCount = 0
     let alreadySentCount = alreadySentRecipients.size

@@ -112,17 +112,35 @@ function createSendRequest(input: {
   })
 }
 
+function isActivePendingDelivery(record: DeliveryRecord) {
+  if (record.status !== 'pending') {
+    return false
+  }
+
+  const createdAtMs = Date.parse(record.createdAt)
+
+  return Number.isFinite(createdAtMs) && Date.now() - createdAtMs < ADMIN_EMAIL_PENDING_DELIVERY_TTL_MS
+}
+
 function createDeliveryStore(records: DeliveryRecord[], options: DeliveryStoreOptions = {}) {
   const markFailuresByRecipient = new Map(Object.entries(options.markFailuresByRecipient ?? {}))
 
   return {
-    async countSentDeliveriesForDate(input: { senderProfileId: string; sendDate: string }) {
-      return records.filter(
+    async reserveDailyQuota(input: {
+      senderProfileId: string
+      sendDate: string
+      requestedCount: number
+    }) {
+      const configuredLimit = parseInt(process.env.RESEND_DAILY_EMAIL_LIMIT ?? '100', 10)
+      const dailyLimit = Number.isFinite(configuredLimit) && configuredLimit > 0 ? configuredLimit : 100
+      const usedCount = records.filter(
         (record) =>
           record.senderProfileId === input.senderProfileId &&
           record.sendDate === input.sendDate &&
-          record.status === 'sent',
+          (record.status === 'sent' || isActivePendingDelivery(record)),
       ).length
+
+      return Math.min(input.requestedCount, Math.max(0, dailyLimit - usedCount))
     },
     async readSentRecipientEmails(input: { senderProfileId: string; idempotencyKey: string }) {
       return records
@@ -142,6 +160,7 @@ function createDeliveryStore(records: DeliveryRecord[], options: DeliveryStoreOp
     }) {
       const duplicateIndex = records.findIndex(
         (record) =>
+          record.senderProfileId === input.senderProfileId &&
           record.idempotencyKey === input.idempotencyKey &&
           record.recipientEmail === input.recipientEmail,
       )
@@ -154,9 +173,7 @@ function createDeliveryStore(records: DeliveryRecord[], options: DeliveryStoreOp
         }
 
         const createdAtMs = Date.parse(duplicate?.createdAt ?? '')
-        const isStale =
-          !Number.isFinite(createdAtMs) ||
-          Date.now() - createdAtMs >= ADMIN_EMAIL_PENDING_DELIVERY_TTL_MS
+        const isStale = !Number.isFinite(createdAtMs) || !isActivePendingDelivery(duplicate)
 
         if (!isStale) {
           return true
@@ -369,6 +386,52 @@ describe('POST /api/email/send', () => {
     })
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(deliveries).toHaveLength(2)
+  })
+
+  it('counts fresh pending deliveries toward the daily quota before sending', async () => {
+    configureDeliveryStore([
+      {
+        senderProfileId: 'user-1',
+        sendDate: '2026-04-11',
+        idempotencyKey: '99999999-9999-4999-8999-999999999999',
+        recipientEmail: 'held@example.com',
+        status: 'pending',
+        providerMessageId: null,
+        sentAt: null,
+        createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      },
+    ])
+    process.env.RESEND_API_KEY = 'resend-key'
+    process.env.MEMBERSHIP_EXPIRY_EMAIL_FROM = 'Evolutionz Fitness <reminders@example.com>'
+    process.env.RESEND_DAILY_EMAIL_LIMIT = '2'
+    const fetchMock = vi.fn().mockResolvedValue(createSuccessResponse())
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await POST(
+      createSendRequest({
+        idempotencyKey: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      sentCount: 1,
+      alreadySentCount: 0,
+      skippedDueToQuotaCount: 1,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(deliveries).toEqual([
+      expect.objectContaining({
+        recipientEmail: 'held@example.com',
+        status: 'pending',
+      }),
+      expect.objectContaining({
+        recipientEmail: 'alpha@example.com',
+        status: 'sent',
+      }),
+    ])
   })
 
   it('retries accepted sends when marking them sent fails before eventually persisting them', async () => {

@@ -1,0 +1,6 @@
+alter table public.admin_email_deliveries
+drop constraint if exists admin_email_deliveries_idempotency_recipient_unique;
+
+alter table public.admin_email_deliveries
+add constraint admin_email_deliveries_idempotency_recipient_sender_unique
+unique (idempotency_key, recipient_email, sender_profile_id);

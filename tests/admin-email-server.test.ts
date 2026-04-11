@@ -113,6 +113,7 @@ class AdminEmailDeliveryQueryBuilder implements PromiseLike<SupabaseResult> {
         const hasConflict = this.insertRows.some((candidate) =>
           this.rows.some(
             (row) =>
+              row.sender_profile_id === candidate.sender_profile_id &&
               row.idempotency_key === candidate.idempotency_key &&
               row.recipient_email === candidate.recipient_email,
           ),
@@ -124,7 +125,7 @@ class AdminEmailDeliveryQueryBuilder implements PromiseLike<SupabaseResult> {
             error: {
               code: '23505',
               message:
-                'duplicate key value violates unique constraint "admin_email_deliveries_idempotency_recipient_unique"',
+                'duplicate key value violates unique constraint "admin_email_deliveries_idempotency_recipient_sender_unique"',
             },
           }
         }
@@ -243,6 +244,7 @@ describe('admin email server', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+    delete process.env.RESEND_DAILY_EMAIL_LIMIT
   })
 
   it('derives a stable provider idempotency key from the draft id and normalized email', () => {
@@ -329,6 +331,64 @@ describe('admin email server', () => {
     expect(supabase.rows).toHaveLength(1)
   })
 
+  it('counts sent and fresh pending deliveries toward the daily quota for the same sender and date', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-11T12:00:00.000Z'))
+    process.env.RESEND_DAILY_EMAIL_LIMIT = '3'
+
+    const freshCreatedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    const staleCreatedAt = new Date(Date.now() - ADMIN_EMAIL_PENDING_DELIVERY_TTL_MS - 1_000)
+      .toISOString()
+    const supabase = createFakeSupabase([
+      createDeliveryRow({
+        id: 'delivery-1',
+        sender_profile_id: 'sender-1',
+        send_date: '2026-04-11',
+        recipient_email: 'alpha@example.com',
+        status: 'sent',
+      }),
+      createDeliveryRow({
+        id: 'delivery-2',
+        sender_profile_id: 'sender-1',
+        send_date: '2026-04-11',
+        recipient_email: 'beta@example.com',
+        status: 'pending',
+        created_at: freshCreatedAt,
+      }),
+      createDeliveryRow({
+        id: 'delivery-3',
+        sender_profile_id: 'sender-1',
+        send_date: '2026-04-11',
+        recipient_email: 'gamma@example.com',
+        status: 'pending',
+        created_at: staleCreatedAt,
+      }),
+      createDeliveryRow({
+        id: 'delivery-4',
+        sender_profile_id: 'sender-2',
+        send_date: '2026-04-11',
+        recipient_email: 'delta@example.com',
+        status: 'sent',
+      }),
+      createDeliveryRow({
+        id: 'delivery-5',
+        sender_profile_id: 'sender-1',
+        send_date: '2026-04-10',
+        recipient_email: 'epsilon@example.com',
+        status: 'sent',
+      }),
+    ])
+    const store = createSupabaseAdminEmailDeliveryStore(supabase)
+
+    await expect(
+      store.reserveDailyQuota({
+        senderProfileId: 'sender-1',
+        sendDate: '2026-04-11',
+        requestedCount: 5,
+      }),
+    ).resolves.toBe(1)
+  })
+
   it('treats fresh pending conflicts as retryable without deleting the reservation', async () => {
     const freshCreatedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString()
     const supabase = createFakeSupabase([
@@ -383,6 +443,40 @@ describe('admin email server', () => {
       }),
     )
     expect(supabase.rows[0]?.created_at).not.toBe(staleCreatedAt)
+  })
+
+  it('allows different senders to reuse the same idempotency key and recipient pair', async () => {
+    const supabase = createFakeSupabase([
+      createDeliveryRow({
+        sender_profile_id: 'sender-1',
+        recipient_email: 'alpha@example.com',
+        status: 'sent',
+        provider_message_id: 'resend-sent',
+        sent_at: '2026-04-11T12:00:00.000Z',
+      }),
+    ])
+    const store = createSupabaseAdminEmailDeliveryStore(supabase)
+
+    await expect(
+      store.reserveDelivery({
+        senderProfileId: 'sender-2',
+        sendDate: '2026-04-11',
+        idempotencyKey: '11111111-1111-4111-8111-111111111111',
+        recipientEmail: 'alpha@example.com',
+      }),
+    ).resolves.toBe(true)
+    expect(supabase.rows).toEqual([
+      expect.objectContaining({
+        sender_profile_id: 'sender-1',
+        recipient_email: 'alpha@example.com',
+        status: 'sent',
+      }),
+      expect.objectContaining({
+        sender_profile_id: 'sender-2',
+        recipient_email: 'alpha@example.com',
+        status: 'pending',
+      }),
+    ])
   })
 
   it('treats markDeliverySent as idempotent when the row is already sent', async () => {

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { stripHtmlToText } from '@/lib/admin-email'
+import { getResendDailyEmailLimit, stripHtmlToText } from '@/lib/admin-email'
 import { getRequiredServerEnv } from '@/lib/server-env'
 
 const ADMIN_EMAIL_DELIVERIES_TABLE = 'admin_email_deliveries'
@@ -232,21 +232,17 @@ export async function sendAdminResendEmailToRecipient(input: {
 
 export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
   async function readDelivery(input: {
+    senderProfileId: string
     idempotencyKey: string
     recipientEmail: string
-    senderProfileId?: string
   }) {
-    let query = supabase
+    const { data, error } = await supabase
       .from(ADMIN_EMAIL_DELIVERIES_TABLE)
       .select('id,status,created_at,provider_message_id,sent_at')
+      .eq('sender_profile_id', input.senderProfileId)
       .eq('idempotency_key', input.idempotencyKey)
       .eq('recipient_email', normalizeRecipientEmail(input.recipientEmail))
-
-    if (input.senderProfileId) {
-      query = query.eq('sender_profile_id', input.senderProfileId)
-    }
-
-    const { data, error } = await query.maybeSingle()
+      .maybeSingle()
 
     if (error) {
       throw new Error(`Failed to read admin email delivery reservation: ${error.message}`)
@@ -275,6 +271,29 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
   }
 
   return {
+    async reserveDailyQuota(input: {
+      senderProfileId: string
+      sendDate: string
+      requestedCount: number
+    }) {
+      const { data, error } = await supabase
+        .from(ADMIN_EMAIL_DELIVERIES_TABLE)
+        .select('status,created_at')
+        .eq('sender_profile_id', input.senderProfileId)
+        .eq('send_date', input.sendDate)
+
+      if (error) {
+        throw new Error(`Failed to read admin email delivery counts: ${error.message}`)
+      }
+
+      const usedCount = ((data ?? []) as Array<Pick<AdminEmailDeliveryRow, 'status' | 'created_at'>>)
+        .filter((row) => row.status === 'sent' || isPendingDeliveryStale(row) === false).length
+
+      return Math.min(
+        input.requestedCount,
+        Math.max(0, getResendDailyEmailLimit() - usedCount),
+      )
+    },
     async countSentDeliveriesForDate(input: { senderProfileId: string; sendDate: string }) {
       const { data, error } = await supabase
         .from(ADMIN_EMAIL_DELIVERIES_TABLE)
@@ -324,6 +343,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
       }
 
       const existingDelivery = await readDelivery({
+        senderProfileId: input.senderProfileId,
         idempotencyKey: input.idempotencyKey,
         recipientEmail: input.recipientEmail,
       })
@@ -342,6 +362,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         }
 
         const retryExistingDelivery = await readDelivery({
+          senderProfileId: input.senderProfileId,
           idempotencyKey: input.idempotencyKey,
           recipientEmail: input.recipientEmail,
         })
@@ -365,6 +386,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         .from(ADMIN_EMAIL_DELIVERIES_TABLE)
         .delete()
         .eq('id', existingDelivery.id)
+        .eq('sender_profile_id', input.senderProfileId)
         .eq('status', 'pending')
 
       if (deleteError) {
@@ -384,6 +406,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
       }
 
       const retryExistingDelivery = await readDelivery({
+        senderProfileId: input.senderProfileId,
         idempotencyKey: input.idempotencyKey,
         recipientEmail: input.recipientEmail,
       })
