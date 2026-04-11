@@ -33,7 +33,11 @@ vi.mock('@/hooks/use-progress-router', () => ({
   }),
 }))
 
-import LoginPage from '@/app/login/page'
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+}))
+
+import LoginPage from '@/app/(auth)/login/page'
 
 function createDeferred<T>() {
   let resolvePromise!: (value: T) => void
