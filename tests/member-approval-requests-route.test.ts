@@ -345,6 +345,7 @@ function createMemberApprovalRequestsClient({
 
 describe('member approval request routes', () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
     moveMemberPhotoObjectMock.mockReset()
@@ -393,6 +394,9 @@ describe('member approval request routes', () => {
   })
 
   it('creates a pending request for the authenticated profile and uses the synced card code', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 3, 9, 12, 0, 0))
+
     const { client, requestInserts } = createMemberApprovalRequestsClient({
       insertedRequestRow: createRequestRecord({
         member_type_id: MEMBER_TYPE_ID_GENERAL,

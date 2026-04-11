@@ -9,12 +9,14 @@ const {
   pushMock,
   refreshMock,
   readStaffProfileMock,
+  searchParamsMock,
   signOutMock,
 } = vi.hoisted(() => ({
   createClientMock: vi.fn(),
   pushMock: vi.fn(),
   refreshMock: vi.fn(),
   readStaffProfileMock: vi.fn(),
+  searchParamsMock: vi.fn(),
   signOutMock: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -34,7 +36,7 @@ vi.mock('@/hooks/use-progress-router', () => ({
 }))
 
 vi.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: searchParamsMock,
 }))
 
 import LoginPage from '@/app/(auth)/login/page'
@@ -84,6 +86,12 @@ async function flushAsyncWork() {
   })
 }
 
+async function renderLoginPage(root: Root) {
+  await act(async () => {
+    root.render(<LoginPage />)
+  })
+}
+
 describe('LoginPage', () => {
   let container: HTMLDivElement
   let root: Root
@@ -91,6 +99,14 @@ describe('LoginPage', () => {
   beforeEach(() => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
+    createClientMock.mockReset()
+    pushMock.mockReset()
+    refreshMock.mockReset()
+    readStaffProfileMock.mockReset()
+    searchParamsMock.mockReset()
+    searchParamsMock.mockReturnValue(new URLSearchParams())
+    signOutMock.mockReset()
+    signOutMock.mockResolvedValue(undefined)
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -122,9 +138,7 @@ describe('LoginPage', () => {
       role: 'staff',
     })
 
-    await act(async () => {
-      root.render(<LoginPage />)
-    })
+    await renderLoginPage(root)
 
     const emailInput = container.querySelector('#email')
     const passwordInput = container.querySelector('#password')
@@ -192,9 +206,7 @@ describe('LoginPage', () => {
       role: 'admin',
     })
 
-    await act(async () => {
-      root.render(<LoginPage />)
-    })
+    await renderLoginPage(root)
 
     const emailInput = container.querySelector('#email')
     const passwordInput = container.querySelector('#password')
@@ -237,9 +249,7 @@ describe('LoginPage', () => {
     })
     createClientMock.mockReturnValue(supabase)
 
-    await act(async () => {
-      root.render(<LoginPage />)
-    })
+    await renderLoginPage(root)
 
     const emailInput = container.querySelector('#email')
     const passwordInput = container.querySelector('#password')
@@ -292,9 +302,7 @@ describe('LoginPage', () => {
         archivedAt: '2026-04-07T18:00:00.000Z',
       })
 
-    await act(async () => {
-      root.render(<LoginPage />)
-    })
+    await renderLoginPage(root)
 
     const emailInput = container.querySelector('#email')
     const passwordInput = container.querySelector('#password')
@@ -329,5 +337,36 @@ describe('LoginPage', () => {
     expect(container.textContent).toContain(
       'This staff account has been archived. Contact an admin if you need access again.',
     )
+  })
+
+  it('renders only the allowed success banner message', async () => {
+    searchParamsMock.mockReturnValue(new URLSearchParams('message=password-updated'))
+
+    await renderLoginPage(root)
+
+    expect(container.textContent).toContain('Password updated successfully.')
+  })
+
+  it('ignores unknown success banner message keys', async () => {
+    searchParamsMock.mockReturnValue(new URLSearchParams('message=Injected+content'))
+
+    await renderLoginPage(root)
+
+    expect(container.textContent).not.toContain('Injected content')
+    expect(container.textContent).not.toContain('Password updated successfully.')
+  })
+
+  it('keeps a visible keyboard focus indicator on the password toggle button', async () => {
+    await renderLoginPage(root)
+
+    const passwordToggleButton = container.querySelector('button[aria-label="Show password"]')
+
+    if (!(passwordToggleButton instanceof HTMLButtonElement)) {
+      throw new Error('Password toggle button not found.')
+    }
+
+    expect(passwordToggleButton.className).toContain('focus-visible:outline-none')
+    expect(passwordToggleButton.className).toContain('focus-visible:ring-2')
+    expect(passwordToggleButton.className).toContain('focus-visible:ring-offset-2')
   })
 })

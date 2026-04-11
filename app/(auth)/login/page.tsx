@@ -16,11 +16,18 @@ import { createClient } from '@/lib/supabase/client'
 const GENERIC_ERROR_MESSAGE = 'Unable to sign in. Please check your credentials and try again.'
 const ARCHIVED_ACCOUNT_ERROR =
   'This staff account has been archived. Contact an admin if you need access again.'
+const SUCCESS_MESSAGE_MAP = {
+  'password-updated': 'Password updated successfully.',
+} as const
+const PASSWORD_TOGGLE_BUTTON_CLASS_NAME =
+  'absolute right-3 top-1/2 -translate-y-1/2 rounded-md text-white/40 transition-colors hover:text-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]'
 
 export default function LoginPage() {
   const router = useProgressRouter()
   const searchParams = useSearchParams()
-  const successMessage = searchParams.get('message')?.trim() ?? ''
+  const successMessageKey = searchParams.get('message')?.trim() ?? ''
+  const successMessage =
+    SUCCESS_MESSAGE_MAP[successMessageKey as keyof typeof SUCCESS_MESSAGE_MAP] ?? null
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -120,12 +127,11 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 transition-colors hover:text-white/80 focus:outline-none"
+                className={PASSWORD_TOGGLE_BUTTON_CLASS_NAME}
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
-
           </div>
 
           <Button

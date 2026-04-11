@@ -14,6 +14,11 @@ import { createClient } from '@/lib/supabase/client'
 
 type RecoveryStatus = 'checking' | 'ready' | 'invalid'
 
+const POLL_INTERVAL_MS = 750
+const MAX_SESSION_CHECKS = 10
+const PASSWORD_TOGGLE_BUTTON_CLASS_NAME =
+  'absolute right-3 top-1/2 -translate-y-1/2 rounded-md text-white/40 transition-colors hover:text-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]'
+
 export default function ResetPasswordPage() {
   const router = useProgressRouter()
   const [password, setPassword] = useState('')
@@ -33,12 +38,27 @@ export default function ResetPasswordPage() {
       hashParams.get('type') === 'recovery' ||
       (hashParams.has('access_token') && hashParams.has('refresh_token'))
     let isMounted = true
-    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let sessionCheckTimeoutId: ReturnType<typeof setTimeout> | null = null
+    let finalizedStatus: Exclude<RecoveryStatus, 'checking'> | null = null
+
+    const clearSessionCheckTimeout = () => {
+      if (sessionCheckTimeoutId) {
+        clearTimeout(sessionCheckTimeoutId)
+        sessionCheckTimeoutId = null
+      }
+    }
 
     const markStatus = (nextStatus: RecoveryStatus) => {
-      if (isMounted) {
-        setStatus(nextStatus)
+      if (!isMounted || finalizedStatus) {
+        return
       }
+
+      if (nextStatus !== 'checking') {
+        finalizedStatus = nextStatus
+        clearSessionCheckTimeout()
+      }
+
+      setStatus(nextStatus)
     }
 
     const markReadyFromSession = (session: Session | null) => {
@@ -57,6 +77,25 @@ export default function ResetPasswordPage() {
         markReadyFromSession(session)
       }
     })
+
+    const scheduleSessionCheck = (attempt: number) => {
+      sessionCheckTimeoutId = setTimeout(async () => {
+        const nextSession = await supabase.auth.getSession()
+
+        if (markReadyFromSession(nextSession.data.session)) {
+          return
+        }
+
+        if (attempt >= MAX_SESSION_CHECKS) {
+          markStatus('invalid')
+          return
+        }
+
+        if (isMounted && !finalizedStatus) {
+          scheduleSessionCheck(attempt + 1)
+        }
+      }, POLL_INTERVAL_MS)
+    }
 
     async function initialize() {
       if (code) {
@@ -82,13 +121,9 @@ export default function ResetPasswordPage() {
         return
       }
 
-      timeoutId = setTimeout(async () => {
-        const nextSession = await supabase.auth.getSession()
-
-        if (!markReadyFromSession(nextSession.data.session)) {
-          markStatus('invalid')
-        }
-      }, 1000)
+      if (!finalizedStatus) {
+        scheduleSessionCheck(1)
+      }
     }
 
     void initialize()
@@ -96,10 +131,7 @@ export default function ResetPasswordPage() {
     return () => {
       isMounted = false
 
-      if (timeoutId) {
-        clearTimeout(timeoutId)
-      }
-
+      clearSessionCheckTimeout()
       subscription.unsubscribe()
     }
   }, [])
@@ -129,7 +161,7 @@ export default function ResetPasswordPage() {
       }
 
       await supabase.auth.signOut()
-      router.replace('/login?message=Password+updated+successfully')
+      router.replace('/login?message=password-updated')
       router.refresh()
     } catch (error) {
       const description =
@@ -152,18 +184,13 @@ export default function ResetPasswordPage() {
         title="Set new password"
         description="This reset link is invalid or has expired."
       >
-        <div className="space-y-6">
-          <div className="rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-4 text-sm text-red-200">
-            This reset link is invalid or has expired.
-          </div>
-          <div className="text-center">
-            <Link
-              href="/forgot-password"
-              className="text-sm text-amber-300 transition-colors hover:text-amber-200"
-            >
-              Request a new reset link
-            </Link>
-          </div>
+        <div className="text-center">
+          <Link
+            href="/forgot-password"
+            className="text-sm text-amber-300 transition-colors hover:text-amber-200"
+          >
+            Request a new reset link
+          </Link>
         </div>
       </AuthCardShell>
     )
@@ -199,7 +226,7 @@ export default function ResetPasswordPage() {
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 transition-colors hover:text-white/80 focus:outline-none"
+                className={PASSWORD_TOGGLE_BUTTON_CLASS_NAME}
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -225,7 +252,7 @@ export default function ResetPasswordPage() {
                 type="button"
                 onClick={() => setShowConfirmPassword((prev) => !prev)}
                 aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 transition-colors hover:text-white/80 focus:outline-none"
+                className={PASSWORD_TOGGLE_BUTTON_CLASS_NAME}
               >
                 {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>

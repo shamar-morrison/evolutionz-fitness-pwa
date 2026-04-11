@@ -1,11 +1,6 @@
 import type { ReactNode } from 'react'
-import { Toaster } from '@/components/ui/toaster'
+import { AuthLayoutWithToaster } from '@/components/auth-layout-with-toaster'
 
 export default function PublicAuthLayout({ children }: { children: ReactNode }) {
-  return (
-    <>
-      {children}
-      <Toaster />
-    </>
-  )
+  return <AuthLayoutWithToaster>{children}</AuthLayoutWithToaster>
 }
