@@ -121,6 +121,59 @@ describe('member actions', () => {
     expect(getSessionMemberOverrides()).toEqual([])
   })
 
+  it('sends member_type_id when direct member creation includes a membership type', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          member: {
+            id: 'member-1',
+            employeeNo: '20260330141516593046',
+            name: 'Jane Doe',
+            cardNo: '0102857149',
+            cardCode: 'A18',
+            cardStatus: 'assigned',
+            cardLostAt: null,
+            type: 'Civil Servant',
+            memberTypeId: 'type-2',
+            status: 'Active',
+            deviceAccessState: 'ready',
+            gender: null,
+            email: null,
+            phone: null,
+            remark: null,
+            photoUrl: null,
+            beginTime: '2026-03-30T00:00:00.000Z',
+            endTime: '2026-07-15T23:59:59.000Z',
+          },
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await addMember({
+      name: 'Jane Doe',
+      type: 'Civil Servant',
+      memberTypeId: 'type-2',
+      beginTime: '2026-03-30T00:00:00',
+      endTime: '2026-07-15T23:59:59',
+      cardNo: '0102857149',
+      cardCode: 'A18',
+    })
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      cardNo: '0102857149',
+      cardCode: 'A18',
+      name: 'Jane Doe',
+      type: 'Civil Servant',
+      member_type_id: 'type-2',
+      beginTime: '2026-03-30T00:00:00',
+      endTime: '2026-07-15T23:59:59',
+    })
+  })
+
   it('throws a step-specific error when member provisioning fails', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       createJsonResponse(

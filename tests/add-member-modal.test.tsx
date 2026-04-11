@@ -5,23 +5,29 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  addMemberMock,
+  compressImageMock,
   createManualAccessCardMock,
   createMemberApprovalRequestMock,
   invalidateQueriesMock,
   onOpenChangeMock,
   refetchAvailableCardsMock,
   toastMock,
+  uploadMemberPhotoMock,
   uploadMemberApprovalRequestPhotoMock,
   useAvailableCardsMock,
   useMemberTypesMock,
   usePermissionsMock,
 } = vi.hoisted(() => ({
+  addMemberMock: vi.fn(),
+  compressImageMock: vi.fn(),
   createManualAccessCardMock: vi.fn(),
   createMemberApprovalRequestMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   onOpenChangeMock: vi.fn(),
   refetchAvailableCardsMock: vi.fn().mockResolvedValue(undefined),
   toastMock: vi.fn(),
+  uploadMemberPhotoMock: vi.fn(),
   uploadMemberApprovalRequestPhotoMock: vi.fn(),
   useAvailableCardsMock: vi.fn(),
   useMemberTypesMock: vi.fn(),
@@ -50,6 +56,10 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
 }))
 
+vi.mock('@/lib/compress-image', () => ({
+  compressImage: compressImageMock,
+}))
+
 vi.mock('@/lib/available-cards', async () => {
   const actual = await vi.importActual<typeof import('@/lib/available-cards')>(
     '@/lib/available-cards',
@@ -70,6 +80,18 @@ vi.mock('@/lib/member-approval-requests', async () => {
     ...actual,
     createMemberApprovalRequest: createMemberApprovalRequestMock,
     uploadMemberApprovalRequestPhoto: uploadMemberApprovalRequestPhotoMock,
+  }
+})
+
+vi.mock('@/lib/member-actions', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/member-actions')>(
+    '@/lib/member-actions',
+  )
+
+  return {
+    ...actual,
+    addMember: addMemberMock,
+    uploadMemberPhoto: uploadMemberPhotoMock,
   }
 })
 
@@ -223,7 +245,7 @@ vi.mock('@/components/ui/select', async () => {
 })
 
 import { AddMemberModal } from '@/components/add-member-modal'
-import type { AvailableAccessCard, MemberApprovalRequest, MemberTypeRecord } from '@/types'
+import type { AvailableAccessCard, Member, MemberApprovalRequest, MemberTypeRecord } from '@/types'
 
 function createRequest(overrides: Partial<MemberApprovalRequest> = {}): MemberApprovalRequest {
   return {
@@ -259,6 +281,29 @@ function createMemberType(overrides: Partial<MemberTypeRecord> = {}): MemberType
     monthly_rate: overrides.monthly_rate ?? 12000,
     is_active: overrides.is_active ?? true,
     created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
+  }
+}
+
+function createMember(overrides: Partial<Member> = {}): Member {
+  return {
+    id: overrides.id ?? 'member-1',
+    employeeNo: overrides.employeeNo ?? '000611',
+    name: overrides.name ?? 'Jane Doe',
+    cardNo: overrides.cardNo ?? '12345',
+    cardCode: overrides.cardCode ?? 'EF-01',
+    cardStatus: overrides.cardStatus ?? 'assigned',
+    cardLostAt: overrides.cardLostAt ?? null,
+    type: overrides.type ?? 'General',
+    memberTypeId: overrides.memberTypeId ?? 'type-1',
+    status: overrides.status ?? 'Active',
+    deviceAccessState: overrides.deviceAccessState ?? 'ready',
+    gender: overrides.gender ?? 'Female',
+    email: overrides.email ?? 'jane@example.com',
+    phone: overrides.phone ?? null,
+    remark: overrides.remark ?? null,
+    photoUrl: overrides.photoUrl ?? null,
+    beginTime: overrides.beginTime ?? '2026-04-08T09:30:00.000Z',
+    endTime: overrides.endTime ?? '2026-05-05T23:59:59.000Z',
   }
 }
 
@@ -327,7 +372,7 @@ function mockMemberTypes(
 function mockPermissions(role: 'admin' | 'staff' = 'admin') {
   usePermissionsMock.mockReturnValue({
     can: vi.fn(),
-    requiresApproval: vi.fn(),
+    requiresApproval: vi.fn().mockReturnValue(role === 'staff'),
     role,
     permissions: new Set(),
   })
@@ -349,6 +394,7 @@ describe('AddMemberModal', () => {
       writable: true,
       value: vi.fn(),
     })
+    compressImageMock.mockImplementation(async (file: File) => file)
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -382,8 +428,9 @@ describe('AddMemberModal', () => {
     vi.clearAllMocks()
   })
 
-  it('submits a pending member request after progressing through the three steps', async () => {
+  it('submits a pending member request for staff after progressing through the three steps', async () => {
     createMemberApprovalRequestMock.mockResolvedValue(createRequest())
+    mockPermissions('staff')
 
     await act(async () => {
       root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
@@ -442,10 +489,182 @@ describe('AddMemberModal', () => {
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['memberApprovalRequests', 'pending'],
     })
+    expect(addMemberMock).not.toHaveBeenCalled()
+    expect(uploadMemberPhotoMock).not.toHaveBeenCalled()
     expect(uploadMemberApprovalRequestPhotoMock).not.toHaveBeenCalled()
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Request submitted',
       description: 'Jane Doe was submitted for admin approval.',
+    })
+  })
+
+  it('creates a member directly for admins, uploads the member photo, and refreshes member data', async () => {
+    const compressedPhoto = new Blob(['compressed-photo'], { type: 'image/jpeg' })
+
+    addMemberMock.mockResolvedValue(createMember())
+    compressImageMock.mockResolvedValue(compressedPhoto)
+    uploadMemberPhotoMock.mockResolvedValue(createMember({ photoUrl: 'members/member-1.jpg' }))
+
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    const nameInput = container.querySelector('#member-name')
+    const emailInput = container.querySelector('#member-email')
+
+    if (!(nameInput instanceof HTMLInputElement) || !(emailInput instanceof HTMLInputElement)) {
+      throw new Error('Step 1 inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(nameInput, 'Jane Doe')
+      setInputValue(emailInput, 'jane@example.com')
+    })
+
+    await clickButton(container, 'Female')
+    await clickButton(container, 'General')
+    await clickButton(container, 'Next')
+
+    const startTimeInput = container.querySelector('#member-start-time')
+
+    if (!(startTimeInput instanceof HTMLInputElement)) {
+      throw new Error('Step 2 start time input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(startTimeInput, '09:30:00')
+    })
+
+    await clickButton(container, '1 Month')
+    await clickButton(container, 'Next')
+    await clickButton(container, 'Choose Photo')
+    await clickButton(container, 'Create Member')
+    await flushAsyncWork()
+
+    expect(addMemberMock).toHaveBeenCalledWith({
+      name: 'Jane Doe',
+      type: 'General',
+      memberTypeId: 'type-1',
+      gender: 'Female',
+      email: 'jane@example.com',
+      beginTime: '2026-04-08T09:30:00',
+      endTime: '2026-05-05T23:59:59',
+      cardNo: '12345',
+      cardCode: 'EF-01',
+    })
+    expect(createMemberApprovalRequestMock).not.toHaveBeenCalled()
+    expect(uploadMemberPhotoMock).toHaveBeenCalledWith('member-1', compressedPhoto)
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['members', 'all'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['cards', 'available'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['dashboard', 'stats'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['dashboard', 'recent-members'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['dashboard', 'expiring-members'],
+    })
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Member created',
+      description: 'EF-01 Jane Doe was created successfully.',
+    })
+  })
+
+  it('uploads the staged photo to the approval request for staff', async () => {
+    const compressedPhoto = new Blob(['compressed-photo'], { type: 'image/jpeg' })
+
+    createMemberApprovalRequestMock.mockResolvedValue(createRequest())
+    compressImageMock.mockResolvedValue(compressedPhoto)
+    uploadMemberApprovalRequestPhotoMock.mockResolvedValue(createRequest({ photoUrl: 'requests/request-1.jpg' }))
+    mockPermissions('staff')
+
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    const nameInput = container.querySelector('#member-name')
+
+    if (!(nameInput instanceof HTMLInputElement)) {
+      throw new Error('Step 1 name input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(nameInput, 'Jane Doe')
+    })
+
+    await clickButton(container, 'General')
+    await clickButton(container, 'Next')
+
+    const startTimeInput = container.querySelector('#member-start-time')
+
+    if (!(startTimeInput instanceof HTMLInputElement)) {
+      throw new Error('Step 2 start time input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(startTimeInput, '09:30:00')
+    })
+
+    await clickButton(container, '1 Month')
+    await clickButton(container, 'Next')
+    await clickButton(container, 'Choose Photo')
+    await clickButton(container, 'Submit Request')
+    await flushAsyncWork()
+
+    expect(uploadMemberApprovalRequestPhotoMock).toHaveBeenCalledWith('request-1', compressedPhoto)
+    expect(addMemberMock).not.toHaveBeenCalled()
+    expect(uploadMemberPhotoMock).not.toHaveBeenCalled()
+  })
+
+  it('blocks admin direct creation when the selected membership type cannot be provisioned directly', async () => {
+    mockMemberTypes([createMemberType({ id: 'type-vip', name: 'VIP' })])
+
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    const nameInput = container.querySelector('#member-name')
+
+    if (!(nameInput instanceof HTMLInputElement)) {
+      throw new Error('Step 1 name input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(nameInput, 'Jane Doe')
+    })
+
+    await clickButton(container, 'VIP')
+    await clickButton(container, 'Next')
+
+    const startTimeInput = container.querySelector('#member-start-time')
+
+    if (!(startTimeInput instanceof HTMLInputElement)) {
+      throw new Error('Step 2 start time input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(startTimeInput, '09:30:00')
+    })
+
+    await clickButton(container, '1 Month')
+    await clickButton(container, 'Next')
+    await clickButton(container, 'Create Member')
+    await flushAsyncWork()
+
+    expect(addMemberMock).not.toHaveBeenCalled()
+    expect(createMemberApprovalRequestMock).not.toHaveBeenCalled()
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Unsupported membership type',
+      description: 'The selected membership type cannot be used for direct member creation.',
+      variant: 'destructive',
     })
   })
 
@@ -717,12 +936,27 @@ describe('AddMemberModal', () => {
 
     const helperParagraphs = Array.from(container.querySelectorAll('p')).filter((paragraph) =>
       paragraph.textContent?.includes(
-        'Select the submitted membership type. Payment is recorded during approval.',
+        'Select the membership type to assign when the member is created immediately.',
       ),
     )
 
     expect(infoTrigger.textContent).toBe('i')
     expect(helperParagraphs).toHaveLength(0)
+    expect(
+      Array.from(container.querySelectorAll('[data-testid="tooltip-content"]')).some((element) =>
+        element.textContent?.includes(
+          'Select the membership type to assign when the member is created immediately.',
+        ),
+      ),
+    ).toBe(true)
+
+    mockPermissions('staff')
+
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
     expect(
       Array.from(container.querySelectorAll('[data-testid="tooltip-content"]')).some((element) =>
         element.textContent?.includes(

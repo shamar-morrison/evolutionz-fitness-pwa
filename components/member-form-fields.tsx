@@ -60,6 +60,7 @@ type MemberBasicFieldsProps = SharedMemberFieldsProps & {
   memberTypes: MemberTypeRecord[]
   memberTypesError: string | null
   isMemberTypesLoading: boolean
+  membershipTypeInfoContent?: string
   onRefreshCards: () => void
   onAddCard: () => void
   selectedInventoryCard: AvailableAccessCard | null
@@ -114,6 +115,7 @@ export function MemberBasicFields({
   isSubmitting,
   memberTypes,
   memberTypesError,
+  membershipTypeInfoContent = 'Select the submitted membership type. Payment is recorded during approval.',
   onAddCard,
   onRefreshCards,
   selectedInventoryCard,
@@ -264,7 +266,7 @@ export function MemberBasicFields({
             <Label htmlFor={`${idPrefix}-type`}>Membership Type</Label>
             <FieldInfoTooltip
               label="Membership type information"
-              content="Select the submitted membership type. Payment is recorded during approval."
+              content={membershipTypeInfoContent}
             />
           </div>
           <Select
