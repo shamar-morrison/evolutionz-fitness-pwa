@@ -10,6 +10,7 @@ import {
 } from '@/lib/admin-email'
 import {
   createSupabaseAdminEmailDeliveryStore,
+  isDefinitiveAdminEmailSendError,
   sendAdminResendEmailToRecipient,
 } from '@/lib/admin-email-server'
 import { getJamaicaDateInputValue } from '@/lib/member-access-time'
@@ -163,28 +164,58 @@ export async function POST(request: Request) {
             return { ok: true as const, alreadySent: true as const }
           }
 
+          let providerMessageId: string | null = null
+          let sendAccepted = false
+          const sentAt = new Date().toISOString()
+
           try {
-            const providerMessageId = await sendAdminResendEmailToRecipient({
+            providerMessageId = await sendAdminResendEmailToRecipient({
               recipientEmail: recipient.email,
+              draftIdempotencyKey: parsedForm.idempotencyKey,
               subject: parsedForm.subject,
               body: parsedForm.body,
               attachments,
             })
+            sendAccepted = true
             await deliveryStore.markDeliverySent({
               senderProfileId,
               idempotencyKey: parsedForm.idempotencyKey,
               recipientEmail: recipient.email,
               providerMessageId,
-              sentAt: new Date().toISOString(),
+              sentAt,
             })
 
             return { ok: true as const, alreadySent: false as const }
           } catch (error) {
-            await deliveryStore.releasePendingDelivery({
-              senderProfileId,
-              idempotencyKey: parsedForm.idempotencyKey,
-              recipientEmail: recipient.email,
-            })
+            if (sendAccepted || providerMessageId !== null) {
+              try {
+                await deliveryStore.markDeliverySent({
+                  senderProfileId,
+                  idempotencyKey: parsedForm.idempotencyKey,
+                  recipientEmail: recipient.email,
+                  providerMessageId,
+                  sentAt,
+                })
+
+                return { ok: true as const, alreadySent: false as const }
+              } catch (markError) {
+                return {
+                  ok: false as const,
+                  error:
+                    markError instanceof Error
+                      ? markError.message
+                      : 'Unexpected error while recording the email delivery.',
+                }
+              }
+            }
+
+            if (isDefinitiveAdminEmailSendError(error)) {
+              await deliveryStore.releasePendingDelivery({
+                senderProfileId,
+                idempotencyKey: parsedForm.idempotencyKey,
+                recipientEmail: recipient.email,
+              })
+            }
 
             return {
               ok: false as const,
