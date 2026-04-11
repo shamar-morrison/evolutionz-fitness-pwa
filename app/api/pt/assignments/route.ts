@@ -108,16 +108,34 @@ export async function GET(request: Request) {
     const nextFilters = { ...filters }
 
     if (authResult.profile.role !== 'admin') {
-      if (isFrontDeskStaff(authResult.profile.titles)) {
-        if (!filters.memberId || filters.trainerId) {
-          return createErrorResponse('Forbidden', 403)
-        }
-      } else {
+      const titles = authResult.profile.titles
+      const isTrainer = hasStaffTitle(titles, 'Trainer')
+      const isFrontDesk = isFrontDeskStaff(titles)
+      const enforceTrainerScope = () => {
         if (filters.trainerId && filters.trainerId !== authResult.profile.id) {
           return createErrorResponse('Forbidden', 403)
         }
 
         nextFilters.trainerId = authResult.profile.id
+        return null
+      }
+
+      if (isTrainer) {
+        const trainerScopeResponse = enforceTrainerScope()
+
+        if (trainerScopeResponse) {
+          return trainerScopeResponse
+        }
+      } else if (isFrontDesk) {
+        if (!filters.memberId || filters.trainerId) {
+          return createErrorResponse('Forbidden', 403)
+        }
+      } else {
+        const trainerScopeResponse = enforceTrainerScope()
+
+        if (trainerScopeResponse) {
+          return trainerScopeResponse
+        }
       }
     }
 

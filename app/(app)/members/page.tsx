@@ -1,7 +1,7 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
 import { useMembers } from '@/hooks/use-members'
@@ -65,15 +65,17 @@ function MembersPageLoading() {
 
 function MembersPageContent() {
   const searchParams = useSearchParams()
+  const action = searchParams.get('action')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<MemberStatus | 'All'>('All')
   const [typeFilter, setTypeFilter] = useState<MemberType | 'All'>('All')
-  const [showAddModal, setShowAddModal] = useState(searchParams.get('action') === 'add')
+  const [showAddModal, setShowAddModal] = useState(false)
   const [isSyncingMembers, setIsSyncingMembers] = useState(false)
   const [isSyncingCards, setIsSyncingCards] = useState(false)
   const queryClient = useQueryClient()
-  const { profile } = useAuth()
+  const { profile, loading } = useAuth()
   const { can } = usePermissions()
+  const canCreateMembers = can('members.create')
   const isFrontDesk = isFrontDeskStaff(profile?.titles)
 
   const { members, isLoading, error } = useMembers({
@@ -81,6 +83,12 @@ function MembersPageContent() {
     status: statusFilter,
     type: typeFilter,
   })
+
+  useEffect(() => {
+    if (!loading && canCreateMembers && action === 'add') {
+      setShowAddModal(true)
+    }
+  }, [action, canCreateMembers, loading])
 
   const handleSyncMembers = async () => {
     setIsSyncingMembers(true)
@@ -173,7 +181,7 @@ function MembersPageContent() {
               </Button>
             </>
           ) : null}
-          {can('members.create') ? (
+          {canCreateMembers ? (
             <Button
               onClick={() => setShowAddModal(true)}
               className="bg-primary text-primary-foreground hover:bg-primary/90"

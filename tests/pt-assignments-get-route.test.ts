@@ -66,6 +66,29 @@ describe('GET /api/pt/assignments', () => {
     await expect(response.json()).resolves.toEqual({ assignments: [] })
   })
 
+  it('treats trainer assistants as trainers instead of front desk staff', async () => {
+    const supabase = { from: vi.fn() }
+
+    getSupabaseAdminClientMock.mockReturnValue(supabase)
+    readTrainerClientsMock.mockResolvedValue([])
+    mockAuthenticatedProfile({
+      profile: {
+        id: '55555555-5555-4555-8555-555555555555',
+        role: 'staff',
+        titles: ['Trainer', 'Assistant'],
+      },
+    })
+
+    const response = await GET(new Request('http://localhost/api/pt/assignments?status=active'))
+
+    expect(response.status).toBe(200)
+    expect(readTrainerClientsMock).toHaveBeenCalledWith(supabase, {
+      status: 'active',
+      trainerId: '55555555-5555-4555-8555-555555555555',
+    })
+    await expect(response.json()).resolves.toEqual({ assignments: [] })
+  })
+
   it('rejects staff requests for another trainerId', async () => {
     mockAuthenticatedProfile({
       profile: {

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   authState,
   invalidateQueriesMock,
+  searchParamsValue,
   useMembersMock,
 } = vi.hoisted(() => ({
   authState: {
@@ -22,6 +23,9 @@ const {
     loading: false,
   },
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
+  searchParamsValue: {
+    value: '',
+  },
   useMembersMock: vi.fn(),
 }))
 
@@ -32,7 +36,7 @@ vi.mock('@tanstack/react-query', () => ({
 }))
 
 vi.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams(''),
+  useSearchParams: () => new URLSearchParams(searchParamsValue.value),
 }))
 
 vi.mock('@/hooks/use-members', () => ({
@@ -44,7 +48,9 @@ vi.mock('@/contexts/auth-context', () => ({
 }))
 
 vi.mock('@/components/add-member-modal', () => ({
-  AddMemberModal: () => null,
+  AddMemberModal: ({ open }: { open: boolean }) => (
+    <div data-testid="add-member-modal">{open ? 'open' : 'closed'}</div>
+  ),
 }))
 
 vi.mock('@/components/members-table', () => ({
@@ -148,6 +154,7 @@ describe('MembersPage', () => {
     }
     authState.role = 'admin'
     authState.loading = false
+    searchParamsValue.value = ''
 
     useMembersMock.mockReturnValue({
       members: [],
@@ -201,5 +208,33 @@ describe('MembersPage', () => {
     expect(container.textContent).toContain('Add Member')
     expect(container.textContent).not.toContain('Sync Cards')
     expect(container.textContent).not.toContain('Sync Members')
+  })
+
+  it('opens the Add Member modal from the action query for users who can create members', async () => {
+    searchParamsValue.value = 'action=add'
+
+    await act(async () => {
+      root.render(<MembersPage />)
+    })
+
+    expect(container.querySelector('[data-testid="add-member-modal"]')?.textContent).toBe('open')
+  })
+
+  it('does not open the Add Member modal from the action query for users without create permission', async () => {
+    authState.profile = {
+      id: 'trainer-1',
+      name: 'Taylor Trainer',
+      role: 'staff',
+      titles: ['Trainer'],
+    }
+    authState.role = 'staff'
+    searchParamsValue.value = 'action=add'
+
+    await act(async () => {
+      root.render(<MembersPage />)
+    })
+
+    expect(container.querySelector('[data-testid="add-member-modal"]')?.textContent).toBe('closed')
+    expect(container.textContent).not.toContain('Add Member')
   })
 })
