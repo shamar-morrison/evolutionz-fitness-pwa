@@ -6,12 +6,14 @@ import {
 } from '@/tests/support/server-auth'
 
 const {
+  archiveResolvedRequestNotificationsMock,
   getSupabaseAdminClientMock,
   insertNotificationsMock,
   moveMemberPhotoObjectMock,
   provisionMemberAccessMock,
   readAdminNotificationRecipientsMock,
 } = vi.hoisted(() => ({
+  archiveResolvedRequestNotificationsMock: vi.fn().mockResolvedValue(undefined),
   getSupabaseAdminClientMock: vi.fn(),
   insertNotificationsMock: vi.fn().mockResolvedValue(undefined),
   moveMemberPhotoObjectMock: vi.fn(),
@@ -24,6 +26,7 @@ vi.mock('@/lib/supabase-admin', () => ({
 }))
 
 vi.mock('@/lib/pt-notifications-server', () => ({
+  archiveResolvedRequestNotifications: archiveResolvedRequestNotificationsMock,
   insertNotifications: insertNotificationsMock,
   readAdminNotificationRecipients: readAdminNotificationRecipientsMock,
 }))
@@ -356,6 +359,8 @@ describe('member approval request routes', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+    archiveResolvedRequestNotificationsMock.mockReset()
+    archiveResolvedRequestNotificationsMock.mockResolvedValue(undefined)
     getSupabaseAdminClientMock.mockReset()
     insertNotificationsMock.mockReset()
     insertNotificationsMock.mockResolvedValue(undefined)
@@ -532,6 +537,208 @@ describe('member approval request routes', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: expect.stringContaining('Phone is required.'),
+    })
+  })
+
+  it('denies a pending member approval request and archives matching notifications', async () => {
+    const updatedRequest = createRequestRecord({
+      status: 'denied',
+      reviewed_by: 'admin-1',
+      reviewed_at: '2026-04-09T15:00:00.000Z',
+      review_note: 'Missing ID verification.',
+      reviewedByProfile: { name: 'Admin User' },
+    })
+    const { client, requestUpdates } = createMemberApprovalRequestsClient({
+      updatedRequestRow: updatedRequest,
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'denied',
+          review_note: 'Missing ID verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(requestUpdates).toEqual([
+      expect.objectContaining({
+        status: 'denied',
+        reviewed_by: 'admin-1',
+        reviewed_at: expect.any(String),
+        review_note: 'Missing ID verification.',
+        updated_at: expect.any(String),
+      }),
+    ])
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'request-1',
+      type: 'member_create_request',
+      archivedAt: expect.any(String),
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      request: expect.objectContaining({
+        id: 'request-1',
+        status: 'denied',
+        reviewNote: 'Missing ID verification.',
+      }),
+    })
+  })
+
+  it('approves a pending member approval request and archives matching notifications', async () => {
+    const updatedRequest = createRequestRecord({
+      status: 'approved',
+      member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+      member_id: 'member-77',
+      reviewed_by: 'admin-1',
+      reviewed_at: '2026-04-09T15:00:00.000Z',
+      review_note: 'Approved after verification.',
+      memberType: { name: 'Civil Servant' },
+      reviewedByProfile: { name: 'Admin User' },
+    })
+    const { client, paymentInserts, requestUpdates } = createMemberApprovalRequestsClient({
+      updatedRequestRow: updatedRequest,
+      memberTypeRow: createMemberTypeRecord({
+        id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        name: 'Civil Servant',
+        monthly_rate: 7500,
+      }),
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+    provisionMemberAccessMock.mockResolvedValue({
+      ok: true,
+      member: createApprovedMember(),
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'approved',
+          selected_card_no: '0102857149',
+          member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+          payment_method: 'cash',
+          amount_paid: 7500,
+          promotion: 'Promo',
+          payment_date: '2026-04-09',
+          notes: 'Collected at front desk',
+          review_note: 'Approved after verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(paymentInserts).toEqual([
+      {
+        member_id: 'member-77',
+        member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        payment_method: 'cash',
+        amount_paid: 7500,
+        promotion: 'Promo',
+        recorded_by: 'admin-1',
+        payment_date: '2026-04-09',
+        notes: 'Collected at front desk',
+      },
+    ])
+    expect(requestUpdates).toEqual([
+      expect.objectContaining({
+        status: 'approved',
+        card_no: '0102857149',
+        card_code: 'A18',
+        member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        member_id: 'member-77',
+        photo_url: null,
+        reviewed_by: 'admin-1',
+        reviewed_at: expect.any(String),
+        review_note: 'Approved after verification.',
+        updated_at: expect.any(String),
+      }),
+    ])
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'request-1',
+      type: 'member_create_request',
+      archivedAt: expect.any(String),
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      request: expect.objectContaining({
+        id: 'request-1',
+        status: 'approved',
+        memberId: 'member-77',
+        memberTypeId: MEMBER_TYPE_ID_CIVIL_SERVANT,
+      }),
+    })
+  })
+
+  it('logs and ignores member create notification archive failures after denial', async () => {
+    const updatedRequest = createRequestRecord({
+      status: 'denied',
+      reviewed_by: 'admin-1',
+      reviewed_at: '2026-04-09T15:00:00.000Z',
+      review_note: 'Missing ID verification.',
+      reviewedByProfile: { name: 'Admin User' },
+    })
+    const { client } = createMemberApprovalRequestsClient({
+      updatedRequestRow: updatedRequest,
+    })
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    archiveResolvedRequestNotificationsMock.mockRejectedValueOnce(new Error('Archive failed.'))
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'denied',
+          review_note: 'Missing ID verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to archive resolved member create request notifications:',
+      expect.any(Error),
+    )
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      request: expect.objectContaining({
+        id: 'request-1',
+        status: 'denied',
+      }),
     })
   })
 

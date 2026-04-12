@@ -12,7 +12,14 @@ type NotificationInsert = {
   metadata?: Record<string, unknown> | null
 }
 
-type RequestNotificationType = Extract<Notification['type'], 'reschedule_request' | 'status_change_request'>
+type RequestNotificationType = Extract<
+  Notification['type'],
+  | 'reschedule_request'
+  | 'status_change_request'
+  | 'member_create_request'
+  | 'member_edit_request'
+  | 'member_payment_request'
+>
 
 type AdminRecipient = {
   id: string

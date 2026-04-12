@@ -20,6 +20,7 @@ import {
 } from '@/lib/member-edit-request-records'
 import { buildAddUserPayloadWithAccessWindow } from '@/lib/member-job'
 import { buildHikMemberName } from '@/lib/member-name'
+import { archiveResolvedRequestNotifications } from '@/lib/pt-notifications-server'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { type MemberTypesReadClient } from '@/lib/member-types-server'
 import { readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
@@ -214,6 +215,19 @@ export async function PATCH(
         throw new Error(`Failed to deny member edit request ${id}: ${error.message}`)
       }
 
+      try {
+        await archiveResolvedRequestNotifications(supabase, {
+          requestId: existingRequest.id,
+          type: 'member_edit_request',
+          archivedAt: reviewTimestamp,
+        })
+      } catch (archiveError) {
+        console.error(
+          'Failed to archive resolved member edit request notifications:',
+          archiveError,
+        )
+      }
+
       return NextResponse.json({ ok: true })
     }
 
@@ -305,6 +319,19 @@ export async function PATCH(
     if (requestUpdateError) {
       throw new Error(
         `Failed to approve member edit request ${id}: ${requestUpdateError.message}`,
+      )
+    }
+
+    try {
+      await archiveResolvedRequestNotifications(supabase, {
+        requestId: existingRequest.id,
+        type: 'member_edit_request',
+        archivedAt: reviewTimestamp,
+      })
+    } catch (archiveError) {
+      console.error(
+        'Failed to archive resolved member edit request notifications:',
+        archiveError,
       )
     }
 

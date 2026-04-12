@@ -4,6 +4,7 @@ import {
   MEMBER_PAYMENT_REQUEST_SELECT,
   type MemberPaymentRequestRecord,
 } from '@/lib/member-payment-request-records'
+import { archiveResolvedRequestNotifications } from '@/lib/pt-notifications-server'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { type MemberTypesReadClient } from '@/lib/member-types-server'
 import { requireAdminUser } from '@/lib/server-auth'
@@ -152,6 +153,19 @@ export async function PATCH(
         throw new Error(`Failed to deny member payment request ${id}: ${error.message}`)
       }
 
+      try {
+        await archiveResolvedRequestNotifications(supabase, {
+          requestId: existingRequest.id,
+          type: 'member_payment_request',
+          archivedAt: reviewTimestamp,
+        })
+      } catch (archiveError) {
+        console.error(
+          'Failed to archive resolved member payment request notifications:',
+          archiveError,
+        )
+      }
+
       return NextResponse.json({ ok: true })
     }
 
@@ -241,6 +255,19 @@ export async function PATCH(
     if (requestUpdateError) {
       throw new Error(
         `Failed to approve member payment request ${id}: ${requestUpdateError.message}`,
+      )
+    }
+
+    try {
+      await archiveResolvedRequestNotifications(supabase, {
+        requestId: existingRequest.id,
+        type: 'member_payment_request',
+        archivedAt: reviewTimestamp,
+      })
+    } catch (archiveError) {
+      console.error(
+        'Failed to archive resolved member payment request notifications:',
+        archiveError,
       )
     }
 

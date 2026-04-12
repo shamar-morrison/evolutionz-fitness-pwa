@@ -7,10 +7,12 @@ import {
 } from '@/tests/support/server-auth'
 
 const {
+  archiveResolvedRequestNotificationsMock,
   getSupabaseAdminClientMock,
   insertNotificationsMock,
   readAdminNotificationRecipientsMock,
 } = vi.hoisted(() => ({
+  archiveResolvedRequestNotificationsMock: vi.fn().mockResolvedValue(undefined),
   getSupabaseAdminClientMock: vi.fn(),
   insertNotificationsMock: vi.fn().mockResolvedValue(undefined),
   readAdminNotificationRecipientsMock: vi.fn().mockResolvedValue([]),
@@ -21,6 +23,7 @@ vi.mock('@/lib/supabase-admin', () => ({
 }))
 
 vi.mock('@/lib/pt-notifications-server', () => ({
+  archiveResolvedRequestNotifications: archiveResolvedRequestNotificationsMock,
   insertNotifications: insertNotificationsMock,
   readAdminNotificationRecipients: readAdminNotificationRecipientsMock,
 }))
@@ -302,6 +305,8 @@ function createPaymentRequestsClient({
 describe('member payment request routes', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    archiveResolvedRequestNotificationsMock.mockReset()
+    archiveResolvedRequestNotificationsMock.mockResolvedValue(undefined)
     getSupabaseAdminClientMock.mockReset()
     insertNotificationsMock.mockClear()
     readAdminNotificationRecipientsMock.mockReset()
@@ -495,6 +500,11 @@ describe('member payment request routes', () => {
         rejection_reason: 'Amount does not match the receipt.',
       },
     ])
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'payment-request-1',
+      type: 'member_payment_request',
+      archivedAt: expect.any(String),
+    })
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ ok: true })
   })
@@ -558,6 +568,49 @@ describe('member payment request routes', () => {
         reviewed_at: expect.any(String),
       },
     ])
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'payment-request-1',
+      type: 'member_payment_request',
+      archivedAt: expect.any(String),
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true })
+  })
+
+  it('logs and ignores member payment notification archive failures after denial', async () => {
+    const { client } = createPaymentRequestsClient()
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    archiveResolvedRequestNotificationsMock.mockRejectedValueOnce(new Error('Archive failed.'))
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-payment-requests/payment-request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'deny',
+          rejectionReason: 'Amount does not match the receipt.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'payment-request-1' }),
+      },
+    )
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to archive resolved member payment request notifications:',
+      expect.any(Error),
+    )
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ ok: true })
   })

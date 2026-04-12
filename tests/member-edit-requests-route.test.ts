@@ -7,10 +7,12 @@ import {
 } from '@/tests/support/server-auth'
 
 const {
+  archiveResolvedRequestNotificationsMock,
   getSupabaseAdminClientMock,
   insertNotificationsMock,
   readAdminNotificationRecipientsMock,
 } = vi.hoisted(() => ({
+  archiveResolvedRequestNotificationsMock: vi.fn().mockResolvedValue(undefined),
   getSupabaseAdminClientMock: vi.fn(),
   insertNotificationsMock: vi.fn().mockResolvedValue(undefined),
   readAdminNotificationRecipientsMock: vi.fn().mockResolvedValue([]),
@@ -21,6 +23,7 @@ vi.mock('@/lib/supabase-admin', () => ({
 }))
 
 vi.mock('@/lib/pt-notifications-server', () => ({
+  archiveResolvedRequestNotifications: archiveResolvedRequestNotificationsMock,
   insertNotifications: insertNotificationsMock,
   readAdminNotificationRecipients: readAdminNotificationRecipientsMock,
 }))
@@ -344,6 +347,8 @@ function createEditRequestsClient({
 describe('member edit request routes', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    archiveResolvedRequestNotificationsMock.mockReset()
+    archiveResolvedRequestNotificationsMock.mockResolvedValue(undefined)
     getSupabaseAdminClientMock.mockReset()
     insertNotificationsMock.mockClear()
     readAdminNotificationRecipientsMock.mockReset()
@@ -566,6 +571,11 @@ describe('member edit request routes', () => {
         rejection_reason: 'Need supporting details.',
       },
     ])
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'request-1',
+      type: 'member_edit_request',
+      archivedAt: expect.any(String),
+    })
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ ok: true })
   })
@@ -621,6 +631,49 @@ describe('member edit request routes', () => {
         reviewed_at: expect.any(String),
       },
     ])
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'request-1',
+      type: 'member_edit_request',
+      archivedAt: expect.any(String),
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true })
+  })
+
+  it('logs and ignores member edit notification archive failures after denial', async () => {
+    const { client } = createEditRequestsClient()
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    archiveResolvedRequestNotificationsMock.mockRejectedValueOnce(new Error('Archive failed.'))
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-edit-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'deny',
+          rejectionReason: 'Need supporting details.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to archive resolved member edit request notifications:',
+      expect.any(Error),
+    )
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ ok: true })
   })
