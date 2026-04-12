@@ -219,6 +219,13 @@ export function useNotifications(profileId: string) {
             })
           }
 
+          if (notificationType === 'member_create_request') {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.all })
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.memberApprovalRequests.pending,
+            })
+          }
+
           if (notificationType === 'member_payment_request') {
             void queryClient.invalidateQueries({ queryKey: queryKeys.memberPaymentRequests.all })
             void queryClient.invalidateQueries({

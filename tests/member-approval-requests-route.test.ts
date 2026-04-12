@@ -7,16 +7,25 @@ import {
 
 const {
   getSupabaseAdminClientMock,
+  insertNotificationsMock,
   moveMemberPhotoObjectMock,
   provisionMemberAccessMock,
+  readAdminNotificationRecipientsMock,
 } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
+  insertNotificationsMock: vi.fn().mockResolvedValue(undefined),
   moveMemberPhotoObjectMock: vi.fn(),
   provisionMemberAccessMock: vi.fn(),
+  readAdminNotificationRecipientsMock: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdminClient: getSupabaseAdminClientMock,
+}))
+
+vi.mock('@/lib/pt-notifications-server', () => ({
+  insertNotifications: insertNotificationsMock,
+  readAdminNotificationRecipients: readAdminNotificationRecipientsMock,
 }))
 
 vi.mock('@/lib/server-auth', async () => {
@@ -348,8 +357,12 @@ describe('member approval request routes', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
+    insertNotificationsMock.mockReset()
+    insertNotificationsMock.mockResolvedValue(undefined)
     moveMemberPhotoObjectMock.mockReset()
     provisionMemberAccessMock.mockReset()
+    readAdminNotificationRecipientsMock.mockReset()
+    readAdminNotificationRecipientsMock.mockResolvedValue([])
     resetServerAuthMocks()
   })
 
@@ -405,6 +418,10 @@ describe('member approval request routes', () => {
       }),
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
+    readAdminNotificationRecipientsMock.mockResolvedValue([
+      { id: 'admin-1' },
+      { id: 'admin-2' },
+    ])
     mockAuthenticatedProfile({
       user: { id: 'staff-auth-1' },
       profile: { id: 'staff-1', role: 'staff', name: 'Jordan Staff' },
@@ -444,6 +461,30 @@ describe('member approval request routes', () => {
         card_no: '0102857149',
         card_code: 'A18',
         submitted_by: 'staff-1',
+      },
+    ])
+    expect(insertNotificationsMock).toHaveBeenCalledWith(client, [
+      {
+        recipientId: 'admin-1',
+        type: 'member_create_request',
+        title: 'New Member Request',
+        body: 'New member request submitted by Jordan Staff for Jane Doe.',
+        metadata: {
+          requestId: 'request-1',
+          memberName: 'Jane Doe',
+          requestedBy: 'Jordan Staff',
+        },
+      },
+      {
+        recipientId: 'admin-2',
+        type: 'member_create_request',
+        title: 'New Member Request',
+        body: 'New member request submitted by Jordan Staff for Jane Doe.',
+        metadata: {
+          requestId: 'request-1',
+          memberName: 'Jane Doe',
+          requestedBy: 'Jordan Staff',
+        },
       },
     ])
     expect(response.status).toBe(200)

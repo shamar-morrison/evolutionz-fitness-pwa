@@ -130,6 +130,37 @@ describe('useNotifications', () => {
     })
   })
 
+  it('invalidates member approval request queries when a member create notification arrives', async () => {
+    await act(async () => {
+      root.render(<TestComponent />)
+    })
+
+    if (!insertCallback) {
+      throw new Error('Insert callback was not registered.')
+    }
+
+    await act(async () => {
+      insertCallback?.({
+        new: {
+          type: 'member_create_request',
+        },
+      })
+    })
+
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1', 'unread-count'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['memberApprovalRequests'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['memberApprovalRequests', 'pending'],
+    })
+  })
+
   it('invalidates member payment request queries when a member payment notification arrives', async () => {
     await act(async () => {
       root.render(<TestComponent />)
