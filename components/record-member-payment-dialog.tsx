@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { MemberPaymentFields, createInitialMemberPaymentFormState } from '@/components/member-payment-fields'
+import {
+  MemberPaymentFields,
+  createInitialMemberPaymentFormState,
+} from '@/components/member-payment-fields'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -15,6 +18,7 @@ import {
 import { useMemberTypes } from '@/hooks/use-member-types'
 import { toast } from '@/hooks/use-toast'
 import { recordMemberPayment } from '@/lib/member-payments'
+import { createMemberPaymentRequest } from '@/lib/member-payment-requests'
 import { queryKeys } from '@/lib/query-keys'
 import type { Member } from '@/types'
 
@@ -22,12 +26,14 @@ type RecordMemberPaymentDialogProps = {
   member: Member
   open: boolean
   onOpenChange: (open: boolean) => void
+  requiresApproval?: boolean
 }
 
 export function RecordMemberPaymentDialog({
   member,
   open,
   onOpenChange,
+  requiresApproval = false,
 }: RecordMemberPaymentDialogProps) {
   const queryClient = useQueryClient()
   const { memberTypes, isLoading: isMemberTypesLoading, error: memberTypesError } = useMemberTypes({
@@ -60,7 +66,7 @@ export function RecordMemberPaymentDialog({
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!formData.memberTypeId) {
+    if (!requiresApproval && !formData.memberTypeId) {
       toast({
         title: 'Membership type required',
         description: 'Select a membership type before recording the payment.',
@@ -88,11 +94,16 @@ export function RecordMemberPaymentDialog({
     }
 
     const parsedAmount = Number(formData.amount)
+    const hasValidAmount = requiresApproval
+      ? Number.isFinite(parsedAmount) && parsedAmount > 0
+      : Number.isFinite(parsedAmount) && parsedAmount >= 0
 
-    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+    if (!hasValidAmount) {
       toast({
         title: 'Amount required',
-        description: 'Enter a valid amount that is 0 or greater.',
+        description: requiresApproval
+          ? 'Enter a valid amount greater than 0.'
+          : 'Enter a valid amount that is 0 or greater.',
         variant: 'destructive',
       })
       return
@@ -101,27 +112,51 @@ export function RecordMemberPaymentDialog({
     setIsSubmitting(true)
 
     try {
-      await recordMemberPayment(member.id, {
-        member_type_id: formData.memberTypeId,
-        payment_method: formData.paymentMethod,
-        amount_paid: parsedAmount,
-        promotion: formData.promotion.trim() || null,
-        payment_date: formData.paymentDate,
-        notes: formData.notes.trim() || null,
-      })
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.memberPayments.member(member.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
-      ])
-      toast({
-        title: 'Payment recorded',
-      })
+      if (requiresApproval) {
+        await createMemberPaymentRequest({
+          member_id: member.id,
+          amount: parsedAmount,
+          payment_method: formData.paymentMethod,
+          payment_date: formData.paymentDate,
+          ...(formData.memberTypeId ? { member_type_id: formData.memberTypeId } : {}),
+          ...(formData.notes.trim() ? { notes: formData.notes.trim() } : {}),
+        })
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.memberPaymentRequests.all }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.memberPaymentRequests.pending }),
+        ])
+        toast({
+          title: 'Request submitted',
+          description: 'Payment request submitted for admin approval',
+        })
+      } else {
+        await recordMemberPayment(member.id, {
+          member_type_id: formData.memberTypeId,
+          payment_method: formData.paymentMethod,
+          amount_paid: parsedAmount,
+          promotion: formData.promotion.trim() || null,
+          payment_date: formData.paymentDate,
+          notes: formData.notes.trim() || null,
+        })
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.memberPayments.member(member.id) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+        ])
+        toast({
+          title: 'Payment recorded',
+        })
+      }
+
       onOpenChange(false)
     } catch (error) {
+      const fallbackMessage = requiresApproval
+        ? 'Failed to submit the payment request.'
+        : 'Failed to record the payment.'
+
       toast({
-        title: 'Payment failed',
-        description: error instanceof Error ? error.message : 'Failed to record the payment.',
+        title: requiresApproval ? 'Request submission failed' : 'Payment failed',
+        description: error instanceof Error ? error.message : fallbackMessage,
         variant: 'destructive',
       })
     } finally {
@@ -135,7 +170,9 @@ export function RecordMemberPaymentDialog({
         <DialogHeader>
           <DialogTitle>Record Payment</DialogTitle>
           <DialogDescription>
-            Record a payment for this member and update their membership type if needed.
+            {requiresApproval
+              ? 'Submit a payment record for admin approval and optionally request a membership type change.'
+              : 'Record a payment for this member and update their membership type if needed.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -150,6 +187,7 @@ export function RecordMemberPaymentDialog({
             memberTypesError={memberTypesError instanceof Error ? memberTypesError.message : null}
             setAmountDirty={setAmountDirty}
             setFormData={setFormData}
+            showPromotion={!requiresApproval}
           />
 
           <DialogFooter>
@@ -162,7 +200,7 @@ export function RecordMemberPaymentDialog({
               Cancel
             </Button>
             <Button type="submit" loading={isSubmitting} disabled={isSubmitting}>
-              Record Payment
+              {requiresApproval ? 'Submit Request' : 'Record Payment'}
             </Button>
           </DialogFooter>
         </form>

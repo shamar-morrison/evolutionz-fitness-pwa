@@ -14,22 +14,44 @@ export type MemberDurationValue =
   | '12_months'
   | '13_months'
 
+export const MEMBER_DURATION_LABELS = {
+  '1_day': '1 Day',
+  '1_week': '1 Week',
+  '2_weeks': '2 Weeks',
+  '1_month': '1 Month',
+  '2_months': '2 Months',
+  '3_months': '3 Months',
+  '4_months': '4 Months',
+  '5_months': '5 Months',
+  '6_months': '6 Months',
+  '9_months': '9 Months',
+  '12_months': '12 Months',
+  '13_months': '13 Months / 1 Year',
+} as const satisfies Record<MemberDurationValue, string>
+
+export type MemberDurationLabel = (typeof MEMBER_DURATION_LABELS)[MemberDurationValue]
+
+export const MEMBER_DURATION_LABEL_VALUES = Object.values(MEMBER_DURATION_LABELS) as [
+  MemberDurationLabel,
+  ...MemberDurationLabel[],
+]
+
 export const MEMBER_DURATION_OPTIONS: Array<{
   value: MemberDurationValue
-  label: string
+  label: MemberDurationLabel
 }> = [
-  { value: '1_day', label: '1 Day' },
-  { value: '1_week', label: '1 Week' },
-  { value: '2_weeks', label: '2 Weeks' },
-  { value: '1_month', label: '1 Month' },
-  { value: '2_months', label: '2 Months' },
-  { value: '3_months', label: '3 Months' },
-  { value: '4_months', label: '4 Months' },
-  { value: '5_months', label: '5 Months' },
-  { value: '6_months', label: '6 Months' },
-  { value: '9_months', label: '9 Months' },
-  { value: '12_months', label: '12 Months' },
-  { value: '13_months', label: '13 Months / 1 Year' },
+  { value: '1_day', label: MEMBER_DURATION_LABELS['1_day'] },
+  { value: '1_week', label: MEMBER_DURATION_LABELS['1_week'] },
+  { value: '2_weeks', label: MEMBER_DURATION_LABELS['2_weeks'] },
+  { value: '1_month', label: MEMBER_DURATION_LABELS['1_month'] },
+  { value: '2_months', label: MEMBER_DURATION_LABELS['2_months'] },
+  { value: '3_months', label: MEMBER_DURATION_LABELS['3_months'] },
+  { value: '4_months', label: MEMBER_DURATION_LABELS['4_months'] },
+  { value: '5_months', label: MEMBER_DURATION_LABELS['5_months'] },
+  { value: '6_months', label: MEMBER_DURATION_LABELS['6_months'] },
+  { value: '9_months', label: MEMBER_DURATION_LABELS['9_months'] },
+  { value: '12_months', label: MEMBER_DURATION_LABELS['12_months'] },
+  { value: '13_months', label: MEMBER_DURATION_LABELS['13_months'] },
 ]
 
 const MEMBER_DURATION_DAYS: Record<MemberDurationValue, number> = {
@@ -55,6 +77,10 @@ const dateTimePattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/
 
 function pad(value: number) {
   return String(value).padStart(2, '0')
+}
+
+function normalizeText(value: string | null | undefined) {
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 function getDatePartsInTimeZone(date: Date, timeZone: string) {
@@ -156,6 +182,34 @@ export function normalizeTimeInputValue(value: string) {
   }
 
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+}
+
+export function getMemberDurationLabel(
+  value: MemberDurationValue | '' | null | undefined,
+): MemberDurationLabel | null {
+  if (!value) {
+    return null
+  }
+
+  return MEMBER_DURATION_LABELS[value]
+}
+
+export function getMemberDurationValueFromLabel(
+  label: string | null | undefined,
+): MemberDurationValue | null {
+  const normalizedLabel = normalizeText(label)
+
+  if (!normalizedLabel) {
+    return null
+  }
+
+  for (const option of MEMBER_DURATION_OPTIONS) {
+    if (option.label === normalizedLabel) {
+      return option.value
+    }
+  }
+
+  return null
 }
 
 export function parseDateInputValue(value: string) {

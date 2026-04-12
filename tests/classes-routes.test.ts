@@ -1066,6 +1066,33 @@ describe('classes routes', () => {
     expect(body.registration.status).toBe('pending')
   })
 
+  it('forbids class registration for staff without classes.register permission', async () => {
+    mockAuthenticatedUser()
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'staff', titles: ['Trainer'] }))
+
+    const response = await postClassRegistration(
+      new Request('http://localhost/api/classes/class-1/registrations', {
+        method: 'POST',
+        body: JSON.stringify({
+          registrant_type: 'member',
+          member_id: '11111111-1111-1111-1111-111111111111',
+          month_start: '2026-04-10',
+          amount_paid: 3000,
+          payment_received: true,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body.error).toBe('Forbidden')
+    expect(readClassByIdMock).not.toHaveBeenCalled()
+  })
+
   it('forces approved status when admins create registrations', async () => {
     mockAuthenticatedUser()
     readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'admin', titles: ['Owner'] }))
@@ -1795,6 +1822,27 @@ describe('classes routes', () => {
     expect(response.status).toBe(403)
   })
 
+  it('returns not found when front desk staff tries to mark attendance directly', async () => {
+    mockAuthenticatedUser()
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'staff', titles: ['Assistant'] }))
+
+    const response = await postSessionAttendance(
+      new Request('http://localhost/api/classes/class-1/sessions/session-1/attendance', {
+        method: 'POST',
+        body: JSON.stringify({
+          member_id: '11111111-1111-1111-1111-111111111111',
+          marked_at: '2026-04-14T15:00:00.000Z',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1', sessionId: 'session-1' }),
+      },
+    )
+
+    expect(response.status).toBe(404)
+  })
+
   it('updates attendance rows for admins', async () => {
     mockAuthenticatedUser({
       id: 'admin-1',
@@ -1834,6 +1882,39 @@ describe('classes routes', () => {
       marked_by: 'admin-1',
     })
     expect(body.attendance.id).toBe('attendance-1')
+  })
+
+  it('returns not found when front desk staff tries to update attendance rows directly', async () => {
+    mockAuthenticatedUser({
+      id: 'assistant-1',
+      email: 'assistant@evolutionzfitness.com',
+    })
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readStaffProfileMock.mockResolvedValue(
+      buildProfile({
+        id: 'assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      }),
+    )
+
+    const response = await patchSessionAttendance(
+      new Request('http://localhost/api/classes/class-1/sessions/session-1/attendance/attendance-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          marked_at: '2026-04-14T15:00:00.000Z',
+        }),
+      }),
+      {
+        params: Promise.resolve({
+          id: 'class-1',
+          sessionId: 'session-1',
+          attendanceId: 'attendance-1',
+        }),
+      },
+    )
+
+    expect(response.status).toBe(404)
   })
 
   it('logs attendance backfill failures without failing the registration', async () => {

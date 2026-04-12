@@ -212,6 +212,27 @@ export function useNotifications(profileId: string) {
             void queryClient.invalidateQueries({ queryKey: queryKeys.rescheduleRequests.pending })
           }
 
+          if (notificationType === 'member_edit_request') {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.memberEditRequests.all })
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.memberEditRequests.pending,
+            })
+          }
+
+          if (notificationType === 'member_create_request') {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.all })
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.memberApprovalRequests.pending,
+            })
+          }
+
+          if (notificationType === 'member_payment_request') {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.memberPaymentRequests.all })
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.memberPaymentRequests.pending,
+            })
+          }
+
           if (
             notificationType === 'reschedule_request' ||
             notificationType === 'reschedule_approved' ||

@@ -389,6 +389,9 @@ describe('POST /api/email/send', () => {
   })
 
   it('counts fresh pending deliveries toward the daily quota before sending', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-11T12:00:00.000Z'))
+
     configureDeliveryStore([
       {
         senderProfileId: 'user-1',

@@ -7,6 +7,10 @@ import {
 } from '@/lib/member-approval-request-records'
 import { formatDateInputValue, parseLocalDateTime } from '@/lib/member-access-time'
 import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
+import {
+  insertNotifications,
+  readAdminNotificationRecipients,
+} from '@/lib/pt-notifications-server'
 import { requireAdminUser, requireAuthenticatedProfile } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import type { MemberGender } from '@/types'
@@ -235,9 +239,36 @@ export async function POST(request: Request) {
       throw new Error(`Failed to create member approval request: ${error.message}`)
     }
 
+    const requestRecord = data as MemberApprovalRequestRecord
+    try {
+      const adminRecipients = await readAdminNotificationRecipients(supabase)
+      const requestedBy = requestRecord.submittedByProfile?.name?.trim() || 'A staff member'
+      const memberName = requestRecord.name?.trim() || 'a new member'
+
+      await insertNotifications(
+        supabase,
+        adminRecipients.map((recipient) => ({
+          recipientId: recipient.id,
+          type: 'member_create_request',
+          title: 'New Member Request',
+          body: `New member request submitted by ${requestedBy} for ${memberName}.`,
+          metadata: {
+            requestId: requestRecord.id,
+            memberName,
+            requestedBy,
+          },
+        })),
+      )
+    } catch (notificationError) {
+      console.error(
+        'Failed to send member create request notifications:',
+        notificationError,
+      )
+    }
+
     return NextResponse.json({
       ok: true,
-      request: mapMemberApprovalRequestRecord(data as MemberApprovalRequestRecord),
+      request: mapMemberApprovalRequestRecord(requestRecord),
     })
   } catch (error) {
     if (error instanceof SyntaxError) {

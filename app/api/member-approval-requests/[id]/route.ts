@@ -12,6 +12,7 @@ import {
   type MemberPhotoStorageClient,
 } from '@/lib/member-photo-storage'
 import { provisionMemberAccess } from '@/lib/member-provisioning-server'
+import { archiveResolvedRequestNotifications } from '@/lib/pt-notifications-server'
 import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -268,6 +269,19 @@ export async function PATCH(
         return createErrorResponse('Member approval request not found.', 404)
       }
 
+      try {
+        await archiveResolvedRequestNotifications(supabase, {
+          requestId: existingRequest.id,
+          type: 'member_create_request',
+          archivedAt: reviewTimestamp,
+        })
+      } catch (archiveError) {
+        console.error(
+          'Failed to archive resolved member create request notifications:',
+          archiveError,
+        )
+      }
+
       return NextResponse.json({
         ok: true,
         request: mapMemberApprovalRequestRecord(data as MemberApprovalRequestRecord),
@@ -382,6 +396,19 @@ export async function PATCH(
 
     if (!data) {
       return createErrorResponse('Member approval request not found.', 404)
+    }
+
+    try {
+      await archiveResolvedRequestNotifications(supabase, {
+        requestId: existingRequest.id,
+        type: 'member_create_request',
+        archivedAt: reviewTimestamp,
+      })
+    } catch (archiveError) {
+      console.error(
+        'Failed to archive resolved member create request notifications:',
+        archiveError,
+      )
     }
 
     return NextResponse.json({

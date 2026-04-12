@@ -19,6 +19,7 @@ const {
   generateClassSessionsMock,
   invalidateQueriesMock,
   pushMock,
+  replaceMock,
   removeClassTrainerMock,
   toastMock,
   useClassScheduleRulesMock,
@@ -47,6 +48,7 @@ const {
   generateClassSessionsMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   pushMock: vi.fn(),
+  replaceMock: vi.fn(),
   removeClassTrainerMock: vi.fn(),
   toastMock: vi.fn(),
   useClassScheduleRulesMock: vi.fn(),
@@ -111,6 +113,7 @@ vi.mock('@/hooks/use-back-link', () => ({
 vi.mock('@/hooks/use-progress-router', () => ({
   useProgressRouter: () => ({
     push: pushMock,
+    replace: replaceMock,
   }),
 }))
 
@@ -577,7 +580,15 @@ describe('classes pages', () => {
     vi.clearAllMocks()
   })
 
-  it('renders the classes index cards', async () => {
+  it('renders the classes index cards for front desk staff', async () => {
+    authState.role = 'staff'
+    authState.profile = {
+      id: 'user-2',
+      name: 'Assistant User',
+      role: 'staff',
+      titles: ['Assistant'],
+    }
+
     await act(async () => {
       root.render(<ClassesPage />)
     })
@@ -615,7 +626,7 @@ describe('classes pages', () => {
     expect(container.textContent).toContain('Mark Attendance')
   })
 
-  it('hides admin-only class detail controls for staff users', async () => {
+  it('shows a read-only class detail view for front desk staff', async () => {
     authState.role = 'staff'
     authState.profile = {
       id: 'user-2',
@@ -630,12 +641,33 @@ describe('classes pages', () => {
 
     expect(getCompactTables(container)).toHaveLength(2)
     expect(container.textContent).toContain('Register')
+    expect(container.textContent).toContain('Review the recurring class schedule.')
+    expect(container.textContent).toContain('Monday')
     expect(container.textContent).not.toContain('Assign or remove trainer-title staff for this class.')
     expect(container.textContent).not.toContain('Add Trainer')
+    expect(container.textContent).not.toContain('Add Rule')
     expect(container.textContent).not.toContain('Set Period Start')
+    expect(container.textContent).not.toContain('Generate Sessions')
     expect(container.textContent).not.toContain('Pending Approvals')
     expect(container.textContent).toContain('Sessions')
     expect(container.textContent).toContain('Mark Attendance')
+  })
+
+  it('redirects unauthorized users away from the class detail page instead of rendering blank', async () => {
+    authState.role = 'staff'
+    authState.profile = {
+      id: 'user-4',
+      name: 'Medical Staff',
+      role: 'staff',
+      titles: ['Medical'],
+    }
+
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+      await Promise.resolve()
+    })
+
+    expect(replaceMock).toHaveBeenCalledWith('/unauthorized')
   })
 
   it('keys schedule-management controls off the owner permission path instead of auth role alone', async () => {
@@ -652,6 +684,8 @@ describe('classes pages', () => {
     })
 
     expect(getCompactTables(container)).toHaveLength(2)
+    expect(container.textContent).toContain('Register')
+    expect(container.textContent).toContain('Review the recurring class schedule.')
     expect(container.textContent).not.toContain('Assign or remove trainer-title staff for this class.')
     expect(container.textContent).not.toContain('Set Period Start')
     expect(container.textContent).not.toContain('Pending Approvals')
@@ -920,6 +954,7 @@ describe('classes pages', () => {
       root.render(<ClassDetailPage />)
     })
 
+    expect(() => getButton(container, 'Register')).toThrow()
     expect(container.textContent).toContain('View Attendance')
     expect(container.textContent).not.toContain('Mark Attendance')
 

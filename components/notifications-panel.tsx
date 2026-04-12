@@ -37,6 +37,18 @@ function getReviewHref(type: string) {
     return '/pending-approvals/reschedule-requests'
   }
 
+  if (type === 'member_create_request') {
+    return '/pending-approvals/member-requests'
+  }
+
+  if (type === 'member_edit_request') {
+    return '/pending-approvals/edit-requests'
+  }
+
+  if (type === 'member_payment_request') {
+    return '/pending-approvals/payment-requests'
+  }
+
   if (type === 'status_change_request') {
     return '/pending-approvals/session-updates'
   }

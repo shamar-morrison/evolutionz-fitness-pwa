@@ -162,6 +162,9 @@ export type Notification = {
   recipientId: string
   type:
     | 'reschedule_request'
+    | 'member_create_request'
+    | 'member_edit_request'
+    | 'member_payment_request'
     | 'reschedule_approved'
     | 'reschedule_denied'
     | 'client_assigned'
@@ -429,6 +432,9 @@ const notificationSchema = z.object({
   recipientId: z.string().trim().min(1),
   type: z.enum([
     'reschedule_request',
+    'member_create_request',
+    'member_edit_request',
+    'member_payment_request',
     'reschedule_approved',
     'reschedule_denied',
     'client_assigned',

@@ -64,18 +64,84 @@ import { GET } from '@/app/api/pt/reschedule-requests/route'
 import { PATCH } from '@/app/api/pt/reschedule-requests/[id]/route'
 import { POST } from '@/app/api/pt/sessions/[id]/reschedule-request/route'
 
+const baseNow = new Date()
+
+function createUtcDateDaysAhead(daysAhead: number, hour: number, minute = 0) {
+  return new Date(
+    Date.UTC(
+      baseNow.getUTCFullYear(),
+      baseNow.getUTCMonth(),
+      baseNow.getUTCDate() + daysAhead,
+      hour,
+      minute,
+      0,
+      0,
+    ),
+  )
+}
+
+function shiftUtcDate(date: Date, days: number, hour = date.getUTCHours(), minute = date.getUTCMinutes()) {
+  return new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate() + days,
+      hour,
+      minute,
+      0,
+      0,
+    ),
+  )
+}
+
+function formatJamaicaLocalInput(date: Date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Jamaica',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+
+  const getPart = (type: string) => parts.find((part) => part.type === type)?.value ?? ''
+
+  return `${getPart('year')}-${getPart('month')}-${getPart('day')}T${getPart('hour')}:${getPart('minute')}`
+}
+
+function formatJamaicaDate(date: Date) {
+  return formatJamaicaLocalInput(date).slice(0, 10)
+}
+
+const requestProposedAtDate = createUtcDateDaysAhead(14, 10)
+const pastProposedAtDate = shiftUtcDate(requestProposedAtDate, 0, 9)
+const approvedProposedAtDate = shiftUtcDate(requestProposedAtDate, 1, 11)
+
+const sessionScheduledAt = shiftUtcDate(requestProposedAtDate, -2, 10).toISOString()
+const sessionCreatedAt = shiftUtcDate(requestProposedAtDate, -11, 0).toISOString()
+const requestProposedAt = requestProposedAtDate.toISOString()
+const requestCreatedAt = shiftUtcDate(requestProposedAtDate, -8, 0).toISOString()
+const pastProposedAt = pastProposedAtDate.toISOString()
+const approvedProposedAt = approvedProposedAtDate.toISOString()
+
+const createRequestProposedAtInput = formatJamaicaLocalInput(requestProposedAtDate)
+const pastRequestProposedAtInput = formatJamaicaLocalInput(pastProposedAtDate)
+const pendingStatusChangeProposedAtInput = `${formatJamaicaDate(requestProposedAtDate)}T10:00`
+const approvedProposedAtInput = formatJamaicaLocalInput(approvedProposedAtDate)
+
 function createSessionRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'session-1',
     trainer_id: 'trainer-1',
     member_id: 'member-1',
-    scheduled_at: '2026-04-10T10:00:00.000Z',
+    scheduled_at: sessionScheduledAt,
     status: 'scheduled',
     assignment_id: 'assignment-1',
     is_recurring: false,
     notes: null,
-    created_at: '2026-04-01T00:00:00.000Z',
-    updated_at: '2026-04-01T00:00:00.000Z',
+    created_at: sessionCreatedAt,
+    updated_at: sessionCreatedAt,
     ...overrides,
   }
 }
@@ -85,14 +151,14 @@ function createRescheduleRow(overrides: Partial<Record<string, unknown>> = {}) {
     id: 'request-1',
     session_id: 'session-1',
     requested_by: 'trainer-1',
-    proposed_at: '2026-04-12T10:00:00.000Z',
+    proposed_at: requestProposedAt,
     note: 'Need to move it later.',
     status: 'pending',
     reviewed_by: null,
     review_note: null,
     reviewed_at: null,
-    created_at: '2026-04-04T00:00:00.000Z',
-    updated_at: '2026-04-04T00:00:00.000Z',
+    created_at: requestCreatedAt,
+    updated_at: requestCreatedAt,
     ...overrides,
   }
 }
@@ -278,7 +344,7 @@ describe('PT reschedule request routes', () => {
     const { client, insertValues } = createPostClient()
 
     getSupabaseAdminClientMock.mockReturnValue(client)
-    buildJamaicaScheduledAtFromLocalInputMock.mockReturnValue('2026-04-12T10:00:00.000Z')
+    buildJamaicaScheduledAtFromLocalInputMock.mockReturnValue(requestProposedAt)
     readPtSessionRowByIdMock.mockResolvedValue(createSessionRow())
     readPtSessionsMock.mockResolvedValue([{ memberName: 'Client One' }])
     readPtRescheduleRequestsMock.mockResolvedValue([
@@ -304,7 +370,7 @@ describe('PT reschedule request routes', () => {
       new Request('http://localhost/api/pt/sessions/session-1/reschedule-request', {
         method: 'POST',
         body: JSON.stringify({
-          proposedAt: '2026-04-12T05:00',
+          proposedAt: createRequestProposedAtInput,
           note: 'Need to move it later.',
         }),
       }),
@@ -316,7 +382,7 @@ describe('PT reschedule request routes', () => {
       {
         session_id: 'session-1',
         requested_by: 'trainer-1',
-        proposed_at: '2026-04-12T10:00:00.000Z',
+        proposed_at: requestProposedAt,
         note: 'Need to move it later.',
       },
     ])
@@ -348,9 +414,9 @@ describe('PT reschedule request routes', () => {
   it('rejects a trainer reschedule request when the proposed time is in the past', async () => {
     const { client, insertValues } = createPostClient()
 
-    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-04-12T10:00:00.000Z').getTime())
+    vi.spyOn(Date, 'now').mockReturnValue(requestProposedAtDate.getTime())
     getSupabaseAdminClientMock.mockReturnValue(client)
-    buildJamaicaScheduledAtFromLocalInputMock.mockReturnValue('2026-04-12T09:00:00.000Z')
+    buildJamaicaScheduledAtFromLocalInputMock.mockReturnValue(pastProposedAt)
     mockAuthenticatedProfile({
       profile: {
         id: 'trainer-1',
@@ -364,7 +430,7 @@ describe('PT reschedule request routes', () => {
       new Request('http://localhost/api/pt/sessions/session-1/reschedule-request', {
         method: 'POST',
         body: JSON.stringify({
-          proposedAt: '2026-04-12T04:00',
+          proposedAt: pastRequestProposedAtInput,
         }),
       }),
       { params: Promise.resolve({ id: 'session-1' }) },
@@ -383,7 +449,7 @@ describe('PT reschedule request routes', () => {
     const { client, insertValues } = createPostClient({ pendingStatusChange: true })
 
     getSupabaseAdminClientMock.mockReturnValue(client)
-    buildJamaicaScheduledAtFromLocalInputMock.mockReturnValue('2026-04-12T10:00:00.000Z')
+    buildJamaicaScheduledAtFromLocalInputMock.mockReturnValue(requestProposedAt)
     readPtSessionRowByIdMock.mockResolvedValue(createSessionRow())
     mockAuthenticatedProfile({
       profile: {
@@ -398,7 +464,7 @@ describe('PT reschedule request routes', () => {
       new Request('http://localhost/api/pt/sessions/session-1/reschedule-request', {
         method: 'POST',
         body: JSON.stringify({
-          proposedAt: '2026-04-12T10:00',
+          proposedAt: pendingStatusChangeProposedAtInput,
         }),
       }),
       { params: Promise.resolve({ id: 'session-1' }) },
@@ -481,7 +547,7 @@ describe('PT reschedule request routes', () => {
     const { client, updates, changeInserts } = createPatchClient()
 
     getSupabaseAdminClientMock.mockReturnValue(client)
-    buildJamaicaScheduledAtFromLocalInputMock.mockReturnValue('2026-04-13T11:00:00.000Z')
+    buildJamaicaScheduledAtFromLocalInputMock.mockReturnValue(approvedProposedAt)
     readPtRescheduleRequestRowByIdMock.mockResolvedValue(createRescheduleRow())
     readPtSessionRowByIdMock.mockResolvedValue(createSessionRow())
     readPtRescheduleRequestsMock.mockResolvedValue([
@@ -502,7 +568,7 @@ describe('PT reschedule request routes', () => {
         method: 'PATCH',
         body: JSON.stringify({
           status: 'approved',
-          proposedAt: '2026-04-13T06:00',
+          proposedAt: approvedProposedAtInput,
           reviewNote: 'Approved with a slightly later slot.',
         }),
       }),
@@ -514,14 +580,14 @@ describe('PT reschedule request routes', () => {
       {
         table: 'pt_sessions',
         values: expect.objectContaining({
-          scheduled_at: '2026-04-13T11:00:00.000Z',
+          scheduled_at: approvedProposedAt,
           status: 'rescheduled',
         }),
       },
       {
         table: 'pt_reschedule_requests',
         values: expect.objectContaining({
-          proposed_at: '2026-04-13T11:00:00.000Z',
+          proposed_at: approvedProposedAt,
           status: 'approved',
           reviewed_by: 'admin-1',
           review_note: 'Approved with a slightly later slot.',
@@ -534,7 +600,7 @@ describe('PT reschedule request routes', () => {
         changed_by: 'admin-1',
         change_type: 'reschedule',
         new_value: {
-          scheduledAt: '2026-04-13T11:00:00.000Z',
+          scheduledAt: approvedProposedAt,
         },
       }),
     ])

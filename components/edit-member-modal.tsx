@@ -38,12 +38,18 @@ import {
   getAccessDateTimeValue,
   getAccessDateInputValue,
   getAccessTimeInputValue,
+  getMemberDurationLabel,
   MEMBER_DURATION_OPTIONS,
+  normalizeTimeInputValue,
   parseDateInputValue,
   type MemberDurationValue,
 } from '@/lib/member-access-time'
 import { compressImage } from '@/lib/compress-image'
 import { useMemberTypes } from '@/hooks/use-member-types'
+import {
+  createMemberEditRequest,
+  type CreateMemberEditRequestInput,
+} from '@/lib/member-edit-requests'
 import { updateMember, uploadMemberPhoto, type UpdateMemberData } from '@/lib/member-actions'
 import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
@@ -56,6 +62,7 @@ type EditMemberModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: () => void
+  requiresApproval?: boolean
 }
 
 type EditMemberFormState = {
@@ -88,6 +95,22 @@ function normalizeEditMemberFormState(formState: EditMemberFormState) {
   }
 }
 
+function normalizeEditMemberRequestState(formState: EditMemberFormState) {
+  const normalizedStartTime = normalizeTimeInputValue(formState.startTime) ?? formState.startTime.trim()
+
+  return {
+    name: formState.name.trim(),
+    gender: formState.gender,
+    email: formState.email.trim(),
+    phone: formState.phone.trim(),
+    memberTypeId: formState.memberTypeId,
+    startDate: formState.startDate.trim(),
+    startTime: normalizedStartTime,
+    duration: formState.duration,
+    durationLabel: getMemberDurationLabel(formState.duration),
+  }
+}
+
 export function hasEditMemberChanges(
   initialFormState: EditMemberFormState,
   formData: EditMemberFormState,
@@ -101,6 +124,138 @@ export function hasEditMemberChanges(
   const initialState = normalizeEditMemberFormState(initialFormState)
 
   return JSON.stringify(currentState) !== JSON.stringify(initialState)
+}
+
+export function hasEditMemberRequestChanges(
+  initialFormState: EditMemberFormState,
+  formData: EditMemberFormState,
+) {
+  const currentState = normalizeEditMemberRequestState(formData)
+  const initialState = normalizeEditMemberRequestState(initialFormState)
+
+  return JSON.stringify(currentState) !== JSON.stringify(initialState)
+}
+
+export function buildEditMemberRequestPayload(
+  initialFormState: EditMemberFormState,
+  formData: EditMemberFormState,
+): {
+  error: string | null
+  payload: Omit<CreateMemberEditRequestInput, 'member_id'> | null
+} {
+  const currentState = normalizeEditMemberRequestState(formData)
+  const initialState = normalizeEditMemberRequestState(initialFormState)
+  const payload: Omit<CreateMemberEditRequestInput, 'member_id'> = {}
+  const hasAccessWindowChanges =
+    currentState.startDate !== initialState.startDate ||
+    currentState.startTime !== initialState.startTime ||
+    currentState.durationLabel !== initialState.durationLabel
+
+  if (hasAccessWindowChanges) {
+    if (!currentState.startDate) {
+      return {
+        error: 'Start date required for access window requests.',
+        payload: null,
+      }
+    }
+
+    if (!currentState.startTime) {
+      return {
+        error: 'Start time required for access window requests.',
+        payload: null,
+      }
+    }
+
+    if (!currentState.duration || !currentState.durationLabel) {
+      return {
+        error: 'Duration required for access window requests.',
+        payload: null,
+      }
+    }
+
+    const nextEndDate = calculateInclusiveEndDate(currentState.startDate, currentState.duration)
+    const nextBeginTime = buildBeginTimeValue(currentState.startDate, currentState.startTime)
+    const nextEndTime = nextEndDate ? buildEndTimeValue(nextEndDate) : null
+
+    if (!nextBeginTime || !nextEndTime) {
+      return {
+        error: 'The selected access window could not be converted into a valid end date.',
+        payload: null,
+      }
+    }
+  }
+
+  if (currentState.name !== initialState.name) {
+    payload.proposed_name = currentState.name
+  }
+
+  if (currentState.gender !== initialState.gender) {
+    if (!currentState.gender) {
+      return {
+        error: 'Clearing gender is not supported in approval requests.',
+        payload: null,
+      }
+    }
+
+    payload.proposed_gender = currentState.gender
+  }
+
+  if (currentState.email !== initialState.email) {
+    if (!currentState.email) {
+      return {
+        error: 'Clearing email is not supported in approval requests.',
+        payload: null,
+      }
+    }
+
+    payload.proposed_email = currentState.email
+  }
+
+  if (currentState.phone !== initialState.phone) {
+    if (!currentState.phone) {
+      return {
+        error: 'Clearing phone is not supported in approval requests.',
+        payload: null,
+      }
+    }
+
+    payload.proposed_phone = currentState.phone
+  }
+
+  if (currentState.memberTypeId !== initialState.memberTypeId) {
+    if (!currentState.memberTypeId) {
+      return {
+        error: 'Clearing membership type is not supported in approval requests.',
+        payload: null,
+      }
+    }
+
+    payload.proposed_member_type_id = currentState.memberTypeId
+  }
+
+  if (currentState.startDate !== initialState.startDate) {
+    payload.proposed_start_date = currentState.startDate
+  }
+
+  if (currentState.startTime !== initialState.startTime) {
+    payload.proposed_start_time = currentState.startTime
+  }
+
+  if (currentState.durationLabel !== initialState.durationLabel && currentState.durationLabel) {
+    payload.proposed_duration = currentState.durationLabel
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return {
+      error: 'Make at least one supported change before submitting.',
+      payload: null,
+    }
+  }
+
+  return {
+    error: null,
+    payload,
+  }
 }
 
 function createInitialFormState(member: Member): EditMemberFormState {
@@ -117,7 +272,13 @@ function createInitialFormState(member: Member): EditMemberFormState {
   }
 }
 
-export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditMemberModalProps) {
+export function EditMemberModal({
+  member,
+  open,
+  onOpenChange,
+  onSuccess,
+  requiresApproval = false,
+}: EditMemberModalProps) {
   const queryClient = useQueryClient()
   const { memberTypes, isLoading: isMemberTypesLoading, error: memberTypesError } = useMemberTypes({
     enabled: open,
@@ -155,7 +316,12 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
     () => hasEditMemberChanges(initialFormState, formData),
     [formData, initialFormState],
   )
-  const hasChanges = hasFormChanges || photoFile !== null
+  const hasRequestChanges = useMemo(
+    () => hasEditMemberRequestChanges(initialFormState, formData),
+    [formData, initialFormState],
+  )
+  const isRequestMode = requiresApproval
+  const hasChanges = isRequestMode ? hasRequestChanges : hasFormChanges || photoFile !== null
   const hasAccessWindowChanged = useMemo(() => {
     const currentState = normalizeEditMemberFormState(formData)
     const initialState = normalizeEditMemberFormState(initialFormState)
@@ -194,6 +360,14 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
       return false
     }
 
+    if (isRequestMode) {
+      if (!hasAccessWindowChanged) {
+        return true
+      }
+
+      return Boolean(formData.startDate && formData.duration && calculatedBeginTime && calculatedEndTime)
+    }
+
     if (hasAccessWindowChanged) {
       return Boolean(formData.startDate && formData.duration && calculatedBeginTime && calculatedEndTime)
     }
@@ -207,6 +381,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
     formData.startDate,
     hasAccessWindowChanged,
     isEmailValid,
+    isRequestMode,
     submittedBeginTime,
     submittedEndTime,
   ])
@@ -242,6 +417,55 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
         description: 'Enter a valid email address or leave the field blank.',
         variant: 'destructive',
       })
+      return
+    }
+
+    if (isRequestMode) {
+      const { error: requestPayloadError, payload } = buildEditMemberRequestPayload(
+        initialFormState,
+        formData,
+      )
+
+      if (requestPayloadError || !payload) {
+        toast({
+          title: 'Request unavailable',
+          description:
+            requestPayloadError ?? 'Make at least one supported change before submitting.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      setIsSubmitting(true)
+
+      try {
+        await createMemberEditRequest({
+          member_id: member.id,
+          ...payload,
+        })
+
+        handleOpenChange(false)
+        void Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.memberEditRequests.all }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.memberEditRequests.pending }),
+        ])
+        onSuccess?.()
+        toast({
+          title: 'Request submitted',
+          description: 'Edit request submitted for admin approval',
+        })
+      } catch (error) {
+        console.error('Failed to submit member edit request:', error)
+        toast({
+          title: 'Request submission failed',
+          description:
+            error instanceof Error ? error.message : 'Failed to submit the member edit request.',
+          variant: 'destructive',
+        })
+      } finally {
+        setIsSubmitting(false)
+      }
+
       return
     }
 
@@ -356,7 +580,9 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
         <DialogHeader>
           <DialogTitle>Edit Member</DialogTitle>
           <DialogDescription>
-            Update the member profile and access window below. Card actions stay on the member detail page.
+            {isRequestMode
+              ? 'Submit profile and access window changes for admin approval. Photo and remark changes stay on the direct admin path.'
+              : 'Update the member profile and access window below. Card actions stay on the member detail page.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -540,6 +766,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
                     }))
                   }
                   required
+                  disabled={isSubmitting}
                 />
               </div>
               <div className="grid gap-2">
@@ -552,6 +779,7 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
                       duration: value,
                     }))
                   }
+                  disabled={isSubmitting}
                 >
                   <SelectTrigger id="edit-duration">
                     <SelectValue placeholder="Select duration" />
@@ -570,45 +798,50 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
             {/* Row 5: End Date summary — full width */}
             <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-4 py-3">
               <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">End Date</p>
-                <p className="text-base font-semibold mt-0.5">
-                  {displayedEndTime ? formatAccessDate(displayedEndTime, 'long') : 'Select a duration above'}
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  End Date
+                </p>
+                <p className="mt-0.5 text-base font-semibold">
+                  {displayedEndTime
+                    ? formatAccessDate(displayedEndTime, 'long')
+                    : 'Select a duration above'}
                 </p>
               </div>
-              <p className="text-xs text-muted-foreground text-right max-w-[200px]">
+              <p className="max-w-[200px] text-right text-xs text-muted-foreground">
                 Access always expires at 23:59:59 on the calculated end date.
               </p>
             </div>
 
-            <div className="h-px bg-border" />
+            {!isRequestMode ? (
+              <>
+                <div className="h-px bg-border" />
 
-            {/* Row 6: Avatar — centered */}
-            <div className="flex justify-center py-2">
-              <Pattern
-                onFileChange={setPhotoFile}
-                defaultAvatar={member.photoUrl ?? undefined}
-              />
-            </div>
+                {/* Row 6: Avatar — centered */}
+                <div className="flex justify-center py-2">
+                  <Pattern onFileChange={setPhotoFile} defaultAvatar={member.photoUrl ?? undefined} />
+                </div>
 
-            <div className="h-px bg-border" />
+                <div className="h-px bg-border" />
 
-            {/* Row 7: Remark — full width */}
-            <div className="grid gap-2">
-              <Label htmlFor="edit-remark">Remark</Label>
-              <Textarea
-                id="edit-remark"
-                rows={3}
-                value={formData.remark}
-                onChange={(event) =>
-                  setFormData((currentFormData) => ({
-                    ...currentFormData,
-                    remark: event.target.value,
-                  }))
-                }
-                placeholder="Add notes about this member..."
-                className="resize-none"
-              />
-            </div>
+                {/* Row 7: Remark — full width */}
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-remark">Remark</Label>
+                  <Textarea
+                    id="edit-remark"
+                    rows={3}
+                    value={formData.remark}
+                    onChange={(event) =>
+                      setFormData((currentFormData) => ({
+                        ...currentFormData,
+                        remark: event.target.value,
+                      }))
+                    }
+                    placeholder="Add notes about this member..."
+                    className="resize-none"
+                  />
+                </div>
+              </>
+            ) : null}
           </div>
 
           <DialogFooter>
@@ -626,10 +859,10 @@ export function EditMemberModal({ member, open, onOpenChange, onSuccess }: EditM
               className="bg-primary text-primary-foreground hover:bg-primary/90"
               loading={isSubmitting}
             >
-              {isSubmitting ? 'Saving...' : (
+              {isSubmitting ? (isRequestMode ? 'Submitting Request...' : 'Saving...') : (
                 <>
                   <Pencil data-icon="inline-start" className="h-4 w-4" />
-                  Save Changes
+                  {isRequestMode ? 'Submit Request' : 'Save Changes'}
                 </>
               )}
             </Button>
