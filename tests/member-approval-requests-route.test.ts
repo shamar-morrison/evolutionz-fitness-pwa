@@ -505,6 +505,55 @@ describe('member approval request routes', () => {
     })
   })
 
+  it('logs and ignores member create notification delivery failures after create', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 3, 9, 12, 0, 0))
+
+    const { client } = createMemberApprovalRequestsClient({
+      insertedRequestRow: createRequestRecord({
+        member_type_id: MEMBER_TYPE_ID_GENERAL,
+        memberType: { name: 'General' },
+        card_code: 'A18',
+      }),
+    })
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    insertNotificationsMock.mockRejectedValueOnce(new Error('Notification insert failed.'))
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readAdminNotificationRecipientsMock.mockResolvedValue([{ id: 'admin-1' }])
+    mockAuthenticatedProfile({
+      user: { id: 'staff-auth-1' },
+      profile: { id: 'staff-1', role: 'staff', name: 'Jordan Staff' },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/member-approval-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Jane Doe',
+          member_type_id: MEMBER_TYPE_ID_GENERAL,
+          gender: 'Female',
+          email: 'jane@example.com',
+          phone: '876-555-1111',
+          remark: 'Wants mornings only',
+          beginTime: '2026-04-10T09:00:00',
+          endTime: '2026-05-09T23:59:59',
+          cardNo: '0102857149',
+          cardCode: 'LOCAL-CODE',
+        }),
+      }),
+    )
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to send member create request notifications:',
+      expect.any(Error),
+    )
+    expect(response.status).toBe(200)
+  })
+
   it('returns 400 when required profile fields are missing on a new request', async () => {
     const { client } = createMemberApprovalRequestsClient()
     getSupabaseAdminClientMock.mockReturnValue(client)

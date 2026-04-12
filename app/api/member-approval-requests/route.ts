@@ -240,24 +240,31 @@ export async function POST(request: Request) {
     }
 
     const requestRecord = data as MemberApprovalRequestRecord
-    const adminRecipients = await readAdminNotificationRecipients(supabase)
-    const requestedBy = requestRecord.submittedByProfile?.name?.trim() || 'A staff member'
-    const memberName = requestRecord.name?.trim() || 'a new member'
+    try {
+      const adminRecipients = await readAdminNotificationRecipients(supabase)
+      const requestedBy = requestRecord.submittedByProfile?.name?.trim() || 'A staff member'
+      const memberName = requestRecord.name?.trim() || 'a new member'
 
-    await insertNotifications(
-      supabase,
-      adminRecipients.map((recipient) => ({
-        recipientId: recipient.id,
-        type: 'member_create_request',
-        title: 'New Member Request',
-        body: `New member request submitted by ${requestedBy} for ${memberName}.`,
-        metadata: {
-          requestId: requestRecord.id,
-          memberName,
-          requestedBy,
-        },
-      })),
-    )
+      await insertNotifications(
+        supabase,
+        adminRecipients.map((recipient) => ({
+          recipientId: recipient.id,
+          type: 'member_create_request',
+          title: 'New Member Request',
+          body: `New member request submitted by ${requestedBy} for ${memberName}.`,
+          metadata: {
+            requestId: requestRecord.id,
+            memberName,
+            requestedBy,
+          },
+        })),
+      )
+    } catch (notificationError) {
+      console.error(
+        'Failed to send member create request notifications:',
+        notificationError,
+      )
+    }
 
     return NextResponse.json({
       ok: true,

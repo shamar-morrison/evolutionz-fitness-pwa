@@ -27,6 +27,8 @@ type QueryResult<T> = PromiseLike<{
   error: QueryError | null
 }>
 
+type MemberPaymentRequestReviewRow = MemberPaymentRequestRecord
+
 type MemberPaymentRequestReviewClient = MemberTypesReadClient & {
   from(table: 'member_payment_requests'): {
     select(columns: string): {
@@ -39,9 +41,7 @@ type MemberPaymentRequestReviewClient = MemberTypesReadClient & {
       reviewed_by: string
       reviewed_at: string
       rejection_reason?: string | null
-    }): {
-      eq(column: 'id', value: string): QueryResult<null>
-    }
+    }): any
   }
   from(table: 'members'): {
     select(columns: 'id, type, member_type_id'): {
@@ -118,27 +118,27 @@ export async function PATCH(
     const input = reviewMemberPaymentRequestSchema.parse(requestBody)
     const reviewTimestamp = new Date().toISOString()
     const supabase = getSupabaseAdminClient() as unknown as MemberPaymentRequestReviewClient
-    const { data: existingRequest, error: existingRequestError } = await supabase
-      .from('member_payment_requests')
-      .select(MEMBER_PAYMENT_REQUEST_SELECT)
-      .eq('id', id)
-      .maybeSingle()
-
-    if (existingRequestError) {
-      throw new Error(
-        `Failed to read member payment request ${id}: ${existingRequestError.message}`,
-      )
-    }
-
-    if (!existingRequest) {
-      return createErrorResponse('Member payment request not found.', 404)
-    }
-
-    if (existingRequest.status !== 'pending') {
-      return createErrorResponse('This request has already been reviewed.', 400)
-    }
-
     if (input.action === 'deny') {
+      const { data: existingRequest, error: existingRequestError } = await supabase
+        .from('member_payment_requests')
+        .select(MEMBER_PAYMENT_REQUEST_SELECT)
+        .eq('id', id)
+        .maybeSingle()
+
+      if (existingRequestError) {
+        throw new Error(
+          `Failed to read member payment request ${id}: ${existingRequestError.message}`,
+        )
+      }
+
+      if (!existingRequest) {
+        return createErrorResponse('Member payment request not found.', 404)
+      }
+
+      if (existingRequest.status !== 'pending') {
+        return createErrorResponse('This request has already been reviewed.', 400)
+      }
+
       const { error } = await supabase
         .from('member_payment_requests')
         .update({
@@ -169,15 +169,54 @@ export async function PATCH(
       return NextResponse.json({ ok: true })
     }
 
+    const { data: approvedRequests, error: requestUpdateError } = await supabase
+      .from('member_payment_requests')
+      .update({
+        status: 'approved',
+        reviewed_by: authResult.profile.id,
+        reviewed_at: reviewTimestamp,
+      })
+      .eq('status', 'pending')
+      .eq('id', id)
+      .select(MEMBER_PAYMENT_REQUEST_SELECT)
+
+    if (requestUpdateError) {
+      throw new Error(
+        `Failed to approve member payment request ${id}: ${requestUpdateError.message}`,
+      )
+    }
+
+    const approvedRequest = ((approvedRequests ?? []) as MemberPaymentRequestReviewRow[])[0] ?? null
+
+    if (!approvedRequest) {
+      const { data: existingRequest, error: existingRequestError } = await supabase
+        .from('member_payment_requests')
+        .select(MEMBER_PAYMENT_REQUEST_SELECT)
+        .eq('id', id)
+        .maybeSingle()
+
+      if (existingRequestError) {
+        throw new Error(
+          `Failed to read member payment request ${id}: ${existingRequestError.message}`,
+        )
+      }
+
+      if (!existingRequest) {
+        return createErrorResponse('Member payment request not found.', 404)
+      }
+
+      return createErrorResponse('This request has already been reviewed.', 400)
+    }
+
     const { data: existingMember, error: existingMemberError } = await supabase
       .from('members')
       .select('id, type, member_type_id')
-      .eq('id', existingRequest.member_id)
+      .eq('id', approvedRequest.member_id)
       .maybeSingle()
 
     if (existingMemberError) {
       throw new Error(
-        `Failed to read member ${existingRequest.member_id}: ${existingMemberError.message}`,
+        `Failed to read member ${approvedRequest.member_id}: ${existingMemberError.message}`,
       )
     }
 
@@ -185,9 +224,9 @@ export async function PATCH(
       return createErrorResponse('Member not found.', 404)
     }
 
-    const effectiveMemberTypeId = existingRequest.member_type_id ?? existingMember.member_type_id
+    let finalMemberTypeId = approvedRequest.member_type_id ?? existingMember.member_type_id
 
-    if (!effectiveMemberTypeId) {
+    if (!finalMemberTypeId) {
       return createErrorResponse(
         'Membership type is required to approve this payment request.',
         400,
@@ -195,29 +234,29 @@ export async function PATCH(
     }
 
     if (
-      existingRequest.member_type_id &&
-      existingRequest.member_type_id !== existingMember.member_type_id
+      approvedRequest.member_type_id &&
+      approvedRequest.member_type_id !== existingMember.member_type_id
     ) {
       const updateValues = await buildMemberTypeUpdateValues(
         supabase,
-        existingRequest.member_type_id,
+        approvedRequest.member_type_id,
         existingMember.type,
       )
-      const nextMemberTypeId = updateValues.member_type_id ?? existingRequest.member_type_id
+      finalMemberTypeId = updateValues.member_type_id ?? approvedRequest.member_type_id
       const nextMemberType = (updateValues.type ?? existingMember.type) as MemberType
       const { error: updateError } = await supabase
         .from('members')
         .update({
-          member_type_id: nextMemberTypeId,
+          member_type_id: finalMemberTypeId,
           type: nextMemberType,
         })
-        .eq('id', existingRequest.member_id)
+        .eq('id', approvedRequest.member_id)
         .select('id')
         .maybeSingle()
 
       if (updateError) {
         throw new Error(
-          `Failed to update member ${existingRequest.member_id}: ${updateError.message}`,
+          `Failed to update member ${approvedRequest.member_id}: ${updateError.message}`,
         )
       }
     }
@@ -225,14 +264,14 @@ export async function PATCH(
     const { error: paymentInsertError } = await supabase
       .from('member_payments')
       .insert({
-        member_id: existingRequest.member_id,
-        member_type_id: effectiveMemberTypeId,
-        payment_method: existingRequest.payment_method,
-        amount_paid: existingRequest.amount,
+        member_id: approvedRequest.member_id,
+        member_type_id: finalMemberTypeId,
+        payment_method: approvedRequest.payment_method,
+        amount_paid: approvedRequest.amount,
         promotion: null,
         recorded_by: authResult.profile.id,
-        payment_date: existingRequest.payment_date,
-        notes: normalizeOptionalText(existingRequest.notes),
+        payment_date: approvedRequest.payment_date,
+        notes: normalizeOptionalText(approvedRequest.notes),
       })
       .select('*')
       .maybeSingle()
@@ -243,24 +282,9 @@ export async function PATCH(
       )
     }
 
-    const { error: requestUpdateError } = await supabase
-      .from('member_payment_requests')
-      .update({
-        status: 'approved',
-        reviewed_by: authResult.profile.id,
-        reviewed_at: reviewTimestamp,
-      })
-      .eq('id', id)
-
-    if (requestUpdateError) {
-      throw new Error(
-        `Failed to approve member payment request ${id}: ${requestUpdateError.message}`,
-      )
-    }
-
     try {
       await archiveResolvedRequestNotifications(supabase, {
-        requestId: existingRequest.id,
+        requestId: approvedRequest.id,
         type: 'member_payment_request',
         archivedAt: reviewTimestamp,
       })

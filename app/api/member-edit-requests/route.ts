@@ -204,25 +204,32 @@ export async function POST(request: Request) {
     }
 
     const requestRecord = data as MemberEditRequestRecord
-    const adminRecipients = await readAdminNotificationRecipients(supabase)
-    const memberName = requestRecord.member?.name?.trim() || 'this member'
-    const requestedBy = requestRecord.requestedByProfile?.name?.trim() || 'A staff member'
+    try {
+      const adminRecipients = await readAdminNotificationRecipients(supabase)
+      const memberName = requestRecord.member?.name?.trim() || 'this member'
+      const requestedBy = requestRecord.requestedByProfile?.name?.trim() || 'A staff member'
 
-    await insertNotifications(
-      supabase,
-      adminRecipients.map((recipient) => ({
-        recipientId: recipient.id,
-        type: 'member_edit_request',
-        title: 'Member Edit Request',
-        body: `New member edit request from ${requestedBy}.`,
-        metadata: {
-          requestId: requestRecord.id,
-          memberId: requestRecord.member_id,
-          memberName,
-          requestedBy,
-        },
-      })),
-    )
+      await insertNotifications(
+        supabase,
+        adminRecipients.map((recipient) => ({
+          recipientId: recipient.id,
+          type: 'member_edit_request',
+          title: 'Member Edit Request',
+          body: `New member edit request from ${requestedBy}.`,
+          metadata: {
+            requestId: requestRecord.id,
+            memberId: requestRecord.member_id,
+            memberName,
+            requestedBy,
+          },
+        })),
+      )
+    } catch (notificationError) {
+      console.error(
+        'Failed to send member edit request notifications:',
+        notificationError,
+      )
+    }
 
     return NextResponse.json({
       ok: true,

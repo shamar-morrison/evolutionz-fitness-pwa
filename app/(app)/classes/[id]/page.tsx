@@ -68,6 +68,8 @@ import {
 import { usePermissions } from '@/hooks/use-permissions'
 import { useStaff } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
+import { RedirectOnMount } from '@/components/redirect-on-mount'
+import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
 import {
   assignClassTrainer,
   calculateClassRegistrationAmount,
@@ -836,7 +838,11 @@ export default function ClassDetailPage() {
   }
 
   if (!canViewClasses) {
-    return null
+    return (
+      <RedirectOnMount
+        href={getAuthenticatedHomePath(profile?.role ?? null, profile?.titles)}
+      />
+    )
   }
 
   if (error) {

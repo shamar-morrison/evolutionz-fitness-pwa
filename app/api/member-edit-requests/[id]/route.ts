@@ -237,10 +237,37 @@ export async function PATCH(
       return createErrorResponse('Member not found.', 404)
     }
 
-    const memberUpdateValues: Record<string, unknown> = {}
     const shouldUpdateAccessWindow = hasAccessWindowProposal(existingRequest)
     let nextBeginTime: string | null = null
     let nextEndTime: string | null = null
+
+    if (shouldUpdateAccessWindow) {
+      const accessWindowResult = resolveApprovedAccessWindow(existingRequest, currentMember)
+
+      if ('error' in accessWindowResult) {
+        return createErrorResponse(accessWindowResult.error, 400)
+      }
+
+      nextBeginTime = accessWindowResult.beginTime
+      nextEndTime = accessWindowResult.endTime
+    }
+
+    const { error: requestUpdateError } = await supabase
+      .from('member_edit_requests')
+      .update({
+        status: 'approved',
+        reviewed_by: authResult.profile.id,
+        reviewed_at: reviewTimestamp,
+      })
+      .eq('id', id)
+
+    if (requestUpdateError) {
+      throw new Error(
+        `Failed to approve member edit request ${id}: ${requestUpdateError.message}`,
+      )
+    }
+
+    const memberUpdateValues: Record<string, unknown> = {}
 
     if (existingRequest.proposed_name) {
       memberUpdateValues.name = buildHikMemberName(
@@ -272,15 +299,7 @@ export async function PATCH(
       )
     }
 
-    if (shouldUpdateAccessWindow) {
-      const accessWindowResult = resolveApprovedAccessWindow(existingRequest, currentMember)
-
-      if ('error' in accessWindowResult) {
-        return createErrorResponse(accessWindowResult.error, 400)
-      }
-
-      nextBeginTime = accessWindowResult.beginTime
-      nextEndTime = accessWindowResult.endTime
+    if (shouldUpdateAccessWindow && nextBeginTime && nextEndTime) {
       memberUpdateValues.begin_time = nextBeginTime
       memberUpdateValues.end_time = nextEndTime
     }
@@ -304,21 +323,6 @@ export async function PATCH(
     if (memberUpdateError) {
       throw new Error(
         `Failed to update member ${existingRequest.member_id}: ${memberUpdateError.message}`,
-      )
-    }
-
-    const { error: requestUpdateError } = await supabase
-      .from('member_edit_requests')
-      .update({
-        status: 'approved',
-        reviewed_by: authResult.profile.id,
-        reviewed_at: reviewTimestamp,
-      })
-      .eq('id', id)
-
-    if (requestUpdateError) {
-      throw new Error(
-        `Failed to approve member edit request ${id}: ${requestUpdateError.message}`,
       )
     }
 

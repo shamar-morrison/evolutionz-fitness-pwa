@@ -129,6 +129,15 @@ async function clickButton(container: ParentNode, label: string) {
   })
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve
+  })
+
+  return { promise, resolve }
+}
+
 describe('PendingMemberPaymentRequestsPage', () => {
   let container: HTMLDivElement
   let root: Root
@@ -255,6 +264,62 @@ describe('PendingMemberPaymentRequestsPage', () => {
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['notifications', 'user-1', 'unread-count'],
+    })
+  })
+
+  it('allows concurrent payment reviews without disabling other visible requests', async () => {
+    const firstReview = createDeferred<void>()
+    const secondReview = createDeferred<void>()
+
+    reviewMemberPaymentRequestMock
+      .mockReturnValueOnce(firstReview.promise)
+      .mockReturnValueOnce(secondReview.promise)
+    useMemberPaymentRequestsMock.mockReturnValue({
+      requests: [
+        createRequest({ id: 'payment-request-1', memberName: 'Jane Doe' }),
+        createRequest({ id: 'payment-request-2', memberName: 'Mark Lee' }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<PendingMemberPaymentRequestsPage />)
+    })
+
+    await clickButton(container, 'Approve')
+
+    const remainingApproveButton = Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.trim() === 'Approve',
+    )
+
+    if (!(remainingApproveButton instanceof HTMLButtonElement)) {
+      throw new Error('Second approve button not found.')
+    }
+
+    expect(remainingApproveButton.disabled).toBe(false)
+
+    await act(async () => {
+      remainingApproveButton.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(reviewMemberPaymentRequestMock).toHaveBeenNthCalledWith(1, 'payment-request-1', {
+      action: 'approve',
+      rejectionReason: null,
+    })
+    expect(reviewMemberPaymentRequestMock).toHaveBeenNthCalledWith(2, 'payment-request-2', {
+      action: 'approve',
+      rejectionReason: null,
+    })
+
+    firstReview.resolve()
+    secondReview.resolve()
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
     })
   })
 })

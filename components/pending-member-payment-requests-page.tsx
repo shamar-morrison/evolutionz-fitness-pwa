@@ -50,7 +50,7 @@ export function PendingMemberPaymentRequestsPage() {
   const [hiddenRequestIds, setHiddenRequestIds] = useState<string[]>([])
   const [denyRequest, setDenyRequest] = useState<MemberPaymentRequest | null>(null)
   const [rejectionReason, setRejectionReason] = useState('')
-  const [reviewingRequestId, setReviewingRequestId] = useState<string | null>(null)
+  const [reviewingRequestIds, setReviewingRequestIds] = useState<Set<string>>(() => new Set())
   const visibleRequests = useMemo(
     () => requests.filter((request) => !hiddenRequestIds.includes(request.id)),
     [hiddenRequestIds, requests],
@@ -61,7 +61,11 @@ export function PendingMemberPaymentRequestsPage() {
     action: 'approve' | 'deny',
     nextRejectionReason?: string | null,
   ) => {
-    setReviewingRequestId(request.id)
+    setReviewingRequestIds((current) => {
+      const next = new Set(current)
+      next.add(request.id)
+      return next
+    })
     setHiddenRequestIds((current) => (current.includes(request.id) ? current : [...current, request.id]))
 
     try {
@@ -101,7 +105,11 @@ export function PendingMemberPaymentRequestsPage() {
         variant: 'destructive',
       })
     } finally {
-      setReviewingRequestId(null)
+      setReviewingRequestIds((current) => {
+        const next = new Set(current)
+        next.delete(request.id)
+        return next
+      })
     }
   }
 
@@ -143,7 +151,7 @@ export function PendingMemberPaymentRequestsPage() {
             </div>
 
             {visibleRequests.map((request) => {
-              const isReviewing = reviewingRequestId === request.id
+              const isReviewing = reviewingRequestIds.has(request.id)
 
               return (
                 <Card key={request.id}>
@@ -219,14 +227,14 @@ export function PendingMemberPaymentRequestsPage() {
               type="button"
               variant="outline"
               onClick={() => setDenyRequest(null)}
-              disabled={denyRequest !== null && reviewingRequestId === denyRequest.id}
+              disabled={denyRequest !== null && reviewingRequestIds.has(denyRequest.id)}
             >
               Cancel
             </Button>
             <Button
               type="button"
               variant="destructive"
-              disabled={denyRequest !== null && reviewingRequestId === denyRequest.id}
+              disabled={denyRequest !== null && reviewingRequestIds.has(denyRequest.id)}
               onClick={() => {
                 if (!denyRequest) {
                   return

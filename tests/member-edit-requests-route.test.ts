@@ -137,6 +137,7 @@ function createEditRequestsClient({
     monthly_rate: 7500,
   }),
   cardRows = [{ card_no: '0102857149', card_code: 'A18', status: 'assigned', lost_at: null }],
+  requestUpdateError = null,
   pollResults,
 }: {
   requestRows?: MemberEditRequestRecord[]
@@ -145,6 +146,7 @@ function createEditRequestsClient({
   currentMemberRow?: Record<string, unknown> | null
   memberTypeRow?: MemberTypeRecord | null
   cardRows?: Array<Record<string, unknown>>
+  requestUpdateError?: { message: string } | null
   pollResults?: Array<{
     data: {
       id: string
@@ -158,6 +160,7 @@ function createEditRequestsClient({
   const { client: accessControlClient, insertedJobs } = createFakeAccessControlClient({
     pollResults,
   })
+  const operations: string[] = []
   const requestInserts: Array<Record<string, unknown>> = []
   const requestUpdates: Array<Record<string, unknown>> = []
   const memberUpdates: Array<Record<string, unknown>> = []
@@ -165,6 +168,7 @@ function createEditRequestsClient({
   return {
     insertedJobs,
     memberUpdates,
+    operations,
     requestInserts,
     requestUpdates,
     client: {
@@ -230,6 +234,7 @@ function createEditRequestsClient({
             },
             update(values: Record<string, unknown>) {
               requestUpdates.push(values)
+              operations.push('request-update')
 
               return {
                 eq(column: string, value: string) {
@@ -238,7 +243,7 @@ function createEditRequestsClient({
 
                   return Promise.resolve({
                     data: null,
-                    error: null,
+                    error: requestUpdateError,
                   })
                 },
               }
@@ -269,6 +274,7 @@ function createEditRequestsClient({
             },
             update(values: Record<string, unknown>) {
               memberUpdates.push(values)
+              operations.push('member-update')
 
               return {
                 eq(column: string, value: string) {
@@ -512,6 +518,41 @@ describe('member edit request routes', () => {
     })
   })
 
+  it('logs and ignores member edit notification delivery failures after create', async () => {
+    const { client } = createEditRequestsClient({
+      insertedRequestRow: createEditRequestRecord({
+        proposed_email: 'jane-updated@example.com',
+        proposed_name: 'Jane Updated',
+      }),
+    })
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    insertNotificationsMock.mockRejectedValueOnce(new Error('Notification insert failed.'))
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readAdminNotificationRecipientsMock.mockResolvedValue([{ id: 'admin-1' }])
+    mockAuthenticatedUser({ id: 'staff-auth-1' })
+
+    const response = await POST(
+      new Request('http://localhost/api/member-edit-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          member_id: MEMBER_ID,
+          proposed_name: 'Jane Updated',
+          proposed_email: 'jane-updated@example.com',
+        }),
+      }),
+    )
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to send member edit request notifications:',
+      expect.any(Error),
+    )
+    expect(response.status).toBe(200)
+  })
+
   it('returns 400 when no proposed changes are provided', async () => {
     const { client } = createEditRequestsClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -589,7 +630,7 @@ describe('member edit request routes', () => {
         name: 'Civil Servant',
       },
     })
-    const { client, memberUpdates, requestUpdates } = createEditRequestsClient({
+    const { client, memberUpdates, operations, requestUpdates } = createEditRequestsClient({
       existingRequestRow,
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -624,6 +665,7 @@ describe('member edit request routes', () => {
         type: 'Civil Servant',
       },
     ])
+    expect(operations).toEqual(['request-update', 'member-update'])
     expect(requestUpdates).toEqual([
       {
         status: 'approved',
@@ -638,6 +680,53 @@ describe('member edit request routes', () => {
     })
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ ok: true })
+  })
+
+  it('does not update the member when approving the request status fails', async () => {
+    const existingRequestRow = createEditRequestRecord({
+      proposed_name: 'Jane Updated',
+    })
+    const { client, memberUpdates, requestUpdates } = createEditRequestsClient({
+      existingRequestRow,
+      requestUpdateError: { message: 'request update failed' },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-edit-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'approve',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(requestUpdates).toEqual([
+      {
+        status: 'approved',
+        reviewed_by: 'admin-1',
+        reviewed_at: expect.any(String),
+      },
+    ])
+    expect(memberUpdates).toEqual([])
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Failed to approve member edit request request-1: request update failed',
+    })
   })
 
   it('logs and ignores member edit notification archive failures after denial', async () => {

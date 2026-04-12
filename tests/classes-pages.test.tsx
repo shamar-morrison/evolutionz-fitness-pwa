@@ -19,6 +19,7 @@ const {
   generateClassSessionsMock,
   invalidateQueriesMock,
   pushMock,
+  replaceMock,
   removeClassTrainerMock,
   toastMock,
   useClassScheduleRulesMock,
@@ -47,6 +48,7 @@ const {
   generateClassSessionsMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   pushMock: vi.fn(),
+  replaceMock: vi.fn(),
   removeClassTrainerMock: vi.fn(),
   toastMock: vi.fn(),
   useClassScheduleRulesMock: vi.fn(),
@@ -111,6 +113,7 @@ vi.mock('@/hooks/use-back-link', () => ({
 vi.mock('@/hooks/use-progress-router', () => ({
   useProgressRouter: () => ({
     push: pushMock,
+    replace: replaceMock,
   }),
 }))
 
@@ -648,6 +651,23 @@ describe('classes pages', () => {
     expect(container.textContent).not.toContain('Pending Approvals')
     expect(container.textContent).toContain('Sessions')
     expect(container.textContent).toContain('Mark Attendance')
+  })
+
+  it('redirects unauthorized users away from the class detail page instead of rendering blank', async () => {
+    authState.role = 'staff'
+    authState.profile = {
+      id: 'user-4',
+      name: 'Medical Staff',
+      role: 'staff',
+      titles: ['Medical'],
+    }
+
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+      await Promise.resolve()
+    })
+
+    expect(replaceMock).toHaveBeenCalledWith('/unauthorized')
   })
 
   it('keys schedule-management controls off the owner permission path instead of auth role alone', async () => {

@@ -160,6 +160,15 @@ async function clickButton(container: ParentNode, label: string) {
   })
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve
+  })
+
+  return { promise, resolve }
+}
+
 describe('PendingMemberEditRequestsPage', () => {
   let container: HTMLDivElement
   let root: Root
@@ -322,5 +331,61 @@ describe('PendingMemberEditRequestsPage', () => {
     expect(container.textContent).toContain(
       nextEndTime ? formatAccessDate(nextEndTime, 'long') : 'Unavailable',
     )
+  })
+
+  it('allows concurrent edit reviews without disabling other visible requests', async () => {
+    const firstReview = createDeferred<void>()
+    const secondReview = createDeferred<void>()
+
+    reviewMemberEditRequestMock
+      .mockReturnValueOnce(firstReview.promise)
+      .mockReturnValueOnce(secondReview.promise)
+    useMemberEditRequestsMock.mockReturnValue({
+      requests: [
+        createRequest({ id: 'request-1', memberName: 'Jane Doe' }),
+        createRequest({ id: 'request-2', memberName: 'Mark Lee' }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<PendingMemberEditRequestsPage />)
+    })
+
+    await clickButton(container, 'Approve')
+
+    const remainingApproveButton = Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.trim() === 'Approve',
+    )
+
+    if (!(remainingApproveButton instanceof HTMLButtonElement)) {
+      throw new Error('Second approve button not found.')
+    }
+
+    expect(remainingApproveButton.disabled).toBe(false)
+
+    await act(async () => {
+      remainingApproveButton.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(reviewMemberEditRequestMock).toHaveBeenNthCalledWith(1, 'request-1', {
+      action: 'approve',
+      rejectionReason: null,
+    })
+    expect(reviewMemberEditRequestMock).toHaveBeenNthCalledWith(2, 'request-2', {
+      action: 'approve',
+      rejectionReason: null,
+    })
+
+    firstReview.resolve()
+    secondReview.resolve()
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
   })
 })
