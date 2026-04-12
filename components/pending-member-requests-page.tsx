@@ -261,7 +261,7 @@ export function PendingMemberRequestsPage() {
 
             {requests.map((request) => (
               <Card key={request.id}>
-                <CardContent className="flex flex-col gap-4 p-5 xl:flex-row xl:items-center xl:justify-between">
+                <CardContent className="flex flex-col gap-4 px-5 xl:flex-row xl:items-center xl:justify-between">
                   <div className="space-y-2">
                     <p className="text-lg font-semibold">{request.name}</p>
                     <p className="text-sm text-muted-foreground">

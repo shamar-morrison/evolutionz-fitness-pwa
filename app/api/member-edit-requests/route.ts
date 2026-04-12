@@ -10,6 +10,10 @@ import {
   mapMemberEditRequestRecord,
   type MemberEditRequestRecord,
 } from '@/lib/member-edit-request-records'
+import {
+  insertNotifications,
+  readAdminNotificationRecipients,
+} from '@/lib/pt-notifications-server'
 import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import type { MemberGender } from '@/types'
@@ -199,9 +203,30 @@ export async function POST(request: Request) {
       throw new Error(`Failed to create member edit request: ${error.message}`)
     }
 
+    const requestRecord = data as MemberEditRequestRecord
+    const adminRecipients = await readAdminNotificationRecipients(supabase)
+    const memberName = requestRecord.member?.name?.trim() || 'this member'
+    const requestedBy = requestRecord.requestedByProfile?.name?.trim() || 'A staff member'
+
+    await insertNotifications(
+      supabase,
+      adminRecipients.map((recipient) => ({
+        recipientId: recipient.id,
+        type: 'member_edit_request',
+        title: 'Member Edit Request',
+        body: `New member edit request from ${requestedBy}.`,
+        metadata: {
+          requestId: requestRecord.id,
+          memberId: requestRecord.member_id,
+          memberName,
+          requestedBy,
+        },
+      })),
+    )
+
     return NextResponse.json({
       ok: true,
-      request: mapMemberEditRequestRecord(data as MemberEditRequestRecord),
+      request: mapMemberEditRequestRecord(requestRecord),
     })
   } catch (error) {
     if (error instanceof SyntaxError) {

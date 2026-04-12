@@ -12,6 +12,8 @@ export const ARCHIVABLE_NOTIFICATION_TYPES = [
 export const ADMIN_REQUEST_ARCHIVABLE_NOTIFICATION_TYPES = [
   'reschedule_request',
   'status_change_request',
+  'member_edit_request',
+  'member_payment_request',
 ] as const satisfies ReadonlyArray<Notification['type']>
 
 export function getArchivableNotificationTypes(role: UserRole | null) {

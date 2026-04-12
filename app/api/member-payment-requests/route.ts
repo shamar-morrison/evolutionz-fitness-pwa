@@ -5,6 +5,10 @@ import {
   mapMemberPaymentRequestRecord,
   type MemberPaymentRequestRecord,
 } from '@/lib/member-payment-request-records'
+import {
+  insertNotifications,
+  readAdminNotificationRecipients,
+} from '@/lib/pt-notifications-server'
 import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import type { MemberPaymentMethod } from '@/types'
@@ -140,9 +144,32 @@ export async function POST(request: Request) {
       throw new Error(`Failed to create member payment request: ${error.message}`)
     }
 
+    const requestRecord = data as MemberPaymentRequestRecord
+    const adminRecipients = await readAdminNotificationRecipients(supabase)
+    const memberName = requestRecord.member?.name?.trim() || 'this member'
+    const requestedBy = requestRecord.requestedByProfile?.name?.trim() || 'A staff member'
+
+    await insertNotifications(
+      supabase,
+      adminRecipients.map((recipient) => ({
+        recipientId: recipient.id,
+        type: 'member_payment_request',
+        title: 'Member Payment Request',
+        body: `New payment request from ${requestedBy} for ${memberName}.`,
+        metadata: {
+          requestId: requestRecord.id,
+          memberId: requestRecord.member_id,
+          memberName,
+          requestedBy,
+          amount: requestRecord.amount,
+          paymentMethod: requestRecord.payment_method,
+        },
+      })),
+    )
+
     return NextResponse.json({
       ok: true,
-      request: mapMemberPaymentRequestRecord(data as MemberPaymentRequestRecord),
+      request: mapMemberPaymentRequestRecord(requestRecord),
     })
   } catch (error) {
     if (error instanceof SyntaxError) {

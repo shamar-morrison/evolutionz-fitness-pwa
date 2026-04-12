@@ -245,7 +245,7 @@ export function PendingMemberEditRequestsPage() {
 
               return (
                 <Card key={request.id}>
-                  <CardContent className="flex flex-col gap-4 p-5 xl:flex-row xl:items-start xl:justify-between">
+                  <CardContent className="flex flex-col gap-4 px-5 xl:flex-row xl:items-start xl:justify-between">
                     <div className="space-y-3">
                       <div className="space-y-1">
                         <h3 className="text-base font-semibold">{request.memberName}</h3>

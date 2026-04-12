@@ -6,12 +6,23 @@ import {
   resetServerAuthMocks,
 } from '@/tests/support/server-auth'
 
-const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
+const {
+  getSupabaseAdminClientMock,
+  insertNotificationsMock,
+  readAdminNotificationRecipientsMock,
+} = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
+  insertNotificationsMock: vi.fn().mockResolvedValue(undefined),
+  readAdminNotificationRecipientsMock: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdminClient: getSupabaseAdminClientMock,
+}))
+
+vi.mock('@/lib/pt-notifications-server', () => ({
+  insertNotifications: insertNotificationsMock,
+  readAdminNotificationRecipients: readAdminNotificationRecipientsMock,
 }))
 
 vi.mock('@/lib/server-auth', async () => {
@@ -292,6 +303,9 @@ describe('member payment request routes', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
+    insertNotificationsMock.mockClear()
+    readAdminNotificationRecipientsMock.mockReset()
+    readAdminNotificationRecipientsMock.mockResolvedValue([])
     resetServerAuthMocks()
   })
 
@@ -342,6 +356,10 @@ describe('member payment request routes', () => {
       }),
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
+    readAdminNotificationRecipientsMock.mockResolvedValue([
+      { id: 'admin-1' },
+      { id: 'admin-2' },
+    ])
     mockAuthenticatedUser({ id: 'staff-auth-1' })
 
     const response = await POST(
@@ -371,6 +389,36 @@ describe('member payment request routes', () => {
         payment_date: '2026-04-12',
         member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
         notes: 'Card machine payment',
+      },
+    ])
+    expect(insertNotificationsMock).toHaveBeenCalledWith(client, [
+      {
+        recipientId: 'admin-1',
+        type: 'member_payment_request',
+        title: 'Member Payment Request',
+        body: 'New payment request from Jordan Staff for Jane Doe.',
+        metadata: {
+          requestId: 'payment-request-1',
+          memberId: MEMBER_ID,
+          memberName: 'Jane Doe',
+          requestedBy: 'Jordan Staff',
+          amount: 7500,
+          paymentMethod: 'fygaro',
+        },
+      },
+      {
+        recipientId: 'admin-2',
+        type: 'member_payment_request',
+        title: 'Member Payment Request',
+        body: 'New payment request from Jordan Staff for Jane Doe.',
+        metadata: {
+          requestId: 'payment-request-1',
+          memberId: MEMBER_ID,
+          memberName: 'Jane Doe',
+          requestedBy: 'Jordan Staff',
+          amount: 7500,
+          paymentMethod: 'fygaro',
+        },
       },
     ])
     expect(response.status).toBe(200)

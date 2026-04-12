@@ -276,7 +276,7 @@ export function PendingApprovalsPageContent({
         ) : (
           sessionUpdateRequestsQuery.requests.map((request) => (
             <Card key={request.id}>
-              <CardContent className="flex flex-col gap-4 p-5 xl:flex-row xl:items-center xl:justify-between">
+              <CardContent className="flex flex-col gap-4 px-5 xl:flex-row xl:items-center xl:justify-between">
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-lg font-semibold">
@@ -537,7 +537,7 @@ function ApprovalGroup({
       ) : (
         requests.map((request) => (
           <Card key={request.id}>
-            <CardContent className="flex flex-col gap-4 p-5 xl:flex-row xl:items-center xl:justify-between">
+            <CardContent className="flex flex-col gap-4 px-5 xl:flex-row xl:items-center xl:justify-between">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-lg font-semibold">

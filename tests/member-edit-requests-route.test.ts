@@ -6,12 +6,23 @@ import {
   resetServerAuthMocks,
 } from '@/tests/support/server-auth'
 
-const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
+const {
+  getSupabaseAdminClientMock,
+  insertNotificationsMock,
+  readAdminNotificationRecipientsMock,
+} = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
+  insertNotificationsMock: vi.fn().mockResolvedValue(undefined),
+  readAdminNotificationRecipientsMock: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdminClient: getSupabaseAdminClientMock,
+}))
+
+vi.mock('@/lib/pt-notifications-server', () => ({
+  insertNotifications: insertNotificationsMock,
+  readAdminNotificationRecipients: readAdminNotificationRecipientsMock,
 }))
 
 vi.mock('@/lib/server-auth', async () => {
@@ -334,6 +345,9 @@ describe('member edit request routes', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
+    insertNotificationsMock.mockClear()
+    readAdminNotificationRecipientsMock.mockReset()
+    readAdminNotificationRecipientsMock.mockResolvedValue([])
     resetServerAuthMocks()
   })
 
@@ -379,6 +393,10 @@ describe('member edit request routes', () => {
       }),
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
+    readAdminNotificationRecipientsMock.mockResolvedValue([
+      { id: 'admin-1' },
+      { id: 'admin-2' },
+    ])
     mockAuthenticatedUser({ id: 'staff-auth-1' })
 
     const response = await POST(
@@ -404,6 +422,32 @@ describe('member edit request routes', () => {
         proposed_email: 'jane-updated@example.com',
       },
     ])
+    expect(insertNotificationsMock).toHaveBeenCalledWith(client, [
+      {
+        recipientId: 'admin-1',
+        type: 'member_edit_request',
+        title: 'Member Edit Request',
+        body: 'New member edit request from Jordan Staff.',
+        metadata: {
+          requestId: 'request-1',
+          memberId: MEMBER_ID,
+          memberName: 'Jane Doe',
+          requestedBy: 'Jordan Staff',
+        },
+      },
+      {
+        recipientId: 'admin-2',
+        type: 'member_edit_request',
+        title: 'Member Edit Request',
+        body: 'New member edit request from Jordan Staff.',
+        metadata: {
+          requestId: 'request-1',
+          memberId: MEMBER_ID,
+          memberName: 'Jane Doe',
+          requestedBy: 'Jordan Staff',
+        },
+      },
+    ])
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
       ok: true,
@@ -424,6 +468,7 @@ describe('member edit request routes', () => {
       }),
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
+    readAdminNotificationRecipientsMock.mockResolvedValue([])
     mockAuthenticatedUser({ id: 'staff-auth-1' })
 
     const response = await POST(

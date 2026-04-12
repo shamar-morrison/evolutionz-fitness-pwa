@@ -416,7 +416,7 @@ function ScheduleContent() {
                   >
                     <CardContent
                       className={cn(
-                        'flex flex-col gap-4 p-5 xl:flex-row xl:items-center xl:justify-between',
+                        'flex flex-col gap-4 px-5 xl:flex-row xl:items-center xl:justify-between',
                         isSessionPending ? 'opacity-60' : undefined,
                       )}
                     >
