@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   authState,
+  configFeatures,
   invalidateQueriesMock,
   searchParamsValue,
   useMembersMock,
@@ -21,6 +22,10 @@ const {
     },
     role: 'admin' as 'admin' | 'staff',
     loading: false,
+  },
+  configFeatures: {
+    showSyncCardsButton: true,
+    showSyncMembersButton: true,
   },
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   searchParamsValue: {
@@ -129,7 +134,12 @@ vi.mock('@/lib/available-cards', () => ({
 vi.mock('@/lib/config', () => ({
   config: {
     features: {
-      showSyncButtons: true,
+      get showSyncCardsButton() {
+        return configFeatures.showSyncCardsButton
+      },
+      get showSyncMembersButton() {
+        return configFeatures.showSyncMembersButton
+      },
     },
   },
 }))
@@ -154,6 +164,8 @@ describe('MembersPage', () => {
     }
     authState.role = 'admin'
     authState.loading = false
+    configFeatures.showSyncCardsButton = true
+    configFeatures.showSyncMembersButton = true
     searchParamsValue.value = ''
 
     useMembersMock.mockReturnValue({
@@ -207,6 +219,43 @@ describe('MembersPage', () => {
 
     expect(container.textContent).toContain('Add Member')
     expect(container.textContent).not.toContain('Sync Cards')
+    expect(container.textContent).not.toContain('Sync Members')
+  })
+
+  it('shows only Sync Cards for admins when member sync is disabled', async () => {
+    configFeatures.showSyncMembersButton = false
+
+    await act(async () => {
+      root.render(<MembersPage />)
+    })
+
+    expect(container.textContent).toContain('Sync Cards')
+    expect(container.textContent).not.toContain('Sync Members')
+  })
+
+  it('hides Sync Cards for non-admin users even when card sync is enabled', async () => {
+    authState.profile = {
+      id: 'trainer-1',
+      name: 'Taylor Trainer',
+      role: 'staff',
+      titles: ['Trainer'],
+    }
+    authState.role = 'staff'
+
+    await act(async () => {
+      root.render(<MembersPage />)
+    })
+
+    expect(container.textContent).not.toContain('Sync Cards')
+  })
+
+  it('hides Sync Members when the feature flag is disabled', async () => {
+    configFeatures.showSyncMembersButton = false
+
+    await act(async () => {
+      root.render(<MembersPage />)
+    })
+
     expect(container.textContent).not.toContain('Sync Members')
   })
 

@@ -74,9 +74,12 @@ function MembersPageContent() {
   const [isSyncingCards, setIsSyncingCards] = useState(false)
   const queryClient = useQueryClient()
   const { profile, loading } = useAuth()
-  const { can } = usePermissions()
+  const { can, role } = usePermissions()
   const canCreateMembers = can('members.create')
   const isFrontDesk = isFrontDeskStaff(profile?.titles)
+  const showSyncMembersButton =
+    can('members.edit') && !isFrontDesk && config.features.showSyncMembersButton
+  const showSyncCardsButton = role === 'admin' && config.features.showSyncCardsButton
 
   const { members, isLoading, error } = useMembers({
     search,
@@ -159,27 +162,27 @@ function MembersPageContent() {
           <p className="text-muted-foreground">Manage your gym members and their subscriptions.</p>
         </div>
         <div className="flex items-center gap-2">
-          {can('members.edit') && !isFrontDesk && config.features.showSyncButtons ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void handleSyncCards()}
-                disabled={isSyncingCards}
-              >
-                {isSyncingCards ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
-                Sync Cards
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void handleSyncMembers()}
-                disabled={isSyncingMembers}
-              >
-                {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
-                Sync Members
-              </Button>
-            </>
+          {showSyncCardsButton ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleSyncCards()}
+              disabled={isSyncingCards}
+            >
+              {isSyncingCards ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
+              Sync Cards
+            </Button>
+          ) : null}
+          {showSyncMembersButton ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleSyncMembers()}
+              disabled={isSyncingMembers}
+            >
+              {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
+              Sync Members
+            </Button>
           ) : null}
           {canCreateMembers ? (
             <Button
