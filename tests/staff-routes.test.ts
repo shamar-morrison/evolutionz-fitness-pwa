@@ -221,7 +221,7 @@ function createStaffAdminClient({
   const insertValues: Array<Record<string, unknown>> = []
   const updateValues: Array<Record<string, unknown>> = []
   const removeCalls: string[][] = []
-  const signedUrlCalls: string[] = []
+  const publicUrlCalls: string[] = []
   let detailReadIndex = 0
 
   return {
@@ -396,14 +396,12 @@ function createStaffAdminClient({
           expect(bucket).toBe('staff-photos')
 
           return {
-            createSignedUrl(path: string, expiresIn: number) {
-              signedUrlCalls.push(path)
-              expect(expiresIn).toBe(3600)
+            getPublicUrl(path: string) {
+              publicUrlCalls.push(path)
 
-              return Promise.resolve({
-                data: { signedUrl: `https://signed.example.com/${path}` },
-                error: null,
-              })
+              return {
+                data: { publicUrl: `https://public.example.com/staff-photos/${path}` },
+              }
             },
             remove(paths: string[]) {
               removeCalls.push(paths)
@@ -419,7 +417,7 @@ function createStaffAdminClient({
     insertValues,
     updateValues,
     removeCalls,
-    signedUrlCalls,
+    publicUrlCalls,
   }
 }
 
@@ -431,7 +429,7 @@ describe('staff API routes', () => {
     resetServerAuthMocks()
   })
 
-  it('returns staff ordered by created_at ascending and signs list photos', async () => {
+  it('returns staff ordered by created_at ascending and hydrates list photos with public URLs', async () => {
     createClientMock.mockResolvedValue(
       createStaffServerClient({
         listRows: [
@@ -452,13 +450,13 @@ describe('staff API routes', () => {
         ],
       }),
     )
-    const { client, signedUrlCalls } = createStaffAdminClient()
+    const { client, publicUrlCalls } = createStaffAdminClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
 
     const response = await getStaff(new Request('http://localhost/api/staff'))
 
     expect(response.status).toBe(200)
-    expect(signedUrlCalls).toEqual(['staff-1.jpg'])
+    expect(publicUrlCalls).toEqual(['staff-1.jpg'])
     await expect(response.json()).resolves.toEqual({
       staff: [
         {
@@ -471,7 +469,7 @@ describe('staff API routes', () => {
           gender: null,
           remark: null,
           specialties: [],
-          photoUrl: 'https://signed.example.com/staff-1.jpg',
+          photoUrl: 'https://public.example.com/staff-photos/staff-1.jpg',
           archivedAt: null,
           created_at: '2026-04-01T00:00:00.000Z',
         },
@@ -1449,7 +1447,7 @@ describe('staff API routes', () => {
     })
   })
 
-  it('returns a signed staff detail profile', async () => {
+  it('returns a public staff detail profile', async () => {
     createClientMock.mockResolvedValue(
       createStaffServerClient({
         detailRow: buildProfileRow({
@@ -1481,7 +1479,7 @@ describe('staff API routes', () => {
         gender: null,
         remark: null,
         specialties: ['Strength Training', 'HIIT'],
-        photoUrl: 'https://signed.example.com/staff-2.jpg',
+        photoUrl: 'https://public.example.com/staff-photos/staff-2.jpg',
         archivedAt: null,
         created_at: '2026-04-03T00:00:00.000Z',
       },

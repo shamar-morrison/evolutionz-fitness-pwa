@@ -35,10 +35,7 @@ function createMembersAdminClient({
   detailError = null,
   cardRows = [],
   cardsError = null,
-  signedUrlResult = {
-    data: { signedUrl: 'https://signed.example.com/member-2.jpg' },
-    error: null,
-  },
+  publicUrl = 'https://public.example.com/member-photos/member-2.jpg',
 }: {
   listRows?: Array<Record<string, unknown>>
   listError?: { message: string } | null
@@ -46,10 +43,7 @@ function createMembersAdminClient({
   detailError?: { message: string } | null
   cardRows?: Array<Record<string, unknown>>
   cardsError?: { message: string } | null
-  signedUrlResult?: {
-    data: { signedUrl: string } | null
-    error: { message: string } | null
-  }
+  publicUrl?: string
 } = {}) {
   return {
     from(table: string) {
@@ -105,11 +99,12 @@ function createMembersAdminClient({
         expect(bucket).toBe('member-photos')
 
         return {
-          createSignedUrl(path: string, expiresIn: number) {
+          getPublicUrl(path: string) {
             expect(path).toBeDefined()
-            expect(expiresIn).toBe(3600)
 
-            return Promise.resolve(signedUrlResult)
+            return {
+              data: { publicUrl },
+            }
           },
         }
       },
@@ -247,7 +242,7 @@ describe('members API routes', () => {
     })
   })
 
-  it('hydrates the member photo with a signed URL on detail reads', async () => {
+  it('hydrates the member photo with a public URL on detail reads', async () => {
     getSupabaseAdminClientMock.mockReturnValue(
       createMembersAdminClient({
         detailRow: {
@@ -294,7 +289,7 @@ describe('members API routes', () => {
         email: null,
         phone: null,
         remark: 'Requires weekend access',
-        photoUrl: 'https://signed.example.com/member-2.jpg',
+        photoUrl: 'https://public.example.com/member-photos/member-2.jpg',
         beginTime: '2026-03-01T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
       },
@@ -325,9 +320,7 @@ describe('members API routes', () => {
     })
   })
 
-  it('falls back to a null member photo when signed URL creation fails', async () => {
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
+  it('returns the public member photo when one is stored', async () => {
     getSupabaseAdminClientMock.mockReturnValue(
       createMembersAdminClient({
         detailRow: {
@@ -346,10 +339,6 @@ describe('members API routes', () => {
           end_time: '2026-07-15T23:59:59Z',
           created_at: '2026-03-01T10:00:00Z',
           updated_at: '2026-03-01T10:00:00Z',
-        },
-        signedUrlResult: {
-          data: null,
-          error: { message: 'Signature failed.' },
         },
         cardRows: [{ card_no: '0102857149', card_code: 'A1', status: 'assigned', lost_at: null }],
       }),
@@ -378,12 +367,11 @@ describe('members API routes', () => {
         email: null,
         phone: null,
         remark: 'Requires weekend access',
-        photoUrl: null,
+        photoUrl: 'https://public.example.com/member-photos/member-2.jpg',
         beginTime: '2026-03-01T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
       },
     })
-    expect(consoleErrorSpy).toHaveBeenCalled()
   })
 
   it('returns 404 when the member does not exist', async () => {

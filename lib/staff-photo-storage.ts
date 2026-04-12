@@ -1,7 +1,6 @@
 import type { Profile } from '@/types'
 
 export const STAFF_PHOTOS_BUCKET = 'staff-photos'
-export const STAFF_PHOTO_SIGNED_URL_TTL_SECONDS = 60 * 60
 
 type StorageError = {
   message: string
@@ -10,13 +9,9 @@ type StorageError = {
 export type StaffPhotoStorageClient = {
   storage: {
     from(bucket: string): {
-      createSignedUrl(
-        path: string,
-        expiresIn: number,
-      ): PromiseLike<{
-        data: { signedUrl: string } | null
-        error: StorageError | null
-      }>
+      getPublicUrl(path: string): {
+        data: { publicUrl: string }
+      }
       upload(
         path: string,
         fileBody: ArrayBuffer,
@@ -42,24 +37,11 @@ export function buildStaffPhotoPath(profileId: string) {
   return `${profileId}.jpg`
 }
 
-export async function createStaffPhotoSignedUrl(
+export function getStaffPhotoPublicUrl(
   storageClient: StaffPhotoStorageClient,
   path: string,
-  expiresInSeconds: number = STAFF_PHOTO_SIGNED_URL_TTL_SECONDS,
 ) {
-  const { data, error } = await storageClient.storage
-    .from(STAFF_PHOTOS_BUCKET)
-    .createSignedUrl(path, expiresInSeconds)
-
-  if (error) {
-    throw new Error(`Failed to create staff photo signed URL: ${error.message}`)
-  }
-
-  if (!data?.signedUrl) {
-    throw new Error('Failed to create staff photo signed URL: missing signed URL in response.')
-  }
-
-  return data.signedUrl
+  return storageClient.storage.from(STAFF_PHOTOS_BUCKET).getPublicUrl(path).data.publicUrl
 }
 
 export async function uploadStaffPhotoObject(
@@ -91,7 +73,7 @@ export async function deleteStaffPhotoObject(
   }
 }
 
-export async function hydrateStaffPhotoUrl(
+export function hydrateStaffPhotoUrl(
   storageClient: StaffPhotoStorageClient,
   profile: Profile,
 ) {
@@ -99,26 +81,24 @@ export async function hydrateStaffPhotoUrl(
     return profile
   }
 
-  try {
-    const signedUrl = await createStaffPhotoSignedUrl(storageClient, profile.photoUrl)
+  const publicUrl = getStaffPhotoPublicUrl(storageClient, profile.photoUrl)
 
-    return {
-      ...profile,
-      photoUrl: signedUrl,
-    }
-  } catch (error) {
-    console.error('Failed to sign staff photo URL:', error)
-
+  if (!publicUrl) {
     return {
       ...profile,
       photoUrl: null,
     }
   }
+
+  return {
+    ...profile,
+    photoUrl: publicUrl,
+  }
 }
 
-export async function hydrateStaffPhotoUrls(
+export function hydrateStaffPhotoUrls(
   storageClient: StaffPhotoStorageClient,
   staff: Profile[],
 ) {
-  return Promise.all(staff.map((profile) => hydrateStaffPhotoUrl(storageClient, profile)))
+  return staff.map((profile) => hydrateStaffPhotoUrl(storageClient, profile))
 }

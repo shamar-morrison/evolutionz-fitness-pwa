@@ -1,7 +1,6 @@
 import type { Member } from '@/types'
 
 export const MEMBER_PHOTOS_BUCKET = 'member-photos'
-export const MEMBER_PHOTO_SIGNED_URL_TTL_SECONDS = 60 * 60
 
 type StorageError = {
   message: string
@@ -10,13 +9,9 @@ type StorageError = {
 export type MemberPhotoStorageClient = {
   storage: {
     from(bucket: string): {
-      createSignedUrl(
-        path: string,
-        expiresIn: number,
-      ): PromiseLike<{
-        data: { signedUrl: string } | null
-        error: StorageError | null
-      }>
+      getPublicUrl(path: string): {
+        data: { publicUrl: string }
+      }
       upload(
         path: string,
         fileBody: ArrayBuffer,
@@ -53,24 +48,11 @@ export function buildPendingMemberRequestPhotoPath(requestId: string) {
   return `pending-member-requests/${requestId}.jpg`
 }
 
-export async function createMemberPhotoSignedUrl(
+export function getMemberPhotoPublicUrl(
   storageClient: MemberPhotoStorageClient,
   path: string,
-  expiresInSeconds: number = MEMBER_PHOTO_SIGNED_URL_TTL_SECONDS,
 ) {
-  const { data, error } = await storageClient.storage
-    .from(MEMBER_PHOTOS_BUCKET)
-    .createSignedUrl(path, expiresInSeconds)
-
-  if (error) {
-    throw new Error(`Failed to create member photo signed URL: ${error.message}`)
-  }
-
-  if (!data?.signedUrl) {
-    throw new Error('Failed to create member photo signed URL: missing signed URL in response.')
-  }
-
-  return data.signedUrl
+  return storageClient.storage.from(MEMBER_PHOTOS_BUCKET).getPublicUrl(path).data.publicUrl
 }
 
 export async function uploadMemberPhotoObject(
@@ -126,7 +108,7 @@ export async function moveMemberPhotoObject(
   return toPath
 }
 
-export async function hydrateMemberPhotoUrl(
+export function hydrateMemberPhotoUrl(
   storageClient: MemberPhotoStorageClient,
   member: Member,
 ) {
@@ -134,19 +116,17 @@ export async function hydrateMemberPhotoUrl(
     return member
   }
 
-  try {
-    const signedUrl = await createMemberPhotoSignedUrl(storageClient, member.photoUrl)
+  const publicUrl = getMemberPhotoPublicUrl(storageClient, member.photoUrl)
 
-    return {
-      ...member,
-      photoUrl: signedUrl,
-    }
-  } catch (error) {
-    console.error('Failed to sign member photo URL:', error)
-
+  if (!publicUrl) {
     return {
       ...member,
       photoUrl: null,
     }
+  }
+
+  return {
+    ...member,
+    photoUrl: publicUrl,
   }
 }

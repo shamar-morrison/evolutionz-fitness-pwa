@@ -60,19 +60,13 @@ function createMemberPhotoAdminClient({
     data: [],
     error: null,
   },
-  signedUrlResult = {
-    data: { signedUrl: 'https://signed.example.com/member-1.jpg' },
-    error: null,
-  },
+  publicUrl = 'https://public.example.com/member-photos/member-1.jpg',
 }: {
   memberReads?: Array<Record<string, unknown> | null>
   updateResult?: QueryResult<{ id: string }>
   uploadResult?: { data: { path?: string } | null; error: { message: string } | null }
   removeResult?: { data: unknown; error: { message: string } | null }
-  signedUrlResult?: {
-    data: { signedUrl: string } | null
-    error: { message: string } | null
-  }
+  publicUrl?: string
 } = {}) {
   const uploadCalls: Array<{
     path: string
@@ -157,11 +151,12 @@ function createMemberPhotoAdminClient({
               removeCalls.push(paths)
               return Promise.resolve(removeResult)
             },
-            createSignedUrl(path: string, expiresIn: number) {
+            getPublicUrl(path: string) {
               expect(path).toBe('member-1.jpg')
-              expect(expiresIn).toBe(3600)
 
-              return Promise.resolve(signedUrlResult)
+              return {
+                data: { publicUrl },
+              }
             },
           }
         },
@@ -227,7 +222,7 @@ describe('/api/members/[id]/photo', () => {
         email: null,
         phone: null,
         remark: null,
-        photoUrl: 'https://signed.example.com/member-1.jpg',
+        photoUrl: 'https://public.example.com/member-photos/member-1.jpg',
         beginTime: '2026-03-30T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
       },

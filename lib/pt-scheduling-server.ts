@@ -1,5 +1,5 @@
 import {
-  createMemberPhotoSignedUrl,
+  getMemberPhotoPublicUrl,
   type MemberPhotoStorageClient,
 } from '@/lib/member-photo-storage'
 import {
@@ -258,32 +258,19 @@ async function loadMemberSummaries(
   }
 
   const members = (data ?? []) as MemberSummaryRow[]
-  const hydratedMembers = await Promise.all(
-    members.map(async (member) => {
-      if (!member.photo_url) {
-        return {
-          ...member,
-          photo_url: null,
-        }
+  const hydratedMembers = members.map((member) => {
+    if (!member.photo_url) {
+      return {
+        ...member,
+        photo_url: null,
       }
+    }
 
-      try {
-        const signedUrl = await createMemberPhotoSignedUrl(supabase, member.photo_url)
-
-        return {
-          ...member,
-          photo_url: signedUrl,
-        }
-      } catch (error) {
-        console.error('Failed to sign PT member photo URL:', error)
-
-        return {
-          ...member,
-          photo_url: null,
-        }
-      }
-    }),
-  )
+    return {
+      ...member,
+      photo_url: getMemberPhotoPublicUrl(supabase, member.photo_url),
+    }
+  })
 
   return new Map(hydratedMembers.map((member) => [member.id, member]))
 }
