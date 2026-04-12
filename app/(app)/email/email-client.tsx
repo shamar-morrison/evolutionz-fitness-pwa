@@ -4,7 +4,7 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import { Bold, Italic, List, ListOrdered, Paperclip, UnderlineIcon, X, Send, Users, PenLine } from 'lucide-react'
-import { useMemo, useState, type ChangeEvent } from 'react'
+import { useMemo, useState, useRef, type ChangeEvent } from 'react'
 import {
   ADMIN_EMAIL_ATTACHMENT_MAX_BYTES,
   dedupeRecipientsByEmail,
@@ -164,6 +164,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   const [attachmentError, setAttachmentError] = useState<string | null>(null)
   const [draftIdempotencyKey, setDraftIdempotencyKey] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const { members, isLoading: isMembersLoading, error: membersError } = useMembers()
   const { memberTypes, isLoading: isMemberTypesLoading, error: memberTypesError } = useMemberTypes()
   const activeMemberTypes = useMemo(
@@ -327,6 +328,9 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     setDraftIdempotencyKey(null)
     setBodyHtml('')
     editor?.commands.clearContent()
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
   }
 
   const handleSend = async () => {
@@ -745,6 +749,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
                   <Input
                     id="email-attachment"
                     type="file"
+                    ref={fileInputRef}
                     onChange={handleAttachmentChange}
                     disabled={isSending}
                     className="max-w-md h-10 shadow-sm file:mr-4 file:py-1 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
@@ -775,6 +780,9 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
                       onClick={() => {
                         handleDraftChanged()
                         setAttachment(null)
+                        if (fileInputRef.current) {
+                          fileInputRef.current.value = ''
+                        }
                       }}
                       disabled={isSending}
                       className="h-8 hover:bg-destructive/10 hover:text-destructive"
