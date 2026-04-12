@@ -131,6 +131,11 @@ const trainerNavItems: NavItem[] = [
   { href: '/trainer/requests', label: 'My Requests', icon: ClipboardList },
 ]
 
+const frontDeskNavItems: NavItem[] = [
+  { href: '/members', label: 'Members', icon: Users },
+  { href: '/classes', label: 'Classes', icon: GraduationCap },
+]
+
 const trainerClassesNavItems: NavItem[] = [{ href: '/classes', label: 'Classes', icon: GraduationCap }]
 
 function getInitials(name: string) {
@@ -169,14 +174,22 @@ export function AppSidebar() {
   })
   const staffTitles = profile?.titles ?? []
   const isFrontDesk = isFrontDeskStaff(staffTitles)
-  const staffNavItems = trainerNavItems.filter((item) =>
+  const trainerPrimaryNavItems = trainerNavItems.filter((item) =>
     isRouteAllowed(item.href, 'staff', staffTitles),
   )
-  const staffSecondaryNavItems = trainerClassesNavItems.filter((item) =>
+  const frontDeskPrimaryNavItems = frontDeskNavItems.filter((item) =>
     isRouteAllowed(item.href, 'staff', staffTitles),
   )
-  const navItems = role === 'staff' ? staffNavItems : adminNavItems
-  const secondaryNavItems = role === 'staff' ? staffSecondaryNavItems : []
+  const trainerSecondaryNavItems = trainerClassesNavItems.filter((item) =>
+    isRouteAllowed(item.href, 'staff', staffTitles),
+  )
+  const navItems =
+    role === 'staff'
+      ? isFrontDesk
+        ? frontDeskPrimaryNavItems
+        : trainerPrimaryNavItems
+      : adminNavItems
+  const secondaryNavItems = role === 'staff' && !isFrontDesk ? trainerSecondaryNavItems : []
   const homeHref = getAuthenticatedHomePath(role, staffTitles)
   const workspaceLabel = role === 'staff' && !isFrontDesk ? 'Trainer' : 'Application'
   const workspaceSubtitle =

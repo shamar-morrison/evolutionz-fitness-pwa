@@ -274,32 +274,33 @@ export default function ClassDetailPage() {
   const { profile, loading } = useAuth()
   const { can } = usePermissions()
   const classId = params.id as string
-  const canManageSchedule = can('classes.manageSchedule')
-  const isTrainerTitle = hasStaffTitle(profile?.titles, 'Trainer')
+  const canViewClasses = can('classes.view')
+  const canRegisterForClasses = can('classes.register')
+  const canManageClasses = can('classes.manage')
   const canManageAttendance = can('classes.markAttendance')
-  const attendanceActionLabel = isTrainerTitle ? 'View Attendance' : 'Mark Attendance'
+  const attendanceActionLabel = canManageAttendance ? 'Mark Attendance' : 'View Attendance'
   const backLink = useBackLink('/classes', '/classes')
   const { classItem, isLoading, error } = useClassDetail(classId, {
-    enabled: !loading,
+    enabled: !loading && canViewClasses,
   })
   const approvedRegistrationsQuery = useClassRegistrations(classId, 'approved', {
-    enabled: !loading,
+    enabled: !loading && canViewClasses,
   })
   const scheduleRulesQuery = useClassScheduleRules(classId, {
-    enabled: !loading && canManageSchedule,
+    enabled: !loading && canViewClasses,
   })
   const [activeTab, setActiveTab] = useState<ClassesTab>('registrations')
   const pendingRegistrationsQuery = useClassRegistrations(classId, 'pending', {
-    enabled: !loading && canManageSchedule && activeTab === 'pending',
+    enabled: !loading && canManageClasses && activeTab === 'pending',
   })
   const sessionsQuery = useClassSessions(classId, classItem?.current_period_start ?? null, {
-    enabled: !loading && Boolean(classItem?.current_period_start),
+    enabled: !loading && canViewClasses && Boolean(classItem?.current_period_start),
   })
   const trainersQuery = useClassTrainers(classId, {
-    enabled: !loading && canManageSchedule,
+    enabled: !loading && canManageClasses,
   })
   const staffQuery = useStaff({
-    enabled: !loading && canManageSchedule,
+    enabled: !loading && canManageClasses,
   })
   const [showRegistrationDialog, setShowRegistrationDialog] = useState(false)
   const [showPeriodDialog, setShowPeriodDialog] = useState(false)
@@ -344,12 +345,12 @@ export default function ClassDetailPage() {
   }, [classItem?.current_period_start])
 
   useEffect(() => {
-    if (canManageSchedule || activeTab !== 'pending') {
+    if (canManageClasses || activeTab !== 'pending') {
       return
     }
 
     setActiveTab('registrations')
-  }, [activeTab, canManageSchedule])
+  }, [activeTab, canManageClasses])
 
   useEffect(() => {
     if (showAddRuleDialog) {
@@ -834,6 +835,10 @@ export default function ClassDetailPage() {
     )
   }
 
+  if (!canViewClasses) {
+    return null
+  }
+
   if (error) {
     return (
       <div className="space-y-4">
@@ -874,7 +879,7 @@ export default function ClassDetailPage() {
               <CardDescription>{classItem.schedule_description}</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
-              {canManageSchedule ? (
+              {canManageClasses ? (
                 <>
                   <Button type="button" variant="outline" onClick={() => setShowPeriodDialog(true)}>
                     Set Period Start
@@ -888,9 +893,11 @@ export default function ClassDetailPage() {
                   </Button>
                 </>
               ) : null}
-              <Button type="button" onClick={() => setShowRegistrationDialog(true)}>
-                Register
-              </Button>
+              {canRegisterForClasses ? (
+                <Button type="button" onClick={() => setShowRegistrationDialog(true)}>
+                  Register
+                </Button>
+              ) : null}
             </div>
           </CardHeader>
           <CardContent className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -915,7 +922,7 @@ export default function ClassDetailPage() {
           </CardContent>
         </Card>
 
-        {canManageSchedule ? (
+        {canManageClasses ? (
           <div className="grid gap-6 lg:grid-cols-2">
             <Card className="flex flex-col">
               <CardHeader className="gap-4">
@@ -1056,9 +1063,50 @@ export default function ClassDetailPage() {
               </CardContent>
             </Card>
           </div>
-        ) : null}
+        ) : (
+          <Card className="flex flex-col">
+            <CardHeader className="gap-4">
+              <div>
+                <CardTitle>Schedule</CardTitle>
+                <CardDescription>Review the recurring class schedule.</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {scheduleRulesQuery.isLoading ? (
+                <>
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </>
+              ) : scheduleRulesQuery.error ? (
+                <p className="text-sm text-destructive">
+                  {scheduleRulesQuery.error instanceof Error
+                    ? scheduleRulesQuery.error.message
+                    : 'Failed to load schedule rules.'}
+                </p>
+              ) : sortedScheduleRules.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No schedule rules added for this class yet.
+                </p>
+              ) : (
+                sortedScheduleRules.map((rule) => (
+                  <div
+                    key={rule.id}
+                    className="flex items-center justify-between gap-4 rounded-lg border p-3"
+                  >
+                    <div>
+                      <p className="font-medium">{getClassDayOfWeekLabel(rule.day_of_week)}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatClassTime(rule.session_time)}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        )}
 
-        {canManageSchedule ? (
+        {canManageClasses ? (
           <Tabs
             value={activeTab}
             onValueChange={(value) => setActiveTab(value as ClassesTab)}
@@ -1167,11 +1215,13 @@ export default function ClassDetailPage() {
         )}
       </div>
 
-      <ClassRegistrationDialog
-        classItem={classItem}
-        open={showRegistrationDialog}
-        onOpenChange={setShowRegistrationDialog}
-      />
+      {canRegisterForClasses ? (
+        <ClassRegistrationDialog
+          classItem={classItem}
+          open={showRegistrationDialog}
+          onOpenChange={setShowRegistrationDialog}
+        />
+      ) : null}
 
       <ClassAttendanceDialog
         classId={classId}

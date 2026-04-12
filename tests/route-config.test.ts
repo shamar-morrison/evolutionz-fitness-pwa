@@ -46,8 +46,10 @@ describe('route config helpers', () => {
     expect(isRouteAllowed('/reports/revenue', 'staff', ['Trainer'])).toBe(false)
   })
 
-  it('allows administrative assistants on member routes only', () => {
+  it('allows administrative assistants on member and class routes', () => {
     expect(isRouteAllowed('/members', 'staff', ['Administrative Assistant'])).toBe(true)
+    expect(isRouteAllowed('/classes', 'staff', ['Administrative Assistant'])).toBe(true)
+    expect(isRouteAllowed('/classes/123', 'staff', ['Administrative Assistant'])).toBe(true)
     expect(
       isRouteAllowed(
         '/members/123e4567-e89b-12d3-a456-426614174000',
@@ -58,8 +60,6 @@ describe('route config helpers', () => {
 
     expect(isRouteAllowed('/dashboard', 'staff', ['Administrative Assistant'])).toBe(false)
     expect(isRouteAllowed('/staff', 'staff', ['Administrative Assistant'])).toBe(false)
-    expect(isRouteAllowed('/classes', 'staff', ['Administrative Assistant'])).toBe(false)
-    expect(isRouteAllowed('/classes/123', 'staff', ['Administrative Assistant'])).toBe(false)
     expect(isRouteAllowed('/reports/pt-payments', 'staff', ['Administrative Assistant'])).toBe(
       false,
     )
@@ -81,7 +81,7 @@ describe('route config helpers', () => {
 
   it('returns false when staff does not have a matching title on a restricted route', () => {
     expect(isRouteAllowed('/members', 'staff', ['Assistant'])).toBe(true)
-    expect(isRouteAllowed('/classes', 'staff', ['Assistant'])).toBe(false)
+    expect(isRouteAllowed('/classes', 'staff', ['Assistant'])).toBe(true)
     expect(isRouteAllowed('/trainer/requests', 'staff', ['Medical'])).toBe(false)
   })
 
@@ -122,6 +122,12 @@ describe('route config helpers', () => {
         '/trainer/schedule',
       ),
     ).toBe('/members')
+  })
+
+  it('returns the classes back link for front desk class detail routes', () => {
+    expect(
+      getBackLink('/classes/123', 'staff', ['Administrative Assistant'], '/members'),
+    ).toBe('/classes')
   })
 
   it('never resolves back links to routes the staff user cannot access', () => {

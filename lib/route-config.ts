@@ -45,11 +45,11 @@ export const routeConfig: Record<string, RouteConfig> = {
   },
   '/classes': {
     allowedRoles: ['admin', 'staff'],
-    allowedTitles: ['Trainer'],
+    allowedTitles: ['Trainer', 'Administrative Assistant', 'Assistant'],
   },
   '/classes/[id]': {
     allowedRoles: ['admin', 'staff'],
-    allowedTitles: ['Trainer'],
+    allowedTitles: ['Trainer', 'Administrative Assistant', 'Assistant'],
     backLink: {
       admin: '/classes',
       staff: '/classes',

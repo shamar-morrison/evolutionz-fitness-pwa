@@ -1,7 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import { useAuth } from '@/contexts/auth-context'
 import { useClasses } from '@/hooks/use-classes'
+import { usePermissions } from '@/hooks/use-permissions'
 import { formatClassDate, formatOptionalJmd } from '@/lib/classes'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,7 +30,17 @@ function ClassSummaryRow({
 }
 
 export default function ClassesPage() {
-  const { classes, isLoading, error } = useClasses()
+  const { loading } = useAuth()
+  const { can } = usePermissions()
+  const canViewClasses = can('classes.view')
+  const { classes, isLoading, error } = useClasses({
+    enabled: !loading && canViewClasses,
+  })
+  const isPageLoading = loading || isLoading
+
+  if (!loading && !canViewClasses) {
+    return null
+  }
 
   return (
     <div className="space-y-6">
@@ -47,7 +59,7 @@ export default function ClassesPage() {
             </p>
           </CardContent>
         </Card>
-      ) : isLoading ? (
+      ) : isPageLoading ? (
         <div className="grid gap-4 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => (
             <Skeleton key={index} className="h-72 w-full" />

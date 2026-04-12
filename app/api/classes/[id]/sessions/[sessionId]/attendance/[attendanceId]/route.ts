@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { readClassAttendance, readClassSessionById } from '@/lib/classes-server'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { requireAuthenticatedUser } from '@/lib/server-auth'
-import { hasStaffTitle, readStaffProfile } from '@/lib/staff'
+import { readStaffProfile } from '@/lib/staff'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const updateAttendanceSchema = z
@@ -43,7 +44,9 @@ export async function PATCH(
       return createErrorResponse('Forbidden', 403)
     }
 
-    if (profile.role !== 'admin' && hasStaffTitle(profile.titles, 'Trainer')) {
+    const permissions = resolvePermissionsForProfile(profile)
+
+    if (!permissions.can('classes.markAttendance')) {
       return createErrorResponse('Forbidden', 403)
     }
 

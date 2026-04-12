@@ -7,6 +7,7 @@ import {
   readClassRegistrationById,
   readClassRegistrations,
 } from '@/lib/classes-server'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { requireAuthenticatedUser } from '@/lib/server-auth'
 import { readStaffProfile } from '@/lib/staff'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -132,13 +133,15 @@ export async function GET(
       return createErrorResponse('Forbidden', 403)
     }
 
+    const permissions = resolvePermissionsForProfile(profile)
+
     const classItem = await readClassById(supabase, id)
 
     if (!classItem) {
       return createErrorResponse('Class not found.', 404)
     }
 
-    const effectiveStatus = profile.role === 'admin' ? filters.status : 'approved'
+    const effectiveStatus = permissions.role === 'admin' ? filters.status : 'approved'
     const registrations = await readClassRegistrations(supabase, id, {
       status: effectiveStatus,
     })
@@ -187,6 +190,12 @@ export async function POST(
       return createErrorResponse('Forbidden', 403)
     }
 
+    const permissions = resolvePermissionsForProfile(profile)
+
+    if (!permissions.can('classes.register')) {
+      return createErrorResponse('Forbidden', 403)
+    }
+
     const classItem = await readClassById(supabase, id)
 
     if (!classItem) {
@@ -196,7 +205,7 @@ export async function POST(
     let memberId: string | null = null
     let guestProfileId: string | null = null
     let createdGuestProfileId: string | null = null
-    const registrationStatus = profile.role === 'admin' ? 'approved' : 'pending'
+    const registrationStatus = permissions.role === 'admin' ? 'approved' : 'pending'
 
     if (input.registrant_type === 'member') {
       const { data: member, error: memberError } = await supabase

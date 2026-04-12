@@ -14,6 +14,7 @@ export type Permission =
   | 'classes.view'
   | 'classes.register'
   | 'classes.markAttendance'
+  | 'classes.manage'
   | 'classes.manageSchedule'
   | 'staff.view'
   | 'staff.manage'
@@ -38,6 +39,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'classes.view',
     'classes.register',
     'classes.markAttendance',
+    'classes.manage',
     'classes.manageSchedule',
     'staff.view',
     'staff.manage',
@@ -56,6 +58,9 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'members.create',
     'members.edit',
     'members.recordPayment',
+    'classes.view',
+    'classes.register',
+    'classes.markAttendance',
     'door.unlock',
   ],
   medical: [],
@@ -64,6 +69,9 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'members.create',
     'members.edit',
     'members.recordPayment',
+    'classes.view',
+    'classes.register',
+    'classes.markAttendance',
     'door.unlock',
   ],
   physiotherapistNutritionist: [],
