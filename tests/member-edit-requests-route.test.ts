@@ -137,6 +137,8 @@ function createEditRequestsClient({
     monthly_rate: 7500,
   }),
   cardRows = [{ card_no: '0102857149', card_code: 'A18', status: 'assigned', lost_at: null }],
+  approveUpdateMatches = true,
+  denyUpdateMatches = true,
   requestUpdateError = null,
   pollResults,
 }: {
@@ -146,6 +148,8 @@ function createEditRequestsClient({
   currentMemberRow?: Record<string, unknown> | null
   memberTypeRow?: MemberTypeRecord | null
   cardRows?: Array<Record<string, unknown>>
+  approveUpdateMatches?: boolean
+  denyUpdateMatches?: boolean
   requestUpdateError?: { message: string } | null
   pollResults?: Array<{
     data: {
@@ -238,13 +242,39 @@ function createEditRequestsClient({
 
               return {
                 eq(column: string, value: string) {
-                  expect(column).toBe('id')
-                  expect(value).toBe('request-1')
+                  expect(column).toBe('status')
+                  expect(value).toBe('pending')
 
-                  return Promise.resolve({
-                    data: null,
-                    error: requestUpdateError,
-                  })
+                  return {
+                    eq(nextColumn: string, nextValue: string) {
+                      expect(nextColumn).toBe('id')
+                      expect(nextValue).toBe('request-1')
+
+                      return {
+                        select(columns: string) {
+                          expect(columns).toBe(MEMBER_EDIT_REQUEST_SELECT)
+
+                          const updateMatches =
+                            values.status === 'approved'
+                              ? approveUpdateMatches
+                              : denyUpdateMatches
+
+                          return Promise.resolve({
+                            data:
+                              updateMatches && existingRequestRow
+                                ? [
+                                    {
+                                      ...existingRequestRow,
+                                      ...values,
+                                    },
+                                  ]
+                                : [],
+                            error: requestUpdateError,
+                          })
+                        },
+                      }
+                    },
+                  }
                 },
               }
             },
@@ -621,6 +651,42 @@ describe('member edit request routes', () => {
     await expect(response.json()).resolves.toEqual({ ok: true })
   })
 
+  it('returns 400 when a deny race finds the request already reviewed', async () => {
+    const { client } = createEditRequestsClient({
+      denyUpdateMatches: false,
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-edit-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'deny',
+          rejectionReason: 'Need supporting details.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'This request has already been reviewed.',
+    })
+  })
+
   it('approves a pending member edit request and updates only the proposed fields', async () => {
     const existingRequestRow = createEditRequestRecord({
       proposed_name: 'Jane Updated',
@@ -680,6 +746,42 @@ describe('member edit request routes', () => {
     })
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ ok: true })
+  })
+
+  it('returns 400 when an approve race finds the request already reviewed', async () => {
+    const { client, memberUpdates } = createEditRequestsClient({
+      approveUpdateMatches: false,
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-edit-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'approve',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(memberUpdates).toEqual([])
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'This request has already been reviewed.',
+    })
   })
 
   it('does not update the member when approving the request status fails', async () => {

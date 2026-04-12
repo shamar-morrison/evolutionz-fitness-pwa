@@ -29,6 +29,14 @@ type QueryResult<T> = PromiseLike<{
 
 type MemberPaymentRequestReviewRow = MemberPaymentRequestRecord
 
+type MemberPaymentRequestGuardedUpdateQuery = {
+  eq(column: 'status', value: 'pending'): {
+    eq(column: 'id', value: string): {
+      select(columns: string): QueryResult<MemberPaymentRequestReviewRow[]>
+    }
+  }
+}
+
 type MemberPaymentRequestReviewClient = MemberTypesReadClient & {
   from(table: 'member_payment_requests'): {
     select(columns: string): {
@@ -41,7 +49,7 @@ type MemberPaymentRequestReviewClient = MemberTypesReadClient & {
       reviewed_by: string
       reviewed_at: string
       rejection_reason?: string | null
-    }): any
+    }): MemberPaymentRequestGuardedUpdateQuery
   }
   from(table: 'members'): {
     select(columns: 'id, type, member_type_id'): {
@@ -139,7 +147,7 @@ export async function PATCH(
         return createErrorResponse('This request has already been reviewed.', 400)
       }
 
-      const { error } = await supabase
+      const { data: deniedRequests, error } = await supabase
         .from('member_payment_requests')
         .update({
           status: 'denied',
@@ -147,15 +155,23 @@ export async function PATCH(
           reviewed_at: reviewTimestamp,
           rejection_reason: normalizeOptionalText(input.rejectionReason),
         })
+        .eq('status', 'pending')
         .eq('id', id)
+        .select(MEMBER_PAYMENT_REQUEST_SELECT)
 
       if (error) {
         throw new Error(`Failed to deny member payment request ${id}: ${error.message}`)
       }
 
+      const deniedRequest = deniedRequests?.[0] ?? null
+
+      if (!deniedRequest) {
+        return createErrorResponse('This request has already been reviewed.', 400)
+      }
+
       try {
         await archiveResolvedRequestNotifications(supabase, {
-          requestId: existingRequest.id,
+          requestId: deniedRequest.id,
           type: 'member_payment_request',
           archivedAt: reviewTimestamp,
         })
@@ -186,7 +202,7 @@ export async function PATCH(
       )
     }
 
-    const approvedRequest = ((approvedRequests ?? []) as MemberPaymentRequestReviewRow[])[0] ?? null
+    const approvedRequest = approvedRequests?.[0] ?? null
 
     if (!approvedRequest) {
       const { data: existingRequest, error: existingRequestError } = await supabase

@@ -108,6 +108,7 @@ function createPaymentRequestsClient({
     monthly_rate: 7500,
   }),
   approveUpdateMatches = true,
+  denyUpdateMatches = true,
   approveUpdateError = null,
   requestUpdateError = null,
 }: {
@@ -122,6 +123,7 @@ function createPaymentRequestsClient({
   } | null
   memberTypeRow?: MemberTypeRecord | null
   approveUpdateMatches?: boolean
+  denyUpdateMatches?: boolean
   approveUpdateError?: { message: string } | null
   requestUpdateError?: { message: string } | null
 } = {}) {
@@ -200,43 +202,43 @@ function createPaymentRequestsClient({
 
               return {
                 eq(column: string, value: string) {
-                  if (column === 'status') {
-                    expect(value).toBe('pending')
+                  expect(column).toBe('status')
+                  expect(value).toBe('pending')
 
-                    return {
-                      eq(nextColumn: string, nextValue: string) {
-                        expect(nextColumn).toBe('id')
-                        expect(nextValue).toBe('payment-request-1')
+                  return {
+                    eq(nextColumn: string, nextValue: string) {
+                      expect(nextColumn).toBe('id')
+                      expect(nextValue).toBe('payment-request-1')
 
-                        return {
-                          select(columns: string) {
-                            expect(columns).toBe(MEMBER_PAYMENT_REQUEST_SELECT)
+                      return {
+                        select(columns: string) {
+                          expect(columns).toBe(MEMBER_PAYMENT_REQUEST_SELECT)
 
-                            return Promise.resolve({
-                              data:
-                                approveUpdateMatches && existingRequestRow
-                                  ? [
-                                      {
-                                        ...existingRequestRow,
-                                        ...values,
-                                      },
-                                    ]
-                                  : [],
-                              error: approveUpdateError,
-                            })
-                          },
-                        }
-                      },
-                    }
+                          const updateMatches =
+                            values.status === 'approved'
+                              ? approveUpdateMatches
+                              : denyUpdateMatches
+                          const updateError =
+                            values.status === 'approved'
+                              ? approveUpdateError
+                              : requestUpdateError
+
+                          return Promise.resolve({
+                            data:
+                              updateMatches && existingRequestRow
+                                ? [
+                                    {
+                                      ...existingRequestRow,
+                                      ...values,
+                                    },
+                                  ]
+                                : [],
+                            error: updateError,
+                          })
+                        },
+                      }
+                    },
                   }
-
-                  expect(column).toBe('id')
-                  expect(value).toBe('payment-request-1')
-
-                  return Promise.resolve({
-                    data: null,
-                    error: requestUpdateError,
-                  })
                 },
               }
             },
@@ -676,6 +678,42 @@ describe('member payment request routes', () => {
     })
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ ok: true })
+  })
+
+  it('returns 400 when a deny race finds the request already reviewed', async () => {
+    const { client } = createPaymentRequestsClient({
+      denyUpdateMatches: false,
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-payment-requests/payment-request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'deny',
+          rejectionReason: 'Amount does not match the receipt.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'payment-request-1' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'This request has already been reviewed.',
+    })
   })
 
   it('approves a pending member payment request and syncs the member type when provided', async () => {

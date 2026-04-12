@@ -48,6 +48,16 @@ type QueryResult<T> = PromiseLike<{
   error: QueryError | null
 }>
 
+type MemberEditRequestReviewRow = MemberEditRequestRecord
+
+type MemberEditRequestGuardedUpdateQuery = {
+  eq(column: 'status', value: 'pending'): {
+    eq(column: 'id', value: string): {
+      select(columns: string): QueryResult<MemberEditRequestReviewRow[]>
+    }
+  }
+}
+
 type MemberEditRequestReviewClient = AccessControlJobsClient & MemberTypesReadClient & MembersReadClient & {
   from(table: 'member_edit_requests'): {
     select(columns: string): {
@@ -60,9 +70,7 @@ type MemberEditRequestReviewClient = AccessControlJobsClient & MemberTypesReadCl
       reviewed_by: string
       reviewed_at: string
       rejection_reason?: string | null
-    }): {
-      eq(column: 'id', value: string): QueryResult<null>
-    }
+    }): MemberEditRequestGuardedUpdateQuery
   }
   from(table: 'members'): {
     update(values: {
@@ -201,7 +209,7 @@ export async function PATCH(
     }
 
     if (input.action === 'deny') {
-      const { error } = await supabase
+      const { data: deniedRequests, error } = await supabase
         .from('member_edit_requests')
         .update({
           status: 'denied',
@@ -209,15 +217,23 @@ export async function PATCH(
           reviewed_at: reviewTimestamp,
           rejection_reason: normalizeOptionalText(input.rejectionReason),
         })
+        .eq('status', 'pending')
         .eq('id', id)
+        .select(MEMBER_EDIT_REQUEST_SELECT)
 
       if (error) {
         throw new Error(`Failed to deny member edit request ${id}: ${error.message}`)
       }
 
+      const deniedRequest = deniedRequests?.[0] ?? null
+
+      if (!deniedRequest) {
+        return createErrorResponse('This request has already been reviewed.', 400)
+      }
+
       try {
         await archiveResolvedRequestNotifications(supabase, {
-          requestId: existingRequest.id,
+          requestId: deniedRequest.id,
           type: 'member_edit_request',
           archivedAt: reviewTimestamp,
         })
@@ -252,19 +268,27 @@ export async function PATCH(
       nextEndTime = accessWindowResult.endTime
     }
 
-    const { error: requestUpdateError } = await supabase
+    const { data: approvedRequests, error: requestUpdateError } = await supabase
       .from('member_edit_requests')
       .update({
         status: 'approved',
         reviewed_by: authResult.profile.id,
         reviewed_at: reviewTimestamp,
       })
+      .eq('status', 'pending')
       .eq('id', id)
+      .select(MEMBER_EDIT_REQUEST_SELECT)
 
     if (requestUpdateError) {
       throw new Error(
         `Failed to approve member edit request ${id}: ${requestUpdateError.message}`,
       )
+    }
+
+    const approvedRequest = approvedRequests?.[0] ?? null
+
+    if (!approvedRequest) {
+      return createErrorResponse('This request has already been reviewed.', 400)
     }
 
     const memberUpdateValues: Record<string, unknown> = {}
@@ -328,7 +352,7 @@ export async function PATCH(
 
     try {
       await archiveResolvedRequestNotifications(supabase, {
-        requestId: existingRequest.id,
+        requestId: approvedRequest.id,
         type: 'member_edit_request',
         archivedAt: reviewTimestamp,
       })
