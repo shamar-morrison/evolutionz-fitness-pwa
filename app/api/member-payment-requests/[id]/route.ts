@@ -321,10 +321,10 @@ export async function PATCH(
       return createErrorResponse(error.message, 400)
     }
 
+    console.error('Unexpected error while reviewing member payment request:', error)
+
     return createErrorResponse(
-      error instanceof Error
-        ? error.message
-        : 'Unexpected server error while reviewing the member payment request.',
+      'Unexpected server error while reviewing the member payment request.',
       500,
     )
   }
