@@ -2,10 +2,13 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { normalizeTimeInputValue } from '@/lib/member-access-time'
 import {
+  buildAssignmentSchedule,
   DAYS_OF_WEEK,
+  MAX_PT_SESSIONS_PER_WEEK,
   normalizeAssignmentTrainingPlan,
   PT_ASSIGNMENT_STATUSES,
   type AssignmentTrainingPlanInput,
+  type ScheduledSessionInput,
 } from '@/lib/pt-scheduling'
 import { readTrainerClientById, readTrainerClientRowById } from '@/lib/pt-scheduling-server'
 import { requireAdminUser } from '@/lib/server-auth'
@@ -15,8 +18,17 @@ const updateAssignmentSchema = z
   .object({
     status: z.enum(PT_ASSIGNMENT_STATUSES).optional(),
     ptFee: z.number().int().min(0, 'PT fee must be zero or greater.').optional(),
-    sessionsPerWeek: z.number().int().min(1).max(3).optional(),
-    scheduledDays: z.array(z.enum(DAYS_OF_WEEK)).optional(),
+    sessionsPerWeek: z.number().int().min(1).max(MAX_PT_SESSIONS_PER_WEEK).optional(),
+    scheduledSessions: z
+      .array(
+        z
+          .object({
+            day: z.enum(DAYS_OF_WEEK),
+            sessionTime: z.string().trim().regex(/^\d{2}:\d{2}$/u, 'Session time must use HH:MM format.'),
+          })
+          .strict(),
+      )
+      .optional(),
     trainingPlan: z
       .array(
         z
@@ -27,7 +39,6 @@ const updateAssignmentSchema = z
           .strict(),
       )
       .optional(),
-    sessionTime: z.string().trim().regex(/^\d{2}:\d{2}$/u, 'Session time must use HH:MM format.').optional(),
     notes: z.string().trim().nullable().optional(),
   })
   .strict()
@@ -54,14 +65,22 @@ function normalizeOptionalNotes(notes: string | null | undefined) {
   return normalizedNotes || null
 }
 
-function validateScheduledDays(scheduledDays: string[], sessionsPerWeek: number) {
-  const uniqueDays = Array.from(new Set(scheduledDays))
+function validateScheduledSessions(scheduledSessions: ScheduledSessionInput[], sessionsPerWeek: number) {
+  const uniqueDays = new Set<string>()
 
-  if (uniqueDays.length !== scheduledDays.length) {
-    return 'Scheduled days must be unique.'
+  for (const entry of scheduledSessions) {
+    if (uniqueDays.has(entry.day)) {
+      return 'Scheduled days must be unique.'
+    }
+
+    if (!normalizeTimeInputValue(entry.sessionTime)) {
+      return `Session time for ${entry.day} must use HH:MM format.`
+    }
+
+    uniqueDays.add(entry.day)
   }
 
-  if (uniqueDays.length !== sessionsPerWeek) {
+  if (uniqueDays.size !== sessionsPerWeek) {
     return 'Scheduled days must match the selected sessions per week.'
   }
 
@@ -70,8 +89,9 @@ function validateScheduledDays(scheduledDays: string[], sessionsPerWeek: number)
 
 function validateTrainingPlan(
   trainingPlan: AssignmentTrainingPlanInput[] | undefined,
-  scheduledDays: string[],
+  scheduledSessions: ScheduledSessionInput[],
 ) {
+  const scheduledDays = scheduledSessions.map((entry) => entry.day)
   const normalizedTrainingPlan = normalizeAssignmentTrainingPlan(trainingPlan ?? [])
 
   if (normalizedTrainingPlan.length !== (trainingPlan ?? []).length) {
@@ -133,23 +153,32 @@ export async function PATCH(
     const requestBody = await request.json()
     const input = updateAssignmentSchema.parse(requestBody)
     const supabase = getSupabaseAdminClient() as any
-    const existingAssignment = await readTrainerClientRowById(supabase, id)
+    const existingAssignmentRow = await readTrainerClientRowById(supabase, id)
+    const existingAssignment = await readTrainerClientById(supabase, id)
 
-    if (!existingAssignment) {
+    if (!existingAssignmentRow || !existingAssignment) {
       return createErrorResponse('PT assignment not found.', 404)
     }
 
-    const nextSessionsPerWeek = input.sessionsPerWeek ?? existingAssignment.sessions_per_week
-    const nextScheduledDays = input.scheduledDays ?? existingAssignment.scheduled_days ?? []
-    const scheduledDaysError = validateScheduledDays(nextScheduledDays, nextSessionsPerWeek)
-    const normalizedTrainingPlan = normalizeAssignmentTrainingPlan(input.trainingPlan ?? [])
-    const trainingPlanError =
+    const existingScheduledSessions = existingAssignment.scheduledSessions.map(({ day, sessionTime }) => ({
+      day,
+      sessionTime,
+    }))
+    const nextSessionsPerWeek = input.sessionsPerWeek ?? existingAssignmentRow.sessions_per_week
+    const nextScheduledSessions = input.scheduledSessions ?? existingScheduledSessions
+    const nextTrainingPlan =
       typeof input.trainingPlan === 'undefined'
-        ? null
-        : validateTrainingPlan(input.trainingPlan, nextScheduledDays)
+        ? existingAssignment.trainingPlan.map(({ day, trainingTypeName }) => ({
+            day,
+            trainingTypeName,
+          }))
+        : normalizeAssignmentTrainingPlan(input.trainingPlan)
+    const scheduledSessionsError = validateScheduledSessions(nextScheduledSessions, nextSessionsPerWeek)
+    const trainingPlanError = validateTrainingPlan(nextTrainingPlan, nextScheduledSessions)
+    const nextSchedule = buildAssignmentSchedule(nextScheduledSessions, nextTrainingPlan)
 
-    if (scheduledDaysError) {
-      return createErrorResponse(scheduledDaysError, 400)
+    if (scheduledSessionsError) {
+      return createErrorResponse(scheduledSessionsError, 400)
     }
 
     if (trainingPlanError) {
@@ -162,7 +191,7 @@ export async function PATCH(
       const { data: activeAssignment, error: activeAssignmentError } = await supabase
         .from('trainer_clients')
         .select('id')
-        .eq('member_id', existingAssignment.member_id)
+        .eq('member_id', existingAssignmentRow.member_id)
         .eq('status', 'active')
         .neq('id', id)
         .limit(1)
@@ -193,17 +222,16 @@ export async function PATCH(
       updateValues.sessions_per_week = input.sessionsPerWeek
     }
 
-    if (input.scheduledDays) {
-      updateValues.scheduled_days = input.scheduledDays
-    }
-
-    if (input.sessionTime) {
-      const normalizedSessionTime = normalizeTimeInputValue(input.sessionTime)
+    if (input.scheduledSessions) {
+      const normalizedSessionTime = nextSchedule[0]?.sessionTime
+        ? normalizeTimeInputValue(nextSchedule[0].sessionTime)
+        : null
 
       if (!normalizedSessionTime) {
         return createErrorResponse('Session time must use HH:MM format.', 400)
       }
 
+      updateValues.scheduled_days = nextSchedule.map((entry) => entry.day)
       updateValues.session_time = normalizedSessionTime
     }
 
@@ -226,7 +254,7 @@ export async function PATCH(
       return createErrorResponse('PT assignment not found.', 404)
     }
 
-    if (typeof input.trainingPlan !== 'undefined') {
+    if (typeof input.trainingPlan !== 'undefined' || typeof input.scheduledSessions !== 'undefined') {
       const { error: deleteTrainingPlanError } = await supabase
         .from('training_plan_days')
         .delete()
@@ -236,13 +264,14 @@ export async function PATCH(
         throw new Error(`Failed to replace the PT training plan: ${deleteTrainingPlanError.message}`)
       }
 
-      if (normalizedTrainingPlan.length > 0) {
+      if (nextSchedule.length > 0) {
         const { error: insertTrainingPlanError } = await supabase
           .from('training_plan_days')
           .insert(
-            normalizedTrainingPlan.map((entry) => ({
+            nextSchedule.map((entry) => ({
               assignment_id: id,
               day_of_week: entry.day,
+              session_time: normalizeTimeInputValue(entry.sessionTime),
               training_type_name: entry.trainingTypeName,
             })),
           )

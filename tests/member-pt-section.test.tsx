@@ -41,6 +41,14 @@ const {
     status: 'active',
     ptFee: 12000,
     sessionsPerWeek: 1,
+    scheduledSessions: [
+      {
+        day: 'Monday',
+        sessionTime: '07:00',
+        trainingTypeName: null,
+        isCustom: false,
+      },
+    ],
     scheduledDays: ['Monday'],
     trainingPlan: [],
     sessionTime: '07:00',
@@ -190,6 +198,10 @@ function createTrainer(overrides: Partial<Profile> = {}): Profile {
 }
 
 function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient {
+  const scheduledDays = overrides.scheduledDays ?? ['Monday']
+  const sessionTime = overrides.sessionTime ?? '07:00'
+  const trainingPlan = overrides.trainingPlan ?? []
+
   return {
     id: overrides.id ?? 'assignment-1',
     trainerId: overrides.trainerId ?? 'trainer-1',
@@ -197,9 +209,21 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     status: overrides.status ?? 'active',
     ptFee: overrides.ptFee ?? 14000,
     sessionsPerWeek: overrides.sessionsPerWeek ?? 1,
-    scheduledDays: overrides.scheduledDays ?? ['Monday'],
-    trainingPlan: overrides.trainingPlan ?? [],
-    sessionTime: overrides.sessionTime ?? '07:00',
+    scheduledSessions:
+      overrides.scheduledSessions ??
+      scheduledDays.map((day) => {
+        const trainingPlanEntry = trainingPlan.find((entry) => entry.day === day)
+
+        return {
+          day,
+          sessionTime,
+          trainingTypeName: trainingPlanEntry?.trainingTypeName ?? null,
+          isCustom: trainingPlanEntry?.isCustom ?? false,
+        }
+      }),
+    scheduledDays,
+    trainingPlan,
+    sessionTime,
     notes: overrides.notes ?? null,
     createdAt: overrides.createdAt ?? '2026-04-03T00:00:00.000Z',
     updatedAt: overrides.updatedAt ?? '2026-04-03T00:00:00.000Z',

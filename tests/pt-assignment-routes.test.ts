@@ -53,6 +53,11 @@ type QueryResult<T> = {
 }
 
 function buildAssignment(overrides: Partial<Record<string, unknown>> = {}) {
+  const scheduledDays = (overrides.scheduledDays as string[] | undefined) ?? ['Monday', 'Wednesday', 'Friday']
+  const sessionTime = (overrides.sessionTime as string | undefined) ?? '07:00'
+  const trainingPlan =
+    (overrides.trainingPlan as Array<{ day: string; trainingTypeName: string; isCustom: boolean }> | undefined) ?? []
+
   return {
     id: 'assignment-1',
     trainerId: '11111111-1111-1111-1111-111111111111',
@@ -60,8 +65,19 @@ function buildAssignment(overrides: Partial<Record<string, unknown>> = {}) {
     status: 'active',
     ptFee: 15000,
     sessionsPerWeek: 3,
-    scheduledDays: ['Monday', 'Wednesday', 'Friday'],
-    sessionTime: '07:00',
+    scheduledSessions: scheduledDays.map((day) => {
+      const trainingPlanEntry = trainingPlan.find((entry) => entry.day === day)
+
+      return {
+        day,
+        sessionTime,
+        trainingTypeName: trainingPlanEntry?.trainingTypeName ?? null,
+        isCustom: trainingPlanEntry?.isCustom ?? false,
+      }
+    }),
+    scheduledDays,
+    trainingPlan,
+    sessionTime,
     notes: 'Client has a prior knee injury.',
     createdAt: '2026-04-03T00:00:00.000Z',
     updatedAt: '2026-04-03T00:00:00.000Z',
@@ -92,25 +108,60 @@ function buildAssignmentRow(overrides: Partial<Record<string, unknown>> = {}) {
 
 function createPostClient() {
   const insertValues: Array<Record<string, unknown>> = []
+  const scheduleDayInserts: Array<Array<Record<string, unknown>>> = []
 
   return {
     insertValues,
+    scheduleDayInserts,
     client: {
       from(table: string) {
-        expect(table).toBe('trainer_clients')
+        if (table === 'trainer_clients') {
+          return {
+            select(columns: string) {
+              if (columns === 'id') {
+                return {
+                  eq(column: string, value: string) {
+                    if (column === 'member_id') {
+                      expect(value).toBe('22222222-2222-2222-2222-222222222222')
 
-        return {
-          select(columns: string) {
-            if (columns === 'id') {
-              return {
-                eq(column: string, value: string) {
-                  if (column === 'member_id') {
-                    expect(value).toBe('22222222-2222-2222-2222-222222222222')
+                      return {
+                        eq(nextColumn: string, nextValue: string) {
+                          expect(nextColumn).toBe('status')
+                          expect(nextValue).toBe('active')
+
+                          return {
+                            limit(limitValue: number) {
+                              expect(limitValue).toBe(1)
+
+                              return {
+                                maybeSingle() {
+                                  return Promise.resolve({
+                                    data: null,
+                                    error: null,
+                                  } satisfies QueryResult<{ id: string }>)
+                                },
+                              }
+                            },
+                          }
+                        },
+                      }
+                    }
+
+                    throw new Error(`Unexpected select eq column: ${column}`)
+                  },
+                }
+              }
+
+              if (columns === 'id, status') {
+                return {
+                  eq(column: string, value: string) {
+                    expect(column).toBe('trainer_id')
+                    expect(value).toBe('11111111-1111-1111-1111-111111111111')
 
                     return {
                       eq(nextColumn: string, nextValue: string) {
-                        expect(nextColumn).toBe('status')
-                        expect(nextValue).toBe('active')
+                        expect(nextColumn).toBe('member_id')
+                        expect(nextValue).toBe('22222222-2222-2222-2222-222222222222')
 
                         return {
                           limit(limitValue: number) {
@@ -121,72 +172,54 @@ function createPostClient() {
                                 return Promise.resolve({
                                   data: null,
                                   error: null,
-                                } satisfies QueryResult<{ id: string }>)
+                                } satisfies QueryResult<{ id: string; status: string }>)
                               },
                             }
                           },
                         }
                       },
                     }
-                  }
-
-                  throw new Error(`Unexpected select eq column: ${column}`)
-                },
+                  },
+                }
               }
-            }
 
-            if (columns === 'id, status') {
+              throw new Error(`Unexpected select columns: ${columns}`)
+            },
+            insert(values: Record<string, unknown>) {
+              insertValues.push(values)
+
               return {
-                eq(column: string, value: string) {
-                  expect(column).toBe('trainer_id')
-                  expect(value).toBe('11111111-1111-1111-1111-111111111111')
+                select(columns: string) {
+                  expect(columns).toBe('id')
 
                   return {
-                    eq(nextColumn: string, nextValue: string) {
-                      expect(nextColumn).toBe('member_id')
-                      expect(nextValue).toBe('22222222-2222-2222-2222-222222222222')
-
-                      return {
-                        limit(limitValue: number) {
-                          expect(limitValue).toBe(1)
-
-                          return {
-                            maybeSingle() {
-                              return Promise.resolve({
-                                data: null,
-                                error: null,
-                              } satisfies QueryResult<{ id: string; status: string }>)
-                            },
-                          }
-                        },
-                      }
+                    maybeSingle() {
+                      return Promise.resolve({
+                        data: { id: 'assignment-1' },
+                        error: null,
+                      } satisfies QueryResult<{ id: string }>)
                     },
                   }
                 },
               }
-            }
-
-            throw new Error(`Unexpected select columns: ${columns}`)
-          },
-          insert(values: Record<string, unknown>) {
-            insertValues.push(values)
-
-            return {
-              select(columns: string) {
-                expect(columns).toBe('id')
-
-                return {
-                  maybeSingle() {
-                    return Promise.resolve({
-                      data: { id: 'assignment-1' },
-                      error: null,
-                    } satisfies QueryResult<{ id: string }>)
-                  },
-                }
-              },
-            }
-          },
+            },
+          }
         }
+
+        if (table === 'training_plan_days') {
+          return {
+            insert(values: Array<Record<string, unknown>>) {
+              scheduleDayInserts.push(values)
+
+              return Promise.resolve({
+                data: null,
+                error: null,
+              } satisfies QueryResult<null>)
+            },
+          }
+        }
+
+        throw new Error(`Unexpected table: ${table}`)
       },
     },
   }
@@ -390,8 +423,11 @@ describe('PT assignment routes', () => {
           memberId: '22222222-2222-2222-2222-222222222222',
           ptFee: 15000,
           sessionsPerWeek: 3,
-          scheduledDays: ['Monday', 'Wednesday', 'Friday'],
-          sessionTime: '07:00',
+          scheduledSessions: [
+            { day: 'Monday', sessionTime: '07:00' },
+            { day: 'Wednesday', sessionTime: '07:00' },
+            { day: 'Friday', sessionTime: '07:00' },
+          ],
           notes: '  Client has a prior knee injury.  ',
         }),
       }),
@@ -425,8 +461,11 @@ describe('PT assignment routes', () => {
           ptFee: 15000,
           trainerPayout: 10500,
           sessionsPerWeek: 3,
-          scheduledDays: ['Monday', 'Wednesday', 'Friday'],
-          sessionTime: '07:00',
+          scheduledSessions: [
+            { day: 'Monday', sessionTime: '07:00' },
+            { day: 'Wednesday', sessionTime: '07:00' },
+            { day: 'Friday', sessionTime: '07:00' },
+          ],
         }),
       }),
     )
@@ -434,6 +473,58 @@ describe('PT assignment routes', () => {
 
     expect(response.status).toBe(400)
     expect(payload.error).toContain('Unrecognized key')
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('POST rejects sessionsPerWeek values above seven', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/pt/assignments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          trainerId: '11111111-1111-1111-1111-111111111111',
+          memberId: '22222222-2222-2222-2222-222222222222',
+          ptFee: 15000,
+          sessionsPerWeek: 8,
+          scheduledSessions: Array.from({ length: 7 }, (_, index) => ({
+            day: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][index],
+            sessionTime: '07:00',
+          })),
+        }),
+      }),
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(payload.error).toContain('Number must be less than or equal to 7')
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('POST rejects duplicate scheduled session days', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/pt/assignments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          trainerId: '11111111-1111-1111-1111-111111111111',
+          memberId: '22222222-2222-2222-2222-222222222222',
+          ptFee: 15000,
+          sessionsPerWeek: 2,
+          scheduledSessions: [
+            { day: 'Monday', sessionTime: '07:00' },
+            { day: 'Monday', sessionTime: '08:00' },
+          ],
+        }),
+      }),
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(payload.error).toBe('Scheduled days must be unique.')
     expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
   })
 
@@ -487,6 +578,31 @@ describe('PT assignment routes', () => {
 
     expect(staleResponse.status).toBe(400)
     expect(stalePayload.error).toContain('Unrecognized key')
+  })
+
+  it('PATCH rejects scheduled session times that are not valid HH:MM values', async () => {
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          scheduledSessions: [
+            {
+              day: 'Monday',
+              sessionTime: '7:00',
+            },
+          ],
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(payload.error).toContain('Session time must use HH:MM format.')
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
   })
 
   it('DELETE without cancelling future sessions only marks the assignment inactive', async () => {

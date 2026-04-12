@@ -2,10 +2,13 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { normalizeTimeInputValue } from '@/lib/member-access-time'
 import {
+  buildAssignmentSchedule,
   DAYS_OF_WEEK,
+  MAX_PT_SESSIONS_PER_WEEK,
   normalizeAssignmentTrainingPlan,
   PT_ASSIGNMENT_STATUSES,
   type CreatePtAssignmentData,
+  type ScheduledSessionInput,
 } from '@/lib/pt-scheduling'
 import { readTrainerClientById, readTrainerClients } from '@/lib/pt-scheduling-server'
 import { requireAdminUser, requireAuthenticatedProfile } from '@/lib/server-auth'
@@ -23,8 +26,15 @@ const createAssignmentSchema = z
     trainerId: z.string().uuid(),
     memberId: z.string().uuid(),
     ptFee: z.number().int().min(0, 'PT fee must be zero or greater.'),
-    sessionsPerWeek: z.number().int().min(1).max(3),
-    scheduledDays: z.array(z.enum(DAYS_OF_WEEK)),
+    sessionsPerWeek: z.number().int().min(1).max(MAX_PT_SESSIONS_PER_WEEK),
+    scheduledSessions: z.array(
+      z
+        .object({
+          day: z.enum(DAYS_OF_WEEK),
+          sessionTime: z.string().trim().regex(/^\d{2}:\d{2}$/u, 'Session time must use HH:MM format.'),
+        })
+        .strict(),
+    ),
     trainingPlan: z
       .array(
         z
@@ -35,7 +45,6 @@ const createAssignmentSchema = z
           .strict(),
       )
       .optional(),
-    sessionTime: z.string().trim().regex(/^\d{2}:\d{2}$/u, 'Session time must use HH:MM format.'),
     notes: z.string().trim().nullable().optional(),
   })
   .strict()
@@ -56,16 +65,24 @@ function normalizeOptionalNotes(notes: string | null | undefined) {
   return normalizedNotes || null
 }
 
-function validateScheduledDays(
-  input: Pick<CreatePtAssignmentData, 'scheduledDays' | 'sessionsPerWeek'>,
+function validateScheduledSessions(
+  input: Pick<CreatePtAssignmentData, 'scheduledSessions' | 'sessionsPerWeek'>,
 ) {
-  const uniqueDays = Array.from(new Set(input.scheduledDays))
+  const uniqueDays = new Set<string>()
 
-  if (uniqueDays.length !== input.scheduledDays.length) {
-    return 'Scheduled days must be unique.'
+  for (const entry of input.scheduledSessions) {
+    if (uniqueDays.has(entry.day)) {
+      return 'Scheduled days must be unique.'
+    }
+
+    if (!normalizeTimeInputValue(entry.sessionTime)) {
+      return `Session time for ${entry.day} must use HH:MM format.`
+    }
+
+    uniqueDays.add(entry.day)
   }
 
-  if (uniqueDays.length !== input.sessionsPerWeek) {
+  if (uniqueDays.size !== input.sessionsPerWeek) {
     return 'Scheduled days must match the selected sessions per week.'
   }
 
@@ -74,8 +91,9 @@ function validateScheduledDays(
 
 function validateTrainingPlan(
   trainingPlan: CreatePtAssignmentData['trainingPlan'] | undefined,
-  scheduledDays: CreatePtAssignmentData['scheduledDays'],
+  scheduledSessions: ScheduledSessionInput[],
 ) {
+  const scheduledDays = scheduledSessions.map((entry) => entry.day)
   const normalizedTrainingPlan = normalizeAssignmentTrainingPlan(trainingPlan ?? [])
 
   if (normalizedTrainingPlan.length !== (trainingPlan ?? []).length) {
@@ -167,20 +185,23 @@ export async function POST(request: Request) {
 
     const requestBody = await request.json()
     const input = createAssignmentSchema.parse(requestBody)
-    const scheduledDaysError = validateScheduledDays(input)
+    const scheduledSessionsError = validateScheduledSessions(input)
 
-    if (scheduledDaysError) {
-      return createErrorResponse(scheduledDaysError, 400)
+    if (scheduledSessionsError) {
+      return createErrorResponse(scheduledSessionsError, 400)
     }
 
     const normalizedTrainingPlan = normalizeAssignmentTrainingPlan(input.trainingPlan ?? [])
-    const trainingPlanError = validateTrainingPlan(input.trainingPlan, input.scheduledDays)
+    const normalizedSchedule = buildAssignmentSchedule(input.scheduledSessions, normalizedTrainingPlan)
+    const trainingPlanError = validateTrainingPlan(input.trainingPlan, input.scheduledSessions)
 
     if (trainingPlanError) {
       return createErrorResponse(trainingPlanError, 400)
     }
 
-    const normalizedSessionTime = normalizeTimeInputValue(input.sessionTime)
+    const representativeSessionTime = normalizedSchedule[0]?.sessionTime
+    const normalizedSessionTime =
+      representativeSessionTime ? normalizeTimeInputValue(representativeSessionTime) : null
 
     if (!normalizedSessionTime) {
       return createErrorResponse('Session time must use HH:MM format.', 400)
@@ -237,7 +258,7 @@ export async function POST(request: Request) {
         member_id: input.memberId,
         pt_fee: input.ptFee,
         sessions_per_week: input.sessionsPerWeek,
-        scheduled_days: input.scheduledDays,
+        scheduled_days: normalizedSchedule.map((entry) => entry.day),
         session_time: normalizedSessionTime,
         notes: normalizeOptionalNotes(input.notes),
       })
@@ -254,11 +275,12 @@ export async function POST(request: Request) {
       throw new Error('Failed to create the PT assignment: missing assignment id in response.')
     }
 
-    if (normalizedTrainingPlan.length > 0) {
+    if (normalizedSchedule.length > 0) {
       const { error: trainingPlanError } = await supabase.from('training_plan_days').insert(
-        normalizedTrainingPlan.map((entry) => ({
+        normalizedSchedule.map((entry) => ({
           assignment_id: assignmentId,
           day_of_week: entry.day,
+          session_time: normalizeTimeInputValue(entry.sessionTime),
           training_type_name: entry.trainingTypeName,
         })),
       )

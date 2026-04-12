@@ -77,7 +77,7 @@ export function TrainerClientsSection({ trainerId }: TrainerClientsSectionProps)
                   <div className="space-y-1">
                     <p className="font-medium">{assignment.memberName ?? 'Unknown member'}</p>
                     <p className="text-muted-foreground text-sm">
-                      {formatScheduleSummary(assignment.scheduledDays, assignment.sessionTime)}
+                      {formatScheduleSummary(assignment.scheduledSessions, assignment.sessionsPerWeek)}
                     </p>
                     <div className="text-sm">
                       <p className="text-muted-foreground">Training Plan</p>

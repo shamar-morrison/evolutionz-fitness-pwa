@@ -30,6 +30,7 @@ import {
   generatePtAssignmentSessions,
   getMonthLabel,
   getMonthValueInJamaica,
+  MAX_PT_SESSIONS_PER_WEEK,
   normalizeTrainingPlan,
   parseMonthValue,
   type TrainerClient,
@@ -167,7 +168,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
       if (!result.ok) {
         toast({
           title: 'Generation needs override',
-          description: `Some weeks would exceed the 3-session limit (${result.weeks.join(', ')}). Use the Schedule page to override if needed.`,
+          description: `Some weeks would exceed the ${MAX_PT_SESSIONS_PER_WEEK}-session limit (${result.weeks.join(', ')}). Use the Schedule page to override if needed.`,
           variant: 'destructive',
         })
       } else {
@@ -255,11 +256,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
                 <div className="space-y-1">
                   <p className="text-muted-foreground text-sm">Schedule</p>
                   <p className="font-medium">
-                    {formatScheduleSummary(
-                      assignment.scheduledDays,
-                      assignment.sessionTime,
-                      assignment.sessionsPerWeek,
-                    )}
+                    {formatScheduleSummary(assignment.scheduledSessions, assignment.sessionsPerWeek)}
                   </p>
                 </div>
                 <div className="space-y-1 sm:col-span-2">

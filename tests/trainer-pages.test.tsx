@@ -175,6 +175,15 @@ function createSession(overrides: Partial<PtSession> = {}): PtSession {
 }
 
 function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient {
+  const scheduledDays = overrides.scheduledDays ?? ['Monday', 'Wednesday']
+  const sessionTime = overrides.sessionTime ?? '07:00'
+  const trainingPlan =
+    overrides.trainingPlan ??
+    [
+      { day: 'Monday', trainingTypeName: 'Legs', isCustom: false },
+      { day: 'Wednesday', trainingTypeName: 'Back', isCustom: false },
+    ]
+
   return {
     id: overrides.id ?? 'assignment-1',
     trainerId: overrides.trainerId ?? 'trainer-1',
@@ -182,15 +191,22 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     status: overrides.status ?? 'active',
     ptFee: overrides.ptFee ?? 15000,
     sessionsPerWeek: overrides.sessionsPerWeek ?? 2,
-    scheduledDays: overrides.scheduledDays ?? ['Monday', 'Wednesday'],
-    sessionTime: overrides.sessionTime ?? '07:00',
+    scheduledSessions:
+      overrides.scheduledSessions ??
+      scheduledDays.map((day) => {
+        const trainingPlanEntry = trainingPlan.find((entry) => entry.day === day)
+
+        return {
+          day,
+          sessionTime,
+          trainingTypeName: trainingPlanEntry?.trainingTypeName ?? null,
+          isCustom: trainingPlanEntry?.isCustom ?? false,
+        }
+      }),
+    scheduledDays,
+    sessionTime,
     notes: overrides.notes ?? null,
-    trainingPlan:
-      overrides.trainingPlan ??
-      [
-        { day: 'Monday', trainingTypeName: 'Legs', isCustom: false },
-        { day: 'Wednesday', trainingTypeName: 'Back', isCustom: false },
-      ],
+    trainingPlan,
     createdAt: overrides.createdAt ?? '2026-04-01T00:00:00.000Z',
     updatedAt: overrides.updatedAt ?? '2026-04-01T00:00:00.000Z',
     trainerName: overrides.trainerName ?? 'Jordan Trainer',

@@ -176,6 +176,10 @@ function createTrainer(overrides: Partial<Profile> = {}): Profile {
 }
 
 function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient {
+  const scheduledDays = overrides.scheduledDays ?? ['Monday']
+  const sessionTime = overrides.sessionTime ?? '07:00'
+  const trainingPlan = overrides.trainingPlan ?? []
+
   return {
     id: overrides.id ?? 'assignment-1',
     trainerId: overrides.trainerId ?? '11111111-1111-1111-1111-111111111111',
@@ -183,9 +187,21 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     status: overrides.status ?? 'active',
     ptFee: overrides.ptFee ?? 14000,
     sessionsPerWeek: overrides.sessionsPerWeek ?? 1,
-    scheduledDays: overrides.scheduledDays ?? ['Monday'],
-    trainingPlan: overrides.trainingPlan ?? [],
-    sessionTime: overrides.sessionTime ?? '07:00',
+    scheduledSessions:
+      overrides.scheduledSessions ??
+      scheduledDays.map((day) => {
+        const trainingPlanEntry = trainingPlan.find((entry) => entry.day === day)
+
+        return {
+          day,
+          sessionTime,
+          trainingTypeName: trainingPlanEntry?.trainingTypeName ?? null,
+          isCustom: trainingPlanEntry?.isCustom ?? false,
+        }
+      }),
+    scheduledDays,
+    trainingPlan,
+    sessionTime,
     notes: overrides.notes ?? null,
     createdAt: overrides.createdAt ?? '2026-04-03T00:00:00.000Z',
     updatedAt: overrides.updatedAt ?? '2026-04-03T00:00:00.000Z',
@@ -225,6 +241,16 @@ function getButton(container: HTMLDivElement, label: string) {
 
 function getTrainingTypeSelects(container: HTMLDivElement) {
   return Array.from(container.querySelectorAll('select')).slice(2)
+}
+
+function getSessionTimeInput(container: HTMLDivElement, day: string) {
+  const input = container.querySelector(`input[aria-label="${day} session time"]`)
+
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error(`${day} session time input not found.`)
+  }
+
+  return input
 }
 
 async function clickButton(container: HTMLDivElement, label: string) {
@@ -376,13 +402,144 @@ describe('PtAssignmentDialog', () => {
       memberId: '22222222-2222-2222-2222-222222222222',
       ptFee: 15000,
       sessionsPerWeek: 3,
-      scheduledDays: ['Monday', 'Wednesday', 'Friday'],
+      scheduledSessions: [
+        {
+          day: 'Monday',
+          sessionTime: '07:00',
+        },
+        {
+          day: 'Wednesday',
+          sessionTime: '07:00',
+        },
+        {
+          day: 'Friday',
+          sessionTime: '07:00',
+        },
+      ],
       trainingPlan: [],
-      sessionTime: '07:00',
       notes: 'Client has a prior knee injury.',
     })
     expect(createPtAssignmentMock).toHaveBeenCalledTimes(1)
     expect('trainerPayout' in createPtAssignmentMock.mock.calls[0][0]).toBe(false)
+  })
+
+  it('submits independent session times for each selected day', async () => {
+    createPtAssignmentMock.mockResolvedValue(
+      createAssignment({
+        sessionsPerWeek: 3,
+        scheduledDays: ['Monday', 'Wednesday', 'Friday'],
+        scheduledSessions: [
+          {
+            day: 'Monday',
+            sessionTime: '06:30',
+            trainingTypeName: null,
+            isCustom: false,
+          },
+          {
+            day: 'Wednesday',
+            sessionTime: '07:15',
+            trainingTypeName: null,
+            isCustom: false,
+          },
+          {
+            day: 'Friday',
+            sessionTime: '08:45',
+            trainingTypeName: null,
+            isCustom: false,
+          },
+        ],
+      }),
+    )
+
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="create"
+          memberId="22222222-2222-2222-2222-222222222222"
+          trainers={[createTrainer()]}
+        />,
+      )
+    })
+
+    const trainerSelect = container.querySelector('select[aria-label="Trainer"]')
+    const ptFeeInput = container.querySelector('#create-pt-fee')
+
+    if (!(trainerSelect instanceof HTMLSelectElement) || !(ptFeeInput instanceof HTMLInputElement)) {
+      throw new Error('Assignment form inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(trainerSelect, '11111111-1111-1111-1111-111111111111')
+      setInputValue(ptFeeInput, '15000')
+    })
+
+    await clickButton(container, 'Monday')
+    await clickButton(container, 'Wednesday')
+    await clickButton(container, 'Friday')
+
+    await act(async () => {
+      setInputValue(getSessionTimeInput(container, 'Monday'), '06:30')
+      setInputValue(getSessionTimeInput(container, 'Wednesday'), '07:15')
+      setInputValue(getSessionTimeInput(container, 'Friday'), '08:45')
+    })
+
+    await clickButton(container, 'Assign Trainer')
+    await flushAsyncWork()
+
+    expect(createPtAssignmentMock).toHaveBeenCalledWith({
+      trainerId: '11111111-1111-1111-1111-111111111111',
+      memberId: '22222222-2222-2222-2222-222222222222',
+      ptFee: 15000,
+      sessionsPerWeek: 3,
+      scheduledSessions: [
+        {
+          day: 'Monday',
+          sessionTime: '06:30',
+        },
+        {
+          day: 'Wednesday',
+          sessionTime: '07:15',
+        },
+        {
+          day: 'Friday',
+          sessionTime: '08:45',
+        },
+      ],
+      trainingPlan: [],
+      notes: null,
+    })
+  })
+
+  it('renders sessions-per-week options from 1 through 7', async () => {
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="create"
+          memberId="22222222-2222-2222-2222-222222222222"
+          trainers={[createTrainer()]}
+        />,
+      )
+    })
+
+    const frequencySelect = container.querySelector('select[aria-label="Sessions per week"]')
+
+    if (!(frequencySelect instanceof HTMLSelectElement)) {
+      throw new Error('Sessions per week select not found.')
+    }
+
+    expect(Array.from(frequencySelect.options).map((option) => option.value)).toEqual([
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+      '7',
+    ])
   })
 
   it('blocks submission when a custom training type is selected but left empty', async () => {
@@ -428,6 +585,51 @@ describe('PtAssignmentDialog', () => {
 
     expect(createPtAssignmentMock).not.toHaveBeenCalled()
     expect(container.textContent).toContain('Enter a custom training type.')
+  })
+
+  it('blocks submission when any selected day is missing a valid time', async () => {
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="create"
+          memberId="22222222-2222-2222-2222-222222222222"
+          trainers={[createTrainer()]}
+        />,
+      )
+    })
+
+    const trainerSelect = container.querySelector('select[aria-label="Trainer"]')
+    const ptFeeInput = container.querySelector('#create-pt-fee')
+
+    if (!(trainerSelect instanceof HTMLSelectElement) || !(ptFeeInput instanceof HTMLInputElement)) {
+      throw new Error('Assignment form inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(trainerSelect, '11111111-1111-1111-1111-111111111111')
+      setInputValue(ptFeeInput, '15000')
+    })
+
+    await clickButton(container, 'Monday')
+    await clickButton(container, 'Wednesday')
+    await clickButton(container, 'Friday')
+
+    await act(async () => {
+      setInputValue(getSessionTimeInput(container, 'Wednesday'), '')
+    })
+
+    await clickButton(container, 'Assign Trainer')
+    await flushAsyncWork()
+
+    expect(createPtAssignmentMock).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('Choose a valid session time.')
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Invalid session time',
+      description: 'Choose a valid HH:MM time for each selected day.',
+      variant: 'destructive',
+    })
   })
 
   it('removes a deselected day from the submitted training plan entries', async () => {
@@ -535,6 +737,7 @@ describe('PtAssignmentDialog', () => {
 
     await act(async () => {
       setInputValue(refreshedMondayTrainingTypeSelect, 'Legs')
+      setInputValue(getSessionTimeInput(container, 'Monday'), '06:30')
     })
 
     await clickButton(container, 'Assign Trainer')
@@ -545,14 +748,26 @@ describe('PtAssignmentDialog', () => {
       memberId: '22222222-2222-2222-2222-222222222222',
       ptFee: 15000,
       sessionsPerWeek: 3,
-      scheduledDays: ['Monday', 'Wednesday', 'Thursday'],
+      scheduledSessions: [
+        {
+          day: 'Monday',
+          sessionTime: '06:30',
+        },
+        {
+          day: 'Wednesday',
+          sessionTime: '07:00',
+        },
+        {
+          day: 'Thursday',
+          sessionTime: '07:00',
+        },
+      ],
       trainingPlan: [
         {
           day: 'Thursday',
           trainingTypeName: 'Agility',
         },
       ],
-      sessionTime: '07:00',
       notes: null,
     })
   })

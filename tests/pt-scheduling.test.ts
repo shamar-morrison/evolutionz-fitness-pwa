@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildAssignmentSchedule,
   buildJamaicaScheduledAt,
   buildJamaicaScheduledAtFromLocalInput,
   calculateAttendanceRate,
+  formatScheduleSummary,
+  formatSessionTime,
   formatPtSessionStatusLabel,
   getCurrentMonthDateRangeInJamaica,
   getDateRangeBoundsInJamaica,
@@ -10,6 +13,7 @@ import {
   getIsoWeekKey,
   getMonthRange,
   getScheduledDateValuesForMonth,
+  normalizeScheduledSessions,
   normalizeSessionTimeValue,
   TRAINER_PAYOUT_PER_CLIENT_JMD,
 } from '@/lib/pt-scheduling'
@@ -48,6 +52,45 @@ describe('PT scheduling helpers', () => {
     ])
   })
 
+  it('normalizes scheduled sessions in weekday order with normalized times', () => {
+    expect(
+      normalizeScheduledSessions([
+        { day: 'Friday', sessionTime: '08:45:00' },
+        { day: 'Monday', sessionTime: '06:30' },
+      ]),
+    ).toEqual([
+      { day: 'Monday', sessionTime: '06:30' },
+      { day: 'Friday', sessionTime: '08:45' },
+    ])
+  })
+
+  it('builds assignment schedules by merging session times with training plan days', () => {
+    expect(
+      buildAssignmentSchedule(
+        [
+          { day: 'Monday', sessionTime: '06:30' },
+          { day: 'Wednesday', sessionTime: '07:15' },
+        ],
+        [
+          { day: 'Wednesday', trainingTypeName: 'Upper Body' },
+        ],
+      ),
+    ).toEqual([
+      {
+        day: 'Monday',
+        sessionTime: '06:30',
+        trainingTypeName: null,
+        isCustom: false,
+      },
+      {
+        day: 'Wednesday',
+        sessionTime: '07:15',
+        trainingTypeName: 'Upper Body',
+        isCustom: false,
+      },
+    ])
+  })
+
   it('builds ISO week keys from Jamaica calendar dates', () => {
     expect(getIsoWeekKey('2026-04-01')).toBe('2026-W14')
     expect(getIsoWeekKey('2026-04-06')).toBe('2026-W15')
@@ -65,6 +108,18 @@ describe('PT scheduling helpers', () => {
       startInclusive: '2026-04-01T00:00:00-05:00',
       endExclusive: '2026-05-01T00:00:00-05:00',
     })
+  })
+
+  it('formats mixed per-day schedules with each day time', () => {
+    expect(
+      formatScheduleSummary(
+        [
+          { day: 'Monday', sessionTime: '06:30' },
+          { day: 'Wednesday', sessionTime: '07:15' },
+        ],
+        2,
+      ),
+    ).toBe(`Mon ${formatSessionTime('06:30')}, Wed ${formatSessionTime('07:15')} (2x/week)`)
   })
 
   it('resolves the current Jamaica month date range for date inputs', () => {

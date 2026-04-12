@@ -40,12 +40,16 @@ export type TrainerClientStatus = typeof PT_ASSIGNMENT_STATUSES[number]
 export const JAMAICA_TIME_ZONE = 'America/Jamaica'
 export const JAMAICA_OFFSET = '-05:00'
 export const TRAINER_PAYOUT_PER_CLIENT_JMD = 10500
+export const DEFAULT_PT_SESSION_TIME = '07:00'
+export const DEFAULT_PT_SESSIONS_PER_WEEK = 3
+export const MAX_PT_SESSIONS_PER_WEEK = 7
 
 export type TrainingPlanDay = {
   id: string
   assignmentId: string
   dayOfWeek: DayOfWeek
-  trainingTypeName: string
+  sessionTime: string
+  trainingTypeName: string | null
   createdAt: string
   updatedAt: string
 }
@@ -61,6 +65,18 @@ export type AssignmentTrainingPlanInput = {
   trainingTypeName: string
 }
 
+export type ScheduledSessionInput = {
+  day: DayOfWeek
+  sessionTime: string
+}
+
+export type AssignmentScheduleDay = {
+  day: DayOfWeek
+  sessionTime: string
+  trainingTypeName: string | null
+  isCustom: boolean
+}
+
 export type TrainerClient = {
   id: string
   trainerId: string
@@ -68,6 +84,7 @@ export type TrainerClient = {
   status: 'active' | 'inactive'
   ptFee: number
   sessionsPerWeek: number
+  scheduledSessions: AssignmentScheduleDay[]
   scheduledDays: DayOfWeek[]
   sessionTime: string
   notes: string | null
@@ -227,9 +244,8 @@ export type CreatePtAssignmentData = {
   memberId: string
   ptFee: number
   sessionsPerWeek: number
-  scheduledDays: DayOfWeek[]
+  scheduledSessions: ScheduledSessionInput[]
   trainingPlan?: AssignmentTrainingPlanInput[]
-  sessionTime: string
   notes?: string | null
 }
 
@@ -237,9 +253,8 @@ export type UpdatePtAssignmentData = {
   status?: TrainerClientStatus
   ptFee?: number
   sessionsPerWeek?: number
-  scheduledDays?: DayOfWeek[]
+  scheduledSessions?: ScheduledSessionInput[]
   trainingPlan?: AssignmentTrainingPlanInput[]
-  sessionTime?: string
   notes?: string | null
 }
 
@@ -312,7 +327,17 @@ const trainerClientSchema = z.object({
   memberId: z.string().trim().min(1),
   status: z.enum(PT_ASSIGNMENT_STATUSES),
   ptFee: z.number().int(),
-  sessionsPerWeek: z.number().int().min(1).max(3),
+  sessionsPerWeek: z.number().int().min(1).max(MAX_PT_SESSIONS_PER_WEEK),
+  scheduledSessions: z
+    .array(
+      z.object({
+        day: z.enum(DAYS_OF_WEEK),
+        sessionTime: z.string().trim().min(1),
+        trainingTypeName: z.string().trim().min(1).nullable(),
+        isCustom: z.boolean(),
+      }),
+    )
+    .default([]),
   scheduledDays: z.array(z.enum(DAYS_OF_WEEK)),
   sessionTime: z.string().trim().min(1),
   notes: z.string().nullable(),
@@ -655,6 +680,45 @@ export function normalizeScheduledDays(value: unknown): DayOfWeek[] {
   return DAYS_OF_WEEK.filter((day) => uniqueDays.has(day))
 }
 
+export function normalizeScheduledSessions(value: unknown): ScheduledSessionInput[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const scheduledSessionByDay = new Map<DayOfWeek, string>()
+
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      continue
+    }
+
+    const day = 'day' in entry && isDayOfWeek(entry.day as string) ? (entry.day as DayOfWeek) : null
+    const sessionTime =
+      'sessionTime' in entry && typeof entry.sessionTime === 'string'
+        ? normalizeSessionTimeValue(entry.sessionTime)
+        : null
+
+    if (!day || !sessionTime) {
+      continue
+    }
+
+    scheduledSessionByDay.set(day, sessionTime)
+  }
+
+  return DAYS_OF_WEEK.flatMap((day) => {
+    const sessionTime = scheduledSessionByDay.get(day)
+
+    return sessionTime
+      ? [
+          {
+            day,
+            sessionTime,
+          },
+        ]
+      : []
+  })
+}
+
 export function isPredefinedTrainingType(value: string) {
   return predefinedTrainingTypeSet.has(value.trim())
 }
@@ -704,6 +768,94 @@ export function normalizeAssignmentTrainingPlan(value: unknown): AssignmentTrain
     day,
     trainingTypeName,
   }))
+}
+
+export function normalizeAssignmentSchedule(value: unknown): AssignmentScheduleDay[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const scheduleByDay = new Map<
+    DayOfWeek,
+    {
+      sessionTime: string
+      trainingTypeName: string | null
+    }
+  >()
+
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      continue
+    }
+
+    const day = 'day' in entry && isDayOfWeek(entry.day as string) ? (entry.day as DayOfWeek) : null
+    const sessionTime =
+      'sessionTime' in entry && typeof entry.sessionTime === 'string'
+        ? normalizeSessionTimeValue(entry.sessionTime)
+        : null
+    const trainingTypeName =
+      'trainingTypeName' in entry && typeof entry.trainingTypeName === 'string'
+        ? entry.trainingTypeName.trim() || null
+        : null
+
+    if (!day || !sessionTime) {
+      continue
+    }
+
+    scheduleByDay.set(day, {
+      sessionTime,
+      trainingTypeName,
+    })
+  }
+
+  return DAYS_OF_WEEK.flatMap((day) => {
+    const entry = scheduleByDay.get(day)
+
+    return entry
+      ? [
+          {
+            day,
+            sessionTime: entry.sessionTime,
+            trainingTypeName: entry.trainingTypeName,
+            isCustom: entry.trainingTypeName ? !isPredefinedTrainingType(entry.trainingTypeName) : false,
+          },
+        ]
+      : []
+  })
+}
+
+export function buildAssignmentSchedule(
+  scheduledSessionsValue: unknown,
+  trainingPlanValue: unknown = [],
+): AssignmentScheduleDay[] {
+  const trainingTypeByDay = new Map<DayOfWeek, string>(
+    normalizeAssignmentTrainingPlan(trainingPlanValue).map((entry) => [entry.day, entry.trainingTypeName]),
+  )
+
+  return normalizeScheduledSessions(scheduledSessionsValue).map(({ day, sessionTime }) => {
+    const trainingTypeName = trainingTypeByDay.get(day) ?? null
+
+    return {
+      day,
+      sessionTime,
+      trainingTypeName,
+      isCustom: trainingTypeName ? !isPredefinedTrainingType(trainingTypeName) : false,
+    }
+  })
+}
+
+export function getTrainingPlanFromSchedule(value: unknown): DayTrainingPlan[] {
+  return normalizeAssignmentSchedule(value).flatMap((entry) =>
+    entry.trainingTypeName
+      ? [
+          {
+            day: entry.day,
+            trainingTypeName: entry.trainingTypeName,
+            isCustom: entry.isCustom,
+          },
+        ]
+      : [],
+  )
 }
 
 export function getTrainingTypeForDay(trainingPlan: DayTrainingPlan[], day: DayOfWeek) {
@@ -760,13 +912,63 @@ export function formatScheduleSummary(
   scheduledDays: DayOfWeek[],
   sessionTime: string,
   sessionsPerWeek?: number,
+): string
+export function formatScheduleSummary(
+  scheduledSessions: ScheduledSessionInput[] | AssignmentScheduleDay[],
+  sessionsPerWeek?: number,
+): string
+export function formatScheduleSummary(
+  scheduleOrDays: DayOfWeek[] | ScheduledSessionInput[] | AssignmentScheduleDay[],
+  sessionTimeOrSessionsPerWeek?: string | number,
+  maybeSessionsPerWeek?: number,
 ) {
-  const sortedDays = DAYS_OF_WEEK.filter((day) => scheduledDays.includes(day))
-  const daySummary = sortedDays.map((day) => formatDayOfWeekShort(day)).join(', ')
+  const scheduledSessions =
+    typeof scheduleOrDays[0] === 'string'
+      ? normalizeScheduledDays(scheduleOrDays).flatMap((day) => {
+          const sessionTime =
+            typeof sessionTimeOrSessionsPerWeek === 'string'
+              ? normalizeSessionTimeValue(sessionTimeOrSessionsPerWeek)
+              : null
+
+          return sessionTime
+            ? [
+                {
+                  day,
+                  sessionTime,
+                },
+              ]
+            : []
+        })
+      : normalizeScheduledSessions(scheduleOrDays)
+  const sessionsPerWeek =
+    typeof sessionTimeOrSessionsPerWeek === 'number' ? sessionTimeOrSessionsPerWeek : maybeSessionsPerWeek
   const frequencySummary =
     typeof sessionsPerWeek === 'number' && sessionsPerWeek > 0 ? ` (${sessionsPerWeek}x/week)` : ''
 
-  return `${daySummary} at ${formatSessionTime(sessionTime)}${frequencySummary}`
+  if (scheduledSessions.length === 0) {
+    return frequencySummary ? frequencySummary.slice(1, -1) : ''
+  }
+
+  const timeGroups = new Map<string, DayOfWeek[]>()
+
+  for (const { day, sessionTime } of scheduledSessions) {
+    const existingDays = timeGroups.get(sessionTime) ?? []
+    existingDays.push(day)
+    timeGroups.set(sessionTime, existingDays)
+  }
+
+  if (timeGroups.size === 1) {
+    const [{ sessionTime }] = scheduledSessions
+    const daySummary = scheduledSessions.map(({ day }) => formatDayOfWeekShort(day)).join(', ')
+
+    return `${daySummary} at ${formatSessionTime(sessionTime)}${frequencySummary}`
+  }
+
+  const scheduleSummary = scheduledSessions
+    .map(({ day, sessionTime }) => `${formatDayOfWeekShort(day)} ${formatSessionTime(sessionTime)}`)
+    .join(', ')
+
+  return `${scheduleSummary}${frequencySummary}`
 }
 
 export function formatJmdCurrency(value: number) {

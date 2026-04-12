@@ -56,11 +56,7 @@ function TrainerClientsContent() {
               <div>
                 <CardTitle>{assignment.memberName ?? 'Unknown member'}</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  {formatScheduleSummary(
-                    assignment.scheduledDays,
-                    assignment.sessionTime,
-                    assignment.sessionsPerWeek,
-                  )}
+                  {formatScheduleSummary(assignment.scheduledSessions, assignment.sessionsPerWeek)}
                 </p>
               </div>
             </CardHeader>

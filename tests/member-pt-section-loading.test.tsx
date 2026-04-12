@@ -167,6 +167,14 @@ describe('MemberPtSection remove dialog loading wiring', () => {
         status: 'active',
         ptFee: 14000,
         sessionsPerWeek: 1,
+        scheduledSessions: [
+          {
+            day: 'Monday',
+            sessionTime: '07:00',
+            trainingTypeName: null,
+            isCustom: false,
+          },
+        ],
         scheduledDays: ['Monday'],
         trainingPlan: [],
         sessionTime: '07:00',

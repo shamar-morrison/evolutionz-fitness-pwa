@@ -4,19 +4,22 @@ import {
 } from '@/lib/member-photo-storage'
 import {
   type ApprovalRequestStatus,
+  buildAssignmentSchedule,
   calculateAttendanceRate,
   DAYS_OF_WEEK,
   getDateRangeBoundsInJamaica,
   getJamaicaDayOfWeek,
+  getTrainingPlanFromSchedule,
   JAMAICA_OFFSET,
   getMonthRange,
-  normalizeTrainingPlan,
+  normalizeAssignmentSchedule,
   normalizeScheduledDays,
   normalizeSessionTimeValue,
   type PtAssignmentFilters,
   type PtPaymentsReport,
   type RescheduleRequest,
   type SessionUpdateRequest,
+  type AssignmentScheduleDay,
   type PtSession,
   type PtSessionChange,
   type PtSessionDetail,
@@ -32,7 +35,7 @@ const TRAINER_CLIENT_SELECT =
   'id, trainer_id, member_id, status, pt_fee, sessions_per_week, scheduled_days, session_time, notes, created_at, updated_at'
 const PT_PAYMENT_ASSIGNMENT_SELECT = 'id, trainer_id, member_id, pt_fee, created_at'
 const TRAINING_PLAN_DAY_SELECT =
-  'id, assignment_id, day_of_week, training_type_name, created_at, updated_at'
+  'id, assignment_id, day_of_week, session_time, training_type_name, created_at, updated_at'
 const PT_SESSION_SELECT =
   'id, assignment_id, trainer_id, member_id, scheduled_at, status, is_recurring, notes, created_at, updated_at'
 const PT_PAYMENT_SESSION_SELECT = 'assignment_id, status'
@@ -106,7 +109,8 @@ type TrainingPlanDayRow = {
   id: string
   assignment_id: string
   day_of_week: string
-  training_type_name: string
+  session_time: string
+  training_type_name: string | null
   created_at: string
   updated_at: string
 }
@@ -177,6 +181,17 @@ function normalizeJsonObject(value: unknown) {
   }
 
   return value as Record<string, unknown>
+}
+
+function buildLegacyScheduledSessions(row: TrainerClientRow): TrainerClient['scheduledSessions'] {
+  const legacySessionTime = normalizeSessionTimeValue(row.session_time) ?? normalizeText(row.session_time)
+
+  return buildAssignmentSchedule(
+    normalizeScheduledDays(row.scheduled_days).map((day) => ({
+      day,
+      sessionTime: legacySessionTime,
+    })),
+  )
 }
 
 function sortAssignments(assignments: TrainerClient[]) {
@@ -300,17 +315,21 @@ async function hydrateTrainerClients(
   const trainerIds = Array.from(new Set(rows.map((row) => row.trainer_id)))
   const memberIds = Array.from(new Set(rows.map((row) => row.member_id)))
   const assignmentIds = rows.map((row) => row.id)
-  const [trainerById, memberById, trainingPlanByAssignmentId] = await Promise.all([
+  const [trainerById, memberById, scheduledSessionsByAssignmentId] = await Promise.all([
     loadTrainerSummaries(supabase, trainerIds),
     loadMemberSummaries(supabase, memberIds),
-    loadTrainingPlanByAssignmentId(supabase, assignmentIds),
+    loadScheduledSessionsByAssignmentId(supabase, assignmentIds),
   ])
 
   return sortAssignments(
     rows.map((row) => {
       const trainer = trainerById.get(row.trainer_id)
       const member = memberById.get(row.member_id)
-      const trainingPlan = trainingPlanByAssignmentId.get(row.id) ?? []
+      const scheduledSessions =
+        scheduledSessionsByAssignmentId.get(row.id)?.length
+          ? scheduledSessionsByAssignmentId.get(row.id) ?? []
+          : buildLegacyScheduledSessions(row)
+      const trainingPlan = getTrainingPlanFromSchedule(scheduledSessions)
 
       return {
         id: row.id,
@@ -319,8 +338,12 @@ async function hydrateTrainerClients(
         status: row.status,
         ptFee: row.pt_fee,
         sessionsPerWeek: row.sessions_per_week,
-        scheduledDays: normalizeScheduledDays(row.scheduled_days),
-        sessionTime: normalizeSessionTimeValue(row.session_time) ?? normalizeText(row.session_time),
+        scheduledSessions,
+        scheduledDays: scheduledSessions.map((entry) => entry.day),
+        sessionTime:
+          scheduledSessions[0]?.sessionTime ??
+          normalizeSessionTimeValue(row.session_time) ??
+          normalizeText(row.session_time),
         notes: normalizeNullableText(row.notes),
         trainingPlan,
         createdAt: row.created_at,
@@ -342,11 +365,11 @@ async function hydratePtSessions(
   const memberIds = Array.from(new Set(rows.map((row) => row.member_id)))
   const assignmentIds = Array.from(new Set(rows.map((row) => row.assignment_id)))
   const sessionIds = rows.map((row) => row.id)
-  const [trainerById, memberById, trainingPlanByAssignmentId, pendingRequestTypeBySessionId] =
+  const [trainerById, memberById, scheduledSessionsByAssignmentId, pendingRequestTypeBySessionId] =
     await Promise.all([
       loadTrainerSummaries(supabase, trainerIds),
       loadMemberSummaries(supabase, memberIds),
-      loadTrainingPlanByAssignmentId(supabase, assignmentIds),
+      loadScheduledSessionsByAssignmentId(supabase, assignmentIds),
       loadPendingRequestTypeBySessionId(supabase, sessionIds),
     ])
 
@@ -354,7 +377,7 @@ async function hydratePtSessions(
     rows.map((row) => {
       const trainingDay = getJamaicaDayOfWeek(row.scheduled_at)
       const trainingTypeName = trainingDay
-        ? (trainingPlanByAssignmentId.get(row.assignment_id) ?? []).find(
+        ? (scheduledSessionsByAssignmentId.get(row.assignment_id) ?? []).find(
             (entry) => entry.day === trainingDay,
           )?.trainingTypeName ?? null
         : null
@@ -380,12 +403,12 @@ async function hydratePtSessions(
   )
 }
 
-async function loadTrainingPlanByAssignmentId(
+async function loadScheduledSessionsByAssignmentId(
   supabase: PtSchedulingAdminClient,
   assignmentIds: string[],
 ) {
   if (assignmentIds.length === 0) {
-    return new Map<string, TrainerClient['trainingPlan']>()
+    return new Map<string, TrainerClient['scheduledSessions']>()
   }
 
   const { data, error } = await supabase
@@ -394,27 +417,47 @@ async function loadTrainingPlanByAssignmentId(
     .in('assignment_id', assignmentIds)
 
   if (error) {
-    throw new Error(`Failed to read training plans: ${error.message}`)
+    throw new Error(`Failed to read PT assignment schedules: ${error.message}`)
   }
 
-  const trainingPlanRows = (data ?? []) as TrainingPlanDayRow[]
-  const trainingPlanByAssignmentId = new Map<string, Array<{ day: string; trainingTypeName: string }>>()
+  const scheduleRows = (data ?? []) as TrainingPlanDayRow[]
+  const scheduleByAssignmentId = new Map<
+    string,
+    Array<{ day: string; sessionTime: string; trainingTypeName: string | null }>
+  >()
 
-  for (const row of trainingPlanRows) {
-    const existingEntries = trainingPlanByAssignmentId.get(row.assignment_id) ?? []
+  for (const row of scheduleRows) {
+    const existingEntries = scheduleByAssignmentId.get(row.assignment_id) ?? []
     existingEntries.push({
       day: row.day_of_week,
+      sessionTime: row.session_time,
       trainingTypeName: row.training_type_name,
     })
-    trainingPlanByAssignmentId.set(row.assignment_id, existingEntries)
+    scheduleByAssignmentId.set(row.assignment_id, existingEntries)
   }
 
   return new Map(
     assignmentIds.map((assignmentId) => [
       assignmentId,
-      normalizeTrainingPlan(trainingPlanByAssignmentId.get(assignmentId) ?? []),
+      normalizeAssignmentSchedule(scheduleByAssignmentId.get(assignmentId) ?? []),
     ]),
   )
+}
+
+export async function readTrainingPlanDayRowsByAssignmentId(
+  supabase: PtSchedulingAdminClient,
+  assignmentId: string,
+): Promise<TrainingPlanDayRow[]> {
+  const { data, error } = await supabase
+    .from('training_plan_days')
+    .select(TRAINING_PLAN_DAY_SELECT)
+    .eq('assignment_id', assignmentId)
+
+  if (error) {
+    throw new Error(`Failed to read PT assignment schedule days for ${assignmentId}: ${error.message}`)
+  }
+
+  return (data ?? []) as TrainingPlanDayRow[]
 }
 
 async function loadRequestSessions(

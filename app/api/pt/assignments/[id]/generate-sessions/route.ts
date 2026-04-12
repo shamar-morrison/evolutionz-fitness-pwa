@@ -4,11 +4,11 @@ import {
   buildJamaicaScheduledAt,
   getIsoWeekKey,
   getJamaicaDateValue,
+  MAX_PT_SESSIONS_PER_WEEK,
   getMonthRange,
-  normalizeScheduledDays,
   getScheduledDateValuesForMonth,
 } from '@/lib/pt-scheduling'
-import { readTrainerClientRowById } from '@/lib/pt-scheduling-server'
+import { readTrainerClientById } from '@/lib/pt-scheduling-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -45,7 +45,7 @@ export async function POST(
     const requestBody = await request.json()
     const input = generateSessionsSchema.parse(requestBody)
     const supabase = getSupabaseAdminClient() as any
-    const assignment = await readTrainerClientRowById(supabase, id)
+    const assignment = await readTrainerClientById(supabase, id)
 
     if (!assignment) {
       return createErrorResponse('PT assignment not found.', 404)
@@ -61,14 +61,14 @@ export async function POST(
       return createErrorResponse('Invalid month or year.', 400)
     }
 
-    const scheduledDateValues = getScheduledDateValuesForMonth(
-      input.month,
-      input.year,
-      normalizeScheduledDays(assignment.scheduled_days ?? []),
-    )
-    const candidateScheduledAtValues = scheduledDateValues
-      .map((dateValue) => buildJamaicaScheduledAt(dateValue, assignment.session_time))
+    const candidateScheduledAtValues = assignment.scheduledSessions
+      .flatMap(({ day, sessionTime }) =>
+        getScheduledDateValuesForMonth(input.month, input.year, [day]).map((dateValue) =>
+          buildJamaicaScheduledAt(dateValue, sessionTime),
+        ),
+      )
       .filter((value): value is string => Boolean(value))
+      .sort()
 
     const { data: existingAssignmentSessions, error: existingAssignmentSessionsError } =
       await supabase
@@ -98,8 +98,8 @@ export async function POST(
     const { data: existingPairSessions, error: existingPairSessionsError } = await supabase
       .from('pt_sessions')
       .select('id, scheduled_at')
-      .eq('trainer_id', assignment.trainer_id)
-      .eq('member_id', assignment.member_id)
+      .eq('trainer_id', assignment.trainerId)
+      .eq('member_id', assignment.memberId)
       .gte('scheduled_at', bufferRangeStart.toISOString())
       .lt('scheduled_at', bufferRangeEnd.toISOString())
 
@@ -136,7 +136,7 @@ export async function POST(
       const nextPendingCount = (pendingInsertsByWeek.get(weekKey) ?? 0) + 1
       pendingInsertsByWeek.set(weekKey, nextPendingCount)
 
-      if ((sessionsByWeek.get(weekKey) ?? 0) + nextPendingCount > 3) {
+      if ((sessionsByWeek.get(weekKey) ?? 0) + nextPendingCount > MAX_PT_SESSIONS_PER_WEEK) {
         pendingWeeks.add(weekKey)
       }
     }
@@ -160,8 +160,8 @@ export async function POST(
     const { error: insertError } = await supabase.from('pt_sessions').insert(
       scheduledAtValuesToInsert.map((scheduledAt) => ({
         assignment_id: assignment.id,
-        trainer_id: assignment.trainer_id,
-        member_id: assignment.member_id,
+        trainer_id: assignment.trainerId,
+        member_id: assignment.memberId,
         scheduled_at: scheduledAt,
         status: 'scheduled',
         is_recurring: true,

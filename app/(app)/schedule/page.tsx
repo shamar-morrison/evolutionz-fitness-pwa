@@ -40,6 +40,7 @@ import {
   getMonthLabel,
   getMonthValueInJamaica,
   getPtSessionStatusBadgeClassName,
+  MAX_PT_SESSIONS_PER_WEEK,
   parseMonthValue,
   SESSION_STATUSES,
   type PtSessionFilterStatus,
@@ -421,11 +422,7 @@ function SchedulePageContent() {
                 options={(activeAssignmentsQuery.data ?? []).map((assignment) => ({
                   value: assignment.id,
                   label: `${assignment.memberName ?? 'Member'} <-> ${assignment.trainerName ?? 'Trainer'}`,
-                  description: formatScheduleSummary(
-                    assignment.scheduledDays,
-                    assignment.sessionTime,
-                    assignment.sessionsPerWeek,
-                  ),
+                  description: formatScheduleSummary(assignment.scheduledSessions, assignment.sessionsPerWeek),
                   keywords: [assignment.memberName ?? '', assignment.trainerName ?? ''],
                 }))}
                 placeholder="Select an assignment"
@@ -473,8 +470,8 @@ function SchedulePageContent() {
         title="Override week limit?"
         description={
           pendingOverride
-            ? `Some weeks would exceed 3 sessions (${pendingOverride.weeks.join(', ')}). Override and generate anyway?`
-            : 'Some weeks would exceed 3 sessions. Override and generate anyway?'
+            ? `Some weeks would exceed ${MAX_PT_SESSIONS_PER_WEEK} sessions (${pendingOverride.weeks.join(', ')}). Override and generate anyway?`
+            : `Some weeks would exceed ${MAX_PT_SESSIONS_PER_WEEK} sessions. Override and generate anyway?`
         }
         confirmLabel="Override"
         cancelLabel="Cancel"

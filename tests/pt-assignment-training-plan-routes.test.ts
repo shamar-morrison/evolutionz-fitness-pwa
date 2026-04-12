@@ -47,6 +47,18 @@ type QueryResult<T> = {
 }
 
 function buildAssignment(overrides: Partial<Record<string, unknown>> = {}) {
+  const scheduledDays = (overrides.scheduledDays as string[] | undefined) ?? ['Monday', 'Wednesday', 'Friday']
+  const sessionTime = (overrides.sessionTime as string | undefined) ?? '07:00'
+  const trainingPlan =
+    (overrides.trainingPlan as Array<{ day: string; trainingTypeName: string; isCustom: boolean }> | undefined) ??
+    [
+      {
+        day: 'Monday',
+        trainingTypeName: 'Legs',
+        isCustom: false,
+      },
+    ]
+
   return {
     id: 'assignment-1',
     trainerId: '11111111-1111-1111-1111-111111111111',
@@ -54,15 +66,19 @@ function buildAssignment(overrides: Partial<Record<string, unknown>> = {}) {
     status: 'active',
     ptFee: 15000,
     sessionsPerWeek: 3,
-    scheduledDays: ['Monday', 'Wednesday', 'Friday'],
-    trainingPlan: [
-      {
-        day: 'Monday',
-        trainingTypeName: 'Legs',
-        isCustom: false,
-      },
-    ],
-    sessionTime: '07:00',
+    scheduledSessions: scheduledDays.map((day) => {
+      const trainingPlanEntry = trainingPlan.find((entry) => entry.day === day)
+
+      return {
+        day,
+        sessionTime,
+        trainingTypeName: trainingPlanEntry?.trainingTypeName ?? null,
+        isCustom: trainingPlanEntry?.isCustom ?? false,
+      }
+    }),
+    scheduledDays,
+    trainingPlan,
+    sessionTime,
     notes: 'Client has a prior knee injury.',
     createdAt: '2026-04-03T00:00:00.000Z',
     updatedAt: '2026-04-03T00:00:00.000Z',
@@ -369,7 +385,11 @@ describe('PT assignment training plan routes', () => {
           memberId: '22222222-2222-2222-2222-222222222222',
           ptFee: 15000,
           sessionsPerWeek: 3,
-          scheduledDays: ['Monday', 'Wednesday', 'Friday'],
+          scheduledSessions: [
+            { day: 'Monday', sessionTime: '07:00' },
+            { day: 'Wednesday', sessionTime: '07:00' },
+            { day: 'Friday', sessionTime: '07:00' },
+          ],
           trainingPlan: [
             {
               day: 'Monday',
@@ -380,7 +400,6 @@ describe('PT assignment training plan routes', () => {
               trainingTypeName: 'Agility',
             },
           ],
-          sessionTime: '07:00',
         }),
       }),
     )
@@ -401,11 +420,19 @@ describe('PT assignment training plan routes', () => {
       {
         assignment_id: 'assignment-1',
         day_of_week: 'Monday',
+        session_time: '07:00:00',
         training_type_name: 'Legs',
       },
       {
         assignment_id: 'assignment-1',
+        day_of_week: 'Wednesday',
+        session_time: '07:00:00',
+        training_type_name: null,
+      },
+      {
+        assignment_id: 'assignment-1',
         day_of_week: 'Friday',
+        session_time: '07:00:00',
         training_type_name: 'Agility',
       },
     ])
@@ -423,14 +450,17 @@ describe('PT assignment training plan routes', () => {
           memberId: '22222222-2222-2222-2222-222222222222',
           ptFee: 15000,
           sessionsPerWeek: 3,
-          scheduledDays: ['Monday', 'Wednesday', 'Friday'],
+          scheduledSessions: [
+            { day: 'Monday', sessionTime: '07:00' },
+            { day: 'Wednesday', sessionTime: '07:00' },
+            { day: 'Friday', sessionTime: '07:00' },
+          ],
           trainingPlan: [
             {
               day: 'Tuesday',
               trainingTypeName: 'Legs',
             },
           ],
-          sessionTime: '07:00',
         }),
       }),
     )
@@ -463,14 +493,17 @@ describe('PT assignment training plan routes', () => {
           memberId: '22222222-2222-2222-2222-222222222222',
           ptFee: 15000,
           sessionsPerWeek: 3,
-          scheduledDays: ['Monday', 'Wednesday', 'Friday'],
+          scheduledSessions: [
+            { day: 'Monday', sessionTime: '07:00' },
+            { day: 'Wednesday', sessionTime: '07:00' },
+            { day: 'Friday', sessionTime: '07:00' },
+          ],
           trainingPlan: [
             {
               day: 'Monday',
               trainingTypeName: 'Legs',
             },
           ],
-          sessionTime: '07:00',
         }),
       }),
     )
@@ -554,12 +587,20 @@ describe('PT assignment training plan routes', () => {
       {
         assignment_id: 'assignment-1',
         day_of_week: 'Monday',
+        session_time: '07:00:00',
         training_type_name: 'Legs',
       },
       {
         assignment_id: 'assignment-1',
         day_of_week: 'Wednesday',
+        session_time: '07:00:00',
         training_type_name: 'Chest',
+      },
+      {
+        assignment_id: 'assignment-1',
+        day_of_week: 'Friday',
+        session_time: '07:00:00',
+        training_type_name: null,
       },
     ])
   })
@@ -567,6 +608,7 @@ describe('PT assignment training plan routes', () => {
   it('PATCH rejects training plan days that are outside the updated schedule', async () => {
     getSupabaseAdminClientMock.mockReturnValue({})
     readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow())
+    readTrainerClientByIdMock.mockResolvedValue(buildAssignment())
 
     const response = await PATCH(
       new Request('http://localhost/api/pt/assignments/assignment-1', {
@@ -575,7 +617,10 @@ describe('PT assignment training plan routes', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          scheduledDays: ['Monday', 'Friday'],
+          scheduledSessions: [
+            { day: 'Monday', sessionTime: '07:00' },
+            { day: 'Friday', sessionTime: '07:00' },
+          ],
           sessionsPerWeek: 2,
           trainingPlan: [
             {
