@@ -17,6 +17,7 @@ describe('permissions', () => {
 
     expect(sortPermissions(permissions)).toEqual(sortPermissions(ROLE_PRESETS.admin))
     expect(permissions.has('door.unlock')).toBe(true)
+    expect(permissions.has('pt.assign')).toBe(true)
   })
 
   it('never requires approval for admins', () => {
@@ -41,6 +42,7 @@ describe('permissions', () => {
     const permissions = resolvePermissions('staff', ['Trainer'])
 
     expect(permissions.has('members.view')).toBe(false)
+    expect(permissions.has('pt.assign')).toBe(false)
     expect(permissions.has('reports.view')).toBe(false)
     expect(permissions.has('dashboard.view')).toBe(false)
   })
@@ -54,8 +56,9 @@ describe('permissions', () => {
     expect(permissions.has('door.unlock')).toBe(true)
   })
 
-  it('requires administrative assistant approval for member creation and payments', () => {
+  it('requires administrative assistant approval for member creation, edits, and payments', () => {
     expect(requiresApproval('members.create', 'staff')).toBe(true)
+    expect(requiresApproval('members.edit', 'staff')).toBe(true)
     expect(requiresApproval('members.recordPayment', 'staff')).toBe(true)
   })
 
@@ -72,13 +75,19 @@ describe('permissions', () => {
     const permissions = resolvePermissions('staff', ['Administrative Assistant'])
 
     expect(permissions.has('staff.manage')).toBe(false)
+    expect(permissions.has('pt.assign')).toBe(false)
     expect(permissions.has('reports.view')).toBe(false)
     expect(permissions.has('members.delete')).toBe(false)
   })
 
+  it('gives assistants the same permissions as administrative assistants', () => {
+    expect(sortPermissions(resolvePermissions('staff', ['Assistant']))).toEqual(
+      sortPermissions(ROLE_PRESETS.administrativeAssistant),
+    )
+  })
+
   it('gives placeholder titles no permissions', () => {
     expect(sortPermissions(resolvePermissions('staff', ['Medical']))).toEqual([])
-    expect(sortPermissions(resolvePermissions('staff', ['Assistant']))).toEqual([])
     expect(sortPermissions(resolvePermissions('staff', ['Physiotherapist/Nutritionist']))).toEqual(
       [],
     )
@@ -95,16 +104,15 @@ describe('permissions', () => {
 
     expect(sortPermissions(permissions)).toEqual(
       sortPermissions([
+        'classes.view',
         'pt.viewOwnSchedule',
         'pt.markSession',
         'pt.requestReschedule',
-        'classes.view',
         'members.view',
         'members.create',
+        'members.edit',
         'members.recordPayment',
         'door.unlock',
-        'classes.register',
-        'classes.markAttendance',
       ]),
     )
   })
@@ -175,7 +183,13 @@ describe('resolvePermissionsForProfile', () => {
         name: 'administrative assistant',
         profile: { titles: ['Administrative Assistant'], role: 'staff' },
         expectedRole: 'staff',
-        allowed: ['members.view', 'members.create', 'members.recordPayment', 'door.unlock'],
+        allowed: [
+          'members.view',
+          'members.create',
+          'members.edit',
+          'members.recordPayment',
+          'door.unlock',
+        ],
         denied: ['staff.manage', 'members.delete', 'reports.view'],
       },
       {
@@ -186,9 +200,9 @@ describe('resolvePermissionsForProfile', () => {
           'pt.viewOwnSchedule',
           'pt.markSession',
           'members.view',
+          'members.edit',
           'members.recordPayment',
           'door.unlock',
-          'classes.register',
         ],
         denied: ['staff.manage', 'reports.view', 'dashboard.view'],
       },

@@ -3,6 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { useAuth } from '@/contexts/auth-context'
 import { AssignCardModal } from '@/components/assign-card-modal'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { formatAccessDate } from '@/lib/member-access-time'
@@ -39,6 +40,7 @@ import { toast } from '@/hooks/use-toast'
 import { useBackLink } from '@/hooks/use-back-link'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useProgressRouter } from '@/hooks/use-progress-router'
+import { isFrontDeskStaff } from '@/lib/staff'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, Trash2, User, BanknoteIcon, X } from 'lucide-react'
 
 export default function MemberDetailPage() {
@@ -46,9 +48,11 @@ export default function MemberDetailPage() {
   const router = useProgressRouter()
   const memberId = params.id as string
   const queryClient = useQueryClient()
+  const { profile } = useAuth()
   const { member, isLoading, error } = useMember(memberId)
   const backLink = useBackLink('/members', '/trainer/clients')
   const { can } = usePermissions()
+  const isFrontDesk = isFrontDeskStaff(profile?.titles)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false)
   const [showAssignCardModal, setShowAssignCardModal] = useState(false)
@@ -296,6 +300,9 @@ export default function MemberDetailPage() {
   const memberHasAssignedCard = hasAssignedCard(member.cardNo)
   const canEditMember = can('members.edit')
   const canViewAllPtSchedules = can('pt.viewAllSchedules')
+  const showDirectMemberEdit = canEditMember && !isFrontDesk
+  const showRecordPaymentAction = can('members.recordPayment') && !isFrontDesk
+  const showPtAttendance = canViewAllPtSchedules || isFrontDesk
   const cardActionState = getMemberCardActionState({
     cardNo: member.cardNo,
     cardStatus: member.cardStatus,
@@ -340,7 +347,7 @@ export default function MemberDetailPage() {
                   className="h-28 w-28 text-2xl"
                 />
               </button>
-              {canEditMember && avatarPhotoUrl ? (
+              {showDirectMemberEdit && avatarPhotoUrl ? (
                 <Button
                   type="button"
                   size="icon"
@@ -355,22 +362,26 @@ export default function MemberDetailPage() {
               ) : null}
             </div>
             <h2 className="mt-4 text-xl font-bold">{memberDisplayName}</h2>
-            <Badge variant="outline" className="mt-2">
-              {member.type}
-            </Badge>
+            {!isFrontDesk ? (
+              <Badge variant="outline" className="mt-2">
+                {member.type}
+              </Badge>
+            ) : null}
 
             <div className="mt-6 w-full space-y-3">
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setShowRecordPaymentModal(true)}
-                disabled={isActionLoading}
-              >
-                <BanknoteIcon className="h-4 w-4" />
-                Record Payment
-              </Button>
+              {showRecordPaymentAction ? (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowRecordPaymentModal(true)}
+                  disabled={isActionLoading}
+                >
+                  <BanknoteIcon className="h-4 w-4" />
+                  Record Payment
+                </Button>
+              ) : null}
 
-              {canEditMember ? (
+              {showDirectMemberEdit ? (
                 <Button
                   variant="outline"
                   className="w-full"
@@ -497,7 +508,7 @@ export default function MemberDetailPage() {
               <TabsTrigger value="checkin" className="px-3 py-1.5">
                 Check-in History
               </TabsTrigger>
-              {canViewAllPtSchedules ? (
+              {showPtAttendance ? (
                 <TabsTrigger value="pt-attendance" className="px-3 py-1.5">
                   PT Attendance
                 </TabsTrigger>
@@ -525,10 +536,12 @@ export default function MemberDetailPage() {
                     <p className="text-sm text-muted-foreground">Placeholder Slot</p>
                     <p className="font-medium">{member.slotPlaceholderName ?? 'Not recorded'}</p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Membership Type</p>
-                    <p className="font-medium">{member.type}</p>
-                  </div>
+                  {!isFrontDesk ? (
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">Membership Type</p>
+                      <p className="font-medium">{member.type}</p>
+                    </div>
+                  ) : null}
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Gender</p>
                     <p className="font-medium">{member.gender ?? 'Not set'}</p>
@@ -580,7 +593,7 @@ export default function MemberDetailPage() {
             <CheckInHistory memberId={memberId} />
           </TabsContent>
 
-          {canViewAllPtSchedules ? (
+          {showPtAttendance ? (
             <TabsContent value="pt-attendance">
               <MemberPtAttendance memberId={memberId} />
             </TabsContent>
@@ -588,7 +601,7 @@ export default function MemberDetailPage() {
         </Tabs>
       </div>
 
-      {canViewAllPtSchedules ? <MemberPtSection memberId={memberId} /> : null}
+      {showPtAttendance ? <MemberPtSection memberId={memberId} /> : null}
 
       <AssignCardModal
         member={member}

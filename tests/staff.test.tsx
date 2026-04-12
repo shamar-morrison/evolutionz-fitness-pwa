@@ -7,6 +7,7 @@ import { OwnerTitleWarning } from '@/components/add-staff-modal'
 import {
   deriveRoleFromTitles,
   filterStaffByTitle,
+  isFrontDeskStaff,
   normalizeStaffSpecialtiesForTitles,
 } from '@/lib/staff'
 import type { Profile } from '@/types'
@@ -118,5 +119,13 @@ describe('staff helpers', () => {
     expect(
       normalizeStaffSpecialtiesForTitles(['Owner'], ['Strength Training', 'HIIT']),
     ).toEqual([])
+  })
+
+  it('does not treat trainer assistants as front desk staff', () => {
+    expect(isFrontDeskStaff(['Trainer', 'Assistant'])).toBe(false)
+  })
+
+  it('treats front desk-only titles as front desk staff', () => {
+    expect(isFrontDeskStaff(['Administrative Assistant'])).toBe(true)
   })
 })

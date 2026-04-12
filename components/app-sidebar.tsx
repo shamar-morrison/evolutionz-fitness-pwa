@@ -27,9 +27,10 @@ import {
   useSessionUpdateRequests,
 } from '@/hooks/use-pt-scheduling'
 import { toast } from '@/hooks/use-toast'
+import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
 import { createClient } from '@/lib/supabase/client'
 import { isRouteAllowed } from '@/lib/route-config'
-import { formatStaffTitles } from '@/lib/staff'
+import { formatStaffTitles, isFrontDeskStaff } from '@/lib/staff'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -167,6 +168,7 @@ export function AppSidebar() {
     enabled: can('reports.view'),
   })
   const staffTitles = profile?.titles ?? []
+  const isFrontDesk = isFrontDeskStaff(staffTitles)
   const staffNavItems = trainerNavItems.filter((item) =>
     isRouteAllowed(item.href, 'staff', staffTitles),
   )
@@ -175,7 +177,14 @@ export function AppSidebar() {
   )
   const navItems = role === 'staff' ? staffNavItems : adminNavItems
   const secondaryNavItems = role === 'staff' ? staffSecondaryNavItems : []
-  const homeHref = role === 'staff' ? '/trainer/schedule' : '/dashboard'
+  const homeHref = getAuthenticatedHomePath(role, staffTitles)
+  const workspaceLabel = role === 'staff' && !isFrontDesk ? 'Trainer' : 'Application'
+  const workspaceSubtitle =
+    role === 'admin'
+      ? 'Admin workspace'
+      : isFrontDesk
+        ? 'Front desk workspace'
+        : 'Trainer workspace'
   const displayName = profile?.name ?? user?.email ?? 'Account'
   const subtitle = profile ? formatStaffTitles(profile.titles) || 'Signed in' : user?.email ?? null
   const userEmail = profile?.email ?? user?.email ?? 'No email available'
@@ -249,7 +258,7 @@ export function AppSidebar() {
                     Evolutionz Fitness
                   </span>
                   <span className="truncate text-xs text-sidebar-foreground/65">
-                    {role === 'staff' ? 'Trainer workspace' : 'Admin workspace'}
+                    {workspaceSubtitle}
                   </span>
                 </div>
               </Link>
@@ -260,7 +269,7 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>{role === 'staff' ? 'Trainer' : 'Application'}</SidebarGroupLabel>
+          <SidebarGroupLabel>{workspaceLabel}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => (

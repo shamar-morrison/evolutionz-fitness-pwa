@@ -9,7 +9,7 @@ import {
 } from '@/lib/pt-scheduling'
 import { readTrainerClientById, readTrainerClients } from '@/lib/pt-scheduling-server'
 import { requireAdminUser, requireAuthenticatedProfile } from '@/lib/server-auth'
-import { hasStaffTitle, readStaffProfile } from '@/lib/staff'
+import { hasStaffTitle, isFrontDeskStaff, readStaffProfile } from '@/lib/staff'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const assignmentFiltersSchema = z.object({
@@ -108,11 +108,35 @@ export async function GET(request: Request) {
     const nextFilters = { ...filters }
 
     if (authResult.profile.role !== 'admin') {
-      if (filters.trainerId && filters.trainerId !== authResult.profile.id) {
-        return createErrorResponse('Forbidden', 403)
+      const titles = authResult.profile.titles
+      const isTrainer = hasStaffTitle(titles, 'Trainer')
+      const isFrontDesk = isFrontDeskStaff(titles)
+      const enforceTrainerScope = () => {
+        if (filters.trainerId && filters.trainerId !== authResult.profile.id) {
+          return createErrorResponse('Forbidden', 403)
+        }
+
+        nextFilters.trainerId = authResult.profile.id
+        return null
       }
 
-      nextFilters.trainerId = authResult.profile.id
+      if (isTrainer) {
+        const trainerScopeResponse = enforceTrainerScope()
+
+        if (trainerScopeResponse) {
+          return trainerScopeResponse
+        }
+      } else if (isFrontDesk) {
+        if (!filters.memberId || filters.trainerId) {
+          return createErrorResponse('Forbidden', 403)
+        }
+      } else {
+        const trainerScopeResponse = enforceTrainerScope()
+
+        if (trainerScopeResponse) {
+          return trainerScopeResponse
+        }
+      }
     }
 
     const supabase = getSupabaseAdminClient() as any

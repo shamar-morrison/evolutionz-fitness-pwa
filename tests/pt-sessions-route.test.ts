@@ -339,6 +339,55 @@ describe('GET /api/pt/sessions', () => {
     )
   })
 
+  it('allows front desk staff to read past PT sessions by memberId', async () => {
+    const { client, operations } = createPtSessionsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'assistant-1',
+        role: 'staff',
+        titles: ['Assistant'],
+      },
+    })
+
+    const response = await GET(
+      new Request(
+        'http://localhost/api/pt/sessions?memberId=22222222-2222-4222-8222-222222222222&past=true',
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ sessions: [] })
+    expect(operations).toContainEqual({
+      type: 'eq',
+      column: 'member_id',
+      value: '22222222-2222-4222-8222-222222222222',
+    })
+    expect(operations).not.toContainEqual({
+      type: 'eq',
+      column: 'trainer_id',
+      value: 'assistant-1',
+    })
+  })
+
+  it('rejects front desk PT session requests that are not scoped to a member', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+
+    const response = await GET(new Request('http://localhost/api/pt/sessions?past=true'))
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+  })
+
   it('forces trainerId to the authenticated staff profile when staff omit the filter', async () => {
     const { client, operations } = createPtSessionsClient()
     getSupabaseAdminClientMock.mockReturnValue(client)

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { BarChart3, Download, FileText } from 'lucide-react'
-import { RedirectOnMount } from '@/components/redirect-on-mount'
+import { AuthenticatedHomeRedirect } from '@/components/authenticated-home-redirect'
 import { RoleGuard } from '@/components/role-guard'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -507,7 +507,7 @@ function ClassPaymentsReportPageContent() {
 
 export default function ClassPaymentsPage() {
   return (
-    <RoleGuard role="admin" fallback={<RedirectOnMount href="/trainer/schedule" />}>
+    <RoleGuard role="admin" fallback={<AuthenticatedHomeRedirect />}>
       <ClassPaymentsReportPageContent />
     </RoleGuard>
   )

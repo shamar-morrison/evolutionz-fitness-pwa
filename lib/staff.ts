@@ -161,6 +161,18 @@ export function hasStaffTitle(
   return normalizeStaffTitles(titles).includes(title)
 }
 
+export function isFrontDeskStaff(
+  titles: ReadonlyArray<string> | string | null | undefined,
+) {
+  const normalizedTitles = normalizeStaffTitles(titles)
+  const hasTrainerTitle = normalizedTitles.includes('Trainer')
+  const hasFrontDeskTitle =
+    normalizedTitles.includes('Administrative Assistant') ||
+    normalizedTitles.includes('Assistant')
+
+  return hasFrontDeskTitle && !hasTrainerTitle
+}
+
 export function formatStaffTitles(
   titles: ReadonlyArray<string> | string | null | undefined,
 ) {

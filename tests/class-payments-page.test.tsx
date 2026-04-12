@@ -48,8 +48,8 @@ vi.mock('@/components/role-guard', () => ({
   }) => (role === 'admin' && currentRoleState.role !== 'admin' ? <>{fallback}</> : <>{children}</>),
 }))
 
-vi.mock('@/components/redirect-on-mount', () => ({
-  RedirectOnMount: ({ href }: { href: string }) => <div>{`redirect:${href}`}</div>,
+vi.mock('@/components/authenticated-home-redirect', () => ({
+  AuthenticatedHomeRedirect: () => <div>redirect:home</div>,
 }))
 
 vi.mock('@/components/ui/checkbox', () => ({
@@ -358,14 +358,14 @@ describe('ClassPaymentsPage', () => {
     expect(container.textContent).toContain('$8,000')
   })
 
-  it('redirects staff users to the trainer schedule', async () => {
+  it('redirects staff users to their authenticated home', async () => {
     currentRoleState.role = 'staff'
 
     await act(async () => {
       root.render(<ClassPaymentsPage />)
     })
 
-    expect(container.textContent).toContain('redirect:/trainer/schedule')
+    expect(container.textContent).toContain('redirect:home')
     expect(container.textContent).not.toContain('Group Class Payments')
   })
 })

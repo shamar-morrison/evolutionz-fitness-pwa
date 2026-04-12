@@ -5,18 +5,31 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  authState,
   deletePtAssignmentMock,
   generatePtAssignmentSessionsMock,
   invalidateQueriesMock,
+  permissionState,
   toastMock,
   useMemberPtAssignmentMock,
   usePtAssignmentsMock,
   useStaffMock,
   savedAssignmentFromDialog,
 } = vi.hoisted(() => ({
+  authState: {
+    profile: {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin' as 'admin' | 'staff',
+      titles: ['Owner'],
+    },
+  },
   deletePtAssignmentMock: vi.fn(),
   generatePtAssignmentSessionsMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
+  permissionState: {
+    canAssignTrainer: true,
+  },
   toastMock: vi.fn(),
   useMemberPtAssignmentMock: vi.fn(),
   usePtAssignmentsMock: vi.fn(),
@@ -54,6 +67,21 @@ vi.mock('@/hooks/use-pt-scheduling', () => ({
 
 vi.mock('@/hooks/use-staff', () => ({
   useStaff: useStaffMock,
+}))
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({
+    user: null,
+    profile: authState.profile,
+    role: authState.profile.role,
+    loading: false,
+  }),
+}))
+
+vi.mock('@/hooks/use-permissions', () => ({
+  usePermissions: () => ({
+    can: (permission: string) => permission === 'pt.assign' && permissionState.canAssignTrainer,
+  }),
 }))
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -213,6 +241,13 @@ describe('MemberPtSection', () => {
   beforeEach(() => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
+    authState.profile = {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin',
+      titles: ['Owner'],
+    }
+    permissionState.canAssignTrainer = true
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -366,5 +401,42 @@ describe('MemberPtSection', () => {
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: queryKeys.staff.detail('trainer-2'),
     })
+  })
+
+  it('renders a read-only PT summary for front desk staff and hides financial and assignment actions', async () => {
+    const assignment = createAssignment({
+      ptFee: 14500,
+      notes: 'Keep sessions in the morning.',
+    })
+
+    authState.profile = {
+      id: 'assistant-1',
+      name: 'Avery Assistant',
+      role: 'staff',
+      titles: ['Assistant'],
+    }
+    permissionState.canAssignTrainer = false
+    useMemberPtAssignmentMock.mockReturnValue({
+      assignment,
+      isLoading: false,
+      error: null,
+    })
+    usePtAssignmentsMock.mockReturnValue({
+      data: [assignment],
+      isLoading: false,
+    })
+
+    await act(async () => {
+      root.render(<MemberPtSection memberId="member-1" />)
+    })
+
+    expect(container.textContent).toContain('Personal Trainer')
+    expect(container.textContent).toContain('Jordan Trainer')
+    expect(container.textContent).toContain('Keep sessions in the morning.')
+    expect(container.textContent).not.toContain('PT Fee')
+    expect(container.textContent).not.toContain('Edit Assignment')
+    expect(container.textContent).not.toContain('Remove Assignment')
+    expect(container.textContent).not.toContain('Assign Trainer')
+    expect(useStaffMock).toHaveBeenCalledWith({ enabled: false })
   })
 })

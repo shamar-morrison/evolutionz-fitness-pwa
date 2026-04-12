@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { type MemberTypesReadClient } from '@/lib/member-types-server'
-import { readStaffProfile } from '@/lib/staff'
-import { requireAuthenticatedUser } from '@/lib/server-auth'
+import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import type { MemberType } from '@/types'
 
@@ -104,19 +103,13 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const authResult = await requireAuthenticatedUser()
+    const authResult = await requireAdminUser()
 
     if ('response' in authResult) {
       return authResult.response
     }
 
     const supabase = getSupabaseAdminClient() as unknown as MemberPaymentsRouteClient
-    const profile = await readStaffProfile(supabase, authResult.user.id)
-
-    if (!profile) {
-      return createErrorResponse('Forbidden', 403)
-    }
-
     const { id } = await params
     const requestBody = await request.json()
     const input = createMemberPaymentSchema.parse(requestBody)
@@ -165,7 +158,7 @@ export async function POST(
         payment_method: input.payment_method,
         amount_paid: input.amount_paid,
         promotion: normalizeOptionalText(input.promotion),
-        recorded_by: profile.id,
+        recorded_by: authResult.profile.id,
         payment_date: input.payment_date,
         notes: normalizeOptionalText(input.notes),
       })

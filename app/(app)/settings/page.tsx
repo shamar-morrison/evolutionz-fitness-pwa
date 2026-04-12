@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { RedirectOnMount } from '@/components/redirect-on-mount'
+import { AuthenticatedHomeRedirect } from '@/components/authenticated-home-redirect'
 import { RoleGuard } from '@/components/role-guard'
 import {
   Card,
@@ -333,7 +333,7 @@ function MembershipExpiryEmailSettingsSection({
 
 export default function SettingsPage() {
   return (
-    <RoleGuard role="admin" fallback={<RedirectOnMount href="/trainer/schedule" />}>
+    <RoleGuard role="admin" fallback={<AuthenticatedHomeRedirect />}>
       <SettingsPageContent />
     </RoleGuard>
   )

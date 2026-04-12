@@ -1,16 +1,23 @@
 import { NextResponse } from 'next/server'
 import { createAndWaitForAccessControlJob } from '@/lib/access-control-jobs'
-import { requireAdminUser } from '@/lib/server-auth'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
+import { requireAuthenticatedProfile } from '@/lib/server-auth'
 
 const DOOR_NUMBER = 1
 const TIMEOUT_ERROR = 'Unlock request timed out after 10 seconds.'
 
 export async function POST() {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
+    }
+
+    const permissions = resolvePermissionsForProfile(authResult.profile)
+
+    if (!permissions.can('door.unlock')) {
+      return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 })
     }
 
     const job = await createAndWaitForAccessControlJob({

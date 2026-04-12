@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createFakeAccessControlClient } from '@/tests/support/access-control-client'
-import { resetServerAuthMocks } from '@/tests/support/server-auth'
+import {
+  mockAuthenticatedProfile,
+  resetServerAuthMocks,
+} from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -14,8 +17,7 @@ vi.mock('@/lib/server-auth', async () => {
   const mod = await import('@/tests/support/server-auth')
 
   return {
-    requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
-    requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -44,6 +46,13 @@ describe('POST /api/access/unlock', () => {
     })
 
     getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'assistant-1',
+        role: 'staff',
+        titles: ['Assistant'],
+      },
+    })
 
     const response = await POST()
 
@@ -58,6 +67,24 @@ describe('POST /api/access/unlock', () => {
       ok: true,
       jobId: 'job-123',
       result: { unlocked: true },
+    })
+  })
+
+  it('returns 403 for authenticated staff without door permissions', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'trainer-1',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await POST()
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
     })
   })
 })
