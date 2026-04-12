@@ -5,11 +5,21 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  authState,
   invalidateQueriesMock,
   reviewMemberPaymentRequestMock,
   toastMock,
   useMemberPaymentRequestsMock,
 } = vi.hoisted(() => ({
+  authState: {
+    profile: {
+      id: 'user-1',
+      name: 'Admin User',
+      role: 'admin' as const,
+      titles: ['Owner'],
+    },
+    loading: false,
+  },
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   reviewMemberPaymentRequestMock: vi.fn().mockResolvedValue(undefined),
   toastMock: vi.fn(),
@@ -20,6 +30,10 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({
     invalidateQueries: invalidateQueriesMock,
   }),
+}))
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => authState,
 }))
 
 vi.mock('@/hooks/use-member-payment-requests', () => ({
@@ -199,6 +213,12 @@ describe('PendingMemberPaymentRequestsPage', () => {
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['members', 'detail', 'member-1'],
     })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1', 'unread-count'],
+    })
   })
 
   it('denies a request with a rejection reason', async () => {
@@ -229,6 +249,12 @@ describe('PendingMemberPaymentRequestsPage', () => {
     expect(reviewMemberPaymentRequestMock).toHaveBeenCalledWith('payment-request-1', {
       action: 'deny',
       rejectionReason: 'Member needs corrected amount.',
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1', 'unread-count'],
     })
   })
 })

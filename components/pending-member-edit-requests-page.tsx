@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ClipboardCheck } from 'lucide-react'
+import { useAuth } from '@/contexts/auth-context'
 import { useMemberEditRequests } from '@/hooks/use-member-edit-requests'
 import { toast } from '@/hooks/use-toast'
 import { reviewMemberEditRequest } from '@/lib/member-edit-requests'
@@ -155,6 +156,7 @@ function buildEditChanges(request: MemberEditRequest): EditChange[] {
 
 export function PendingMemberEditRequestsPage() {
   const queryClient = useQueryClient()
+  const { profile } = useAuth()
   const { requests, isLoading, error } = useMemberEditRequests()
   const [hiddenRequestIds, setHiddenRequestIds] = useState<string[]>([])
   const [denyRequest, setDenyRequest] = useState<MemberEditRequest | null>(null)
@@ -178,14 +180,27 @@ export function PendingMemberEditRequestsPage() {
         action,
         rejectionReason: nextRejectionReason ?? null,
       })
-      await Promise.all([
+      const invalidations = [
         queryClient.invalidateQueries({ queryKey: queryKeys.memberEditRequests.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberEditRequests.pending }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(request.memberId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
-      ])
+      ]
+
+      if (profile?.id) {
+        invalidations.push(
+          queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all(profile.id) }),
+        )
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.notifications.unreadCount(profile.id),
+          }),
+        )
+      }
+
+      await Promise.all(invalidations)
       toast({
         title: action === 'approve' ? 'Edit request approved' : 'Edit request denied',
       })

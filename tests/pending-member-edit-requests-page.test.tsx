@@ -5,11 +5,21 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  authState,
   invalidateQueriesMock,
   reviewMemberEditRequestMock,
   toastMock,
   useMemberEditRequestsMock,
 } = vi.hoisted(() => ({
+  authState: {
+    profile: {
+      id: 'user-1',
+      name: 'Admin User',
+      role: 'admin' as const,
+      titles: ['Owner'],
+    },
+    loading: false,
+  },
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   reviewMemberEditRequestMock: vi.fn().mockResolvedValue(undefined),
   toastMock: vi.fn(),
@@ -20,6 +30,10 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({
     invalidateQueries: invalidateQueriesMock,
   }),
+}))
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => authState,
 }))
 
 vi.mock('@/hooks/use-member-edit-requests', () => ({
@@ -233,6 +247,12 @@ describe('PendingMemberEditRequestsPage', () => {
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['dashboard', 'expiring-members'],
     })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1', 'unread-count'],
+    })
   })
 
   it('denies a request with a rejection reason', async () => {
@@ -263,6 +283,12 @@ describe('PendingMemberEditRequestsPage', () => {
     expect(reviewMemberEditRequestMock).toHaveBeenCalledWith('request-1', {
       action: 'deny',
       rejectionReason: 'Missing supporting details.',
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1', 'unread-count'],
     })
   })
 

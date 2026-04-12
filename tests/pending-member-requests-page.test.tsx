@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  authState,
   invalidateQueriesMock,
   reviewMemberApprovalRequestMock,
   toastMock,
@@ -12,6 +13,15 @@ const {
   useMemberApprovalRequestsMock,
   useMemberTypesMock,
 } = vi.hoisted(() => ({
+  authState: {
+    profile: {
+      id: 'user-1',
+      name: 'Admin User',
+      role: 'admin' as const,
+      titles: ['Owner'],
+    },
+    loading: false,
+  },
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   reviewMemberApprovalRequestMock: vi.fn().mockResolvedValue({
     ok: true,
@@ -26,6 +36,10 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({
     invalidateQueries: invalidateQueriesMock,
   }),
+}))
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => authState,
 }))
 
 vi.mock('@/hooks/use-available-cards', () => ({
@@ -321,8 +335,37 @@ describe('PendingMemberRequestsPage', () => {
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['members', 'all'],
     })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1', 'unread-count'],
+    })
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Member approved',
+    })
+  })
+
+  it('denies the request and invalidates the notification queries', async () => {
+    await act(async () => {
+      root.render(<PendingMemberRequestsPage />)
+    })
+
+    await clickButton(container, 'Review')
+    await clickButton(container, 'Deny')
+
+    expect(reviewMemberApprovalRequestMock).toHaveBeenCalledWith('request-1', {
+      status: 'denied',
+      review_note: null,
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['notifications', 'user-1', 'unread-count'],
+    })
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Member request denied',
     })
   })
 

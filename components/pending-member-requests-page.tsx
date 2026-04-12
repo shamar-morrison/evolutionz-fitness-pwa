@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { useAuth } from '@/contexts/auth-context'
 import { useAvailableCards } from '@/hooks/use-available-cards'
 import { useMemberApprovalRequests } from '@/hooks/use-member-approval-requests'
 import { useMemberTypes } from '@/hooks/use-member-types'
@@ -38,6 +39,7 @@ const EMPTY_CARD_VALUE = '__none__'
 
 export function PendingMemberRequestsPage() {
   const queryClient = useQueryClient()
+  const { profile } = useAuth()
   const [selectedRequest, setSelectedRequest] = useState<MemberApprovalRequest | null>(null)
   const [selectedCardNo, setSelectedCardNo] = useState('')
   const [reviewNote, setReviewNote] = useState('')
@@ -95,7 +97,7 @@ export function PendingMemberRequestsPage() {
   }
 
   const invalidateQueries = async () => {
-    await Promise.all([
+    const invalidations = [
       queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.pending }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
@@ -103,7 +105,20 @@ export function PendingMemberRequestsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.recentMembers }),
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
-    ])
+    ]
+
+    if (profile?.id) {
+      invalidations.push(
+        queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all(profile.id) }),
+      )
+      invalidations.push(
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.notifications.unreadCount(profile.id),
+        }),
+      )
+    }
+
+    await Promise.all(invalidations)
   }
 
   const handleApprove = async () => {

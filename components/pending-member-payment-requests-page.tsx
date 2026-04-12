@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { BanknoteIcon, ClipboardCheck } from 'lucide-react'
+import { useAuth } from '@/contexts/auth-context'
 import { useMemberPaymentRequests } from '@/hooks/use-member-payment-requests'
 import { toast } from '@/hooks/use-toast'
 import { MEMBER_PAYMENT_METHOD_OPTIONS } from '@/lib/member-payments'
@@ -44,6 +45,7 @@ function formatPaymentMethod(value: MemberPaymentRequest['paymentMethod']) {
 
 export function PendingMemberPaymentRequestsPage() {
   const queryClient = useQueryClient()
+  const { profile } = useAuth()
   const { requests, isLoading, error } = useMemberPaymentRequests()
   const [hiddenRequestIds, setHiddenRequestIds] = useState<string[]>([])
   const [denyRequest, setDenyRequest] = useState<MemberPaymentRequest | null>(null)
@@ -67,13 +69,26 @@ export function PendingMemberPaymentRequestsPage() {
         action,
         rejectionReason: nextRejectionReason ?? null,
       })
-      await Promise.all([
+      const invalidations = [
         queryClient.invalidateQueries({ queryKey: queryKeys.memberPaymentRequests.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberPaymentRequests.pending }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberPayments.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(request.memberId) }),
-      ])
+      ]
+
+      if (profile?.id) {
+        invalidations.push(
+          queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all(profile.id) }),
+        )
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.notifications.unreadCount(profile.id),
+          }),
+        )
+      }
+
+      await Promise.all(invalidations)
       toast({
         title: action === 'approve' ? 'Payment request approved' : 'Payment request denied',
       })
