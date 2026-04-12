@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, Pencil, Trash2, UserRoundPlus } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
@@ -237,7 +238,12 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
                   <p className="text-muted-foreground text-sm">Trainer</p>
-                  <p className="font-medium">{assignment.trainerName ?? 'Unknown trainer'}</p>
+                  <Link
+                    href={`/staff/${assignment.trainerId}`}
+                    className="font-medium hover:underline"
+                  >
+                    {assignment.trainerName ?? 'Unknown trainer'}
+                  </Link>
                   <div className="flex flex-wrap gap-2">
                     {(assignment.trainerTitles ?? []).map((title) => (
                       <Badge key={title} variant="outline">
