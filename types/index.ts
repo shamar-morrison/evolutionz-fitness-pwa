@@ -96,6 +96,59 @@ export type MemberApprovalRequest = {
   updatedAt: string
 }
 
+export type MemberEditRequest = {
+  id: string
+  memberId: string
+  memberName: string
+  currentName: string
+  currentGender: MemberGender | null
+  currentPhone: string | null
+  currentEmail: string | null
+  currentMemberTypeId: string | null
+  currentMemberTypeName: string | null
+  currentBeginTime: string | null
+  currentEndTime: string | null
+  proposedName: string | null
+  proposedGender: MemberGender | null
+  proposedPhone: string | null
+  proposedEmail: string | null
+  proposedMemberTypeId: string | null
+  proposedMemberTypeName: string | null
+  proposedStartDate: string | null
+  proposedStartTime: string | null
+  proposedDuration: string | null
+  requestedBy: string
+  requestedByName: string | null
+  reviewedBy: string | null
+  reviewedByName: string | null
+  reviewedAt: string | null
+  rejectionReason: string | null
+  status: MemberApprovalRequestStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export type MemberPaymentRequest = {
+  id: string
+  memberId: string
+  memberName: string
+  amount: number
+  paymentMethod: MemberPaymentMethod
+  paymentDate: string
+  memberTypeId: string | null
+  memberTypeName: string | null
+  notes: string | null
+  requestedBy: string
+  requestedByName: string | null
+  reviewedBy: string | null
+  reviewedByName: string | null
+  reviewedAt: string | null
+  rejectionReason: string | null
+  status: MemberApprovalRequestStatus
+  createdAt: string
+  updatedAt: string
+}
+
 export type Member = {
   id: string
   employeeNo: string

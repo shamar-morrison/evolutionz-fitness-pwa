@@ -6,6 +6,7 @@ import { useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   BarChart3,
+  BanknoteIcon,
   CalendarDays,
   Check,
   ClipboardList,
@@ -15,11 +16,14 @@ import {
   LayoutDashboard,
   LogOut,
   Mail,
+  Pencil,
   Settings,
   Users,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
+import { useMemberEditRequests } from '@/hooks/use-member-edit-requests'
 import { useMemberApprovalRequests } from '@/hooks/use-member-approval-requests'
+import { useMemberPaymentRequests } from '@/hooks/use-member-payment-requests'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import {
@@ -113,6 +117,16 @@ const adminApprovalItems: NavItem[] = [
     icon: ClipboardCheck,
   },
   {
+    href: '/pending-approvals/edit-requests',
+    label: 'Edit Requests',
+    icon: Pencil,
+  },
+  {
+    href: '/pending-approvals/payment-requests',
+    label: 'Payment Requests',
+    icon: BanknoteIcon,
+  },
+  {
     href: '/pending-approvals/reschedule-requests',
     label: 'Reschedule Requests',
     icon: CalendarDays,
@@ -170,6 +184,12 @@ export function AppSidebar() {
     enabled: can('reports.view'),
   })
   const pendingMemberApprovalRequests = useMemberApprovalRequests('pending', {
+    enabled: can('reports.view'),
+  })
+  const pendingMemberEditRequests = useMemberEditRequests({
+    enabled: can('reports.view'),
+  })
+  const pendingMemberPaymentRequests = useMemberPaymentRequests({
     enabled: can('reports.view'),
   })
   const staffTitles = profile?.titles ?? []
@@ -360,6 +380,10 @@ export function AppSidebar() {
                   const count =
                     item.href === '/pending-approvals/member-requests'
                       ? pendingMemberApprovalRequests.requests.length
+                      : item.href === '/pending-approvals/edit-requests'
+                      ? pendingMemberEditRequests.requests.length
+                      : item.href === '/pending-approvals/payment-requests'
+                      ? pendingMemberPaymentRequests.requests.length
                       : item.href === '/pending-approvals/reschedule-requests'
                       ? pendingRescheduleRequests.requests.length
                       : pendingSessionUpdateRequests.requests.length

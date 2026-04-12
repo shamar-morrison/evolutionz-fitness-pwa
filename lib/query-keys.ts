@@ -21,9 +21,17 @@ export const queryKeys = {
     status: (status: 'pending' | 'approved' | 'denied') =>
       ['memberApprovalRequests', status] as const,
   },
+  memberEditRequests: {
+    all: ['memberEditRequests'] as const,
+    pending: ['memberEditRequests', 'pending'] as const,
+  },
   memberPayments: {
     all: ['memberPayments'] as const,
     member: (memberId: string) => ['memberPayments', memberId] as const,
+  },
+  memberPaymentRequests: {
+    all: ['memberPaymentRequests'] as const,
+    pending: ['memberPaymentRequests', 'pending'] as const,
   },
   staff: {
     all: ['staff'] as const,

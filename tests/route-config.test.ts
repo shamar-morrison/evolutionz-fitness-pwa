@@ -94,9 +94,19 @@ describe('route config helpers', () => {
 
   it('inherits access rules from the nearest configured parent route', () => {
     expect(isRouteAllowed('/pending-approvals/session-updates', 'admin', ['Owner'])).toBe(true)
+    expect(isRouteAllowed('/pending-approvals/edit-requests', 'admin', ['Owner'])).toBe(true)
+    expect(isRouteAllowed('/pending-approvals/payment-requests', 'admin', ['Owner'])).toBe(
+      true,
+    )
     expect(isRouteAllowed('/pending-approvals/session-updates', 'staff', ['Trainer'])).toBe(
       false,
     )
+    expect(
+      isRouteAllowed('/pending-approvals/edit-requests', 'staff', ['Administrative Assistant']),
+    ).toBe(false)
+    expect(
+      isRouteAllowed('/pending-approvals/payment-requests', 'staff', ['Administrative Assistant']),
+    ).toBe(false)
     expect(isRouteAllowed('/pending-approvals/member-requests', 'staff', ['Trainer'])).toBe(
       false,
     )

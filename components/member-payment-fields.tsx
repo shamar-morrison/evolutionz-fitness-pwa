@@ -58,6 +58,7 @@ type MemberPaymentFieldsProps = {
   memberTypesError?: string | null
   setAmountDirty: Dispatch<SetStateAction<boolean>>
   setFormData: Dispatch<SetStateAction<MemberPaymentFormState>>
+  showPromotion?: boolean
 }
 
 const EMPTY_MEMBER_TYPE_VALUE = '__none__'
@@ -73,6 +74,7 @@ export function MemberPaymentFields({
   memberTypesError = null,
   setAmountDirty,
   setFormData,
+  showPromotion = true,
 }: MemberPaymentFieldsProps) {
   const previousMemberTypeIdRef = useRef(formData.memberTypeId)
 
@@ -210,23 +212,24 @@ export function MemberPaymentFields({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}-promotion`}>Promotion (optional)</Label>
-          <Input
-            id={`${idPrefix}-promotion`}
-            value={formData.promotion}
-            onChange={(event) =>
-              setFormData((currentFormData) => ({
-                ...currentFormData,
-                promotion: event.target.value,
-              }))
-            }
-            disabled={disabled}
-            placeholder="Optional promotion"
-          />
-        </div>
-
+      <div className={`grid gap-4 ${showPromotion ? 'sm:grid-cols-2' : ''}`}>
+        {showPromotion ? (
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}-promotion`}>Promotion (optional)</Label>
+            <Input
+              id={`${idPrefix}-promotion`}
+              value={formData.promotion}
+              onChange={(event) =>
+                setFormData((currentFormData) => ({
+                  ...currentFormData,
+                  promotion: event.target.value,
+                }))
+              }
+              disabled={disabled}
+              placeholder="Optional promotion"
+            />
+          </div>
+        ) : null}
         <div className="grid gap-2">
           <Label htmlFor={`${idPrefix}-notes`}>Notes</Label>
           <Textarea

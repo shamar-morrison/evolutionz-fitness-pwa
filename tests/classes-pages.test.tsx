@@ -647,8 +647,7 @@ describe('classes pages', () => {
     expect(container.textContent).not.toContain('Generate Sessions')
     expect(container.textContent).not.toContain('Pending Approvals')
     expect(container.textContent).toContain('Sessions')
-    expect(container.textContent).toContain('View Attendance')
-    expect(container.textContent).not.toContain('Mark Attendance')
+    expect(container.textContent).toContain('Mark Attendance')
   })
 
   it('keys schedule-management controls off the owner permission path instead of auth role alone', async () => {
@@ -670,8 +669,7 @@ describe('classes pages', () => {
     expect(container.textContent).not.toContain('Assign or remove trainer-title staff for this class.')
     expect(container.textContent).not.toContain('Set Period Start')
     expect(container.textContent).not.toContain('Pending Approvals')
-    expect(container.textContent).toContain('View Attendance')
-    expect(container.textContent).not.toContain('Mark Attendance')
+    expect(container.textContent).toContain('Mark Attendance')
   })
 
   it('shows an empty trainer state when no trainers are assigned', async () => {

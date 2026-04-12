@@ -1822,7 +1822,7 @@ describe('classes routes', () => {
     expect(response.status).toBe(403)
   })
 
-  it('forbids front desk staff from marking attendance', async () => {
+  it('returns not found when front desk staff tries to mark attendance directly', async () => {
     mockAuthenticatedUser()
     getSupabaseAdminClientMock.mockReturnValue({})
     readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'staff', titles: ['Assistant'] }))
@@ -1840,7 +1840,7 @@ describe('classes routes', () => {
       },
     )
 
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(404)
   })
 
   it('updates attendance rows for admins', async () => {
@@ -1884,7 +1884,7 @@ describe('classes routes', () => {
     expect(body.attendance.id).toBe('attendance-1')
   })
 
-  it('forbids front desk staff from updating attendance rows', async () => {
+  it('returns not found when front desk staff tries to update attendance rows directly', async () => {
     mockAuthenticatedUser({
       id: 'assistant-1',
       email: 'assistant@evolutionzfitness.com',
@@ -1914,7 +1914,7 @@ describe('classes routes', () => {
       },
     )
 
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(404)
   })
 
   it('logs attendance backfill failures without failing the registration', async () => {

@@ -51,7 +51,7 @@ export default function MemberDetailPage() {
   const { profile } = useAuth()
   const { member, isLoading, error } = useMember(memberId)
   const backLink = useBackLink('/members', '/trainer/clients')
-  const { can } = usePermissions()
+  const { can, requiresApproval } = usePermissions()
   const isFrontDesk = isFrontDeskStaff(profile?.titles)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false)
@@ -300,8 +300,9 @@ export default function MemberDetailPage() {
   const memberHasAssignedCard = hasAssignedCard(member.cardNo)
   const canEditMember = can('members.edit')
   const canViewAllPtSchedules = can('pt.viewAllSchedules')
-  const showDirectMemberEdit = canEditMember && !isFrontDesk
-  const showRecordPaymentAction = can('members.recordPayment') && !isFrontDesk
+  const showEditMemberAction = canEditMember
+  const showDirectMemberPhotoActions = canEditMember && !isFrontDesk
+  const showRecordPaymentAction = can('members.recordPayment')
   const showPtAttendance = canViewAllPtSchedules || isFrontDesk
   const cardActionState = getMemberCardActionState({
     cardNo: member.cardNo,
@@ -347,7 +348,7 @@ export default function MemberDetailPage() {
                   className="h-28 w-28 text-2xl"
                 />
               </button>
-              {showDirectMemberEdit && avatarPhotoUrl ? (
+              {showDirectMemberPhotoActions && avatarPhotoUrl ? (
                 <Button
                   type="button"
                   size="icon"
@@ -381,7 +382,7 @@ export default function MemberDetailPage() {
                 </Button>
               ) : null}
 
-              {showDirectMemberEdit ? (
+              {showEditMemberAction ? (
                 <Button
                   variant="outline"
                   className="w-full"
@@ -741,12 +742,14 @@ export default function MemberDetailPage() {
         member={member}
         open={showEditModal}
         onOpenChange={setShowEditModal}
+        requiresApproval={requiresApproval('members.edit')}
       />
 
       <RecordMemberPaymentDialog
         member={member}
         open={showRecordPaymentModal}
         onOpenChange={setShowRecordPaymentModal}
+        requiresApproval={requiresApproval('members.recordPayment')}
       />
     </div>
   )

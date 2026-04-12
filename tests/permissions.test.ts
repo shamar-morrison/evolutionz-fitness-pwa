@@ -83,7 +83,7 @@ describe('permissions', () => {
     expect(permissions.has('staff.manage')).toBe(false)
     expect(permissions.has('pt.assign')).toBe(false)
     expect(permissions.has('classes.manage')).toBe(false)
-    expect(permissions.has('classes.markAttendance')).toBe(false)
+    expect(permissions.has('classes.markAttendance')).toBe(true)
     expect(permissions.has('reports.view')).toBe(false)
     expect(permissions.has('members.delete')).toBe(false)
   })
@@ -114,6 +114,7 @@ describe('permissions', () => {
       sortPermissions([
         'classes.view',
         'classes.register',
+        'classes.markAttendance',
         'pt.viewOwnSchedule',
         'pt.markSession',
         'pt.requestReschedule',

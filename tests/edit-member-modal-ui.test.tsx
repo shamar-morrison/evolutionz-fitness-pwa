@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  createMemberEditRequestMock,
   invalidateQueriesMock,
   onOpenChangeMock,
   toastMock,
@@ -12,6 +13,9 @@ const {
   uploadMemberPhotoMock,
   useMemberTypesMock,
 } = vi.hoisted(() => ({
+  createMemberEditRequestMock: vi.fn().mockResolvedValue({
+    id: 'request-1',
+  }),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   onOpenChangeMock: vi.fn(),
   toastMock: vi.fn(),
@@ -41,6 +45,17 @@ vi.mock('@/lib/member-actions', async () => {
     ...actual,
     updateMember: updateMemberMock,
     uploadMemberPhoto: uploadMemberPhotoMock,
+  }
+})
+
+vi.mock('@/lib/member-edit-requests', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/member-edit-requests')>(
+    '@/lib/member-edit-requests',
+  )
+
+  return {
+    ...actual,
+    createMemberEditRequest: createMemberEditRequestMock,
   }
 })
 
@@ -326,6 +341,104 @@ describe('EditMemberModal UI', () => {
       remark: null,
       beginTime: '2026-04-02T00:00:00',
       endTime: '2026-05-01T23:59:59',
+    })
+  })
+
+  it('submits only changed supported fields when approval is required', async () => {
+    await act(async () => {
+      root.render(
+        <EditMemberModal
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+          requiresApproval
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('Submit Request')
+    expect(container.textContent).toContain('Start Date')
+    expect(container.textContent).toContain('Start Time')
+    expect(container.textContent).toContain('Duration')
+    expect(container.textContent).not.toContain('Remark')
+
+    const nameInput = container.querySelector('#edit-name')
+
+    if (!(nameInput instanceof HTMLInputElement)) {
+      throw new Error('Name input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(nameInput, 'Jane Updated')
+    })
+
+    const submitButton = container.querySelector('button[type="submit"]')
+
+    if (!(submitButton instanceof HTMLButtonElement)) {
+      throw new Error('Submit button not found.')
+    }
+
+    await act(async () => {
+      submitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await flushAsyncWork()
+
+    expect(createMemberEditRequestMock).toHaveBeenCalledWith({
+      member_id: 'member-1',
+      proposed_name: 'Jane Updated',
+    })
+    expect(updateMemberMock).not.toHaveBeenCalled()
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['memberEditRequests'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['memberEditRequests', 'pending'],
+    })
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Request submitted',
+      description: 'Edit request submitted for admin approval',
+    })
+  })
+
+  it('submits only changed access window fields when approval is required', async () => {
+    await act(async () => {
+      root.render(
+        <EditMemberModal
+          member={createMember({
+            beginTime: '2026-04-02T00:00:00.000Z',
+            endTime: '2026-04-29T23:59:59.000Z',
+          })}
+          open
+          onOpenChange={onOpenChangeMock}
+          requiresApproval
+        />,
+      )
+    })
+
+    const startTimeInput = container.querySelector('#edit-start-time')
+
+    if (!(startTimeInput instanceof HTMLInputElement)) {
+      throw new Error('Start time input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(startTimeInput, '08:30')
+    })
+
+    const submitButton = container.querySelector('button[type="submit"]')
+
+    if (!(submitButton instanceof HTMLButtonElement)) {
+      throw new Error('Submit button not found.')
+    }
+
+    await act(async () => {
+      submitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await flushAsyncWork()
+
+    expect(createMemberEditRequestMock).toHaveBeenCalledWith({
+      member_id: 'member-1',
+      proposed_start_time: '08:30:00',
     })
   })
 

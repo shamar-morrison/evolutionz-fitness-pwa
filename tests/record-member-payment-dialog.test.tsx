@@ -5,12 +5,16 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  createMemberPaymentRequestMock,
   invalidateQueriesMock,
   onOpenChangeMock,
   recordMemberPaymentMock,
   toastMock,
   useMemberTypesMock,
 } = vi.hoisted(() => ({
+  createMemberPaymentRequestMock: vi.fn().mockResolvedValue({
+    id: 'payment-request-1',
+  }),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   onOpenChangeMock: vi.fn(),
   recordMemberPaymentMock: vi.fn().mockResolvedValue({
@@ -42,6 +46,17 @@ vi.mock('@/lib/member-payments', async () => {
   return {
     ...actual,
     recordMemberPayment: recordMemberPaymentMock,
+  }
+})
+
+vi.mock('@/lib/member-payment-requests', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/member-payment-requests')>(
+    '@/lib/member-payment-requests',
+  )
+
+  return {
+    ...actual,
+    createMemberPaymentRequest: createMemberPaymentRequestMock,
   }
 })
 
@@ -320,6 +335,44 @@ describe('RecordMemberPaymentDialog', () => {
     await clickButton(container, 'Civil Servant')
 
     expect(amountInput.value).toBe('11000')
+  })
+
+  it('submits a payment request instead of recording directly when approval is required', async () => {
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+          requiresApproval
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('Submit Request')
+    expect(container.textContent).not.toContain('Promotion (optional)')
+
+    await clickButton(container, 'Cash')
+    await clickButton(container, 'Submit Request')
+
+    expect(createMemberPaymentRequestMock).toHaveBeenCalledWith({
+      member_id: 'member-1',
+      amount: 12000,
+      payment_method: 'cash',
+      payment_date: '2026-04-09',
+      member_type_id: 'type-1',
+    })
+    expect(recordMemberPaymentMock).not.toHaveBeenCalled()
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['memberPaymentRequests'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['memberPaymentRequests', 'pending'],
+    })
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Request submitted',
+      description: 'Payment request submitted for admin approval',
+    })
   })
 
   it('auto-fills the amount after member types finish loading when the dialog opens first', async () => {
