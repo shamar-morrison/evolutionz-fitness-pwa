@@ -24,7 +24,7 @@ interface AvatarUploadProps {
 }
 
 export function Pattern({
-  maxSize = 2 * 1024 * 1024, // 2MB
+  maxSize = 6 * 1024 * 1024, // 6MB
   className,
   onFileChange,
   defaultAvatar,
