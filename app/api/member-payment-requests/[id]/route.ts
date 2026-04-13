@@ -1,19 +1,12 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 import {
   MEMBER_PAYMENT_REQUEST_SELECT,
   type MemberPaymentRequestRecord,
 } from '@/lib/member-payment-request-records'
 import { archiveResolvedRequestNotifications } from '@/lib/pt-notifications-server'
-import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
-import { type MemberTypesReadClient } from '@/lib/member-types-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import type {
-  MemberPaymentMethod,
-  MemberType,
-} from '@/types'
 
 const reviewMemberPaymentRequestSchema = z
   .object({
@@ -41,7 +34,7 @@ type MemberPaymentRequestGuardedUpdateQuery = {
   }
 }
 
-type MemberPaymentRequestReviewClient = MemberTypesReadClient & {
+type MemberPaymentRequestReviewClient = {
   from(table: 'member_payment_requests'): {
     select(columns: string): {
       eq(column: 'id', value: string): {
@@ -56,52 +49,31 @@ type MemberPaymentRequestReviewClient = MemberTypesReadClient & {
     }): MemberPaymentRequestGuardedUpdateQuery
   }
   from(table: 'members'): {
-    select(columns: 'id, type, member_type_id, begin_time, end_time'): {
+    select(columns: 'id, email, begin_time, end_time'): {
       eq(column: 'id', value: string): {
         maybeSingle(): QueryResult<{
           id: string
-          type: MemberType
-          member_type_id: string | null
+          email: string | null
           begin_time: string | null
           end_time: string | null
         }>
       }
     }
-    update(values: {
-      member_type_id: string | null
-      type: MemberType
-    }): {
-      eq(column: 'id', value: string): {
-        select(columns: 'id'): {
-          maybeSingle(): QueryResult<{
-            id: string
-          }>
-        }
-      }
-    }
-  }
-  from(table: 'member_payments'): {
-    insert(values: {
-      member_id: string
-      member_type_id: string | null
-      payment_type: 'membership' | 'card_fee'
-      payment_method: MemberPaymentMethod
-      amount_paid: number
-      promotion: null
-      recorded_by: string
-      payment_date: string
-      notes: string | null
-      membership_begin_time: string | null
-      membership_end_time: string | null
-    }): {
-      select(columns: '*'): {
-        maybeSingle(): QueryResult<{
-          id: string
-        }>
-      }
-    }
   }
   from(table: string): unknown
+  rpc(
+    fn: 'approve_member_payment_request',
+    args: {
+      p_request_id: string
+      p_reviewer_id: string
+      p_review_timestamp: string
+      p_membership_begin_time: string | null
+      p_membership_end_time: string | null
+    },
+  ): PromiseLike<{
+    data: string | null
+    error: QueryError | null
+  }>
 }
 
 function createErrorResponse(error: string, status: number) {
@@ -117,6 +89,21 @@ function createErrorResponse(error: string, status: number) {
 function normalizeOptionalText(value: string | null | undefined) {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || null
+}
+
+function getApprovalRpcErrorStatus(message: string) {
+  if (message === 'Member payment request not found.' || message === 'Member not found.') {
+    return 404
+  }
+
+  if (
+    message === 'This request has already been reviewed.' ||
+    message === 'Membership type is required to approve this payment request.'
+  ) {
+    return 400
+  }
+
+  return null
 }
 
 export async function PATCH(
@@ -195,54 +182,35 @@ export async function PATCH(
       return NextResponse.json({ ok: true })
     }
 
-    const { data: approvedRequests, error: requestUpdateError } = await supabase
+    const { data: existingRequest, error: existingRequestError } = await supabase
       .from('member_payment_requests')
-      .update({
-        status: 'approved',
-        reviewed_by: authResult.profile.id,
-        reviewed_at: reviewTimestamp,
-      })
-      .eq('status', 'pending')
-      .eq('id', id)
       .select(MEMBER_PAYMENT_REQUEST_SELECT)
+      .eq('id', id)
+      .maybeSingle()
 
-    if (requestUpdateError) {
+    if (existingRequestError) {
       throw new Error(
-        `Failed to approve member payment request ${id}: ${requestUpdateError.message}`,
+        `Failed to read member payment request ${id}: ${existingRequestError.message}`,
       )
     }
 
-    const approvedRequest = approvedRequests?.[0] ?? null
+    if (!existingRequest) {
+      return createErrorResponse('Member payment request not found.', 404)
+    }
 
-    if (!approvedRequest) {
-      const { data: existingRequest, error: existingRequestError } = await supabase
-        .from('member_payment_requests')
-        .select(MEMBER_PAYMENT_REQUEST_SELECT)
-        .eq('id', id)
-        .maybeSingle()
-
-      if (existingRequestError) {
-        throw new Error(
-          `Failed to read member payment request ${id}: ${existingRequestError.message}`,
-        )
-      }
-
-      if (!existingRequest) {
-        return createErrorResponse('Member payment request not found.', 404)
-      }
-
+    if (existingRequest.status !== 'pending') {
       return createErrorResponse('This request has already been reviewed.', 400)
     }
 
     const { data: existingMember, error: existingMemberError } = await supabase
       .from('members')
-      .select('id, type, member_type_id, begin_time, end_time')
-      .eq('id', approvedRequest.member_id)
+      .select('id, email, begin_time, end_time')
+      .eq('id', existingRequest.member_id)
       .maybeSingle()
 
     if (existingMemberError) {
       throw new Error(
-        `Failed to read member ${approvedRequest.member_id}: ${existingMemberError.message}`,
+        `Failed to read member ${existingRequest.member_id}: ${existingMemberError.message}`,
       )
     }
 
@@ -250,81 +218,45 @@ export async function PATCH(
       return createErrorResponse('Member not found.', 404)
     }
 
-    let finalMemberTypeId = approvedRequest.member_type_id ?? existingMember.member_type_id
-
-    if (approvedRequest.payment_type === 'membership' && !finalMemberTypeId) {
+    if (!normalizeOptionalText(existingMember.email)) {
       return createErrorResponse(
-        'Membership type is required to approve this payment request.',
+        'Member email is required to approve this payment request.',
         400,
       )
     }
 
-    if (
-      approvedRequest.payment_type === 'membership' &&
-      approvedRequest.member_type_id &&
-      approvedRequest.member_type_id !== existingMember.member_type_id
-    ) {
-      const updateValues = await buildMemberTypeUpdateValues(
-        supabase,
-        approvedRequest.member_type_id,
-        existingMember.type,
-      )
-      finalMemberTypeId = updateValues.member_type_id ?? approvedRequest.member_type_id
-      const nextMemberType = (updateValues.type ?? existingMember.type) as MemberType
-      const { error: updateError } = await supabase
-        .from('members')
-        .update({
-          member_type_id: finalMemberTypeId,
-          type: nextMemberType,
-        })
-        .eq('id', approvedRequest.member_id)
-        .select('id')
-        .maybeSingle()
+    const { data: paymentId, error: approvalError } = await supabase.rpc(
+      'approve_member_payment_request',
+      {
+        p_request_id: id,
+        p_reviewer_id: authResult.profile.id,
+        p_review_timestamp: reviewTimestamp,
+        p_membership_begin_time: existingMember.begin_time,
+        p_membership_end_time: existingMember.end_time,
+      },
+    )
 
-      if (updateError) {
-        throw new Error(
-          `Failed to update member ${approvedRequest.member_id}: ${updateError.message}`,
-        )
+    if (approvalError) {
+      const status = getApprovalRpcErrorStatus(approvalError.message)
+
+      if (status !== null) {
+        return createErrorResponse(approvalError.message, status)
       }
-    }
 
-    const { data: insertedPayment, error: paymentInsertError } = await supabase
-      .from('member_payments')
-      .insert({
-        member_id: approvedRequest.member_id,
-        member_type_id:
-          approvedRequest.payment_type === 'membership' ? finalMemberTypeId : null,
-        payment_type: approvedRequest.payment_type,
-        payment_method: approvedRequest.payment_method,
-        amount_paid:
-          approvedRequest.payment_type === 'membership'
-            ? approvedRequest.amount
-            : CARD_FEE_AMOUNT_JMD,
-        promotion: null,
-        recorded_by: approvedRequest.requested_by,
-        payment_date: approvedRequest.payment_date,
-        notes: normalizeOptionalText(approvedRequest.notes),
-        membership_begin_time: existingMember.begin_time,
-        membership_end_time: existingMember.end_time,
-      })
-      .select('*')
-      .maybeSingle()
-
-    if (paymentInsertError) {
       throw new Error(
-        `Failed to record approved member payment request ${id}: ${paymentInsertError.message}`,
+        `Failed to approve member payment request ${id}: ${approvalError.message}`,
       )
     }
 
-    if (!insertedPayment) {
+    if (!paymentId) {
       throw new Error(
-        `Failed to record approved member payment request ${id}: missing inserted row.`,
+        `Failed to approve member payment request ${id}: missing payment id.`,
       )
     }
 
     try {
       await archiveResolvedRequestNotifications(supabase, {
-        requestId: approvedRequest.id,
+        requestId: id,
         type: 'member_payment_request',
         archivedAt: reviewTimestamp,
       })
@@ -337,7 +269,7 @@ export async function PATCH(
 
     return NextResponse.json({
       ok: true,
-      paymentId: insertedPayment.id,
+      paymentId,
     })
   } catch (error) {
     if (error instanceof SyntaxError) {

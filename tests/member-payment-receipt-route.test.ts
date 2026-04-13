@@ -213,6 +213,8 @@ describe('member payment receipt route', () => {
       disabledReason: null,
       receiptSentAt: null,
     })
+    expect(getSupabaseAdminClientMock).toHaveBeenCalledTimes(1)
+    expect(createSupabaseAdminEmailDeliveryStoreMock).toHaveBeenCalledWith(client)
   })
 
   it('sends a receipt, records the delivery, and updates receipt_sent_at', async () => {
@@ -265,6 +267,8 @@ describe('member payment receipt route', () => {
       sentAt: body.receiptSentAt,
     })
     expect(receiptSentAtUpdates).toEqual([body.receiptSentAt])
+    expect(getSupabaseAdminClientMock).toHaveBeenCalledTimes(1)
+    expect(createSupabaseAdminEmailDeliveryStoreMock).toHaveBeenCalledWith(client)
   })
 
   it('returns 400 when the member has no email on file', async () => {
@@ -342,6 +346,8 @@ describe('member payment receipt route', () => {
       error: 'Daily email limit reached for today.',
     })
     expect(sendAdminResendEmailToRecipientMock).not.toHaveBeenCalled()
+    expect(getSupabaseAdminClientMock).toHaveBeenCalledTimes(1)
+    expect(createSupabaseAdminEmailDeliveryStoreMock).toHaveBeenCalledWith(client)
   })
 
   it('returns 502 and releases the reservation when Resend rejects the send', async () => {

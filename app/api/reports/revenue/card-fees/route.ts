@@ -6,7 +6,10 @@ import {
   createValidationErrorResponse,
   revenueReportFiltersSchema,
 } from '@/app/api/reports/revenue/route-utils'
-import { readCardFeeRevenueReport } from '@/lib/revenue-reports-server'
+import {
+  readCardFeeRevenueReport,
+  type RevenueReportsAdminClient,
+} from '@/lib/revenue-reports-server'
 import { isDateValue } from '@/lib/pt-scheduling'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -37,7 +40,7 @@ export async function GET(request: Request) {
       return createErrorResponse('From date must be on or before to date.', 400)
     }
 
-    const supabase = getSupabaseAdminClient() as any
+    const supabase: RevenueReportsAdminClient = getSupabaseAdminClient()
     const report = await readCardFeeRevenueReport(supabase, filters)
 
     return NextResponse.json(report)

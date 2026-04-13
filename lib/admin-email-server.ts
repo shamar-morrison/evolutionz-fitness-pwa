@@ -57,6 +57,13 @@ export class AdminEmailSendError extends Error {
   }
 }
 
+export class AdminEmailQuotaError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AdminEmailQuotaError'
+  }
+}
+
 function normalizeRecipientEmail(value: string) {
   return value.trim().toLowerCase()
 }
@@ -252,7 +259,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
     return (data as AdminEmailDeliveryLookupRow | null) ?? null
   }
 
-  async function readReceiptDelivery(input: { paymentId: string }) {
+  async function readReceiptDeliveryRow(input: { paymentId: string }) {
     const { data, error } = await supabase
       .from(ADMIN_EMAIL_DELIVERIES_TABLE)
       .select('id,status,created_at,provider_message_id,sent_at')
@@ -520,7 +527,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
       }
     },
     async readReceiptDelivery(input: { paymentId: string }) {
-      const delivery = await readReceiptDelivery(input)
+      const delivery = await readReceiptDeliveryRow(input)
 
       if (!delivery) {
         return null
@@ -550,7 +557,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         throw new Error(`Failed to reserve receipt email delivery: ${error.message}`)
       }
 
-      const existingDelivery = await readReceiptDelivery({
+      const existingDelivery = await readReceiptDeliveryRow({
         paymentId: input.paymentId,
       })
 
@@ -567,7 +574,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
           )
         }
 
-        const retryExistingDelivery = await readReceiptDelivery({
+        const retryExistingDelivery = await readReceiptDeliveryRow({
           paymentId: input.paymentId,
         })
 
@@ -613,7 +620,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         )
       }
 
-      const retryExistingDelivery = await readReceiptDelivery({
+      const retryExistingDelivery = await readReceiptDeliveryRow({
         paymentId: input.paymentId,
       })
 
@@ -649,7 +656,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
       }
 
       if (!data) {
-        const existingDelivery = await readReceiptDelivery({
+        const existingDelivery = await readReceiptDeliveryRow({
           paymentId: input.paymentId,
         })
 

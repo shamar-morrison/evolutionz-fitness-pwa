@@ -4,6 +4,7 @@ import {
   buildMemberPaymentReceiptEmailBody,
 } from '@/lib/member-payment-receipts'
 import {
+  AdminEmailQuotaError,
   createSupabaseAdminEmailDeliveryStore,
   isDefinitiveAdminEmailSendError,
   sendAdminResendEmailToRecipient,
@@ -215,7 +216,7 @@ export async function GET(
       return createErrorResponse('Member payment not found.', 404)
     }
 
-    const deliveryStore = createSupabaseAdminEmailDeliveryStore(getSupabaseAdminClient())
+    const deliveryStore = createSupabaseAdminEmailDeliveryStore(supabase)
     const existingDelivery = await deliveryStore.readReceiptDelivery({
       paymentId,
     })
@@ -263,7 +264,7 @@ export async function POST(
       return createErrorResponse('Member payment not found.', 404)
     }
 
-    const deliveryStore = createSupabaseAdminEmailDeliveryStore(getSupabaseAdminClient())
+    const deliveryStore = createSupabaseAdminEmailDeliveryStore(supabase)
     const existingDelivery = await deliveryStore.readReceiptDelivery({
       paymentId,
     })
@@ -304,7 +305,7 @@ export async function POST(
       })
 
       if (availableQuotaCount < 1) {
-        return createErrorResponse('Daily email limit reached for today.', 429)
+        throw new AdminEmailQuotaError('Daily email limit reached for today.')
       }
     }
 
@@ -375,7 +376,7 @@ export async function POST(
     })
   } catch (error) {
     const status =
-      error instanceof Error && error.message === 'Daily email limit reached for today.'
+      error instanceof AdminEmailQuotaError
         ? 429
         : isDefinitiveAdminEmailSendError(error)
           ? 502

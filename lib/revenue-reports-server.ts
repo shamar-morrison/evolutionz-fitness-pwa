@@ -10,7 +10,7 @@ import {
 import { getDateRangeBoundsInJamaica } from '@/lib/pt-scheduling'
 import type { MemberPaymentMethod } from '@/types'
 
-type RevenueReportsAdminClient = {
+export type RevenueReportsAdminClient = {
   from(table: string): any
 }
 

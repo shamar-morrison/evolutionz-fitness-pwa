@@ -177,6 +177,19 @@ export function buildMemberPaymentReceipt(input: {
 }
 
 export function buildMemberPaymentReceiptEmailBody(receipt: MemberPaymentReceipt) {
+  const membershipDatesMarkup =
+    receipt.paymentType === 'membership'
+      ? `
+          <tr>
+            <td style="padding:8px 0;font-weight:600;vertical-align:top;">Membership Start</td>
+            <td style="padding:8px 0;">${escapeHtml(formatTimestampInJamaica(receipt.membershipBeginTime))}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;font-weight:600;vertical-align:top;">Membership End</td>
+            <td style="padding:8px 0;">${escapeHtml(formatTimestampInJamaica(receipt.membershipEndTime))}</td>
+          </tr>
+        `
+      : ''
   const notesMarkup = receipt.notes
     ? `
       <tr>
@@ -208,14 +221,7 @@ export function buildMemberPaymentReceiptEmailBody(receipt: MemberPaymentReceipt
             <td style="padding:8px 0;font-weight:600;vertical-align:top;">Payment Date</td>
             <td style="padding:8px 0;">${escapeHtml(formatDateValueInJamaica(receipt.paymentDate))}</td>
           </tr>
-          <tr>
-            <td style="padding:8px 0;font-weight:600;vertical-align:top;">Membership Start</td>
-            <td style="padding:8px 0;">${escapeHtml(formatTimestampInJamaica(receipt.membershipBeginTime))}</td>
-          </tr>
-          <tr>
-            <td style="padding:8px 0;font-weight:600;vertical-align:top;">Membership End</td>
-            <td style="padding:8px 0;">${escapeHtml(formatTimestampInJamaica(receipt.membershipEndTime))}</td>
-          </tr>
+          ${membershipDatesMarkup}
           <tr>
             <td style="padding:8px 0;font-weight:600;vertical-align:top;">Payment Type</td>
             <td style="padding:8px 0;">${escapeHtml(receipt.paymentLabel)}</td>
