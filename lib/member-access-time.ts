@@ -136,6 +136,34 @@ export function getJamaicaExpiringWindow(now: Date) {
   }
 }
 
+export function isWithinTimeWindow(
+  value: string | null | undefined,
+  window: { startInclusive: string; endExclusive: string },
+) {
+  const normalizedValue = normalizeText(value)
+
+  if (!normalizedValue) {
+    return false
+  }
+
+  const timestampMs = Date.parse(normalizedValue)
+  const startMs = Date.parse(window.startInclusive)
+  const endMs = Date.parse(window.endExclusive)
+
+  if (Number.isNaN(timestampMs) || Number.isNaN(startMs) || Number.isNaN(endMs)) {
+    return false
+  }
+
+  return timestampMs >= startMs && timestampMs < endMs
+}
+
+export function isWithinJamaicaExpiringWindow(
+  value: string | null | undefined,
+  now: Date,
+) {
+  return isWithinTimeWindow(value, getJamaicaExpiringWindow(now))
+}
+
 export function getJamaicaDayWindow(now: Date, daysFromToday = 0) {
   const todayDateValue = getJamaicaDateInputValue(now)
   const todayDate = parseDateInputValue(todayDateValue)

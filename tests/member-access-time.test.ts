@@ -7,6 +7,7 @@ import {
   getAccessTimeInputValue,
   getJamaicaDayWindow,
   getJamaicaExpiringWindow,
+  isWithinJamaicaExpiringWindow,
 } from '@/lib/member-access-time'
 
 describe('member access time helpers', () => {
@@ -44,6 +45,16 @@ describe('member access time helpers', () => {
       startInclusive: '2026-04-02T00:00:00-05:00',
       endExclusive: '2026-04-10T00:00:00-05:00',
     })
+  })
+
+  it('matches timestamps against the Jamaica expiring-members window boundaries', () => {
+    const now = new Date('2026-04-02T10:15:30.000Z')
+
+    expect(isWithinJamaicaExpiringWindow('2026-04-02T05:00:00.000Z', now)).toBe(true)
+    expect(isWithinJamaicaExpiringWindow('2026-04-10T04:59:59.000Z', now)).toBe(true)
+    expect(isWithinJamaicaExpiringWindow('2026-04-10T05:00:00.000Z', now)).toBe(false)
+    expect(isWithinJamaicaExpiringWindow('not-a-date', now)).toBe(false)
+    expect(isWithinJamaicaExpiringWindow(null, now)).toBe(false)
   })
 
   it('builds a single Jamaica-local day window for a specific reminder offset', () => {

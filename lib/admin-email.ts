@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { getJamaicaExpiringWindow } from '@/lib/member-access-time'
+import { isWithinJamaicaExpiringWindow } from '@/lib/member-access-time'
 import type { Member } from '@/types'
 
 export const ADMIN_EMAIL_ATTACHMENT_MAX_BYTES = 15 * 1024 * 1024
@@ -108,17 +108,7 @@ function isMemberExpiringSoon(member: Pick<Member, 'status' | 'endTime'>, now: D
     return false
   }
 
-  const endTimeMs = Date.parse(member.endTime)
-
-  if (Number.isNaN(endTimeMs)) {
-    return false
-  }
-
-  const { startInclusive, endExclusive } = getJamaicaExpiringWindow(now)
-  const startMs = Date.parse(startInclusive)
-  const endMs = Date.parse(endExclusive)
-
-  return endTimeMs >= startMs && endTimeMs < endMs
+  return isWithinJamaicaExpiringWindow(member.endTime, now)
 }
 
 export function resolveDraftEmailRecipients(

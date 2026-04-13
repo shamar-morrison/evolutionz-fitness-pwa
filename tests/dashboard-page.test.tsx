@@ -35,7 +35,16 @@ vi.mock('@/components/dashboard-member-panels', () => ({
 }))
 
 vi.mock('@/components/stat-card', () => ({
-  StatCard: ({ title, value }: { title: string; value: number }) => <div>{`${title}:${value}`}</div>,
+  StatCard: ({
+    title,
+    value,
+    href,
+  }: {
+    title: string
+    value: number
+    href?: string
+  }) =>
+    href ? <a href={href}>{`${title}:${value}`}</a> : <div>{`${title}:${value}`}</div>,
 }))
 
 vi.mock('@/components/quick-actions', () => ({
@@ -86,6 +95,9 @@ describe('DashboardPage', () => {
     expect(container.textContent).toContain('Dashboard')
     expect(container.textContent).toContain('Active Members:12')
     expect(container.textContent).toContain('Quick Actions Content')
+    expect(container.querySelector('a[href="/dashboard/expiring-members"]')?.textContent).toBe(
+      'Expiring Soon (7 days):4',
+    )
   })
 
   it('redirects staff users to their authenticated home', async () => {

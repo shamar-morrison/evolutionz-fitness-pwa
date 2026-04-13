@@ -67,6 +67,7 @@ function DashboardPageContent() {
               value={stats.expiringSoon}
               icon={Clock3}
               variant="warning"
+              href="/dashboard/expiring-members"
             />
           </>
         )}
