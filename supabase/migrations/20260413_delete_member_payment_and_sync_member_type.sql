@@ -27,10 +27,7 @@ begin
 
   update public.members
   set member_type_id = v_latest_member_type_id,
-      type = case
-        when v_latest_member_type_name is null then type
-        else v_latest_member_type_name
-      end
+      type = coalesce(v_latest_member_type_name, 'General')
   where id = p_member_id;
 
   if not found then

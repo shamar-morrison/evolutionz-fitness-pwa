@@ -616,7 +616,7 @@ describe('GET /api/members/[id]/payments', () => {
     )
 
     expect(getSupabaseAdminClientMock).toHaveBeenCalledTimes(1)
-    expect(getQuerySequence()).toEqual(['members'])
+    expect(getQuerySequence()).toEqual([])
     expect(getRangeArguments()).toBeNull()
     expect(orderCalls).toEqual([])
     expect(response.status).toBe(400)
@@ -675,6 +675,61 @@ describe('GET /api/members/[id]/payments', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Failed to read member member-1: member select failed',
+    })
+  })
+
+  it('returns 500 when reading paginated payments fails', async () => {
+    const { client, getQuerySequence, getRangeArguments, orderCalls } = createGetPaymentsRouteClient(
+      {
+        paymentError: { message: 'payments select failed' },
+      },
+    )
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser()
+
+    const response = await GET(
+      new Request('http://localhost/api/members/member-1/payments?page=1&limit=10'),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(500)
+    expect(getQuerySequence()).toEqual(['members', 'payments-page'])
+    expect(getRangeArguments()).toEqual([10, 19])
+    expect(orderCalls).toEqual([
+      { column: 'payment_date', ascending: false },
+      { column: 'created_at', ascending: false },
+      { column: 'id', ascending: false },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Failed to read member payments for member-1: payments select failed',
+    })
+  })
+
+  it('returns 500 when reading the count-only payments query fails', async () => {
+    const { client, getQuerySequence, getRangeArguments, orderCalls } =
+      createGetPaymentsRouteClient({
+        countError: { message: 'payments count failed' },
+      })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser()
+
+    const response = await GET(
+      new Request('http://localhost/api/members/member-1/payments?page=0&limit=0'),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(500)
+    expect(getQuerySequence()).toEqual(['members', 'payments-count'])
+    expect(getRangeArguments()).toBeNull()
+    expect(orderCalls).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Failed to read member payments for member-1: payments count failed',
     })
   })
 

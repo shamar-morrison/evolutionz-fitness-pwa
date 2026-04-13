@@ -179,6 +179,17 @@ export async function GET(
     }
 
     const clampedLimit = Math.min(limit, MAX_LIMIT)
+
+    if (clampedLimit !== 0) {
+      const maxSafePage = Math.floor(
+        (Number.MAX_SAFE_INTEGER - (clampedLimit - 1)) / clampedLimit,
+      )
+
+      if (page > maxSafePage) {
+        return createErrorResponse('Requested member payments page is too large.', 400)
+      }
+    }
+
     const { count: memberCount, error: memberError } = await supabase
       .from('members')
       .select('id', { count: 'exact', head: true })
@@ -206,12 +217,6 @@ export async function GET(
         payments: [],
         totalMatches: count ?? 0,
       })
-    }
-
-    const maxSafePage = Math.floor((Number.MAX_SAFE_INTEGER - (clampedLimit - 1)) / clampedLimit)
-
-    if (page > maxSafePage) {
-      return createErrorResponse('Requested member payments page is too large.', 400)
     }
 
     const rangeStart = page * clampedLimit
