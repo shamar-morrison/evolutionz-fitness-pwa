@@ -191,22 +191,57 @@ function createGetPaymentsRouteClient({
     },
   ],
   count = paymentRows.length,
+  memberCount = 1,
   paymentError = null,
   countError = null,
+  memberError = null,
 }: {
   paymentRows?: Array<Record<string, unknown>>
   count?: number | null
+  memberCount?: number | null
   paymentError?: { message: string } | null
   countError?: { message: string } | null
+  memberError?: { message: string } | null
 } = {}) {
   const orderCalls: Array<{ column: string; ascending: boolean }> = []
+  const querySequence: string[] = []
   let rangeArguments: [number, number] | null = null
 
   return {
     getRangeArguments: () => rangeArguments,
+    getQuerySequence: () => querySequence,
     orderCalls,
     client: {
       from(table: string) {
+        if (table === 'members') {
+          return {
+            select(columns: string, options?: { count?: 'exact'; head?: boolean }) {
+              expect(columns).toBe('id')
+              expect(options).toEqual({ count: 'exact', head: true })
+
+              const builder = {
+                eq(column: string, value: string) {
+                  expect(column).toBe('id')
+                  expect(value).toBe('member-1')
+                  querySequence.push('members')
+                  return builder
+                },
+                then(
+                  onFulfilled: (value: unknown) => unknown,
+                  onRejected?: (reason: unknown) => unknown,
+                ) {
+                  return Promise.resolve({
+                    count: memberCount,
+                    error: memberError,
+                  }).then(onFulfilled, onRejected)
+                },
+              }
+
+              return builder
+            },
+          }
+        }
+
         if (table === 'member_payments') {
           return {
             select(columns: string, options?: { count?: 'exact'; head?: boolean }) {
@@ -217,6 +252,7 @@ function createGetPaymentsRouteClient({
                   eq(column: string, value: string) {
                     expect(column).toBe('member_id')
                     expect(value).toBe('member-1')
+                    querySequence.push('payments-count')
                     return builder
                   },
                   then(
@@ -248,6 +284,7 @@ function createGetPaymentsRouteClient({
                 },
                 range(from: number, to: number) {
                   rangeArguments = [from, to]
+                  querySequence.push('payments-page')
 
                   return Promise.resolve({
                     data: paymentRows,
@@ -434,7 +471,8 @@ describe('GET /api/members/[id]/payments', () => {
   })
 
   it('returns paginated payment history for admins', async () => {
-    const { client, getRangeArguments, orderCalls } = createGetPaymentsRouteClient({
+    const { client, getQuerySequence, getRangeArguments, orderCalls } = createGetPaymentsRouteClient(
+      {
       paymentRows: [
         {
           id: 'payment-2',
@@ -466,7 +504,8 @@ describe('GET /api/members/[id]/payments', () => {
         },
       ],
       count: 12,
-    })
+      },
+    )
     getSupabaseAdminClientMock.mockReturnValue(client)
     mockAdminUser()
 
@@ -478,6 +517,7 @@ describe('GET /api/members/[id]/payments', () => {
     )
 
     expect(response.status).toBe(200)
+    expect(getQuerySequence()).toEqual(['members', 'payments-page'])
     expect(getRangeArguments()).toEqual([10, 19])
     expect(orderCalls).toEqual([
       { column: 'payment_date', ascending: false },
@@ -520,7 +560,8 @@ describe('GET /api/members/[id]/payments', () => {
   })
 
   it('returns the count-only response when limit is zero', async () => {
-    const { client, getRangeArguments, orderCalls } = createGetPaymentsRouteClient({
+    const { client, getQuerySequence, getRangeArguments, orderCalls } =
+      createGetPaymentsRouteClient({
       count: 42,
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -534,6 +575,7 @@ describe('GET /api/members/[id]/payments', () => {
     )
 
     expect(response.status).toBe(200)
+    expect(getQuerySequence()).toEqual(['members', 'payments-count'])
     expect(getRangeArguments()).toBeNull()
     expect(orderCalls).toEqual([])
     await expect(response.json()).resolves.toEqual({
@@ -560,6 +602,8 @@ describe('GET /api/members/[id]/payments', () => {
   })
 
   it('rejects page values that would overflow the query range', async () => {
+    const { client, getQuerySequence, getRangeArguments, orderCalls } = createGetPaymentsRouteClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
     mockAdminUser()
 
     const response = await GET(
@@ -571,11 +615,66 @@ describe('GET /api/members/[id]/payments', () => {
       },
     )
 
-    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+    expect(getSupabaseAdminClientMock).toHaveBeenCalledTimes(1)
+    expect(getQuerySequence()).toEqual(['members'])
+    expect(getRangeArguments()).toBeNull()
+    expect(orderCalls).toEqual([])
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Requested member payments page is too large.',
+    })
+  })
+
+  it('returns 404 when the parent member does not exist', async () => {
+    const { client, getQuerySequence, getRangeArguments, orderCalls } = createGetPaymentsRouteClient(
+      {
+        memberCount: 0,
+      },
+    )
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser()
+
+    const response = await GET(
+      new Request('http://localhost/api/members/member-1/payments?page=0&limit=10'),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(404)
+    expect(getQuerySequence()).toEqual(['members'])
+    expect(getRangeArguments()).toBeNull()
+    expect(orderCalls).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Member not found.',
+    })
+  })
+
+  it('returns 500 when reading the parent member fails', async () => {
+    const { client, getQuerySequence, getRangeArguments, orderCalls } = createGetPaymentsRouteClient(
+      {
+        memberError: { message: 'member select failed' },
+      },
+    )
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser()
+
+    const response = await GET(
+      new Request('http://localhost/api/members/member-1/payments?page=0&limit=10'),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(500)
+    expect(getQuerySequence()).toEqual(['members'])
+    expect(getRangeArguments()).toBeNull()
+    expect(orderCalls).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Failed to read member member-1: member select failed',
     })
   })
 
