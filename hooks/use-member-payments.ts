@@ -13,6 +13,6 @@ export function useMemberPayments(memberId: string, page: number) {
     queryKey: queryKeys.memberPayments.page(memberId, page),
     queryFn: () => fetchMemberPayments(memberId, page, MEMBER_PAYMENTS_PAGE_SIZE),
     staleTime: 24 * 60 * 60 * 1000, // 24 hours
-    enabled: Boolean(memberId),
+    enabled: Boolean(memberId) && Number.isInteger(page) && page >= 0,
   })
 }

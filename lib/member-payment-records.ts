@@ -48,11 +48,20 @@ function normalizeNullableText(value: string | null | undefined) {
 
 function normalizeAmount(value: number | string) {
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0
+    if (Number.isFinite(value)) {
+      return value
+    }
+
+    throw new Error(`Invalid amount: ${String(value)}`)
   }
 
   const parsedValue = Number(value)
-  return Number.isFinite(parsedValue) ? parsedValue : 0
+
+  if (Number.isFinite(parsedValue)) {
+    return parsedValue
+  }
+
+  throw new Error(`Invalid amount: ${String(value)}`)
 }
 
 function normalizeTimestamp(value: string | null | undefined) {

@@ -48,6 +48,7 @@ export function MemberPaymentHistory({ memberId }: MemberPaymentHistoryProps) {
 
   useEffect(() => {
     setPage(0)
+    setPaymentToDelete(null)
   }, [memberId])
 
   const payments = data?.payments ?? []

@@ -46,6 +46,28 @@ describe('member payment helpers', () => {
     )
   })
 
+  it('throws when fetching member payments returns a non-2xx response', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          error: 'bad',
+        },
+        400,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchMemberPayments('member-1', 2)).rejects.toThrow('bad')
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/members/member-1/payments?page=2&limit=${MEMBER_PAYMENTS_PAGE_SIZE}`,
+      {
+        method: 'GET',
+        cache: 'no-store',
+      },
+    )
+  })
+
   it('deletes a specific member payment row', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       createJsonResponse(
@@ -59,6 +81,24 @@ describe('member payment helpers', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(deleteMemberPayment('member-1', 'payment-1')).resolves.toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledWith('/api/members/member-1/payments/payment-1', {
+      method: 'DELETE',
+    })
+  })
+
+  it('throws when deleting a member payment returns a non-2xx response', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          error: 'bad',
+        },
+        400,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(deleteMemberPayment('member-1', 'payment-1')).rejects.toThrow('bad')
     expect(fetchMock).toHaveBeenCalledWith('/api/members/member-1/payments/payment-1', {
       method: 'DELETE',
     })

@@ -239,6 +239,80 @@ describe('MemberPaymentHistory', () => {
     expect(container.textContent).not.toContain('Page 1 note 10')
   })
 
+  it('clears a pending delete when the selected member changes', async () => {
+    useMemberPaymentsMock.mockImplementation((memberId: string) => ({
+      data: {
+        payments: [
+          createPayment(0, {
+            id: memberId === 'member-1' ? 'payment-1' : 'payment-2',
+            memberId,
+            notes: memberId === 'member-1' ? 'Member 1 payment' : 'Member 2 payment',
+          }),
+        ],
+        totalMatches: 1,
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    }))
+
+    await act(async () => {
+      root.render(<MemberPaymentHistory memberId="member-1" />)
+    })
+
+    await act(async () => {
+      const deleteButton = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Delete',
+      )
+
+      if (!(deleteButton instanceof HTMLButtonElement)) {
+        throw new Error('Delete button not found.')
+      }
+
+      deleteButton.click()
+    })
+
+    expect(container.textContent).toContain('Delete payment?')
+    expect(container.textContent).toContain('Member 1 payment')
+
+    await act(async () => {
+      root.render(<MemberPaymentHistory memberId="member-2" />)
+    })
+
+    expect(container.textContent).not.toContain('Delete payment?')
+    expect(container.textContent).toContain('Member 2 payment')
+
+    await act(async () => {
+      const deleteButton = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Delete',
+      )
+
+      if (!(deleteButton instanceof HTMLButtonElement)) {
+        throw new Error('Delete button not found after switching members.')
+      }
+
+      deleteButton.click()
+    })
+
+    await act(async () => {
+      const confirmDeleteButton = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Delete Payment',
+      )
+
+      if (!(confirmDeleteButton instanceof HTMLButtonElement)) {
+        throw new Error('Delete Payment button not found.')
+      }
+
+      confirmDeleteButton.click()
+      await Promise.resolve()
+    })
+
+    await flushAsyncWork()
+
+    expect(deleteMemberPaymentMock).toHaveBeenCalledTimes(1)
+    expect(deleteMemberPaymentMock).toHaveBeenCalledWith('member-2', 'payment-2')
+  })
+
   it('deletes a payment, invalidates payment queries, and returns to the previous page when needed', async () => {
     useMemberPaymentsMock.mockImplementation((_memberId: string, page: number) => ({
       data:

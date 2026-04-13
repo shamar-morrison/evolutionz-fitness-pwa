@@ -122,6 +122,8 @@ function parseNonNegativeInteger(value: string | null, fallback: number) {
   return parsedValue
 }
 
+const MAX_LIMIT = MEMBER_PAYMENTS_PAGE_SIZE
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -142,9 +144,10 @@ export async function GET(
       return createErrorResponse('page and limit must be non-negative integers.', 400)
     }
 
-    const supabase = getSupabaseAdminClient() as any
+    const clampedLimit = Math.min(limit, MAX_LIMIT)
 
-    if (limit === 0) {
+    if (clampedLimit === 0) {
+      const supabase = getSupabaseAdminClient() as any
       const { count, error } = await supabase
         .from('member_payments')
         .select('id', { count: 'exact', head: true })
@@ -160,8 +163,15 @@ export async function GET(
       })
     }
 
-    const rangeStart = page * limit
-    const rangeEnd = rangeStart + limit - 1
+    const maxSafePage = Math.floor((Number.MAX_SAFE_INTEGER - (clampedLimit - 1)) / clampedLimit)
+
+    if (page > maxSafePage) {
+      return createErrorResponse('Requested member payments page is too large.', 400)
+    }
+
+    const rangeStart = page * clampedLimit
+    const rangeEnd = rangeStart + clampedLimit - 1
+    const supabase = getSupabaseAdminClient() as any
     const { data, error, count } = await supabase
       .from('member_payments')
       .select(MEMBER_PAYMENT_RECORD_SELECT, { count: 'exact' })

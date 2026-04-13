@@ -192,10 +192,12 @@ function createGetPaymentsRouteClient({
   ],
   count = paymentRows.length,
   paymentError = null,
+  countError = null,
 }: {
   paymentRows?: Array<Record<string, unknown>>
   count?: number | null
   paymentError?: { message: string } | null
+  countError?: { message: string } | null
 } = {}) {
   const orderCalls: Array<{ column: string; ascending: boolean }> = []
   let rangeArguments: [number, number] | null = null
@@ -207,7 +209,30 @@ function createGetPaymentsRouteClient({
       from(table: string) {
         if (table === 'member_payments') {
           return {
-            select(columns: string, options?: { count?: 'exact' }) {
+            select(columns: string, options?: { count?: 'exact'; head?: boolean }) {
+              if (columns === 'id') {
+                expect(options).toEqual({ count: 'exact', head: true })
+
+                const builder = {
+                  eq(column: string, value: string) {
+                    expect(column).toBe('member_id')
+                    expect(value).toBe('member-1')
+                    return builder
+                  },
+                  then(
+                    onFulfilled: (value: unknown) => unknown,
+                    onRejected?: (reason: unknown) => unknown,
+                  ) {
+                    return Promise.resolve({
+                      count,
+                      error: countError,
+                    }).then(onFulfilled, onRejected)
+                  },
+                }
+
+                return builder
+              }
+
               expect(columns).toBe(MEMBER_PAYMENT_RECORD_SELECT)
               expect(options).toEqual({ count: 'exact' })
 
@@ -446,7 +471,7 @@ describe('GET /api/members/[id]/payments', () => {
     mockAdminUser()
 
     const response = await GET(
-      new Request('http://localhost/api/members/member-1/payments?page=1&limit=10'),
+      new Request('http://localhost/api/members/member-1/payments?page=1&limit=999'),
       {
         params: Promise.resolve({ id: 'member-1' }),
       },
@@ -494,6 +519,29 @@ describe('GET /api/members/[id]/payments', () => {
     })
   })
 
+  it('returns the count-only response when limit is zero', async () => {
+    const { client, getRangeArguments, orderCalls } = createGetPaymentsRouteClient({
+      count: 42,
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser()
+
+    const response = await GET(
+      new Request('http://localhost/api/members/member-1/payments?page=0&limit=0'),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(getRangeArguments()).toBeNull()
+    expect(orderCalls).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      payments: [],
+      totalMatches: 42,
+    })
+  })
+
   it('rejects invalid page and limit values', async () => {
     mockAdminUser()
 
@@ -508,6 +556,62 @@ describe('GET /api/members/[id]/payments', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'page and limit must be non-negative integers.',
+    })
+  })
+
+  it('rejects page values that would overflow the query range', async () => {
+    mockAdminUser()
+
+    const response = await GET(
+      new Request(
+        'http://localhost/api/members/member-1/payments?page=900719925474099&limit=10',
+      ),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Requested member payments page is too large.',
+    })
+  })
+
+  it('returns 500 when a payment row contains an invalid amount', async () => {
+    const { client } = createGetPaymentsRouteClient({
+      paymentRows: [
+        {
+          id: 'payment-1',
+          member_id: 'member-1',
+          member_type_id: MEMBER_TYPE_ID_GENERAL,
+          payment_method: 'cash',
+          amount_paid: 'not-a-number',
+          promotion: null,
+          recorded_by: 'admin-1',
+          payment_date: '2026-04-10',
+          notes: null,
+          created_at: '2026-04-10T12:00:00.000Z',
+          memberType: { name: 'General' },
+          recordedByProfile: { name: 'Admin User' },
+        },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser()
+
+    const response = await GET(
+      new Request('http://localhost/api/members/member-1/payments?page=0&limit=10'),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Invalid amount: not-a-number',
     })
   })
 
