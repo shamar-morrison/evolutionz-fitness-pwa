@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import {
+  mapMemberPaymentRecord,
+  MEMBER_PAYMENT_RECORD_SELECT,
+  type MemberPaymentRecord,
+} from '@/lib/member-payment-records'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
+import { MEMBER_PAYMENTS_PAGE_SIZE } from '@/lib/member-payments'
 import { type MemberTypesReadClient } from '@/lib/member-types-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -96,6 +102,91 @@ function createErrorResponse(error: string, status: number) {
 function normalizeOptionalText(value: string | null | undefined) {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || null
+}
+
+function parseNonNegativeInteger(value: string | null, fallback: number) {
+  if (value === null) {
+    return fallback
+  }
+
+  if (!/^\d+$/u.test(value)) {
+    return null
+  }
+
+  const parsedValue = Number(value)
+
+  if (!Number.isSafeInteger(parsedValue) || parsedValue < 0) {
+    return null
+  }
+
+  return parsedValue
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const authResult = await requireAdminUser()
+
+    if ('response' in authResult) {
+      return authResult.response
+    }
+
+    const { id } = await params
+    const { searchParams } = new URL(request.url)
+    const page = parseNonNegativeInteger(searchParams.get('page'), 0)
+    const limit = parseNonNegativeInteger(searchParams.get('limit'), MEMBER_PAYMENTS_PAGE_SIZE)
+
+    if (page === null || limit === null) {
+      return createErrorResponse('page and limit must be non-negative integers.', 400)
+    }
+
+    const supabase = getSupabaseAdminClient() as any
+
+    if (limit === 0) {
+      const { count, error } = await supabase
+        .from('member_payments')
+        .select('id', { count: 'exact', head: true })
+        .eq('member_id', id)
+
+      if (error) {
+        throw new Error(`Failed to read member payments for ${id}: ${error.message}`)
+      }
+
+      return NextResponse.json({
+        payments: [],
+        totalMatches: count ?? 0,
+      })
+    }
+
+    const rangeStart = page * limit
+    const rangeEnd = rangeStart + limit - 1
+    const { data, error, count } = await supabase
+      .from('member_payments')
+      .select(MEMBER_PAYMENT_RECORD_SELECT, { count: 'exact' })
+      .eq('member_id', id)
+      .order('payment_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(rangeStart, rangeEnd)
+
+    if (error) {
+      throw new Error(`Failed to read member payments for ${id}: ${error.message}`)
+    }
+
+    return NextResponse.json({
+      payments: ((data ?? []) as MemberPaymentRecord[]).map(mapMemberPaymentRecord),
+      totalMatches: count ?? 0,
+    })
+  } catch (error) {
+    return createErrorResponse(
+      error instanceof Error
+        ? error.message
+        : 'Unexpected server error while loading the member payments.',
+      500,
+    )
+  }
 }
 
 export async function POST(

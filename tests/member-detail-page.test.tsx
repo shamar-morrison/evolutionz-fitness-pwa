@@ -108,6 +108,10 @@ vi.mock('@/components/check-in-history', () => ({
   CheckInHistory: () => <div>Check-in History Content</div>,
 }))
 
+vi.mock('@/components/member-payment-history', () => ({
+  MemberPaymentHistory: () => <div>Payment History Content</div>,
+}))
+
 vi.mock('@/components/status-badge', () => ({
   StatusBadge: ({ status }: { status: string }) => <span>{status}</span>,
 }))
@@ -316,7 +320,9 @@ describe('Member detail page tabs', () => {
     expect(getActiveTabPanel(container).textContent).toContain('Member Information')
     expect(getButton(container, 'Check-in History')).toBeDefined()
     expect(container.textContent).toContain('PT Attendance')
+    expect(getButton(container, 'Payments')).toBeDefined()
     expect(container.textContent).not.toContain('Check-in History Content')
+    expect(container.textContent).not.toContain('Payment History Content')
   })
 
   it('hides the PT Attendance tab and avoids PT attendance queries for non-admin users', async () => {
@@ -333,6 +339,7 @@ describe('Member detail page tabs', () => {
     })
 
     expect(container.textContent).not.toContain('PT Attendance')
+    expect(container.textContent).not.toContain('Payments')
     expect(usePtSessionsMock).not.toHaveBeenCalled()
   })
 
@@ -354,6 +361,7 @@ describe('Member detail page tabs', () => {
     expect(container.textContent).toContain('Edit Member')
     expect(container.textContent).toContain('Record Payment')
     expect(container.textContent).not.toContain('Membership Type')
+    expect(container.textContent).not.toContain('Payments')
   })
 
   it('uses permissions instead of auth role alone for migrated member detail controls', async () => {
@@ -371,6 +379,7 @@ describe('Member detail page tabs', () => {
 
     expect(container.textContent).not.toContain('Edit Member')
     expect(container.textContent).not.toContain('PT Attendance')
+    expect(container.textContent).not.toContain('Payments')
     expect(usePtSessionsMock).not.toHaveBeenCalled()
   })
 

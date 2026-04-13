@@ -28,6 +28,7 @@ export const queryKeys = {
   memberPayments: {
     all: ['memberPayments'] as const,
     member: (memberId: string) => ['memberPayments', memberId] as const,
+    page: (memberId: string, page: number) => ['memberPayments', memberId, page] as const,
   },
   memberPaymentRequests: {
     all: ['memberPaymentRequests'] as const,

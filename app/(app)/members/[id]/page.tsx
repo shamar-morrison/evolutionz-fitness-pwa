@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { formatAccessDate } from '@/lib/member-access-time'
 import { useMember } from '@/hooks/use-members'
 import { MemberAvatar } from '@/components/member-avatar'
+import { MemberPaymentHistory } from '@/components/member-payment-history'
 import { MemberPtAttendance } from '@/components/member-pt-attendance'
 import { MemberPtSection } from '@/components/member-pt-section'
 import { StatusBadge } from '@/components/status-badge'
@@ -51,7 +52,7 @@ export default function MemberDetailPage() {
   const { profile } = useAuth()
   const { member, isLoading, error } = useMember(memberId)
   const backLink = useBackLink('/members', '/trainer/clients')
-  const { can, requiresApproval } = usePermissions()
+  const { can, requiresApproval, role } = usePermissions()
   const isFrontDesk = isFrontDeskStaff(profile?.titles)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false)
@@ -304,6 +305,7 @@ export default function MemberDetailPage() {
   const showDirectMemberPhotoActions = canEditMember && !isFrontDesk
   const showRecordPaymentAction = can('members.recordPayment')
   const showPtAttendance = canViewAllPtSchedules || isFrontDesk
+  const showPaymentsTab = role === 'admin'
   const cardActionState = getMemberCardActionState({
     cardNo: member.cardNo,
     cardStatus: member.cardStatus,
@@ -514,6 +516,11 @@ export default function MemberDetailPage() {
                   PT Attendance
                 </TabsTrigger>
               ) : null}
+              {showPaymentsTab ? (
+                <TabsTrigger value="payments" className="px-3 py-1.5">
+                  Payments
+                </TabsTrigger>
+              ) : null}
             </TabsList>
           </div>
 
@@ -597,6 +604,12 @@ export default function MemberDetailPage() {
           {showPtAttendance ? (
             <TabsContent value="pt-attendance">
               <MemberPtAttendance memberId={memberId} />
+            </TabsContent>
+          ) : null}
+
+          {showPaymentsTab ? (
+            <TabsContent value="payments">
+              <MemberPaymentHistory memberId={memberId} />
             </TabsContent>
           ) : null}
         </Tabs>

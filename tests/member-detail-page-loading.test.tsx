@@ -120,6 +120,10 @@ vi.mock('@/components/check-in-history', () => ({
   CheckInHistory: () => <div>Check-in history</div>,
 }))
 
+vi.mock('@/components/member-payment-history', () => ({
+  MemberPaymentHistory: () => <div>Payment history</div>,
+}))
+
 vi.mock('@/components/status-badge', () => ({
   StatusBadge: ({ status }: { status: string }) => <span>{status}</span>,
 }))
