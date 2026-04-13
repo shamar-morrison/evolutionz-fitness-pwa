@@ -609,7 +609,7 @@ export default function MemberDetailPage() {
 
           {showPaymentsTab ? (
             <TabsContent value="payments">
-              <MemberPaymentHistory memberId={memberId} />
+              <MemberPaymentHistory memberId={memberId} memberEmail={member.email} />
             </TabsContent>
           ) : null}
         </Tabs>

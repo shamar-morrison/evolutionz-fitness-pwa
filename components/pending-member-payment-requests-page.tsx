@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
-import { BanknoteIcon, ClipboardCheck } from 'lucide-react'
+import { BanknoteIcon, ClipboardCheck, Mail } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useMemberPaymentRequests } from '@/hooks/use-member-payment-requests'
 import { toast } from '@/hooks/use-toast'
@@ -11,6 +11,7 @@ import { MEMBER_PAYMENT_METHOD_OPTIONS } from '@/lib/member-payments'
 import { reviewMemberPaymentRequest } from '@/lib/member-payment-requests'
 import { queryKeys } from '@/lib/query-keys'
 import type { MemberPaymentRequest } from '@/types'
+import { MemberPaymentReceiptPreviewDialog } from '@/components/member-payment-receipt-preview-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -23,11 +24,20 @@ import {
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 const amountFormatter = new Intl.NumberFormat('en-JM', {
   style: 'currency',
   currency: 'JMD',
 })
+
+type ApprovedReceiptState = {
+  memberId: string
+  memberName: string
+  memberEmail: string | null
+  paymentId: string
+  receiptSentAt: string | null
+}
 
 function formatRequestTimestamp(value: string) {
   return format(new Date(value), 'MMM d, yyyy h:mm a')
@@ -51,6 +61,8 @@ export function PendingMemberPaymentRequestsPage() {
   const [denyRequest, setDenyRequest] = useState<MemberPaymentRequest | null>(null)
   const [rejectionReason, setRejectionReason] = useState('')
   const [reviewingRequestIds, setReviewingRequestIds] = useState<Set<string>>(() => new Set())
+  const [approvedReceiptState, setApprovedReceiptState] = useState<ApprovedReceiptState | null>(null)
+  const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false)
   const visibleRequests = useMemo(
     () => requests.filter((request) => !hiddenRequestIds.includes(request.id)),
     [hiddenRequestIds, requests],
@@ -69,7 +81,7 @@ export function PendingMemberPaymentRequestsPage() {
     setHiddenRequestIds((current) => (current.includes(request.id) ? current : [...current, request.id]))
 
     try {
-      await reviewMemberPaymentRequest(request.id, {
+      const result = await reviewMemberPaymentRequest(request.id, {
         action,
         rejectionReason: nextRejectionReason ?? null,
       })
@@ -96,6 +108,16 @@ export function PendingMemberPaymentRequestsPage() {
       toast({
         title: action === 'approve' ? 'Payment request approved' : 'Payment request denied',
       })
+
+      if (action === 'approve' && result.paymentId) {
+        setApprovedReceiptState({
+          memberId: request.memberId,
+          memberName: request.memberName,
+          memberEmail: request.memberEmail,
+          paymentId: result.paymentId,
+          receiptSentAt: null,
+        })
+      }
     } catch (error) {
       setHiddenRequestIds((current) => current.filter((id) => id !== request.id))
       toast({
@@ -170,7 +192,10 @@ export function PendingMemberPaymentRequestsPage() {
                         <p>Payment Method: {formatPaymentMethod(request.paymentMethod)}</p>
                         <p>Payment Date: {formatPaymentDate(request.paymentDate)}</p>
                         <p>
-                          Membership Type: {request.memberTypeName ?? 'Use current member type'}
+                          Membership Type:{' '}
+                          {request.paymentType === 'card_fee'
+                            ? 'Card Fee'
+                            : (request.memberTypeName ?? 'Use current member type')}
                         </p>
                         <p className="sm:col-span-2">Notes: {request.notes ?? 'None'}</p>
                       </div>
@@ -250,6 +275,79 @@ export function PendingMemberPaymentRequestsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={approvedReceiptState !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setApprovedReceiptState(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Payment request approved</DialogTitle>
+            <DialogDescription>
+              The payment for {approvedReceiptState?.memberName ?? 'this member'} has been recorded.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setApprovedReceiptState(null)}
+            >
+              Done
+            </Button>
+            {approvedReceiptState?.memberEmail ? (
+              <Button
+                type="button"
+                onClick={() => setReceiptPreviewOpen(true)}
+                disabled={Boolean(approvedReceiptState.receiptSentAt)}
+              >
+                <Mail className="h-4 w-4" />
+                {approvedReceiptState.receiptSentAt ? 'Receipt Sent' : 'Send Receipt'}
+              </Button>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Button type="button" disabled>
+                      <Mail className="h-4 w-4" />
+                      Send Receipt
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Add an email address to the member profile before sending a receipt.
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <MemberPaymentReceiptPreviewDialog
+        memberId={approvedReceiptState?.memberId ?? ''}
+        paymentId={approvedReceiptState?.paymentId ?? null}
+        open={receiptPreviewOpen}
+        onOpenChange={setReceiptPreviewOpen}
+        onSent={(receiptSentAt) => {
+          setApprovedReceiptState((currentState) =>
+            currentState
+              ? {
+                  ...currentState,
+                  receiptSentAt,
+                }
+              : currentState,
+          )
+          if (approvedReceiptState?.memberId) {
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.memberPayments.member(approvedReceiptState.memberId),
+            })
+          }
+        }}
+      />
     </>
   )
 }

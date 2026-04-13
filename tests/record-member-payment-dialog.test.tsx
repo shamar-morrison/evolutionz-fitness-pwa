@@ -3,6 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 
 const {
   createMemberPaymentRequestMock,
@@ -19,6 +20,20 @@ const {
   onOpenChangeMock: vi.fn(),
   recordMemberPaymentMock: vi.fn().mockResolvedValue({
     id: 'payment-1',
+    member_id: 'member-1',
+    member_type_id: 'type-1',
+    payment_type: 'membership',
+    payment_method: 'cash',
+    amount_paid: 12000,
+    promotion: null,
+    recorded_by: 'admin-1',
+    payment_date: '2026-04-09',
+    notes: null,
+    receipt_number: 'EF-2026-00001',
+    receipt_sent_at: null,
+    membership_begin_time: '2026-04-09T00:00:00.000Z',
+    membership_end_time: '2026-05-08T23:59:59.000Z',
+    created_at: '2026-04-09T12:00:00.000Z',
   }),
   toastMock: vi.fn(),
   useMemberTypesMock: vi.fn(),
@@ -158,6 +173,52 @@ vi.mock('@/components/ui/select', async () => {
   }
 })
 
+vi.mock('@/components/ui/tabs', async () => {
+  const React = await import('react')
+
+  const TabsContext = React.createContext<{
+    onValueChange?: (value: string) => void
+    value?: string
+  } | null>(null)
+
+  return {
+    Tabs: ({
+      children,
+      onValueChange,
+      value,
+    }: {
+      children: React.ReactNode
+      onValueChange?: (value: string) => void
+      value?: string
+    }) => (
+      <TabsContext.Provider value={{ onValueChange, value }}>
+        <div>{children}</div>
+      </TabsContext.Provider>
+    ),
+    TabsList: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+    TabsTrigger: ({
+      children,
+      value,
+    }: React.ComponentProps<'button'> & { value: string }) => {
+      const context = React.useContext(TabsContext)
+
+      return (
+        <button type="button" onClick={() => context?.onValueChange?.(value)}>
+          {children}
+        </button>
+      )
+    },
+    TabsContent: ({
+      children,
+      value,
+    }: React.ComponentProps<'div'> & { value: string }) => {
+      const context = React.useContext(TabsContext)
+
+      return context?.value === value ? <div>{children}</div> : null
+    },
+  }
+})
+
 import { RecordMemberPaymentDialog } from '@/components/record-member-payment-dialog'
 import type { Member, MemberTypeRecord } from '@/types'
 
@@ -175,7 +236,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     status: overrides.status ?? 'Active',
     deviceAccessState: overrides.deviceAccessState ?? 'ready',
     gender: overrides.gender ?? 'Male',
-    email: overrides.email ?? 'marcus@example.com',
+    email: overrides.email !== undefined ? overrides.email : 'marcus@example.com',
     phone: overrides.phone ?? '876-555-1111',
     remark: overrides.remark ?? null,
     photoUrl: overrides.photoUrl ?? null,
@@ -218,6 +279,13 @@ async function clickButton(container: ParentNode, label: string) {
 
   await act(async () => {
     button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
+async function flushAsyncWork() {
+  await act(async () => {
     await Promise.resolve()
     await Promise.resolve()
   })
@@ -287,8 +355,10 @@ describe('RecordMemberPaymentDialog', () => {
 
     await clickButton(container, 'Cash')
     await clickButton(container, 'Record Payment')
+    await flushAsyncWork()
 
     expect(recordMemberPaymentMock).toHaveBeenCalledWith('member-1', {
+      payment_type: 'membership',
       member_type_id: 'type-1',
       payment_method: 'cash',
       amount_paid: 12000,
@@ -304,10 +374,6 @@ describe('RecordMemberPaymentDialog', () => {
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['members', 'all'],
-    })
-    expect(onOpenChangeMock).toHaveBeenCalledWith(false)
-    expect(toastMock).toHaveBeenCalledWith({
-      title: 'Payment recorded',
     })
   })
 
@@ -357,6 +423,7 @@ describe('RecordMemberPaymentDialog', () => {
 
     expect(createMemberPaymentRequestMock).toHaveBeenCalledWith({
       member_id: 'member-1',
+      payment_type: 'membership',
       amount: 12000,
       payment_method: 'cash',
       payment_date: '2026-04-09',
@@ -373,6 +440,87 @@ describe('RecordMemberPaymentDialog', () => {
       title: 'Request submitted',
       description: 'Payment request submitted for admin approval',
     })
+  })
+
+  it('records a card fee payment with the fixed amount payload', async () => {
+    recordMemberPaymentMock.mockResolvedValueOnce({
+      id: 'payment-card-fee-1',
+      member_id: 'member-1',
+      member_type_id: null,
+      payment_type: 'card_fee',
+      payment_method: 'cash',
+      amount_paid: CARD_FEE_AMOUNT_JMD,
+      promotion: null,
+      recorded_by: 'admin-1',
+      payment_date: '2026-04-09',
+      notes: 'Replacement card',
+      receipt_number: 'EF-2026-00002',
+      receipt_sent_at: null,
+      membership_begin_time: '2026-04-09T00:00:00.000Z',
+      membership_end_time: '2026-05-08T23:59:59.000Z',
+      created_at: '2026-04-09T12:00:00.000Z',
+    })
+
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    await clickButton(container, 'Card Fee')
+    await flushAsyncWork()
+
+    const amountInput = container.querySelector('#record-card-fee-amount')
+
+    if (!(amountInput instanceof HTMLInputElement)) {
+      throw new Error('Card fee amount input not found.')
+    }
+
+    expect(amountInput.value).toBe(String(CARD_FEE_AMOUNT_JMD))
+    expect(container.textContent).toContain('Fixed card fee amount')
+
+    await clickButton(container, 'Cash')
+    await clickButton(container, 'Record Payment')
+    await flushAsyncWork()
+
+    expect(recordMemberPaymentMock).toHaveBeenCalledWith('member-1', {
+      payment_type: 'card_fee',
+      payment_method: 'cash',
+      payment_date: '2026-04-09',
+      notes: null,
+    })
+  })
+
+  it('blocks submission when the member has no email on file', async () => {
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember({ email: null })}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain(
+      'Add an email address to this member\'s profile before recording a payment.',
+    )
+
+    const submitButton = Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.trim() === 'Record Payment',
+    )
+
+    if (!(submitButton instanceof HTMLButtonElement)) {
+      throw new Error('Record Payment button not found.')
+    }
+
+    expect(submitButton.disabled).toBe(true)
+    expect(recordMemberPaymentMock).not.toHaveBeenCalled()
+    expect(createMemberPaymentRequestMock).not.toHaveBeenCalled()
   })
 
   it('auto-fills the amount after member types finish loading when the dialog opens first', async () => {

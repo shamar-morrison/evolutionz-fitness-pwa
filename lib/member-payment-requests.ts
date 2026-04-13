@@ -5,7 +5,9 @@ const memberPaymentRequestSchema = z.object({
   id: z.string().trim().min(1),
   memberId: z.string().trim().min(1),
   memberName: z.string().trim().min(1),
+  memberEmail: z.string().trim().nullable(),
   amount: z.number().finite(),
+  paymentType: z.enum(['membership', 'card_fee']),
   paymentMethod: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
   paymentDate: z.string().trim().min(1),
   memberTypeId: z.string().trim().nullable(),
@@ -47,10 +49,12 @@ type MemberPaymentRequestSuccessResponse = {
 
 type ReviewSuccessResponse = {
   ok: true
+  paymentId?: string | null
 }
 
-export type CreateMemberPaymentRequestInput = {
+export type CreateMembershipPaymentRequestInput = {
   member_id: string
+  payment_type: 'membership'
   amount: number
   payment_method: MemberPaymentMethod
   payment_date: string
@@ -58,9 +62,25 @@ export type CreateMemberPaymentRequestInput = {
   notes?: string | null
 }
 
+export type CreateCardFeePaymentRequestInput = {
+  member_id: string
+  payment_type: 'card_fee'
+  payment_method: MemberPaymentMethod
+  payment_date: string
+  notes?: string | null
+}
+
+export type CreateMemberPaymentRequestInput =
+  | CreateMembershipPaymentRequestInput
+  | CreateCardFeePaymentRequestInput
+
 export type ReviewMemberPaymentRequestInput = {
   action: 'approve' | 'deny'
   rejectionReason?: string | null
+}
+
+export type ReviewMemberPaymentRequestResult = {
+  paymentId: string | null
 }
 
 function getErrorMessage(responseBody: unknown, fallback: string) {
@@ -128,7 +148,7 @@ export async function createMemberPaymentRequest(
 export async function reviewMemberPaymentRequest(
   id: string,
   input: ReviewMemberPaymentRequestInput,
-): Promise<void> {
+): Promise<ReviewMemberPaymentRequestResult> {
   const response = await fetch(`/api/member-payment-requests/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: {
@@ -149,5 +169,17 @@ export async function reviewMemberPaymentRequest(
     throw new Error(
       getErrorMessage(responseBody, 'Failed to review the member payment request.'),
     )
+  }
+
+  const paymentId =
+    typeof responseBody === 'object' &&
+    responseBody !== null &&
+    'paymentId' in responseBody &&
+    typeof responseBody.paymentId === 'string'
+      ? responseBody.paymentId
+      : null
+
+  return {
+    paymentId,
   }
 }

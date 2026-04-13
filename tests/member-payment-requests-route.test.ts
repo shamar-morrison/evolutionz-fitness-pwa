@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 import {
   mockAdminUser,
   mockAuthenticatedUser,
@@ -69,10 +70,14 @@ function createPaymentRequestRecord(
     requested_by: overrides.requested_by ?? 'staff-1',
     status: overrides.status ?? 'pending',
     amount: overrides.amount ?? 12000,
+    payment_type: overrides.payment_type ?? 'membership',
     payment_method: overrides.payment_method ?? 'cash',
     payment_date: overrides.payment_date ?? '2026-04-11',
-    member_type_id: overrides.member_type_id ?? MEMBER_TYPE_ID_GENERAL,
-    notes: overrides.notes ?? 'Paid in full',
+    member_type_id:
+      overrides.member_type_id !== undefined
+        ? overrides.member_type_id
+        : MEMBER_TYPE_ID_GENERAL,
+    notes: overrides.notes !== undefined ? overrides.notes : 'Paid in full',
     reviewed_by: overrides.reviewed_by ?? null,
     reviewed_at: overrides.reviewed_at ?? null,
     rejection_reason: overrides.rejection_reason ?? null,
@@ -81,10 +86,14 @@ function createPaymentRequestRecord(
     member: overrides.member ?? {
       id: MEMBER_ID,
       name: 'Jane Doe',
+      email: 'jane@example.com',
     },
-    memberType: overrides.memberType ?? {
-      name: 'General',
-    },
+    memberType:
+      overrides.memberType !== undefined
+        ? overrides.memberType
+        : {
+            name: 'General',
+          },
     requestedByProfile: overrides.requestedByProfile ?? {
       name: 'Jordan Staff',
     },
@@ -101,6 +110,9 @@ function createPaymentRequestsClient({
     id: MEMBER_ID,
     type: 'General' as MemberType,
     member_type_id: MEMBER_TYPE_ID_GENERAL,
+    email: 'jane@example.com',
+    begin_time: '2026-04-01T00:00:00.000Z',
+    end_time: '2026-04-30T23:59:59.000Z',
   },
   memberTypeRow = createMemberTypeRecord({
     id: MEMBER_TYPE_ID_CIVIL_SERVANT,
@@ -120,6 +132,9 @@ function createPaymentRequestsClient({
     id: string
     type: MemberType
     member_type_id: string | null
+    email: string | null
+    begin_time: string | null
+    end_time: string | null
   } | null
   memberTypeRow?: MemberTypeRecord | null
   approveUpdateMatches?: boolean
@@ -248,7 +263,10 @@ function createPaymentRequestsClient({
         if (table === 'members') {
           return {
             select(columns: string) {
-              expect(['id, member_type_id', 'id, type, member_type_id']).toContain(columns)
+              expect([
+                'id, member_type_id, email',
+                'id, type, member_type_id, begin_time, end_time',
+              ]).toContain(columns)
 
               return {
                 eq(column: string, value: string) {
@@ -259,11 +277,12 @@ function createPaymentRequestsClient({
                     maybeSingle() {
                       return Promise.resolve({
                         data:
-                          columns === 'id, member_type_id'
+                          columns === 'id, member_type_id, email'
                             ? existingMemberRow
                               ? {
                                   id: existingMemberRow.id,
                                   member_type_id: existingMemberRow.member_type_id,
+                                  email: existingMemberRow.email,
                                 }
                               : null
                             : existingMemberRow,
@@ -429,6 +448,7 @@ describe('member payment request routes', () => {
         },
         body: JSON.stringify({
           member_id: MEMBER_ID,
+          payment_type: 'membership',
           amount: 7500,
           payment_method: 'fygaro',
           payment_date: '2026-04-12',
@@ -444,6 +464,7 @@ describe('member payment request routes', () => {
         requested_by: 'staff-auth-1',
         status: 'pending',
         amount: 7500,
+        payment_type: 'membership',
         payment_method: 'fygaro',
         payment_date: '2026-04-12',
         member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
@@ -463,6 +484,7 @@ describe('member payment request routes', () => {
           requestedBy: 'Jordan Staff',
           amount: 7500,
           paymentMethod: 'fygaro',
+          paymentType: 'membership',
         },
       },
       {
@@ -477,6 +499,7 @@ describe('member payment request routes', () => {
           requestedBy: 'Jordan Staff',
           amount: 7500,
           paymentMethod: 'fygaro',
+          paymentType: 'membership',
         },
       },
     ])
@@ -513,6 +536,7 @@ describe('member payment request routes', () => {
         },
         body: JSON.stringify({
           member_id: MEMBER_ID,
+          payment_type: 'membership',
           amount: 12000,
           payment_method: 'cash',
           payment_date: '2026-04-12',
@@ -526,12 +550,113 @@ describe('member payment request routes', () => {
         requested_by: 'staff-auth-1',
         status: 'pending',
         amount: 12000,
+        payment_type: 'membership',
         payment_method: 'cash',
         payment_date: '2026-04-12',
         member_type_id: MEMBER_TYPE_ID_GENERAL,
       },
     ])
     expect(response.status).toBe(200)
+  })
+
+  it('creates a pending card fee request with the fixed amount and no membership type', async () => {
+    const { client, requestInserts } = createPaymentRequestsClient({
+      insertedRequestRow: createPaymentRequestRecord({
+        amount: CARD_FEE_AMOUNT_JMD,
+        payment_type: 'card_fee',
+        payment_date: '2026-04-12',
+        member_type_id: null,
+        memberType: null,
+        notes: 'Replacement card',
+      }),
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readAdminNotificationRecipientsMock.mockResolvedValue([{ id: 'admin-1' }])
+    mockAuthenticatedUser({ id: 'staff-auth-1' })
+
+    const response = await POST(
+      new Request('http://localhost/api/member-payment-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          member_id: MEMBER_ID,
+          payment_type: 'card_fee',
+          payment_method: 'cash',
+          payment_date: '2026-04-12',
+          notes: 'Replacement card',
+        }),
+      }),
+    )
+
+    expect(requestInserts).toEqual([
+      {
+        member_id: MEMBER_ID,
+        requested_by: 'staff-auth-1',
+        status: 'pending',
+        amount: CARD_FEE_AMOUNT_JMD,
+        payment_type: 'card_fee',
+        payment_method: 'cash',
+        payment_date: '2026-04-12',
+        member_type_id: null,
+        notes: 'Replacement card',
+      },
+    ])
+    expect(insertNotificationsMock).toHaveBeenCalledWith(client, [
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          paymentType: 'card_fee',
+        }),
+      }),
+    ])
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      request: expect.objectContaining({
+        amount: CARD_FEE_AMOUNT_JMD,
+        paymentType: 'card_fee',
+        memberTypeId: null,
+      }),
+    })
+  })
+
+  it('returns 400 when the member has no email on file for a payment request', async () => {
+    const { client, requestInserts } = createPaymentRequestsClient({
+      existingMemberRow: {
+        id: MEMBER_ID,
+        type: 'General',
+        member_type_id: MEMBER_TYPE_ID_GENERAL,
+        email: null,
+        begin_time: '2026-04-01T00:00:00.000Z',
+        end_time: '2026-04-30T23:59:59.000Z',
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAuthenticatedUser({ id: 'staff-auth-1' })
+
+    const response = await POST(
+      new Request('http://localhost/api/member-payment-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          member_id: MEMBER_ID,
+          payment_type: 'membership',
+          amount: 12000,
+          payment_method: 'cash',
+          payment_date: '2026-04-12',
+        }),
+      }),
+    )
+
+    expect(requestInserts).toEqual([])
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Add an email address to the member profile before submitting a payment.',
+    })
   })
 
   it('returns 400 when the amount is not greater than zero', async () => {
@@ -547,6 +672,7 @@ describe('member payment request routes', () => {
         },
         body: JSON.stringify({
           member_id: MEMBER_ID,
+          payment_type: 'membership',
           amount: 0,
           payment_method: 'cash',
           payment_date: '2026-04-12',
@@ -567,6 +693,9 @@ describe('member payment request routes', () => {
         id: MEMBER_ID,
         type: 'General',
         member_type_id: null,
+        email: 'jane@example.com',
+        begin_time: '2026-04-01T00:00:00.000Z',
+        end_time: '2026-04-30T23:59:59.000Z',
       },
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -580,6 +709,7 @@ describe('member payment request routes', () => {
         },
         body: JSON.stringify({
           member_id: MEMBER_ID,
+          payment_type: 'membership',
           amount: 12000,
           payment_method: 'cash',
           payment_date: '2026-04-12',
@@ -621,6 +751,7 @@ describe('member payment request routes', () => {
         },
         body: JSON.stringify({
           member_id: MEMBER_ID,
+          payment_type: 'membership',
           amount: 7500,
           payment_method: 'fygaro',
           payment_date: '2026-04-12',
@@ -761,12 +892,15 @@ describe('member payment request routes', () => {
       {
         member_id: MEMBER_ID,
         member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        payment_type: 'membership',
         payment_method: 'cash',
         amount_paid: 12000,
         promotion: null,
-        recorded_by: 'admin-1',
+        recorded_by: 'staff-1',
         payment_date: '2026-04-11',
         notes: 'Paid in full',
+        membership_begin_time: '2026-04-01T00:00:00.000Z',
+        membership_end_time: '2026-04-30T23:59:59.000Z',
       },
     ])
     expect(requestUpdates).toEqual([
@@ -782,7 +916,7 @@ describe('member payment request routes', () => {
       archivedAt: expect.any(String),
     })
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({ ok: true })
+    await expect(response.json()).resolves.toEqual({ ok: true, paymentId: 'payment-1' })
   })
 
   it('uses the final resolved member type id when recording an approved payment request', async () => {
@@ -836,6 +970,7 @@ describe('member payment request routes', () => {
     expect(paymentInserts).toEqual([
       expect.objectContaining({
         member_type_id: resolvedMemberTypeId,
+        payment_type: 'membership',
       }),
     ])
     expect(response.status).toBe(200)
@@ -917,16 +1052,75 @@ describe('member payment request routes', () => {
       {
         member_id: MEMBER_ID,
         member_type_id: MEMBER_TYPE_ID_GENERAL,
+        payment_type: 'membership',
         payment_method: 'cash',
         amount_paid: 12000,
         promotion: null,
-        recorded_by: 'admin-1',
+        recorded_by: 'staff-1',
         payment_date: '2026-04-11',
         notes: 'Paid in full',
+        membership_begin_time: '2026-04-01T00:00:00.000Z',
+        membership_end_time: '2026-04-30T23:59:59.000Z',
       },
     ])
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({ ok: true })
+    await expect(response.json()).resolves.toEqual({ ok: true, paymentId: 'payment-1' })
+  })
+
+  it('approves a card fee request without syncing the member type', async () => {
+    const existingRequestRow = createPaymentRequestRecord({
+      amount: CARD_FEE_AMOUNT_JMD,
+      payment_type: 'card_fee',
+      member_type_id: null,
+      memberType: null,
+      notes: 'Replacement card',
+    })
+    const { client, memberUpdates, operations, paymentInserts } = createPaymentRequestsClient({
+      existingRequestRow,
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-payment-requests/payment-request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'approve',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'payment-request-1' }),
+      },
+    )
+
+    expect(memberUpdates).toEqual([])
+    expect(operations).toEqual(['request-update', 'payment-insert'])
+    expect(paymentInserts).toEqual([
+      {
+        member_id: MEMBER_ID,
+        member_type_id: null,
+        payment_type: 'card_fee',
+        payment_method: 'cash',
+        amount_paid: CARD_FEE_AMOUNT_JMD,
+        promotion: null,
+        recorded_by: 'staff-1',
+        payment_date: '2026-04-11',
+        notes: 'Replacement card',
+        membership_begin_time: '2026-04-01T00:00:00.000Z',
+        membership_end_time: '2026-04-30T23:59:59.000Z',
+      },
+    ])
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, paymentId: 'payment-1' })
   })
 
   it('returns 400 when an approve race finds the request already reviewed', async () => {

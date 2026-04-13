@@ -5,11 +5,13 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  useCardFeeRevenueReportMock,
   toastMock,
   useMembershipRevenueReportMock,
   useOverallRevenueReportMock,
   usePtRevenueReportMock,
 } = vi.hoisted(() => ({
+  useCardFeeRevenueReportMock: vi.fn(),
   toastMock: vi.fn(),
   useMembershipRevenueReportMock: vi.fn(),
   useOverallRevenueReportMock: vi.fn(),
@@ -17,6 +19,7 @@ const {
 }))
 
 vi.mock('@/hooks/use-revenue-reports', () => ({
+  useCardFeeRevenueReport: useCardFeeRevenueReportMock,
   useMembershipRevenueReport: useMembershipRevenueReportMock,
   usePtRevenueReport: usePtRevenueReportMock,
   useOverallRevenueReport: useOverallRevenueReportMock,
@@ -108,6 +111,13 @@ describe('RevenueReportClient', () => {
       error: null,
       refetch: vi.fn(),
     }))
+    useCardFeeRevenueReportMock.mockImplementation(() => ({
+      report: null,
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+    }))
     usePtRevenueReportMock.mockImplementation(() => ({
       report: null,
       isLoading: false,
@@ -130,6 +140,7 @@ describe('RevenueReportClient', () => {
     })
     container.remove()
     vi.restoreAllMocks()
+    useCardFeeRevenueReportMock.mockReset()
     useMembershipRevenueReportMock.mockReset()
     usePtRevenueReportMock.mockReset()
     useOverallRevenueReportMock.mockReset()
@@ -150,6 +161,11 @@ describe('RevenueReportClient', () => {
       '',
       expect.objectContaining({ enabled: false }),
     )
+    expect(useCardFeeRevenueReportMock).toHaveBeenCalledWith(
+      '',
+      '',
+      expect.objectContaining({ enabled: false }),
+    )
     expect(useOverallRevenueReportMock).toHaveBeenCalledWith(
       '',
       '',
@@ -163,6 +179,11 @@ describe('RevenueReportClient', () => {
       '2026-04-01',
       '2026-04-30',
       expect.objectContaining({ enabled: true }),
+    )
+    expect(useCardFeeRevenueReportMock).toHaveBeenLastCalledWith(
+      '2026-04-01',
+      '2026-04-30',
+      expect.objectContaining({ enabled: false }),
     )
     expect(usePtRevenueReportMock).toHaveBeenLastCalledWith(
       '2026-04-01',
@@ -199,6 +220,11 @@ describe('RevenueReportClient', () => {
       }),
     )
     expect(useMembershipRevenueReportMock).toHaveBeenLastCalledWith(
+      '',
+      '',
+      expect.objectContaining({ enabled: false }),
+    )
+    expect(useCardFeeRevenueReportMock).toHaveBeenLastCalledWith(
       '',
       '',
       expect.objectContaining({ enabled: false }),
@@ -282,26 +308,66 @@ describe('RevenueReportClient', () => {
         refetch: vi.fn(),
       }),
     )
+    useCardFeeRevenueReportMock.mockImplementation(
+      (from: string, to: string, options?: { enabled?: boolean }) => ({
+        report:
+          from && to && options?.enabled
+            ? {
+                summary: {
+                  totalRevenue: 5000,
+                  totalPayments: 2,
+                },
+                payments: [
+                  {
+                    id: 'payment-card-fee-1',
+                    memberName: 'Member Three',
+                    amount: 2500,
+                    paymentMethod: 'cash',
+                    paymentDate: '2026-04-08',
+                    notes: 'Lost card replacement',
+                  },
+                ],
+                monthlyBreakdown: [
+                  {
+                    month: '2026-04',
+                    totalRevenue: 5000,
+                    paymentCount: 2,
+                  },
+                ],
+              }
+            : null,
+        isLoading: false,
+        isFetching: false,
+        error: null,
+        refetch: vi.fn(),
+      }),
+    )
     useOverallRevenueReportMock.mockImplementation(
       (from: string, to: string, options?: { enabled?: boolean }) => ({
         report:
           from && to && options?.enabled
             ? {
                 summary: {
-                  grandTotal: 42000,
+                  grandTotal: 47000,
                   membershipRevenue: 12000,
+                  cardFeeRevenue: 5000,
                   ptRevenue: 30000,
                 },
                 breakdown: [
                   {
                     revenueStream: 'Membership',
                     amount: 12000,
-                    percentageOfTotal: 28.57,
+                    percentageOfTotal: 25.53,
+                  },
+                  {
+                    revenueStream: 'Card Fees',
+                    amount: 5000,
+                    percentageOfTotal: 10.64,
                   },
                   {
                     revenueStream: 'PT Revenue',
                     amount: 30000,
-                    percentageOfTotal: 71.43,
+                    percentageOfTotal: 63.83,
                   },
                 ],
               }
@@ -326,11 +392,32 @@ describe('RevenueReportClient', () => {
       '2026-04-30',
       expect.objectContaining({ enabled: true }),
     )
+    expect(useCardFeeRevenueReportMock).toHaveBeenLastCalledWith(
+      '2026-04-01',
+      '2026-04-30',
+      expect.objectContaining({ enabled: false }),
+    )
     expect(usePtRevenueReportMock).toHaveBeenLastCalledWith(
       '2026-04-01',
       '2026-04-30',
       expect.objectContaining({ enabled: false }),
     )
+
+    await clickButton(container, 'Card Fees')
+    await flushAsyncWork()
+
+    expect(useCardFeeRevenueReportMock).toHaveBeenCalledWith(
+      '2026-04-01',
+      '2026-04-30',
+      expect.objectContaining({ enabled: true }),
+    )
+    expect(useMembershipRevenueReportMock).toHaveBeenCalledWith(
+      '2026-04-01',
+      '2026-04-30',
+      expect.objectContaining({ enabled: false }),
+    )
+    expect(container.textContent).toContain('Monthly Breakdown')
+    expect(container.textContent).toContain('Member Three')
 
     await clickButton(container, 'PT Revenue')
     await flushAsyncWork()
@@ -345,6 +432,11 @@ describe('RevenueReportClient', () => {
       '2026-04-30',
       expect.objectContaining({ enabled: true }),
     )
+    expect(useCardFeeRevenueReportMock).toHaveBeenCalledWith(
+      '2026-04-01',
+      '2026-04-30',
+      expect.objectContaining({ enabled: false }),
+    )
     expect(container.textContent).toContain('Jordan Trainer')
     expect(container.textContent).toContain('Total Sessions Completed')
 
@@ -357,6 +449,7 @@ describe('RevenueReportClient', () => {
       expect.objectContaining({ enabled: true }),
     )
     expect(container.textContent).toContain('Grand Total Revenue')
+    expect(container.textContent).toContain('Card Fee Revenue')
     expect(container.textContent).toContain('PT Revenue')
   })
 })

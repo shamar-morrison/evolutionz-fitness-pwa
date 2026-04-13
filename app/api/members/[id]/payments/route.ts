@@ -1,19 +1,24 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 import {
   mapMemberPaymentRecord,
   MEMBER_PAYMENT_RECORD_SELECT,
   type MemberPaymentRecord,
 } from '@/lib/member-payment-records'
-import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { MEMBER_PAYMENTS_PAGE_SIZE } from '@/lib/member-payments'
+import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { type MemberTypesReadClient } from '@/lib/member-types-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import type { MemberType } from '@/types'
+import type {
+  MemberPaymentMethod,
+  MemberType,
+} from '@/types'
 
-const createMemberPaymentSchema = z
+const membershipPaymentSchema = z
   .object({
+    payment_type: z.literal('membership'),
     member_type_id: z.string().trim().uuid('Membership type is required.'),
     payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
     amount_paid: z.number().finite().min(0),
@@ -25,6 +30,23 @@ const createMemberPaymentSchema = z
     notes: z.string().trim().min(1).nullable().optional(),
   })
   .strict()
+
+const cardFeePaymentSchema = z
+  .object({
+    payment_type: z.literal('card_fee'),
+    payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+    payment_date: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Payment date must be in YYYY-MM-DD format.'),
+    notes: z.string().trim().min(1).nullable().optional(),
+  })
+  .strict()
+
+const createMemberPaymentSchema = z.discriminatedUnion('payment_type', [
+  membershipPaymentSchema,
+  cardFeePaymentSchema,
+])
 
 type QueryError = {
   message: string
@@ -70,12 +92,15 @@ type MemberPaymentsGetRouteClient = {
 
 type MemberPaymentsRouteClient = MemberTypesReadClient & {
   from(table: 'members'): {
-    select(columns: 'id, type, member_type_id'): {
+    select(columns: 'id, type, member_type_id, email, begin_time, end_time'): {
       eq(column: 'id', value: string): {
         maybeSingle(): QueryResult<{
           id: string
           type: MemberType
           member_type_id: string | null
+          email: string | null
+          begin_time: string | null
+          end_time: string | null
         }>
       }
     }
@@ -95,27 +120,19 @@ type MemberPaymentsRouteClient = MemberTypesReadClient & {
   from(table: 'member_payments'): {
     insert(values: {
       member_id: string
-      member_type_id: string
-      payment_method: 'cash' | 'fygaro' | 'bank_transfer' | 'point_of_sale'
+      member_type_id: string | null
+      payment_type: 'membership' | 'card_fee'
+      payment_method: MemberPaymentMethod
       amount_paid: number
       promotion: string | null
       recorded_by: string
       payment_date: string
       notes: string | null
+      membership_begin_time: string | null
+      membership_end_time: string | null
     }): {
       select(columns: '*'): {
-        maybeSingle(): QueryResult<{
-          id: string
-          member_id: string
-          member_type_id: string
-          payment_method: 'cash' | 'fygaro' | 'bank_transfer' | 'point_of_sale'
-          amount_paid: number
-          promotion: string | null
-          recorded_by: string | null
-          payment_date: string
-          notes: string | null
-          created_at: string
-        }>
+        maybeSingle(): QueryResult<Record<string, unknown>>
       }
     }
   }
@@ -265,7 +282,7 @@ export async function POST(
     const input = createMemberPaymentSchema.parse(requestBody)
     const { data: existingMember, error: existingMemberError } = await supabase
       .from('members')
-      .select('id, type, member_type_id')
+      .select('id, type, member_type_id, email, begin_time, end_time')
       .eq('id', id)
       .maybeSingle()
 
@@ -277,7 +294,17 @@ export async function POST(
       return createErrorResponse('Member not found.', 404)
     }
 
-    if (existingMember.member_type_id !== input.member_type_id) {
+    if (!existingMember.email?.trim()) {
+      return createErrorResponse(
+        'Add an email address to the member profile before recording a payment.',
+        400,
+      )
+    }
+
+    if (
+      input.payment_type === 'membership' &&
+      existingMember.member_type_id !== input.member_type_id
+    ) {
       const updateValues = await buildMemberTypeUpdateValues(
         supabase,
         input.member_type_id,
@@ -304,13 +331,23 @@ export async function POST(
       .from('member_payments')
       .insert({
         member_id: id,
-        member_type_id: input.member_type_id,
+        member_type_id:
+          input.payment_type === 'membership' ? input.member_type_id : null,
+        payment_type: input.payment_type,
         payment_method: input.payment_method,
-        amount_paid: input.amount_paid,
-        promotion: normalizeOptionalText(input.promotion),
+        amount_paid:
+          input.payment_type === 'membership'
+            ? input.amount_paid
+            : CARD_FEE_AMOUNT_JMD,
+        promotion:
+          input.payment_type === 'membership'
+            ? normalizeOptionalText(input.promotion)
+            : null,
         recorded_by: authResult.profile.id,
         payment_date: input.payment_date,
         notes: normalizeOptionalText(input.notes),
+        membership_begin_time: existingMember.begin_time,
+        membership_end_time: existingMember.end_time,
       })
       .select('*')
       .maybeSingle()

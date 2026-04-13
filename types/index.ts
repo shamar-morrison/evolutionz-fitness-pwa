@@ -56,26 +56,33 @@ export type MembershipExpiryEmailSettings = {
 }
 
 export type MemberPaymentMethod = 'cash' | 'fygaro' | 'bank_transfer' | 'point_of_sale'
+export type MemberPaymentType = 'membership' | 'card_fee'
 export type MemberApprovalRequestStatus = 'pending' | 'approved' | 'denied'
 
 export type MemberPayment = {
   id: string
   member_id: string
-  member_type_id: string
+  member_type_id: string | null
+  payment_type: MemberPaymentType
   payment_method: MemberPaymentMethod
   amount_paid: number
   promotion: string | null
   recorded_by: string | null
   payment_date: string
   notes: string | null
+  receipt_number: string | null
+  receipt_sent_at: string | null
+  membership_begin_time: string | null
+  membership_end_time: string | null
   created_at: string
 }
 
 export type MemberPaymentHistoryItem = {
   id: string
   memberId: string
-  memberTypeId: string
+  memberTypeId: string | null
   memberTypeName: string | null
+  paymentType: MemberPaymentType
   paymentMethod: MemberPaymentMethod
   amountPaid: number
   promotion: string | null
@@ -83,6 +90,8 @@ export type MemberPaymentHistoryItem = {
   recordedByName: string | null
   paymentDate: string
   notes: string | null
+  receiptNumber: string | null
+  receiptSentAt: string | null
   createdAt: string
 }
 
@@ -152,7 +161,9 @@ export type MemberPaymentRequest = {
   id: string
   memberId: string
   memberName: string
+  memberEmail: string | null
   amount: number
+  paymentType: MemberPaymentType
   paymentMethod: MemberPaymentMethod
   paymentDate: string
   memberTypeId: string | null

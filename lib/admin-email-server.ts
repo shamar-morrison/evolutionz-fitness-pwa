@@ -31,6 +31,7 @@ type AdminEmailDeliveryRow = {
   send_date: string
   idempotency_key: string
   recipient_email: string
+  payment_id?: string | null
   status: 'pending' | 'sent'
   provider_message_id?: string | null
   sent_at?: string | null
@@ -251,6 +252,20 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
     return (data as AdminEmailDeliveryLookupRow | null) ?? null
   }
 
+  async function readReceiptDelivery(input: { paymentId: string }) {
+    const { data, error } = await supabase
+      .from(ADMIN_EMAIL_DELIVERIES_TABLE)
+      .select('id,status,created_at,provider_message_id,sent_at')
+      .eq('payment_id', input.paymentId)
+      .maybeSingle()
+
+    if (error) {
+      throw new Error(`Failed to read receipt email delivery reservation: ${error.message}`)
+    }
+
+    return (data as AdminEmailDeliveryLookupRow | null) ?? null
+  }
+
   async function insertPendingDelivery(input: {
     senderProfileId: string
     sendDate: string
@@ -264,6 +279,27 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         send_date: input.sendDate,
         idempotency_key: input.idempotencyKey,
         recipient_email: normalizeRecipientEmail(input.recipientEmail),
+        status: 'pending',
+      } satisfies AdminEmailDeliveryRow)
+      .select('id')
+      .maybeSingle()
+  }
+
+  async function insertPendingReceiptDelivery(input: {
+    senderProfileId: string
+    sendDate: string
+    paymentId: string
+    recipientEmail: string
+    idempotencyKey: string
+  }) {
+    return supabase
+      .from(ADMIN_EMAIL_DELIVERIES_TABLE)
+      .insert({
+        sender_profile_id: input.senderProfileId,
+        send_date: input.sendDate,
+        idempotency_key: input.idempotencyKey,
+        recipient_email: normalizeRecipientEmail(input.recipientEmail),
+        payment_id: input.paymentId,
         status: 'pending',
       } satisfies AdminEmailDeliveryRow)
       .select('id')
@@ -481,6 +517,158 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
 
       if (error) {
         throw new Error(`Failed to release admin email delivery reservation: ${error.message}`)
+      }
+    },
+    async readReceiptDelivery(input: { paymentId: string }) {
+      const delivery = await readReceiptDelivery(input)
+
+      if (!delivery) {
+        return null
+      }
+
+      return {
+        status: delivery.status,
+        createdAt: delivery.created_at ?? null,
+        sentAt: delivery.sent_at ?? null,
+        isStale: isPendingDeliveryStale(delivery),
+      }
+    },
+    async reserveReceiptDelivery(input: {
+      senderProfileId: string
+      sendDate: string
+      paymentId: string
+      recipientEmail: string
+      idempotencyKey: string
+    }) {
+      const { data, error } = await insertPendingReceiptDelivery(input)
+
+      if (!error) {
+        return data ? 'reserved' : 'pending'
+      }
+
+      if (error.code !== '23505') {
+        throw new Error(`Failed to reserve receipt email delivery: ${error.message}`)
+      }
+
+      const existingDelivery = await readReceiptDelivery({
+        paymentId: input.paymentId,
+      })
+
+      if (!existingDelivery) {
+        const retryInsertResult = await insertPendingReceiptDelivery(input)
+
+        if (!retryInsertResult.error) {
+          return retryInsertResult.data ? 'reserved' : 'pending'
+        }
+
+        if (retryInsertResult.error.code !== '23505') {
+          throw new Error(
+            `Failed to reserve receipt email delivery: ${retryInsertResult.error.message}`,
+          )
+        }
+
+        const retryExistingDelivery = await readReceiptDelivery({
+          paymentId: input.paymentId,
+        })
+
+        if (!retryExistingDelivery) {
+          throw new Error('Failed to reserve receipt email delivery: reservation not found.')
+        }
+
+        if (retryExistingDelivery.status === 'pending' && !isPendingDeliveryStale(retryExistingDelivery)) {
+          return 'pending'
+        }
+
+        return retryExistingDelivery.status === 'sent' ? 'sent' : 'pending'
+      }
+
+      if (existingDelivery.status === 'sent') {
+        return 'sent'
+      }
+
+      if (!isPendingDeliveryStale(existingDelivery)) {
+        return 'pending'
+      }
+
+      const { error: deleteError } = await supabase
+        .from(ADMIN_EMAIL_DELIVERIES_TABLE)
+        .delete()
+        .eq('id', existingDelivery.id)
+        .eq('payment_id', input.paymentId)
+        .eq('status', 'pending')
+
+      if (deleteError) {
+        throw new Error(`Failed to recycle stale receipt email delivery: ${deleteError.message}`)
+      }
+
+      const retryInsertResult = await insertPendingReceiptDelivery(input)
+
+      if (!retryInsertResult.error) {
+        return retryInsertResult.data ? 'reserved' : 'pending'
+      }
+
+      if (retryInsertResult.error.code !== '23505') {
+        throw new Error(
+          `Failed to reserve receipt email delivery: ${retryInsertResult.error.message}`,
+        )
+      }
+
+      const retryExistingDelivery = await readReceiptDelivery({
+        paymentId: input.paymentId,
+      })
+
+      if (!retryExistingDelivery) {
+        throw new Error('Failed to reserve receipt email delivery: reservation not found.')
+      }
+
+      if (retryExistingDelivery.status === 'pending' && !isPendingDeliveryStale(retryExistingDelivery)) {
+        return 'pending'
+      }
+
+      return retryExistingDelivery.status === 'sent' ? 'sent' : 'pending'
+    },
+    async markReceiptDeliverySent(input: {
+      paymentId: string
+      providerMessageId: string | null
+      sentAt: string
+    }) {
+      const { data, error } = await supabase
+        .from(ADMIN_EMAIL_DELIVERIES_TABLE)
+        .update({
+          provider_message_id: input.providerMessageId,
+          sent_at: input.sentAt,
+          status: 'sent',
+        })
+        .eq('payment_id', input.paymentId)
+        .eq('status', 'pending')
+        .select('id')
+        .maybeSingle()
+
+      if (error) {
+        throw new Error(`Failed to mark receipt email delivery as sent: ${error.message}`)
+      }
+
+      if (!data) {
+        const existingDelivery = await readReceiptDelivery({
+          paymentId: input.paymentId,
+        })
+
+        if (existingDelivery?.status === 'sent') {
+          return
+        }
+
+        throw new Error('Failed to mark receipt email delivery as sent: reservation not found.')
+      }
+    },
+    async releasePendingReceiptDelivery(input: { paymentId: string }) {
+      const { error } = await supabase
+        .from(ADMIN_EMAIL_DELIVERIES_TABLE)
+        .delete()
+        .eq('payment_id', input.paymentId)
+        .eq('status', 'pending')
+
+      if (error) {
+        throw new Error(`Failed to release receipt email delivery reservation: ${error.message}`)
       }
     },
   }

@@ -2,9 +2,15 @@
 
 import { useState } from 'react'
 import { BarChart3, Download, FileText } from 'lucide-react'
-import { useMembershipRevenueReport, useOverallRevenueReport, usePtRevenueReport } from '@/hooks/use-revenue-reports'
+import {
+  useCardFeeRevenueReport,
+  useMembershipRevenueReport,
+  useOverallRevenueReport,
+  usePtRevenueReport,
+} from '@/hooks/use-revenue-reports'
 import { toast } from '@/hooks/use-toast'
 import {
+  type CardFeeRevenueReport,
   type DateRangeValue,
   formatGeneratedTimestamp,
   formatPaymentMethodLabel,
@@ -12,6 +18,7 @@ import {
   formatRevenuePercentage,
   formatRevenueReportDate,
   formatRevenueReportDateTime,
+  formatRevenueReportMonth,
   getRevenueDateRangeForPeriod,
   isDateRangeValue,
   type MembershipRevenueReport,
@@ -36,7 +43,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-type RevenueTab = 'membership' | 'pt' | 'overall'
+type RevenueTab = 'membership' | 'card-fees' | 'pt' | 'overall'
 
 function getPdfCursorY(doc: { lastAutoTable?: { finalY: number } }, fallback: number) {
   return (doc.lastAutoTable?.finalY ?? fallback) + 20
@@ -218,6 +225,138 @@ async function downloadMembershipRevenuePdf(
   doc.save(`revenue-membership-${range.from}-to-${range.to}.pdf`)
 }
 
+async function downloadCardFeeRevenuePdf(
+  report: CardFeeRevenueReport,
+  range: DateRangeValue,
+) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf/dist/jspdf.es.min.js'),
+    import('jspdf-autotable/es'),
+  ])
+  const doc = new jsPDF({
+    unit: 'pt',
+    format: 'a4',
+  })
+  const leftMargin = 40
+  let cursorY = 48
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(18)
+  doc.setTextColor(0, 0, 0)
+  doc.text('Evolutionz Fitness - Card Fee Revenue Report', leftMargin, cursorY)
+
+  cursorY += 24
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(11)
+  doc.setTextColor(70, 70, 70)
+  doc.text(
+    `Period: ${formatRevenueReportDate(range.from)} to ${formatRevenueReportDate(range.to)}`,
+    leftMargin,
+    cursorY,
+  )
+
+  cursorY += 16
+  doc.text(`Generated: ${formatGeneratedTimestamp()}`, leftMargin, cursorY)
+
+  autoTable(doc, {
+    startY: cursorY + 20,
+    margin: { left: leftMargin, right: leftMargin },
+    theme: 'grid',
+    head: [['Total Card Fee Revenue (JMD)', 'Card Fee Payments']],
+    body: [[formatRevenueCurrency(report.summary.totalRevenue), String(report.summary.totalPayments)]],
+    styles: {
+      font: 'helvetica',
+      fontSize: 10,
+      textColor: [0, 0, 0],
+      lineColor: [190, 190, 190],
+      lineWidth: 0.5,
+      cellPadding: 6,
+    },
+    headStyles: {
+      fillColor: [235, 235, 235],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+    },
+  })
+
+  cursorY = getPdfCursorY(doc as any, cursorY)
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.text('Monthly Breakdown', leftMargin, cursorY)
+
+  autoTable(doc, {
+    startY: cursorY + 10,
+    margin: { left: leftMargin, right: leftMargin },
+    theme: 'grid',
+    head: [['Month', 'Revenue (JMD)', 'Payments']],
+    body:
+      report.monthlyBreakdown.length > 0
+        ? report.monthlyBreakdown.map((item) => [
+            formatRevenueReportMonth(item.month),
+            formatRevenueCurrency(item.totalRevenue),
+            String(item.paymentCount),
+          ])
+        : [['No card fee totals for the selected period.', '', '']],
+    styles: {
+      font: 'helvetica',
+      fontSize: 9,
+      textColor: [0, 0, 0],
+      lineColor: [190, 190, 190],
+      lineWidth: 0.5,
+      cellPadding: 5,
+    },
+    headStyles: {
+      fillColor: [235, 235, 235],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+    },
+  })
+
+  cursorY = getPdfCursorY(doc as any, cursorY)
+
+  autoTable(doc, {
+    startY: cursorY,
+    margin: { left: leftMargin, right: leftMargin },
+    theme: 'grid',
+    head: [['Member Name', 'Amount (JMD)', 'Payment Method', 'Date', 'Notes']],
+    body:
+      report.payments.length > 0
+        ? report.payments.map((payment) => [
+            payment.memberName,
+            formatRevenueCurrency(payment.amount),
+            formatPaymentMethodLabel(payment.paymentMethod),
+            formatRevenueReportDate(payment.paymentDate),
+            payment.notes ?? '',
+          ])
+        : [['No card fee payments found for the selected period.', '', '', '', '']],
+    styles: {
+      font: 'helvetica',
+      fontSize: 9,
+      textColor: [0, 0, 0],
+      lineColor: [190, 190, 190],
+      lineWidth: 0.5,
+      cellPadding: 5,
+    },
+    headStyles: {
+      fillColor: [235, 235, 235],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+    },
+  })
+
+  addPdfFooter(doc, [
+    `Generated: ${formatGeneratedTimestamp()}`,
+    'Evolutionz Fitness - Confidential',
+  ])
+
+  doc.save(`revenue-card-fees-${range.from}-to-${range.to}.pdf`)
+}
+
 async function downloadPtRevenuePdf(report: PtRevenueReport, range: DateRangeValue) {
   if (typeof window === 'undefined') {
     return
@@ -379,10 +518,11 @@ async function downloadOverallRevenuePdf(
     startY: cursorY + 20,
     margin: { left: leftMargin, right: leftMargin },
     theme: 'grid',
-    head: [['Grand Total (JMD)', 'Membership Revenue (JMD)', 'PT Revenue (JMD)']],
+    head: [['Grand Total (JMD)', 'Membership Revenue (JMD)', 'Card Fee Revenue (JMD)', 'PT Revenue (JMD)']],
     body: [[
       formatRevenueCurrency(report.summary.grandTotal),
       formatRevenueCurrency(report.summary.membershipRevenue),
+      formatRevenueCurrency(report.summary.cardFeeRevenue),
       formatRevenueCurrency(report.summary.ptRevenue),
     ]],
     styles: {
@@ -675,6 +815,153 @@ function MembershipRevenueContent({
   )
 }
 
+function CardFeeRevenueContent({
+  report,
+  isLoading,
+  error,
+  appliedRange,
+  onExport,
+}: {
+  report: CardFeeRevenueReport | null
+  isLoading: boolean
+  error: Error | null
+  appliedRange: DateRangeValue | null
+  onExport: () => void
+}) {
+  if (!appliedRange) {
+    return <InitialReportState />
+  }
+
+  if (error) {
+    return <ErrorState message={error.message || 'Failed to load the card fee revenue report.'} />
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-2">
+          <SummaryCardSkeleton />
+          <SummaryCardSkeleton />
+        </div>
+        <TableSkeleton columns={3} />
+        <TableSkeleton columns={5} />
+      </div>
+    )
+  }
+
+  if (!report) {
+    return null
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Card Fees</h2>
+          <p className="text-sm text-muted-foreground">
+            Card fee payments recorded from {formatRevenueReportDate(appliedRange.from)} to{' '}
+            {formatRevenueReportDate(appliedRange.to)}.
+          </p>
+        </div>
+        <Button type="button" variant="outline" onClick={onExport}>
+          <Download className="h-4 w-4" />
+          <span>Export PDF</span>
+        </Button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <SummaryCard
+          title="Total Card Fee Revenue (JMD)"
+          value={formatRevenueCurrency(report.summary.totalRevenue)}
+        />
+        <SummaryCard title="Card Fee Payments" value={String(report.summary.totalPayments)} />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Monthly Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Month</TableHead>
+                  <TableHead className="text-right">Revenue (JMD)</TableHead>
+                  <TableHead className="text-right">Payments</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {report.monthlyBreakdown.length > 0 ? (
+                  report.monthlyBreakdown.map((item) => (
+                    <TableRow key={item.month}>
+                      <TableCell className="font-medium">
+                        {formatRevenueReportMonth(item.month)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatRevenueCurrency(item.totalRevenue)}
+                      </TableCell>
+                      <TableCell className="text-right">{item.paymentCount}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
+                      No card fee totals for the selected period.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Member Name</TableHead>
+                  <TableHead className="text-right">Amount (JMD)</TableHead>
+                  <TableHead>Payment Method</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {report.payments.length > 0 ? (
+                  report.payments.map((payment) => (
+                    <TableRow key={payment.id}>
+                      <TableCell className="font-medium">{payment.memberName}</TableCell>
+                      <TableCell className="text-right">
+                        {formatRevenueCurrency(payment.amount)}
+                      </TableCell>
+                      <TableCell>{formatPaymentMethodLabel(payment.paymentMethod)}</TableCell>
+                      <TableCell>{formatRevenueReportDate(payment.paymentDate)}</TableCell>
+                      <TableCell>{payment.notes ?? ''}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      No card fee payments found for the selected period.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 function PtRevenueContent({
   report,
   isLoading,
@@ -834,7 +1121,8 @@ function OverallRevenueContent({
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 xl:grid-cols-4">
+          <SummaryCardSkeleton />
           <SummaryCardSkeleton />
           <SummaryCardSkeleton />
           <SummaryCardSkeleton />
@@ -854,8 +1142,8 @@ function OverallRevenueContent({
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Overall Revenue</h2>
           <p className="text-sm text-muted-foreground">
-            Combined membership and PT revenue from {formatRevenueReportDate(appliedRange.from)} to{' '}
-            {formatRevenueReportDate(appliedRange.to)}.
+            Combined membership, card fee, and PT revenue from{' '}
+            {formatRevenueReportDate(appliedRange.from)} to {formatRevenueReportDate(appliedRange.to)}.
           </p>
         </div>
         <Button type="button" variant="outline" onClick={onExport}>
@@ -864,9 +1152,10 @@ function OverallRevenueContent({
         </Button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-4">
         <SummaryCard title="Grand Total Revenue (JMD)" value={formatRevenueCurrency(report.summary.grandTotal)} />
         <SummaryCard title="Membership Revenue (JMD)" value={formatRevenueCurrency(report.summary.membershipRevenue)} />
+        <SummaryCard title="Card Fee Revenue (JMD)" value={formatRevenueCurrency(report.summary.cardFeeRevenue)} />
         <SummaryCard title="PT Revenue (JMD)" value={formatRevenueCurrency(report.summary.ptRevenue)} />
       </div>
 
@@ -913,6 +1202,13 @@ export function RevenueReportClient() {
     appliedRange?.to ?? '',
     {
       enabled: isDateRangeValue(appliedRange) && activeTab === 'membership',
+    },
+  )
+  const cardFeeReportQuery = useCardFeeRevenueReport(
+    appliedRange?.from ?? '',
+    appliedRange?.to ?? '',
+    {
+      enabled: isDateRangeValue(appliedRange) && activeTab === 'card-fees',
     },
   )
   const ptReportQuery = usePtRevenueReport(appliedRange?.from ?? '', appliedRange?.to ?? '', {
@@ -1004,6 +1300,25 @@ export function RevenueReportClient() {
     }
   }
 
+  const handleCardFeePdfDownload = async () => {
+    if (!cardFeeReportQuery.report || !appliedRange) {
+      return
+    }
+
+    try {
+      await downloadCardFeeRevenuePdf(cardFeeReportQuery.report, appliedRange)
+    } catch (error) {
+      toast({
+        title: 'PDF export failed',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Failed to download the card fee revenue PDF.',
+        variant: 'destructive',
+      })
+    }
+  }
+
   const handleOverallPdfDownload = async () => {
     if (!overallReportQuery.report || !appliedRange) {
       return
@@ -1026,7 +1341,7 @@ export function RevenueReportClient() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
         <p className="text-sm text-muted-foreground">
-          Admin reporting for membership and personal training revenue.
+          Admin reporting for membership, card fee, and personal training revenue.
         </p>
       </div>
 
@@ -1117,6 +1432,9 @@ export function RevenueReportClient() {
           <TabsTrigger value="membership" className="px-3 py-1.5">
             Membership
           </TabsTrigger>
+          <TabsTrigger value="card-fees" className="px-3 py-1.5">
+            Card Fees
+          </TabsTrigger>
           <TabsTrigger value="pt" className="px-3 py-1.5">
             PT Revenue
           </TabsTrigger>
@@ -1132,6 +1450,16 @@ export function RevenueReportClient() {
             error={membershipReportQuery.error as Error | null}
             appliedRange={appliedRange}
             onExport={() => void handleMembershipPdfDownload()}
+          />
+        </TabsContent>
+
+        <TabsContent value="card-fees" className="space-y-4">
+          <CardFeeRevenueContent
+            report={cardFeeReportQuery.report}
+            isLoading={cardFeeReportQuery.isLoading}
+            error={cardFeeReportQuery.error as Error | null}
+            appliedRange={appliedRange}
+            onExport={() => void handleCardFeePdfDownload()}
           />
         </TabsContent>
 

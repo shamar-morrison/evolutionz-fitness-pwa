@@ -62,6 +62,16 @@ vi.mock('@/components/confirm-dialog', () => ({
     ) : null,
 }))
 
+vi.mock('@/components/member-payment-receipt-preview-dialog', () => ({
+  MemberPaymentReceiptPreviewDialog: ({
+    open,
+    paymentId,
+  }: {
+    open: boolean
+    paymentId: string | null
+  }) => (open && paymentId ? <div data-testid="receipt-preview">{paymentId}</div> : null),
+}))
+
 vi.mock('@/lib/member-payments', async () => {
   const actual = await vi.importActual<typeof import('@/lib/member-payments')>(
     '@/lib/member-payments',
@@ -85,6 +95,7 @@ function createPayment(
     memberId: overrides.memberId ?? 'member-1',
     memberTypeId: overrides.memberTypeId ?? 'type-1',
     memberTypeName: overrides.memberTypeName ?? 'General',
+    paymentType: overrides.paymentType ?? 'membership',
     paymentMethod: overrides.paymentMethod ?? 'cash',
     amountPaid: overrides.amountPaid ?? 12000 + index,
     promotion: overrides.promotion ?? null,
@@ -92,6 +103,8 @@ function createPayment(
     recordedByName: overrides.recordedByName ?? 'Admin User',
     paymentDate: overrides.paymentDate ?? `2026-04-${String(index + 1).padStart(2, '0')}`,
     notes: overrides.notes ?? `Payment note ${index}`,
+    receiptNumber: overrides.receiptNumber ?? `EF-2026-${String(index + 1).padStart(5, '0')}`,
+    receiptSentAt: overrides.receiptSentAt ?? null,
     createdAt: overrides.createdAt ?? `2026-04-${String(index + 1).padStart(2, '0')}T12:00:00.000Z`,
   }
 }
@@ -395,5 +408,41 @@ describe('MemberPaymentHistory', () => {
     expect(container.textContent).toContain('Showing 1-10 of 11')
     expect(container.textContent).toContain('Page 1 payment 10')
     expect(container.textContent).not.toContain('Page 2 only payment')
+  })
+
+  it('shows card fee labels and disables receipt sending when member email is missing', async () => {
+    useMemberPaymentsMock.mockReturnValue({
+      data: {
+        payments: [
+          createPayment(0, {
+            paymentType: 'card_fee',
+            memberTypeId: null,
+            memberTypeName: null,
+            amountPaid: 2500,
+            receiptNumber: 'EF-2026-00001',
+          }),
+        ],
+        totalMatches: 1,
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(<MemberPaymentHistory memberId="member-1" memberEmail={null} />)
+    })
+
+    expect(container.textContent).toContain('Card Fee')
+
+    const sendReceiptButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Send Receipt',
+    )
+
+    if (!(sendReceiptButton instanceof HTMLButtonElement)) {
+      throw new Error('Send Receipt button not found.')
+    }
+
+    expect(sendReceiptButton.disabled).toBe(true)
   })
 })

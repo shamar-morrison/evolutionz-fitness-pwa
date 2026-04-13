@@ -1,9 +1,11 @@
 import { z } from 'zod'
 import { getJamaicaDateInputValue } from '@/lib/member-access-time'
+import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 import type {
   MemberPayment,
   MemberPaymentHistoryResponse,
   MemberPaymentMethod,
+  MemberPaymentType,
   MemberTypeRecord,
 } from '@/types'
 
@@ -22,13 +24,18 @@ export const MEMBER_PAYMENTS_PAGE_SIZE = 10
 const memberPaymentSchema = z.object({
   id: z.string().trim().min(1),
   member_id: z.string().trim().min(1),
-  member_type_id: z.string().trim().min(1),
+  member_type_id: z.string().trim().min(1).nullable(),
+  payment_type: z.enum(['membership', 'card_fee']),
   payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
   amount_paid: z.number().finite(),
   promotion: z.string().trim().nullable(),
   recorded_by: z.string().trim().nullable(),
   payment_date: z.string().trim().min(1),
   notes: z.string().trim().nullable(),
+  receipt_number: z.string().trim().min(1).nullable(),
+  receipt_sent_at: z.string().trim().min(1).nullable(),
+  membership_begin_time: z.string().trim().min(1).nullable(),
+  membership_end_time: z.string().trim().min(1).nullable(),
   created_at: z.string().trim().min(1),
 })
 
@@ -39,8 +46,9 @@ const memberPaymentResponseSchema = z.object({
 const memberPaymentHistoryItemSchema = z.object({
   id: z.string().trim().min(1),
   memberId: z.string().trim().min(1),
-  memberTypeId: z.string().trim().min(1),
+  memberTypeId: z.string().trim().min(1).nullable(),
   memberTypeName: z.string().trim().nullable(),
+  paymentType: z.enum(['membership', 'card_fee']),
   paymentMethod: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
   amountPaid: z.number().finite(),
   promotion: z.string().trim().nullable(),
@@ -48,6 +56,8 @@ const memberPaymentHistoryItemSchema = z.object({
   recordedByName: z.string().trim().nullable(),
   paymentDate: z.string().trim().min(1),
   notes: z.string().trim().nullable(),
+  receiptNumber: z.string().trim().nullable(),
+  receiptSentAt: z.string().trim().nullable(),
   createdAt: z.string().trim().min(1),
 })
 
@@ -66,7 +76,8 @@ type ErrorResponse = {
   error: string
 }
 
-export type CreateMemberPaymentInput = {
+export type CreateMembershipPaymentInput = {
+  payment_type: 'membership'
   member_type_id: string
   payment_method: MemberPaymentMethod
   amount_paid: number
@@ -74,6 +85,17 @@ export type CreateMemberPaymentInput = {
   payment_date: string
   notes?: string | null
 }
+
+export type CreateCardFeePaymentInput = {
+  payment_type: 'card_fee'
+  payment_method: MemberPaymentMethod
+  payment_date: string
+  notes?: string | null
+}
+
+export type CreateMemberPaymentInput =
+  | CreateMembershipPaymentInput
+  | CreateCardFeePaymentInput
 
 export function getMemberTypeMonthlyRate(
   memberTypes: MemberTypeRecord[],
@@ -89,6 +111,21 @@ export function formatPaymentAmountInputValue(amount: number) {
 
 export function getDefaultMemberPaymentDate(now: Date = new Date()) {
   return getJamaicaDateInputValue(now)
+}
+
+export function getMemberPaymentTypeLabel(
+  paymentType: MemberPaymentType,
+  memberTypeName: string | null,
+) {
+  if (paymentType === 'card_fee') {
+    return 'Card Fee'
+  }
+
+  return memberTypeName?.trim() || 'Unknown'
+}
+
+export function getCardFeeAmountInputValue() {
+  return formatPaymentAmountInputValue(CARD_FEE_AMOUNT_JMD)
 }
 
 export async function fetchMemberPayments(

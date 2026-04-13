@@ -40,24 +40,38 @@ function createSupabaseOverallRevenueClient(
     client: {
       from(table: string) {
         const builder = {
-          data: datasets[table as keyof typeof datasets] ?? [],
+          data: [...(datasets[table as keyof typeof datasets] ?? [])],
           error: null as { message: string } | null,
           select() {
             return this
           },
+          eq(column: string, value: string) {
+            this.data = this.data.filter((row) => String(row[column]) === value)
+            return this
+          },
           gte() {
+            if (arguments.length >= 2) {
+              const [column, value] = arguments as unknown as [string, string]
+              this.data = this.data.filter((row) => String(row[column]) >= value)
+            }
             return this
           },
           lte() {
+            if (arguments.length >= 2) {
+              const [column, value] = arguments as unknown as [string, string]
+              this.data = this.data.filter((row) => String(row[column]) <= value)
+            }
             return this
           },
           lt() {
+            if (arguments.length >= 2) {
+              const [column, value] = arguments as unknown as [string, string]
+              this.data = this.data.filter((row) => String(row[column]) < value)
+            }
             return this
           },
-          eq() {
-            return this
-          },
-          in() {
+          in(column: string, values: string[]) {
+            this.data = this.data.filter((row) => values.includes(String(row[column])))
             return this
           },
           order() {
@@ -163,6 +177,7 @@ describe('GET /api/reports/revenue/overall', () => {
           id: 'payment-1',
           member_id: 'member-1',
           member_type_id: 'type-general',
+          payment_type: 'membership',
           payment_method: 'cash',
           amount_paid: 12000,
           payment_date: '2026-04-02',
@@ -195,9 +210,10 @@ describe('GET /api/reports/revenue/overall', () => {
     expect(body.summary).toEqual({
       grandTotal: 27000,
       membershipRevenue: 12000,
+      cardFeeRevenue: 0,
       ptRevenue: 15000,
     })
-    expect(body.breakdown).toHaveLength(2)
+    expect(body.breakdown).toHaveLength(3)
     expect(body.breakdown[0]).toEqual(
       expect.objectContaining({
         revenueStream: 'Membership',
@@ -206,12 +222,19 @@ describe('GET /api/reports/revenue/overall', () => {
     )
     expect(body.breakdown[1]).toEqual(
       expect.objectContaining({
+        revenueStream: 'Card Fees',
+        amount: 0,
+      }),
+    )
+    expect(body.breakdown[2]).toEqual(
+      expect.objectContaining({
         revenueStream: 'PT Revenue',
         amount: 15000,
       }),
     )
     expect(body.breakdown[0].percentageOfTotal).toBeCloseTo(44.444, 2)
-    expect(body.breakdown[1].percentageOfTotal).toBeCloseTo(55.555, 2)
+    expect(body.breakdown[1].percentageOfTotal).toBeCloseTo(0, 2)
+    expect(body.breakdown[2].percentageOfTotal).toBeCloseTo(55.555, 2)
   })
 
   it('returns zeroed summary values when there is no revenue in range', async () => {
@@ -228,11 +251,17 @@ describe('GET /api/reports/revenue/overall', () => {
       summary: {
         grandTotal: 0,
         membershipRevenue: 0,
+        cardFeeRevenue: 0,
         ptRevenue: 0,
       },
       breakdown: [
         {
           revenueStream: 'Membership',
+          amount: 0,
+          percentageOfTotal: 0,
+        },
+        {
+          revenueStream: 'Card Fees',
           amount: 0,
           percentageOfTotal: 0,
         },

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 import {
   MEMBER_PAYMENT_REQUEST_SELECT,
   type MemberPaymentRequestRecord,
@@ -9,7 +10,10 @@ import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { type MemberTypesReadClient } from '@/lib/member-types-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import type { MemberPaymentMethod, MemberType } from '@/types'
+import type {
+  MemberPaymentMethod,
+  MemberType,
+} from '@/types'
 
 const reviewMemberPaymentRequestSchema = z
   .object({
@@ -52,12 +56,14 @@ type MemberPaymentRequestReviewClient = MemberTypesReadClient & {
     }): MemberPaymentRequestGuardedUpdateQuery
   }
   from(table: 'members'): {
-    select(columns: 'id, type, member_type_id'): {
+    select(columns: 'id, type, member_type_id, begin_time, end_time'): {
       eq(column: 'id', value: string): {
         maybeSingle(): QueryResult<{
           id: string
           type: MemberType
           member_type_id: string | null
+          begin_time: string | null
+          end_time: string | null
         }>
       }
     }
@@ -77,13 +83,16 @@ type MemberPaymentRequestReviewClient = MemberTypesReadClient & {
   from(table: 'member_payments'): {
     insert(values: {
       member_id: string
-      member_type_id: string
+      member_type_id: string | null
+      payment_type: 'membership' | 'card_fee'
       payment_method: MemberPaymentMethod
       amount_paid: number
       promotion: null
       recorded_by: string
       payment_date: string
       notes: string | null
+      membership_begin_time: string | null
+      membership_end_time: string | null
     }): {
       select(columns: '*'): {
         maybeSingle(): QueryResult<{
@@ -126,6 +135,7 @@ export async function PATCH(
     const input = reviewMemberPaymentRequestSchema.parse(requestBody)
     const reviewTimestamp = new Date().toISOString()
     const supabase = getSupabaseAdminClient() as unknown as MemberPaymentRequestReviewClient
+
     if (input.action === 'deny') {
       const { data: existingRequest, error: existingRequestError } = await supabase
         .from('member_payment_requests')
@@ -226,7 +236,7 @@ export async function PATCH(
 
     const { data: existingMember, error: existingMemberError } = await supabase
       .from('members')
-      .select('id, type, member_type_id')
+      .select('id, type, member_type_id, begin_time, end_time')
       .eq('id', approvedRequest.member_id)
       .maybeSingle()
 
@@ -242,7 +252,7 @@ export async function PATCH(
 
     let finalMemberTypeId = approvedRequest.member_type_id ?? existingMember.member_type_id
 
-    if (!finalMemberTypeId) {
+    if (approvedRequest.payment_type === 'membership' && !finalMemberTypeId) {
       return createErrorResponse(
         'Membership type is required to approve this payment request.',
         400,
@@ -250,6 +260,7 @@ export async function PATCH(
     }
 
     if (
+      approvedRequest.payment_type === 'membership' &&
       approvedRequest.member_type_id &&
       approvedRequest.member_type_id !== existingMember.member_type_id
     ) {
@@ -277,17 +288,24 @@ export async function PATCH(
       }
     }
 
-    const { error: paymentInsertError } = await supabase
+    const { data: insertedPayment, error: paymentInsertError } = await supabase
       .from('member_payments')
       .insert({
         member_id: approvedRequest.member_id,
-        member_type_id: finalMemberTypeId,
+        member_type_id:
+          approvedRequest.payment_type === 'membership' ? finalMemberTypeId : null,
+        payment_type: approvedRequest.payment_type,
         payment_method: approvedRequest.payment_method,
-        amount_paid: approvedRequest.amount,
+        amount_paid:
+          approvedRequest.payment_type === 'membership'
+            ? approvedRequest.amount
+            : CARD_FEE_AMOUNT_JMD,
         promotion: null,
-        recorded_by: authResult.profile.id,
+        recorded_by: approvedRequest.requested_by,
         payment_date: approvedRequest.payment_date,
         notes: normalizeOptionalText(approvedRequest.notes),
+        membership_begin_time: existingMember.begin_time,
+        membership_end_time: existingMember.end_time,
       })
       .select('*')
       .maybeSingle()
@@ -295,6 +313,12 @@ export async function PATCH(
     if (paymentInsertError) {
       throw new Error(
         `Failed to record approved member payment request ${id}: ${paymentInsertError.message}`,
+      )
+    }
+
+    if (!insertedPayment) {
+      throw new Error(
+        `Failed to record approved member payment request ${id}: missing inserted row.`,
       )
     }
 
@@ -311,7 +335,10 @@ export async function PATCH(
       )
     }
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({
+      ok: true,
+      paymentId: insertedPayment.id,
+    })
   } catch (error) {
     if (error instanceof SyntaxError) {
       return createErrorResponse('Invalid JSON body.', 400)

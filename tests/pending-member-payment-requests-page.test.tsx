@@ -82,7 +82,9 @@ function createRequest(overrides: Partial<MemberPaymentRequest> = {}): MemberPay
     id: overrides.id ?? 'payment-request-1',
     memberId: overrides.memberId ?? 'member-1',
     memberName: overrides.memberName ?? 'Jane Doe',
+    memberEmail: overrides.memberEmail ?? 'jane@example.com',
     amount: overrides.amount ?? 12000,
+    paymentType: overrides.paymentType ?? 'membership',
     paymentMethod: overrides.paymentMethod ?? 'cash',
     paymentDate: overrides.paymentDate ?? '2026-04-11',
     memberTypeId: overrides.memberTypeId ?? 'type-1',
@@ -191,6 +193,7 @@ describe('PendingMemberPaymentRequestsPage', () => {
   })
 
   it('approves a request and invalidates the related queries', async () => {
+    reviewMemberPaymentRequestMock.mockResolvedValueOnce({ paymentId: 'payment-1' })
     useMemberPaymentRequestsMock.mockReturnValue({
       requests: [createRequest()],
       isLoading: false,
@@ -228,6 +231,8 @@ describe('PendingMemberPaymentRequestsPage', () => {
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['notifications', 'user-1', 'unread-count'],
     })
+    expect(container.textContent).toContain('Payment request approved')
+    expect(container.textContent).toContain('Send Receipt')
   })
 
   it('denies a request with a rejection reason', async () => {

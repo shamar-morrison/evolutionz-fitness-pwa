@@ -25,6 +25,7 @@ import { GET } from '@/app/api/reports/revenue/membership/route'
 
 type QueryOperation =
   | { table: string; type: 'select'; columns: string }
+  | { table: string; type: 'eq'; column: string; value: string }
   | { table: string; type: 'gte' | 'lte'; column: string; value: string }
   | { table: string; type: 'in'; column: string; values: string[] }
   | { table: string; type: 'order'; column: string; ascending: boolean }
@@ -45,22 +46,43 @@ function createSupabaseMembershipRevenueClient(
     client: {
       from(table: string) {
         const builder = {
-          data: datasets[table as keyof typeof datasets] ?? [],
+          data: [...(datasets[table as keyof typeof datasets] ?? [])],
           error: null as { message: string } | null,
           select(columns: string) {
             operations.push({ table, type: 'select', columns })
             return this
           },
+          eq(column: string, value: string) {
+            operations.push({ table, type: 'eq', column, value })
+
+            if (table === 'member_payments') {
+              this.data = this.data.filter((row) => String(row[column]) === value)
+            }
+
+            return this
+          },
           gte(column: string, value: string) {
             operations.push({ table, type: 'gte', column, value })
+
+            if (table === 'member_payments') {
+              this.data = this.data.filter((row) => String(row[column]) >= value)
+            }
+
             return this
           },
           lte(column: string, value: string) {
             operations.push({ table, type: 'lte', column, value })
+
+            if (table === 'member_payments') {
+              this.data = this.data.filter((row) => String(row[column]) <= value)
+            }
+
             return this
           },
           in(column: string, values: string[]) {
             operations.push({ table, type: 'in', column, values })
+
+            this.data = this.data.filter((row) => values.includes(String(row[column])))
             return this
           },
           order(column: string, options?: { ascending?: boolean }) {
@@ -182,6 +204,12 @@ describe('GET /api/reports/revenue/membership', () => {
       expect.arrayContaining([
         {
           table: 'member_payments',
+          type: 'eq',
+          column: 'payment_type',
+          value: 'membership',
+        },
+        {
+          table: 'member_payments',
           type: 'gte',
           column: 'payment_date',
           value: '2026-04-01',
@@ -209,6 +237,7 @@ describe('GET /api/reports/revenue/membership', () => {
           id: 'payment-1',
           member_id: 'member-1',
           member_type_id: 'type-general',
+          payment_type: 'membership',
           payment_method: 'cash',
           amount_paid: 12000,
           payment_date: '2026-04-10',
@@ -218,6 +247,7 @@ describe('GET /api/reports/revenue/membership', () => {
           id: 'payment-2',
           member_id: 'member-2',
           member_type_id: 'type-student',
+          payment_type: 'membership',
           payment_method: 'fygaro',
           amount_paid: 9000,
           payment_date: '2026-04-09',
@@ -227,6 +257,7 @@ describe('GET /api/reports/revenue/membership', () => {
           id: 'payment-3',
           member_id: 'member-1',
           member_type_id: 'type-general',
+          payment_type: 'membership',
           payment_method: 'cash',
           amount_paid: 12000,
           payment_date: '2026-04-02',
