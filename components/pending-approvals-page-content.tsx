@@ -205,7 +205,7 @@ export function PendingApprovalsPageContent({
     <>
       <div className="space-y-6">
         <div className="space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">Pending Approvals</p>
+          <p className="text-sm font-medium text-muted-foreground">Notifications</p>
           <h1 className="text-3xl font-bold tracking-tight">{content.title}</h1>
           <p className="text-sm text-muted-foreground">{content.description}</p>
         </div>
