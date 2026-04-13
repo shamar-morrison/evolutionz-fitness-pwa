@@ -73,7 +73,6 @@ type DeleteMemberAdminClient = MemberPhotoStorageClient &
       update(values: {
         status: 'available'
         employee_no: null
-        card_code: null
       }): {
         eq(column: 'card_no', value: string): {
           select(columns: 'card_no'): {
@@ -336,7 +335,6 @@ export async function DELETE(
         .update({
           status: 'available',
           employee_no: null,
-          card_code: null,
         })
         .eq('card_no', cardNo)
         .select('card_no')

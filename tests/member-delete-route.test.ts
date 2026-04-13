@@ -154,7 +154,6 @@ function createDeleteAdminClient({
     values: {
       status: 'available'
       employee_no: null
-      card_code: null
     }
     filters: Array<{ column: 'card_no'; value: string }>
   }> = []
@@ -219,7 +218,6 @@ function createDeleteAdminClient({
             update(values: {
               status: 'available'
               employee_no: null
-              card_code: null
             }) {
               operations.push('update-card')
 
@@ -581,7 +579,6 @@ describe('DELETE /api/members/[id]', () => {
         values: {
           status: 'available',
           employee_no: null,
-          card_code: null,
         },
         filters: [{ column: 'card_no', value: '0102857149' }],
       },
