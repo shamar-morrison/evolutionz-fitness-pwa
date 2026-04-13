@@ -117,7 +117,7 @@ export function PendingMemberPaymentRequestsPage() {
     <>
       <div className="space-y-6">
         <div className="space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">Pending Approvals</p>
+          <p className="text-sm font-medium text-muted-foreground">Notifications</p>
           <h1 className="text-3xl font-bold tracking-tight">Payment Requests</h1>
           <p className="text-sm text-muted-foreground">
             Review payment recordings submitted by front desk staff before they are posted.

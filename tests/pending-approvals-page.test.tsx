@@ -288,7 +288,7 @@ describe('PendingApprovalsPage', () => {
       root.render(<PendingRescheduleRequestsPage />)
     })
 
-    expect(container.textContent).toContain('Pending Approvals')
+    expect(container.textContent).toContain('Notifications')
     expect(container.textContent).toContain('Reschedule Requests')
     expect(container.textContent).toContain('Pending')
     expect(container.textContent).toContain('Move to Saturday.')
@@ -356,7 +356,7 @@ describe('PendingApprovalsPage', () => {
       root.render(<PendingSessionUpdatesPage />)
     })
 
-    expect(container.textContent).toContain('Pending Approvals')
+    expect(container.textContent).toContain('Notifications')
     expect(container.textContent).toContain('Session Updates')
     expect(container.textContent).toContain('Client completed the workout.')
     expect(container.textContent).toContain('Jordan Trainer')

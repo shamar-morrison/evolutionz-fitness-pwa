@@ -71,6 +71,26 @@ export type MemberPayment = {
   created_at: string
 }
 
+export type MemberPaymentHistoryItem = {
+  id: string
+  memberId: string
+  memberTypeId: string
+  memberTypeName: string | null
+  paymentMethod: MemberPaymentMethod
+  amountPaid: number
+  promotion: string | null
+  recordedBy: string | null
+  recordedByName: string | null
+  paymentDate: string
+  notes: string | null
+  createdAt: string
+}
+
+export type MemberPaymentHistoryResponse = {
+  payments: MemberPaymentHistoryItem[]
+  totalMatches: number
+}
+
 export type MemberApprovalRequest = {
   id: string
   name: string
