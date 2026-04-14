@@ -882,7 +882,6 @@ export default function ClassDetailPage() {
           <CardHeader className="gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <CardTitle>Class Information</CardTitle>
-              <CardDescription>{classItem.schedule_description}</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
               {canManageClasses ? (

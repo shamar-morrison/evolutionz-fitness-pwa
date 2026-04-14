@@ -605,6 +605,8 @@ describe('classes pages', () => {
     })
 
     expect(getCompactTables(container)).toHaveLength(3)
+    expect(container.textContent).toContain('Class Information')
+    expect(container.textContent).not.toContain('3 times per week')
     expect(getButton(container, 'Add Trainer').className).toContain('w-full')
     expect(getButton(container, 'Add Rule').className).toContain('w-full')
     expect(container.textContent).toContain('Assign or remove trainer-title staff for this class.')
@@ -640,6 +642,8 @@ describe('classes pages', () => {
     })
 
     expect(getCompactTables(container)).toHaveLength(2)
+    expect(container.textContent).toContain('Class Information')
+    expect(container.textContent).not.toContain('3 times per week')
     expect(container.textContent).toContain('Register')
     expect(container.textContent).toContain('Review the recurring class schedule.')
     expect(container.textContent).toContain('Monday')
@@ -684,6 +688,8 @@ describe('classes pages', () => {
     })
 
     expect(getCompactTables(container)).toHaveLength(2)
+    expect(container.textContent).toContain('Class Information')
+    expect(container.textContent).not.toContain('3 times per week')
     expect(container.textContent).toContain('Register')
     expect(container.textContent).toContain('Review the recurring class schedule.')
     expect(container.textContent).not.toContain('Assign or remove trainer-title staff for this class.')
