@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ClipboardCheck } from 'lucide-react'
-import { MemberPaymentFields, createInitialMemberPaymentFormState } from '@/components/member-payment-fields'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -27,7 +26,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/auth-context'
 import { useAvailableCards } from '@/hooks/use-available-cards'
 import { useMemberApprovalRequests } from '@/hooks/use-member-approval-requests'
-import { useMemberTypes } from '@/hooks/use-member-types'
 import { toast } from '@/hooks/use-toast'
 import { reviewMemberApprovalRequest } from '@/lib/member-approval-requests'
 import { formatAccessDate } from '@/lib/member-access-time'
@@ -43,7 +41,6 @@ export function PendingMemberRequestsPage() {
   const [selectedRequest, setSelectedRequest] = useState<MemberApprovalRequest | null>(null)
   const [selectedCardNo, setSelectedCardNo] = useState('')
   const [reviewNote, setReviewNote] = useState('')
-  const [amountDirty, setAmountDirty] = useState(false)
   const [submittingAction, setSubmittingAction] = useState<null | 'approved' | 'denied'>(null)
   const { requests, isLoading, error } = useMemberApprovalRequests('pending')
   const {
@@ -51,12 +48,6 @@ export function PendingMemberRequestsPage() {
     isLoading: isCardsLoading,
     error: cardsError,
   } = useAvailableCards({ enabled: Boolean(selectedRequest) })
-  const {
-    memberTypes,
-    isLoading: isMemberTypesLoading,
-    error: memberTypesError,
-  } = useMemberTypes({ enabled: Boolean(selectedRequest) })
-  const [paymentForm, setPaymentForm] = useState(() => createInitialMemberPaymentFormState('', []))
 
   const isSubmitting = submittingAction !== null
   const selectedAvailableCard = useMemo(
@@ -78,9 +69,7 @@ export function PendingMemberRequestsPage() {
     setSelectedRequest(null)
     setSelectedCardNo('')
     setReviewNote('')
-    setAmountDirty(false)
     setSubmittingAction(null)
-    setPaymentForm(createInitialMemberPaymentFormState('', []))
   }
 
   const handleOpenReview = (request: MemberApprovalRequest) => {
@@ -91,9 +80,7 @@ export function PendingMemberRequestsPage() {
     setSelectedRequest(request)
     setSelectedCardNo(defaultCardNo)
     setReviewNote('')
-    setAmountDirty(false)
     setSubmittingAction(null)
-    setPaymentForm(createInitialMemberPaymentFormState(request.memberTypeId, memberTypes))
   }
 
   const invalidateQueries = async () => {
@@ -135,56 +122,12 @@ export function PendingMemberRequestsPage() {
       return
     }
 
-    if (!paymentForm.memberTypeId) {
-      toast({
-        title: 'Membership type required',
-        description: 'Select a membership type before approving the request.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    if (!paymentForm.paymentMethod) {
-      toast({
-        title: 'Payment method required',
-        description: 'Select how the payment was collected before approving the request.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    if (!paymentForm.paymentDate) {
-      toast({
-        title: 'Payment date required',
-        description: 'Enter the payment date before approving the request.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    const parsedAmount = Number(paymentForm.amount)
-
-    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
-      toast({
-        title: 'Amount required',
-        description: 'Enter a valid payment amount that is 0 or greater.',
-        variant: 'destructive',
-      })
-      return
-    }
-
     setSubmittingAction('approved')
 
     try {
       const { warning } = await reviewMemberApprovalRequest(selectedRequest.id, {
         status: 'approved',
         selected_card_no: selectedCardNo,
-        member_type_id: paymentForm.memberTypeId,
-        payment_method: paymentForm.paymentMethod,
-        amount_paid: parsedAmount,
-        promotion: paymentForm.promotion.trim() || null,
-        payment_date: paymentForm.paymentDate,
-        notes: paymentForm.notes.trim() || null,
         review_note: reviewNote.trim() || null,
       })
       await invalidateQueries()
@@ -251,7 +194,7 @@ export function PendingMemberRequestsPage() {
           <p className="text-sm font-medium text-muted-foreground">Notifications</p>
           <h1 className="text-3xl font-bold tracking-tight">Member Requests</h1>
           <p className="text-sm text-muted-foreground">
-            Review submitted member requests, assign a final card, and record the first payment at approval.
+            Review submitted member requests, confirm the member details, and assign the final card.
           </p>
         </div>
 
@@ -327,7 +270,7 @@ export function PendingMemberRequestsPage() {
           <DialogHeader>
             <DialogTitle>Review Member Request</DialogTitle>
             <DialogDescription>
-              Confirm the request details, select the final card, and record the first payment.
+              Confirm the request details and select the final card.
             </DialogDescription>
           </DialogHeader>
 
@@ -380,23 +323,6 @@ export function PendingMemberRequestsPage() {
                     Choose the card that should be provisioned when the request is approved.
                   </p>
                 )}
-              </div>
-
-              <div className="rounded-lg border p-4">
-                <p className="mb-4 text-sm font-medium text-muted-foreground">Payment</p>
-                <MemberPaymentFields
-                  amountDirty={amountDirty}
-                  disabled={isSubmitting}
-                  formData={paymentForm}
-                  idPrefix="member-request-payment"
-                  isMemberTypesLoading={isMemberTypesLoading}
-                  memberTypes={memberTypes}
-                  memberTypesError={
-                    memberTypesError instanceof Error ? memberTypesError.message : null
-                  }
-                  setAmountDirty={setAmountDirty}
-                  setFormData={setPaymentForm}
-                />
               </div>
 
               <div className="space-y-2">

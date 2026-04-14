@@ -11,7 +11,6 @@ const {
   toastMock,
   useAvailableCardsMock,
   useMemberApprovalRequestsMock,
-  useMemberTypesMock,
 } = vi.hoisted(() => ({
   authState: {
     profile: {
@@ -27,7 +26,6 @@ const {
   toastMock: vi.fn(),
   useAvailableCardsMock: vi.fn(),
   useMemberApprovalRequestsMock: vi.fn(),
-  useMemberTypesMock: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -46,10 +44,6 @@ vi.mock('@/hooks/use-available-cards', () => ({
 
 vi.mock('@/hooks/use-member-approval-requests', () => ({
   useMemberApprovalRequests: useMemberApprovalRequestsMock,
-}))
-
-vi.mock('@/hooks/use-member-types', () => ({
-  useMemberTypes: useMemberTypesMock,
 }))
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -156,11 +150,9 @@ vi.mock('@/components/ui/select', async () => {
 })
 
 import { PendingMemberRequestsPage } from '@/components/pending-member-requests-page'
-import type { MemberApprovalRequest, MemberTypeRecord } from '@/types'
+import type { MemberApprovalRequest } from '@/types'
 
-function createRequest(
-  overrides: Partial<MemberApprovalRequest> = {},
-): MemberApprovalRequest {
+function createRequest(overrides: Partial<MemberApprovalRequest> = {}): MemberApprovalRequest {
   return {
     id: overrides.id ?? 'request-1',
     name: overrides.name ?? 'Jane Doe',
@@ -187,29 +179,6 @@ function createRequest(
   }
 }
 
-function createMemberType(overrides: Partial<MemberTypeRecord> = {}): MemberTypeRecord {
-  return {
-    id: overrides.id ?? 'type-1',
-    name: overrides.name ?? 'General',
-    monthly_rate: overrides.monthly_rate ?? 12000,
-    is_active: overrides.is_active ?? true,
-    created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
-  }
-}
-
-function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
-  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')
-  const setValue = descriptor?.set
-
-  if (!setValue) {
-    throw new Error('Input value setter is unavailable.')
-  }
-
-  setValue.call(input, value)
-  input.dispatchEvent(new Event('input', { bubbles: true }))
-  input.dispatchEvent(new Event('change', { bubbles: true }))
-}
-
 async function clickButton(container: ParentNode, label: string) {
   const button = Array.from(container.querySelectorAll('button')).find(
     (candidate) => candidate.textContent?.trim() === label,
@@ -230,11 +199,6 @@ async function clickButton(container: ParentNode, label: string) {
 describe('PendingMemberRequestsPage', () => {
   let container: HTMLDivElement
   let root: Root
-  let memberTypesState: {
-    memberTypes: MemberTypeRecord[]
-    isLoading: boolean
-    error: null
-  }
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -261,15 +225,6 @@ describe('PendingMemberRequestsPage', () => {
       isLoading: false,
       error: null,
     })
-    memberTypesState = {
-      memberTypes: [
-        createMemberType(),
-        createMemberType({ id: 'type-2', name: 'Civil Servant', monthly_rate: 7500 }),
-      ],
-      isLoading: false,
-      error: null,
-    }
-    useMemberTypesMock.mockImplementation(() => memberTypesState)
   })
 
   afterEach(async () => {
@@ -285,48 +240,29 @@ describe('PendingMemberRequestsPage', () => {
     vi.clearAllMocks()
   })
 
-  it('keeps a manually edited amount when the membership type changes in review', async () => {
+  it('removes the payment section from the review modal', async () => {
     await act(async () => {
       root.render(<PendingMemberRequestsPage />)
     })
 
     await clickButton(container, 'Review')
 
-    const amountInput = container.querySelector('#member-request-payment-amount')
-
-    if (!(amountInput instanceof HTMLInputElement)) {
-      throw new Error('Amount input not found.')
-    }
-
-    expect(amountInput.value).toBe('12000')
-
-    await act(async () => {
-      setInputValue(amountInput, '11500')
-    })
-
-    await clickButton(container, 'Civil Servant')
-
-    expect(amountInput.value).toBe('11500')
+    expect(container.textContent).toContain('Review Member Request')
+    expect(container.textContent).not.toContain('Payment')
+    expect(container.querySelector('#member-request-payment-amount')).toBeNull()
   })
 
-  it('approves the request with the selected payment data and invalidates the related queries', async () => {
+  it('approves the request with the selected card only and invalidates the related queries', async () => {
     await act(async () => {
       root.render(<PendingMemberRequestsPage />)
     })
 
     await clickButton(container, 'Review')
-    await clickButton(container, 'Cash')
     await clickButton(container, 'Approve')
 
     expect(reviewMemberApprovalRequestMock).toHaveBeenCalledWith('request-1', {
       status: 'approved',
       selected_card_no: '0102857149',
-      member_type_id: 'type-1',
-      payment_method: 'cash',
-      amount_paid: 12000,
-      promotion: null,
-      payment_date: '2026-04-09',
-      notes: null,
       review_note: null,
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
@@ -360,7 +296,6 @@ describe('PendingMemberRequestsPage', () => {
     })
 
     await clickButton(container, 'Review')
-    await clickButton(container, 'Cash')
     await clickButton(container, 'Approve')
 
     expect(toastMock).toHaveBeenCalledWith({
@@ -391,48 +326,5 @@ describe('PendingMemberRequestsPage', () => {
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Member request denied',
     })
-  })
-
-  it('auto-fills the amount after member types finish loading during review', async () => {
-    memberTypesState = {
-      memberTypes: [],
-      isLoading: true,
-      error: null,
-    }
-
-    await act(async () => {
-      root.render(<PendingMemberRequestsPage />)
-    })
-
-    await clickButton(container, 'Review')
-
-    let amountInput = container.querySelector('#member-request-payment-amount')
-
-    if (!(amountInput instanceof HTMLInputElement)) {
-      throw new Error('Amount input not found.')
-    }
-
-    expect(amountInput.value).toBe('')
-
-    await act(async () => {
-      memberTypesState = {
-        memberTypes: [
-          createMemberType(),
-          createMemberType({ id: 'type-2', name: 'Civil Servant', monthly_rate: 7500 }),
-        ],
-        isLoading: false,
-        error: null,
-      }
-
-      root.render(<PendingMemberRequestsPage />)
-    })
-
-    amountInput = container.querySelector('#member-request-payment-amount')
-
-    if (!(amountInput instanceof HTMLInputElement)) {
-      throw new Error('Amount input not found after member types loaded.')
-    }
-
-    expect(amountInput.value).toBe('12000')
   })
 })

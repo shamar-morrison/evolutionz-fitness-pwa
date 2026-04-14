@@ -115,7 +115,7 @@ export function MemberBasicFields({
   isSubmitting,
   memberTypes,
   memberTypesError,
-  membershipTypeInfoContent = 'Select the submitted membership type. Payment is recorded during approval.',
+  membershipTypeInfoContent = 'Select the membership type that will be used if the request is approved.',
   onAddCard,
   onRefreshCards,
   selectedInventoryCard,
