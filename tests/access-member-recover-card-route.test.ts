@@ -307,6 +307,71 @@ describe('POST /api/access/members/[id]/recover-card', () => {
     })
   })
 
+  it('restores an expired status when the recovered member window has already ended', async () => {
+    const { client, memberUpdates } = createRecoverCardAdminClient({
+      detailRows: [
+        {
+          id: 'member-1',
+          employee_no: '000611',
+          name: 'A18 Jane Doe',
+          card_no: '0102857149',
+          type: 'General',
+          status: 'Suspended',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: null,
+          photo_url: null,
+          begin_time: '2026-03-01T00:00:00Z',
+          end_time: '2026-03-31T23:59:59Z',
+          updated_at: '2026-04-01T05:00:00Z',
+        },
+        {
+          id: 'member-1',
+          employee_no: '000611',
+          name: 'A18 Jane Doe',
+          card_no: '0102857149',
+          type: 'General',
+          status: 'Expired',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: null,
+          photo_url: null,
+          begin_time: '2026-03-01T00:00:00Z',
+          end_time: '2026-03-31T23:59:59Z',
+          updated_at: '2026-04-01T05:05:00Z',
+        },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/member-1/recover-card', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          employeeNo: '000611',
+          cardNo: '0102857149',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(memberUpdates).toEqual([{ status: 'Expired' }])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      member: expect.objectContaining({
+        status: 'Expired',
+      }),
+    })
+  })
+
   it('returns 400 when the card is not in suspended_lost state', async () => {
     const { client, insertedJobs } = createRecoverCardAdminClient({
       cardLookupResults: [

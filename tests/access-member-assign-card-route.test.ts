@@ -129,6 +129,7 @@ function createAssignCardAdminClient({
   const memberUpdateCalls: Array<{
     begin_time: string
     end_time: string
+    status: 'Active' | 'Expired'
     id: string
     employee_no: string
   }> = []
@@ -166,7 +167,7 @@ function createAssignCardAdminClient({
               },
             }
           },
-          update(values: { begin_time: string; end_time: string }) {
+          update(values: { begin_time: string; end_time: string; status: 'Active' | 'Expired' }) {
             return {
               eq(column: string, value: string) {
                 expect(column).toBe('id')
@@ -305,6 +306,7 @@ describe('POST /api/access/members/[id]/assign-card', () => {
       {
         begin_time: '2026-04-01T00:00:00',
         end_time: '2026-08-31T23:59:59',
+        status: 'Active',
         id: 'member-1',
         employee_no: '000611',
       },
@@ -331,6 +333,76 @@ describe('POST /api/access/members/[id]/assign-card', () => {
         beginTime: '2026-04-01T00:00:00.000Z',
         endTime: '2026-08-31T23:59:59.000Z',
       },
+    })
+  })
+
+  it('reactivates an expired member when the assigned access window ends in the future', async () => {
+    const { client, memberUpdateCalls } = createAssignCardAdminClient({
+      detailRows: [
+        {
+          id: 'member-1',
+          employee_no: '000611',
+          name: 'Jane Doe',
+          card_no: null,
+          type: 'General',
+          status: 'Expired',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: null,
+          photo_url: null,
+          begin_time: '2026-03-01T00:00:00Z',
+          end_time: '2026-03-31T23:59:59Z',
+          updated_at: '2026-04-01T05:00:00Z',
+        },
+        {
+          id: 'member-1',
+          employee_no: '000611',
+          name: 'Jane Doe',
+          card_no: '0102857149',
+          type: 'General',
+          status: 'Active',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: null,
+          photo_url: null,
+          begin_time: '2026-04-01T00:00:00Z',
+          end_time: '2026-08-31T23:59:59Z',
+          updated_at: '2026-04-01T05:05:00Z',
+        },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/member-1/assign-card', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(validAssignCardRequestBody),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(memberUpdateCalls).toEqual([
+      {
+        begin_time: '2026-04-01T00:00:00',
+        end_time: '2026-08-31T23:59:59',
+        status: 'Active',
+        id: 'member-1',
+        employee_no: '000611',
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      member: expect.objectContaining({
+        status: 'Active',
+      }),
     })
   })
 
@@ -470,6 +542,7 @@ describe('POST /api/access/members/[id]/assign-card', () => {
       {
         begin_time: '2026-04-01T00:00:00',
         end_time: '2026-08-31T23:59:59',
+        status: 'Active',
         id: 'member-1',
         employee_no: '000611',
       },
@@ -1083,6 +1156,7 @@ describe('POST /api/access/members/[id]/assign-card', () => {
       {
         begin_time: '2026-04-05T00:00:00',
         end_time: '2026-04-30T23:59:59',
+        status: 'Active',
         id: 'member-1',
         employee_no: '000611',
       },

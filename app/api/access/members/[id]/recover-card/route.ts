@@ -5,6 +5,7 @@ import {
   createAndWaitForAccessControlJob,
 } from '@/lib/access-control-jobs'
 import { buildAddCardPayload } from '@/lib/member-job'
+import { resolveMembershipLifecycleStatus } from '@/lib/member-status'
 import { MEMBER_RECORD_SELECT, readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -105,10 +106,12 @@ export async function POST(
       return createErrorResponse('Only suspended lost cards can be recovered.', 400)
     }
 
+    const restoredStatus = resolveMembershipLifecycleStatus(currentMember.endTime)
+
     const { data: updatedMember, error: memberError } = await supabase
       .from('members')
       .update({
-        status: 'Active',
+        status: restoredStatus,
       })
       .eq('id', id)
       .eq('employee_no', input.employeeNo)

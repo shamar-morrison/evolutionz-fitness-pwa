@@ -11,11 +11,12 @@ import {
   type AccessControlJobsClient,
   createAndWaitForAccessControlJob,
 } from '@/lib/access-control-jobs'
+import { resolveMembershipLifecycleStatus } from '@/lib/member-status'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { MEMBER_RECORD_SELECT, readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
 import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import type { MemberType } from '@/types'
+import type { MemberStatus, MemberType } from '@/types'
 
 const updateMemberRequestSchema = z
   .object({
@@ -207,7 +208,7 @@ export async function PATCH(
 
     const { data, error } = await (supabase.from('members') as unknown as {
       update(values: {
-        status?: 'Active'
+        status?: MemberStatus
         member_type_id?: string | null
         type?: MemberType
       }): {
@@ -222,7 +223,9 @@ export async function PATCH(
       }
     })
       .update({
-        ...(input.status ? { status: input.status } : {}),
+        ...(input.status
+          ? { status: resolveMembershipLifecycleStatus(currentMember.endTime) }
+          : {}),
         ...memberTypeUpdateValues,
       })
       .eq('id', id)

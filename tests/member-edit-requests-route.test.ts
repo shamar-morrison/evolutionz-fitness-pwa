@@ -935,6 +935,7 @@ describe('member edit request routes', () => {
       {
         begin_time: '2026-04-01T08:30:00',
         end_time: '2026-04-28T23:59:59',
+        status: 'Active',
       },
     ])
     expect(insertedJobs).toEqual([
@@ -976,7 +977,7 @@ describe('member edit request routes', () => {
         card_no: '0102857149',
         type: 'General',
         member_type_id: MEMBER_TYPE_ID_GENERAL,
-        status: 'Active',
+        status: 'Expired',
         gender: 'Female',
         email: 'jane@example.com',
         phone: '555-0100',
@@ -1016,6 +1017,88 @@ describe('member edit request routes', () => {
         name: 'A18 Jane Updated',
         begin_time: '2026-04-05T08:30:00',
         end_time: '2026-06-27T23:59:59',
+        status: 'Active',
+      },
+    ])
+    expect(insertedJobs).toEqual([
+      {
+        type: 'add_user',
+        payload: {
+          employeeNo: '000611',
+          name: 'A18 Jane Updated',
+          userType: 'normal',
+          beginTime: '2026-04-05T08:30:00',
+          endTime: '2026-06-27T23:59:59',
+        },
+      },
+    ])
+    expect(requestUpdates).toEqual([
+      {
+        status: 'approved',
+        reviewed_by: 'admin-1',
+        reviewed_at: expect.any(String),
+      },
+    ])
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true })
+  })
+
+  it('preserves suspension when approving an access window update for a suspended member', async () => {
+    const existingRequestRow = createEditRequestRecord({
+      proposed_start_date: '2026-04-05',
+      proposed_start_time: '08:30:00',
+      proposed_duration: '3 Months',
+    })
+    const { client, insertedJobs, memberUpdates, requestUpdates } = createEditRequestsClient({
+      existingRequestRow,
+      currentMemberRow: {
+        id: MEMBER_ID,
+        employee_no: '000611',
+        name: 'A18 Jane Doe',
+        card_no: '0102857149',
+        type: 'General',
+        member_type_id: MEMBER_TYPE_ID_GENERAL,
+        status: 'Suspended',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '555-0100',
+        remark: null,
+        photo_url: null,
+        begin_time: '2026-04-01T00:00:00Z',
+        end_time: '2026-04-28T23:59:59Z',
+        updated_at: '2026-04-01T00:00:00.000Z',
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-edit-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'approve',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(memberUpdates).toEqual([
+      {
+        name: 'A18 Jane Updated',
+        begin_time: '2026-04-05T08:30:00',
+        end_time: '2026-06-27T23:59:59',
+        status: 'Suspended',
       },
     ])
     expect(insertedJobs).toEqual([

@@ -8,9 +8,17 @@ const {
   currentPathnameState,
   currentProfileState,
   currentRoleState,
+  deleteMemberMock,
+  deleteMemberPhotoMock,
   invalidateQueriesMock,
   pushMock,
+  reactivateMemberMock,
+  recoverMemberCardMock,
+  releaseMemberSlotMock,
+  reportMemberCardLostMock,
   replaceMock,
+  suspendMemberMock,
+  unassignMemberCardMock,
   useMemberMock,
   usePtSessionsMock,
 } = vi.hoisted(() => ({
@@ -26,9 +34,17 @@ const {
     },
   },
   currentRoleState: { role: 'admin' as 'admin' | 'staff' },
+  deleteMemberMock: vi.fn(),
+  deleteMemberPhotoMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   pushMock: vi.fn(),
+  reactivateMemberMock: vi.fn(),
+  recoverMemberCardMock: vi.fn(),
+  releaseMemberSlotMock: vi.fn(),
+  reportMemberCardLostMock: vi.fn(),
   replaceMock: vi.fn(),
+  suspendMemberMock: vi.fn(),
+  unassignMemberCardMock: vi.fn(),
   useMemberMock: vi.fn(),
   usePtSessionsMock: vi.fn(),
 }))
@@ -85,7 +101,37 @@ vi.mock('@/components/assign-card-modal', () => ({
 }))
 
 vi.mock('@/components/confirm-dialog', () => ({
-  ConfirmDialog: () => null,
+  ConfirmDialog: ({
+    open,
+    title,
+    confirmLabel,
+    cancelLabel = 'Cancel',
+    onConfirm,
+    onCancel,
+  }: {
+    open: boolean
+    title: string
+    confirmLabel: string
+    cancelLabel?: string
+    onConfirm: () => void
+    onCancel?: () => void
+  }) =>
+    open ? (
+      <div data-testid="confirm-dialog">
+        <h2>{title}</h2>
+        <button
+          type="button"
+          data-role="confirm"
+          data-confirm-label={confirmLabel}
+          onClick={onConfirm}
+        >
+          {confirmLabel}
+        </button>
+        <button type="button" data-role="cancel" onClick={onCancel}>
+          {cancelLabel}
+        </button>
+      </div>
+    ) : null,
 }))
 
 vi.mock('@/components/edit-member-modal', () => ({
@@ -143,14 +189,14 @@ vi.mock('@/components/ui/tooltip', () => ({
 }))
 
 vi.mock('@/lib/member-actions', () => ({
-  deleteMember: vi.fn(),
-  deleteMemberPhoto: vi.fn(),
-  recoverMemberCard: vi.fn(),
-  reactivateMember: vi.fn(),
-  reportMemberCardLost: vi.fn(),
-  releaseMemberSlot: vi.fn(),
-  suspendMember: vi.fn(),
-  unassignMemberCard: vi.fn(),
+  deleteMember: deleteMemberMock,
+  deleteMemberPhoto: deleteMemberPhotoMock,
+  recoverMemberCard: recoverMemberCardMock,
+  reactivateMember: reactivateMemberMock,
+  reportMemberCardLost: reportMemberCardLostMock,
+  releaseMemberSlot: releaseMemberSlotMock,
+  suspendMember: suspendMemberMock,
+  unassignMemberCard: unassignMemberCardMock,
 }))
 
 vi.mock('@/lib/member-card', () => ({
@@ -249,6 +295,25 @@ function getIconOnlyButton(container: HTMLDivElement) {
 async function clickButton(container: HTMLDivElement, label: string) {
   await act(async () => {
     getButton(container, label).click()
+  })
+}
+
+async function clickConfirmButton(container: HTMLDivElement, label: string) {
+  const buttons = Array.from(container.querySelectorAll('button'))
+  const button = buttons.find(
+    (candidate) =>
+      candidate.getAttribute('data-role') === 'confirm' &&
+      candidate.getAttribute('data-confirm-label') === label,
+  )
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`${label} confirm button not found.`)
+  }
+
+  await act(async () => {
+    button.click()
+    await Promise.resolve()
+    await Promise.resolve()
   })
 }
 
@@ -552,5 +617,88 @@ describe('MemberPtAttendance', () => {
     expect(container.textContent).not.toContain('Showing 1-10 of 10')
     expect(container.textContent).toContain('Trainer 10')
     expect(container.textContent).toContain('Trainer 01')
+  })
+})
+
+describe('Member detail page action dialogs', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    currentPathnameState.pathname = '/members/123e4567-e89b-12d3-a456-426614174000'
+    currentRoleState.role = 'admin'
+    currentProfileState.profile = {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin',
+      titles: ['Owner'],
+    }
+    usePtSessionsMock.mockReturnValue({
+      sessions: [],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+    suspendMemberMock.mockReset()
+    suspendMemberMock.mockResolvedValue(createMember({ status: 'Suspended' }))
+    reactivateMemberMock.mockReset()
+    reactivateMemberMock.mockResolvedValue(createMember({ status: 'Active' }))
+  })
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+
+    container.remove()
+    document.body.innerHTML = ''
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      false
+    vi.clearAllMocks()
+  })
+
+  it('closes the suspend dialog after a successful suspend action', async () => {
+    useMemberMock.mockReturnValue({
+      member: createMember({ status: 'Active' }),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    await clickButton(container, 'Suspend')
+    expect(container.textContent).toContain('Suspend member?')
+
+    await clickConfirmButton(container, 'Suspend Member')
+
+    expect(suspendMemberMock).toHaveBeenCalledTimes(1)
+    expect(container.textContent).not.toContain('Suspend member?')
+  })
+
+  it('closes the reactivate dialog after a successful reactivate action', async () => {
+    useMemberMock.mockReturnValue({
+      member: createMember({ status: 'Suspended' }),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    await clickButton(container, 'Reactivate')
+    expect(container.textContent).toContain('Reactivate member?')
+
+    await clickConfirmButton(container, 'Reactivate')
+
+    expect(reactivateMemberMock).toHaveBeenCalledTimes(1)
+    expect(container.textContent).not.toContain('Reactivate member?')
   })
 })

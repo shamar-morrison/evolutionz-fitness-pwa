@@ -20,6 +20,7 @@ import {
 } from '@/lib/member-edit-request-records'
 import { buildAddUserPayloadWithAccessWindow } from '@/lib/member-job'
 import { buildHikMemberName } from '@/lib/member-name'
+import { resolveMemberStatusForAccessWindowUpdate } from '@/lib/member-status'
 import { archiveResolvedRequestNotifications } from '@/lib/pt-notifications-server'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { type MemberTypesReadClient } from '@/lib/member-types-server'
@@ -268,6 +269,12 @@ export async function PATCH(
       nextEndTime = accessWindowResult.endTime
     }
 
+    const accessWindowChanged =
+      shouldUpdateAccessWindow &&
+      nextBeginTime !== null &&
+      nextEndTime !== null &&
+      hasAccessWindowChanged(currentMember, nextBeginTime, nextEndTime)
+
     const { data: approvedRequests, error: requestUpdateError } = await supabase
       .from('member_edit_requests')
       .update({
@@ -326,6 +333,13 @@ export async function PATCH(
     if (shouldUpdateAccessWindow && nextBeginTime && nextEndTime) {
       memberUpdateValues.begin_time = nextBeginTime
       memberUpdateValues.end_time = nextEndTime
+
+      if (accessWindowChanged) {
+        memberUpdateValues.status = resolveMemberStatusForAccessWindowUpdate({
+          currentStatus: currentMember.status,
+          endTime: nextEndTime,
+        })
+      }
     }
 
     const { error: memberUpdateError } = await supabase
@@ -367,7 +381,7 @@ export async function PATCH(
       return NextResponse.json({ ok: true })
     }
 
-    if (!hasAccessWindowChanged(currentMember, nextBeginTime, nextEndTime)) {
+    if (!accessWindowChanged) {
       return NextResponse.json({ ok: true })
     }
 
