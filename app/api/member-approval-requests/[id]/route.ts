@@ -40,6 +40,7 @@ const reviewMemberApprovalRequestSchema = z.union([
   approveMemberApprovalRequestSchema,
   denyMemberApprovalRequestSchema,
 ])
+const provisionableMemberTypeSchema = z.enum(['General', 'Civil Servant', 'Student/BPO'])
 
 type QueryError = {
   message: string
@@ -133,6 +134,11 @@ function createErrorResponse(error: string, status: number) {
 function normalizeOptionalText(value: string | null | undefined) {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || null
+}
+
+function resolveProvisionableMemberType(name: string): MemberType | null {
+  const parsedMemberType = provisionableMemberTypeSchema.safeParse(name)
+  return parsedMemberType.success ? parsedMemberType.data : null
 }
 
 async function archiveMemberCreateRequestNotifications(
@@ -257,6 +263,12 @@ export async function PATCH(
       return createErrorResponse('Membership type not found.', 404)
     }
 
+    const provisionableMemberType = resolveProvisionableMemberType(memberType.name)
+
+    if (!provisionableMemberType) {
+      return createErrorResponse('Membership type is not supported for provisioning.', 400)
+    }
+
     const { data: selectedCard, error: selectedCardError } = await supabase
       .from('cards')
       .select('card_no, card_code')
@@ -312,7 +324,7 @@ export async function PATCH(
 
     const provisionResult = await provisionMemberAccess({
       name: existingRequest.name,
-      type: memberType.name as MemberType,
+      type: provisionableMemberType,
       memberTypeId: memberType.id,
       gender: existingRequest.gender ?? null,
       email: normalizeOptionalText(existingRequest.email),

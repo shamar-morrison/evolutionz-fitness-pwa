@@ -910,6 +910,57 @@ describe('member approval request routes', () => {
     })
   })
 
+  it('returns 400 when the requested member type is not supported for provisioning', async () => {
+    const existingRequest = createRequestRecord({
+      member_type_id: MEMBER_TYPE_ID_GENERAL,
+      memberType: { name: 'Corporate' },
+    })
+    const { client, approvalClaimUpdates, approvalFinalizeUpdates } =
+      createMemberApprovalRequestsClient({
+        existingRequestRow: existingRequest,
+        memberTypeRow: createMemberTypeRecord({
+          id: MEMBER_TYPE_ID_GENERAL,
+          name: 'Corporate',
+        }),
+      })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+    provisionMemberAccessMock.mockResolvedValue({
+      ok: true,
+      member: createApprovedMember(),
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'approved',
+          selected_card_no: '0102857149',
+          review_note: 'Approved after verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(provisionMemberAccessMock).not.toHaveBeenCalled()
+    expect(approvalClaimUpdates).toEqual([])
+    expect(approvalFinalizeUpdates).toEqual([])
+    expect(archiveResolvedRequestNotificationsMock).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Membership type is not supported for provisioning.',
+    })
+  })
+
   it('logs and ignores member create notification archive failures after denial', async () => {
     const deniedRequest = createRequestRecord({
       status: 'denied',
