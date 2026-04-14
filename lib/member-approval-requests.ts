@@ -39,6 +39,11 @@ const memberApprovalRequestResponseSchema = z.object({
   request: memberApprovalRequestSchema,
 })
 
+const reviewMemberApprovalRequestResponseSchema = z.object({
+  request: memberApprovalRequestSchema.optional(),
+  warning: z.string().trim().optional(),
+})
+
 type MemberApprovalRequestsSuccessResponse = {
   ok: true
   requests: MemberApprovalRequest[]
@@ -47,6 +52,12 @@ type MemberApprovalRequestsSuccessResponse = {
 type MemberApprovalRequestSuccessResponse = {
   ok: true
   request: MemberApprovalRequest
+}
+
+type ReviewMemberApprovalRequestSuccessResponse = {
+  ok: true
+  request?: MemberApprovalRequest
+  warning?: string
 }
 
 type ErrorResponse = {
@@ -150,7 +161,10 @@ export async function createMemberApprovalRequest(
 export async function reviewMemberApprovalRequest(
   id: string,
   input: ReviewMemberApprovalRequestInput,
-): Promise<MemberApprovalRequest> {
+): Promise<{
+  request?: MemberApprovalRequest
+  warning?: string
+}> {
   const response = await fetch(`/api/member-approval-requests/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: {
@@ -159,10 +173,12 @@ export async function reviewMemberApprovalRequest(
     body: JSON.stringify(input),
   })
 
-  let responseBody: MemberApprovalRequestSuccessResponse | ErrorResponse | null = null
+  let responseBody: ReviewMemberApprovalRequestSuccessResponse | ErrorResponse | null = null
 
   try {
-    responseBody = (await response.json()) as MemberApprovalRequestSuccessResponse | ErrorResponse
+    responseBody = (await response.json()) as
+      | ReviewMemberApprovalRequestSuccessResponse
+      | ErrorResponse
   } catch {
     responseBody = null
   }
@@ -171,7 +187,7 @@ export async function reviewMemberApprovalRequest(
     throw new Error(getErrorMessage(responseBody, 'Failed to review the member request.'))
   }
 
-  return memberApprovalRequestResponseSchema.parse(responseBody).request
+  return reviewMemberApprovalRequestResponseSchema.parse(responseBody)
 }
 
 export async function uploadMemberApprovalRequestPhoto(

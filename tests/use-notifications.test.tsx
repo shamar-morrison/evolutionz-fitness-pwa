@@ -93,6 +93,12 @@ function expectUnreadCountInvalidation() {
   })
 }
 
+function expectArchivedNotificationsInvalidation() {
+  expect(invalidateQueriesMock).toHaveBeenCalledWith({
+    queryKey: ['notifications', 'user-1', 'archived'],
+  })
+}
+
 describe('useNotifications', () => {
   let container: HTMLDivElement
   let root: Root
@@ -257,6 +263,7 @@ describe('useNotifications', () => {
       })
 
       expectNotificationListInvalidation()
+      expectArchivedNotificationsInvalidation()
       expectUnreadCountInvalidation()
       expect(invalidateQueriesMock).toHaveBeenCalledWith({
         queryKey: expectedAllKey,

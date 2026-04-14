@@ -306,6 +306,9 @@ export function useNotifications(profileId: string) {
 
           void queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all(profileId) })
           void queryClient.invalidateQueries({
+            queryKey: queryKeys.notifications.archived(profileId),
+          })
+          void queryClient.invalidateQueries({
             queryKey: queryKeys.notifications.unreadCount(profileId),
           })
 
