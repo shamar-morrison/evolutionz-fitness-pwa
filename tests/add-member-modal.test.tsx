@@ -932,7 +932,7 @@ describe('AddMemberModal', () => {
     expect(
       Array.from(container.querySelectorAll('[data-testid="tooltip-content"]')).some((element) =>
         element.textContent?.includes(
-          'Select the submitted membership type. Payment is recorded during approval.',
+          'Select the membership type that will be used if the request is approved.',
         ),
       ),
     ).toBe(true)

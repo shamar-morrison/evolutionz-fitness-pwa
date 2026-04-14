@@ -16,7 +16,7 @@ import { archiveResolvedRequestNotifications } from '@/lib/pt-notifications-serv
 import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import type { MemberPaymentMethod, MemberType } from '@/types'
+import type { MemberType } from '@/types'
 
 const APPROVE_MEMBER_REQUEST_WARNING =
   'Member was approved and provisioned successfully, but the request record could not be fully updated. Please verify the member details manually.'
@@ -32,15 +32,6 @@ const approveMemberApprovalRequestSchema = z
   .object({
     status: z.literal('approved'),
     selected_card_no: z.string().trim().min(1, 'Card number is required.'),
-    member_type_id: z.string().trim().uuid('Membership type is required.'),
-    payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
-    amount_paid: z.number().finite().min(0),
-    promotion: z.string().trim().min(1).nullable().optional(),
-    payment_date: z
-      .string()
-      .trim()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Payment date must be in YYYY-MM-DD format.'),
-    notes: z.string().trim().min(1).nullable().optional(),
     review_note: z.string().trim().min(1).nullable().optional(),
   })
   .strict()
@@ -110,24 +101,6 @@ type MemberApprovalRequestReviewClient = MemberTypesReadClient &
             card_code: string | null
           }>
         }
-      }
-    }
-  }
-  from(table: 'member_payments'): {
-    insert(values: {
-      member_id: string
-      member_type_id: string
-      payment_method: MemberPaymentMethod
-      amount_paid: number
-      promotion: string | null
-      recorded_by: string
-      payment_date: string
-      notes: string | null
-    }): {
-      select(columns: '*'): {
-        maybeSingle(): QueryResult<{
-          id: string
-        }>
       }
     }
   }
@@ -206,48 +179,6 @@ async function moveRequestPhotoToMember(
   return movedPath
 }
 
-async function recordApprovalPayment(
-  supabase: MemberApprovalRequestReviewClient,
-  {
-    memberId,
-    memberTypeId,
-    paymentMethod,
-    amountPaid,
-    promotion,
-    recordedBy,
-    paymentDate,
-    notes,
-  }: {
-    memberId: string
-    memberTypeId: string
-    paymentMethod: MemberPaymentMethod
-    amountPaid: number
-    promotion: string | null
-    recordedBy: string
-    paymentDate: string
-    notes: string | null
-  },
-) {
-  const { error } = await supabase
-    .from('member_payments')
-    .insert({
-      member_id: memberId,
-      member_type_id: memberTypeId,
-      payment_method: paymentMethod,
-      amount_paid: amountPaid,
-      promotion,
-      recorded_by: recordedBy,
-      payment_date: paymentDate,
-      notes,
-    })
-    .select('*')
-    .maybeSingle()
-
-  if (error) {
-    throw new Error(`Failed to record the approval payment: ${error.message}`)
-  }
-}
-
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -316,7 +247,11 @@ export async function PATCH(
       })
     }
 
-    const memberType = await readMemberTypeById(supabase, input.member_type_id)
+    const memberTypeId =
+      typeof existingRequest.member_type_id === 'string'
+        ? existingRequest.member_type_id.trim()
+        : ''
+    const memberType = memberTypeId ? await readMemberTypeById(supabase, memberTypeId) : null
 
     if (!memberType) {
       return createErrorResponse('Membership type not found.', 404)
@@ -405,22 +340,6 @@ export async function PATCH(
       } catch (photoError) {
         console.error('Failed to move the staged request photo to the approved member:', photoError)
       }
-    }
-
-    try {
-      await recordApprovalPayment(supabase, {
-        memberId: provisionResult.member.id,
-        memberTypeId: memberType.id,
-        paymentMethod: input.payment_method,
-        amountPaid: input.amount_paid,
-        promotion: normalizeOptionalText(input.promotion),
-        recordedBy: authResult.profile.id,
-        paymentDate: input.payment_date,
-        notes: normalizeOptionalText(input.notes),
-      })
-    } catch (paymentError) {
-      console.error('Failed to record member approval payment:', paymentError)
-      throw paymentError
     }
 
     const { data: approvedRequest, error: approvedRequestError } = await supabase

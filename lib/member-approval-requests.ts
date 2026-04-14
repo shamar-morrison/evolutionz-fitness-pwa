@@ -1,10 +1,5 @@
 import { z } from 'zod'
-import type {
-  MemberApprovalRequest,
-  MemberApprovalRequestStatus,
-  MemberGender,
-  MemberPaymentMethod,
-} from '@/types'
+import type { MemberApprovalRequest, MemberApprovalRequestStatus, MemberGender } from '@/types'
 
 const memberApprovalRequestSchema = z.object({
   id: z.string().trim().min(1),
@@ -86,12 +81,6 @@ export type ReviewMemberApprovalRequestInput =
   | {
       status: 'approved'
       selected_card_no: string
-      member_type_id: string
-      payment_method: MemberPaymentMethod
-      amount_paid: number
-      promotion?: string | null
-      payment_date: string
-      notes?: string | null
       review_note?: string | null
     }
 

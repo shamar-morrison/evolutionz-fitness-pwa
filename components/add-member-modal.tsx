@@ -115,7 +115,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
   )
   const needsMemberApproval = role !== 'admin' && requiresApproval('members.create')
   const membershipTypeInfoContent = needsMemberApproval
-    ? 'Select the submitted membership type. Payment is recorded during approval.'
+    ? 'Select the membership type that will be used if the request is approved.'
     : 'Select the membership type to assign when the member is created immediately.'
   const submitLabel = needsMemberApproval ? 'Submit Request' : 'Create Member'
   const submitLoadingLabel = needsMemberApproval ? 'Submitting Request...' : 'Creating Member...'
