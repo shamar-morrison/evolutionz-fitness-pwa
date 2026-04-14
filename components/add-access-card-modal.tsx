@@ -168,7 +168,7 @@ export function AddAccessCardModal({
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Optional prefix code shown to staff (e.g. N39).
+                Required prefix code shown to staff (e.g. N39).
               </p>
             </div>
           </div>

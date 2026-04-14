@@ -759,6 +759,43 @@ describe('AddMemberModal', () => {
     })
   })
 
+  it('requires a card code when adding a manual access card', async () => {
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    await clickButton(container, 'Add Access Card')
+
+    expect(container.textContent).toContain('Required prefix code shown to staff (e.g. N39).')
+
+    const manualCardNumberInput = container.querySelector('#manual-card-number')
+    const manualCardCodeInput = container.querySelector('#manual-card-code')
+
+    if (
+      !(manualCardNumberInput instanceof HTMLInputElement) ||
+      !(manualCardCodeInput instanceof HTMLInputElement)
+    ) {
+      throw new Error('Manual card inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(manualCardNumberInput, '12345')
+      setInputValue(manualCardCodeInput, '   ')
+    })
+
+    await clickButton(container, 'Create Card')
+    await flushAsyncWork()
+
+    expect(createManualAccessCardMock).not.toHaveBeenCalled()
+    expect(container.querySelector('#manual-card-number')).not.toBeNull()
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Card code required',
+      description: 'Enter the card code before saving.',
+      variant: 'destructive',
+    })
+  })
+
   it('treats whitespace-only card codes as missing in Step 1', async () => {
     mockAvailableCards([
       {
