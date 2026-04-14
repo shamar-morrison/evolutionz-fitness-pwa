@@ -124,6 +124,78 @@ describe('updateSession', () => {
     expect(response.headers.get('location')).toBe('http://localhost/members')
   })
 
+  it('redirects suspended users from protected routes to /suspended', async () => {
+    mockSupabaseUser({
+      id: 'user-5',
+      email: 'suspended@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'user-5',
+      role: 'staff',
+      titles: ['Trainer'],
+      isSuspended: true,
+    })
+
+    const response = await updateSession(createRequest('/members'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/suspended')
+  })
+
+  it('redirects suspended users away from /login to /suspended', async () => {
+    mockSupabaseUser({
+      id: 'user-6',
+      email: 'suspended@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'user-6',
+      role: 'staff',
+      titles: ['Trainer'],
+      isSuspended: true,
+    })
+
+    const response = await updateSession(createRequest('/login'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/suspended')
+  })
+
+  it('allows suspended users to remain on /suspended', async () => {
+    mockSupabaseUser({
+      id: 'user-7',
+      email: 'suspended@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'user-7',
+      role: 'staff',
+      titles: ['Trainer'],
+      isSuspended: true,
+    })
+
+    const response = await updateSession(createRequest('/suspended'))
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('location')).toBeNull()
+  })
+
+  it('redirects active authenticated users away from /suspended', async () => {
+    mockSupabaseUser({
+      id: 'user-8',
+      email: 'trainer@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'user-8',
+      role: 'staff',
+      titles: ['Trainer'],
+      isSuspended: false,
+    })
+
+    const response = await updateSession(createRequest('/suspended'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/trainer/schedule')
+  })
+
   it('allows admins through protected routes', async () => {
     mockSupabaseUser({
       id: 'user-1',

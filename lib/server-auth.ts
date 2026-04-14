@@ -17,6 +17,9 @@ type AdminAuthSuccess = {
   profile: Profile
 }
 
+const SUSPENDED_ACCOUNT_ERROR =
+  'Your account has been suspended. Please contact an administrator.'
+
 async function readProfile(userId: string) {
   const supabase = await createClient()
   return readStaffProfile(supabase, userId)
@@ -50,6 +53,12 @@ export async function requireAuthenticatedProfile(): Promise<AuthFailure | Admin
   if (!profile) {
     return {
       response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+    }
+  }
+
+  if (profile.isSuspended) {
+    return {
+      response: NextResponse.json({ error: SUSPENDED_ACCOUNT_ERROR }, { status: 403 }),
     }
   }
 

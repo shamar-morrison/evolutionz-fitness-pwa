@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { updateStaff } from '@/lib/staff-actions'
+import { setStaffSuspended, updateStaff } from '@/lib/staff-actions'
 
 function createJsonResponse(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {
@@ -27,6 +27,7 @@ describe('staff actions', () => {
             email: 'jordan@evolutionzfitness.com',
             role: 'staff',
             titles: ['Trainer'],
+            isSuspended: false,
             phone: '876-555-0100',
             gender: 'male',
             remark: 'Updated remark',
@@ -76,6 +77,7 @@ describe('staff actions', () => {
             email: 'jordan@evolutionzfitness.com',
             role: 'staff',
             titles: ['Trainer'],
+            isSuspended: false,
             phone: '876-555-0100',
             gender: 'other',
             remark: 'Updated remark',
@@ -102,6 +104,24 @@ describe('staff actions', () => {
       phone: '876-555-0100',
       remark: 'Updated remark',
       titles: ['Trainer'],
+    })
+  })
+
+  it('updates staff suspension through the suspend route', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(createJsonResponse({ ok: true }, 200))
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await setStaffSuspended('staff-1', true)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/staff/staff-1/suspend', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        suspended: true,
+      }),
     })
   })
 })

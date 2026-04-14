@@ -85,7 +85,6 @@ async function emitInsert(payload: MembersInsertPayload = {}) {
 
 describe('useMembers', () => {
   let container: HTMLDivElement
-  let consoleLogSpy: ReturnType<typeof vi.spyOn>
   let root: Root
 
   beforeEach(() => {
@@ -94,7 +93,6 @@ describe('useMembers', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     insertCallback = null
 
     useQueryMock.mockReset()
@@ -168,7 +166,6 @@ describe('useMembers', () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       false
     vi.clearAllMocks()
-    consoleLogSpy.mockRestore()
   })
 
   it('enables keepPreviousData for members list refetches', async () => {
@@ -193,15 +190,8 @@ describe('useMembers', () => {
     }
 
     expect(createClientMock).toHaveBeenCalledTimes(1)
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      '[members realtime] effect fired, user:',
-      'user-1',
-    )
     expect(supabase.channel).toHaveBeenCalledWith('members-inserts-user-1')
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      '[members realtime] channel subscribed, user:',
-      'user-1',
-    )
+    expect(subscribeMock).toHaveBeenCalledTimes(1)
     expect(channelMock.on).toHaveBeenCalledWith(
       'postgres_changes',
       {
@@ -218,9 +208,6 @@ describe('useMembers', () => {
     await renderComponent(root)
     await emitInsert()
 
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      '[members realtime] INSERT received, invalidating query',
-    )
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['members', 'all'],
     })

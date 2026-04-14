@@ -43,6 +43,10 @@ type UploadStaffPhotoSuccessResponse = {
   photo_url: string
 }
 
+type StaffMutationSuccessResponse = {
+  ok: true
+}
+
 export type CreateStaffData = {
   name: string
   email: string
@@ -339,5 +343,35 @@ export async function archiveStaff(id: string): Promise<{ archivedAt: string }> 
 
   return {
     archivedAt: responseBody.archivedAt,
+  }
+}
+
+export async function setStaffSuspended(id: string, suspended: boolean): Promise<void> {
+  const response = await fetch(`/api/staff/${encodeURIComponent(id)}/suspend`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      suspended,
+    }),
+  })
+
+  let responseBody: StaffMutationSuccessResponse | StaffMutationErrorResponse | null = null
+
+  try {
+    responseBody = (await response.json()) as
+      | StaffMutationSuccessResponse
+      | StaffMutationErrorResponse
+  } catch {
+    responseBody = null
+  }
+
+  if (!response.ok || !responseBody || ('ok' in responseBody && responseBody.ok === false)) {
+    throw new Error(
+      responseBody && 'ok' in responseBody && responseBody.ok === false
+        ? responseBody.error
+        : `Failed to ${suspended ? 'suspend' : 'restore'} staff access.`,
+    )
   }
 }

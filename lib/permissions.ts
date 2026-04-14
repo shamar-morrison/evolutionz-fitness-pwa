@@ -18,6 +18,7 @@ export type Permission =
   | 'classes.manageSchedule'
   | 'staff.view'
   | 'staff.manage'
+  | 'staff.suspend'
   | 'reports.view'
   | 'settings.manage'
   | 'dashboard.view'
@@ -43,6 +44,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'classes.manageSchedule',
     'staff.view',
     'staff.manage',
+    'staff.suspend',
     'reports.view',
     'settings.manage',
     'dashboard.view',

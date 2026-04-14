@@ -6,20 +6,35 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   archiveStaffMock,
+  authState,
   deleteStaffMock,
   deleteStaffPhotoMock,
   invalidateQueriesMock,
+  permissionState,
   pushMock,
   replaceMock,
+  setStaffSuspendedMock,
   toastMock,
   useStaffProfileMock,
 } = vi.hoisted(() => ({
   archiveStaffMock: vi.fn(),
+  authState: {
+    profile: {
+      id: 'admin-1',
+      role: 'admin' as const,
+      titles: ['Owner'],
+      isSuspended: false,
+    },
+  },
   deleteStaffMock: vi.fn(),
   deleteStaffPhotoMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
+  permissionState: {
+    canSuspend: true,
+  },
   pushMock: vi.fn(),
   replaceMock: vi.fn(),
+  setStaffSuspendedMock: vi.fn(),
   toastMock: vi.fn(),
   useStaffProfileMock: vi.fn(),
 }))
@@ -45,6 +60,21 @@ vi.mock('@/hooks/use-staff', () => ({
   useStaffProfile: useStaffProfileMock,
 }))
 
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({
+    user: null,
+    profile: authState.profile,
+    role: authState.profile?.role ?? null,
+    loading: false,
+  }),
+}))
+
+vi.mock('@/hooks/use-permissions', () => ({
+  usePermissions: () => ({
+    can: (permission: string) => permission === 'staff.suspend' && permissionState.canSuspend,
+  }),
+}))
+
 vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
 }))
@@ -53,6 +83,7 @@ vi.mock('@/lib/staff-actions', () => ({
   archiveStaff: archiveStaffMock,
   deleteStaff: deleteStaffMock,
   deleteStaffPhoto: deleteStaffPhotoMock,
+  setStaffSuspended: setStaffSuspendedMock,
 }))
 
 vi.mock('@/components/role-guard', () => ({
@@ -161,6 +192,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     email: overrides.email ?? 'jordan@evolutionzfitness.com',
     role: overrides.role ?? 'staff',
     titles: overrides.titles ?? ['Trainer'],
+    isSuspended: overrides.isSuspended ?? false,
     phone: overrides.phone ?? null,
     gender: overrides.gender ?? null,
     remark: overrides.remark ?? null,
@@ -217,6 +249,14 @@ describe('StaffDetailPage', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    authState.profile = {
+      id: 'admin-1',
+      role: 'admin',
+      titles: ['Owner'],
+      isSuspended: false,
+    }
+    permissionState.canSuspend = true
+    setStaffSuspendedMock.mockResolvedValue(undefined)
   })
 
   afterEach(async () => {
@@ -282,5 +322,118 @@ describe('StaffDetailPage', () => {
     expect(archiveStaffMock).not.toHaveBeenCalled()
     expect(container.textContent).toContain('Archive staff account?')
     expect(container.textContent).not.toContain('Unable to archive staff account')
+  })
+
+  it('shows the suspended status and restores access without a confirmation dialog', async () => {
+    useStaffProfileMock.mockReturnValue({
+      profile: createProfile({
+        isSuspended: true,
+      }),
+      removal: createRemoval(),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<StaffDetailPage />)
+    })
+
+    expect(container.textContent).toContain('Suspended')
+
+    await clickButton(container, 'Restore Access')
+
+    expect(setStaffSuspendedMock).toHaveBeenCalledWith('staff-1', false)
+    expect(container.textContent).not.toContain('Suspend staff account?')
+    expect(invalidateQueriesMock).toHaveBeenCalled()
+  })
+
+  it('opens a confirmation dialog before suspending a staff account', async () => {
+    useStaffProfileMock.mockReturnValue({
+      profile: createProfile(),
+      removal: createRemoval(),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<StaffDetailPage />)
+    })
+
+    await clickButton(container, 'Suspend Account')
+
+    expect(setStaffSuspendedMock).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('Suspend staff account?')
+    expect(container.textContent).toContain(
+      'Are you sure you want to suspend Jordan Trainer? They will be immediately logged out and will not be able to log back in until you restore their access.',
+    )
+
+    await clickButton(container, 'Confirm')
+
+    expect(setStaffSuspendedMock).toHaveBeenCalledWith('staff-1', true)
+    expect(invalidateQueriesMock).toHaveBeenCalled()
+  })
+
+  it('shows archived access status with archived priority over suspension', async () => {
+    useStaffProfileMock.mockReturnValue({
+      profile: createProfile({
+        archivedAt: '2026-04-10T00:00:00.000Z',
+        isSuspended: true,
+      }),
+      removal: createRemoval(),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<StaffDetailPage />)
+    })
+
+    const accessStatusBadge = container.querySelector('[aria-label="Access status: Archived"]')
+
+    expect(accessStatusBadge?.textContent).toBe('Archived')
+    expect(container.querySelector('[aria-label="Access status: Suspended"]')).toBeNull()
+  })
+
+  it('does not render suspension controls for owner accounts', async () => {
+    useStaffProfileMock.mockReturnValue({
+      profile: createProfile({
+        role: 'admin',
+        titles: ['Owner'],
+      }),
+      removal: createRemoval(),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<StaffDetailPage />)
+    })
+
+    expect(container.textContent).not.toContain('Suspend Account')
+    expect(container.textContent).not.toContain('Restore Access')
+  })
+
+  it('does not render suspension controls for the current admin profile', async () => {
+    authState.profile = {
+      id: 'staff-1',
+      role: 'admin',
+      titles: ['Owner'],
+      isSuspended: false,
+    }
+    useStaffProfileMock.mockReturnValue({
+      profile: createProfile({
+        id: 'staff-1',
+      }),
+      removal: createRemoval(),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<StaffDetailPage />)
+    })
+
+    expect(container.textContent).not.toContain('Suspend Account')
+    expect(container.textContent).not.toContain('Restore Access')
   })
 })

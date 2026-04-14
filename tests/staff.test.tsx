@@ -8,6 +8,7 @@ import {
   deriveRoleFromTitles,
   filterStaffByTitle,
   isFrontDeskStaff,
+  normalizeProfile,
   normalizeStaffSpecialtiesForTitles,
 } from '@/lib/staff'
 import type { Profile } from '@/types'
@@ -19,6 +20,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     email: overrides.email ?? 'admin@evolutionzfitness.com',
     role: overrides.role ?? 'admin',
     titles: overrides.titles ?? ['Owner'],
+    isSuspended: overrides.isSuspended ?? false,
     phone: overrides.phone ?? null,
     gender: overrides.gender ?? null,
     remark: overrides.remark ?? null,
@@ -127,5 +129,48 @@ describe('staff helpers', () => {
 
   it('treats front desk-only titles as front desk staff', () => {
     expect(isFrontDeskStaff(['Administrative Assistant'])).toBe(true)
+  })
+
+  it('preserves the suspended flag when normalizing a staff profile', () => {
+    const profile = normalizeProfile({
+      profile: {
+        id: 'staff-1',
+        name: 'Jordan Trainer',
+        email: 'jordan@evolutionzfitness.com',
+        role: 'staff',
+        titles: ['Trainer'],
+        isSuspended: true,
+        phone: null,
+        gender: null,
+        remark: null,
+        specialties: [],
+        photoUrl: null,
+        archivedAt: null,
+        created_at: '2026-04-03T00:00:00.000Z',
+      },
+    })
+
+    expect(profile?.isSuspended).toBe(true)
+  })
+
+  it('fails normalization when suspension state is missing', () => {
+    const profile = normalizeProfile({
+      profile: {
+        id: 'staff-1',
+        name: 'Jordan Trainer',
+        email: 'jordan@evolutionzfitness.com',
+        role: 'staff',
+        titles: ['Trainer'],
+        phone: null,
+        gender: null,
+        remark: null,
+        specialties: [],
+        photoUrl: null,
+        archivedAt: null,
+        created_at: '2026-04-03T00:00:00.000Z',
+      },
+    })
+
+    expect(profile).toBeNull()
   })
 })

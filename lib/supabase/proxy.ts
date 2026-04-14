@@ -36,6 +36,7 @@ export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
     request,
   })
+  const pathname = request.nextUrl.pathname
   const isPublicPath = isPublicRoute(request.nextUrl.pathname)
 
   const supabase = createServerClient(getSupabaseUrl(), getSupabasePublishableKey(), {
@@ -90,12 +91,32 @@ export async function updateSession(request: NextRequest) {
       return copyCookies(response, NextResponse.redirect(loginUrl))
     }
 
-    if (!isPublicPath) {
-      const titles = Array.isArray(profile.titles) ? profile.titles : []
-      const role: AppRole =
-        profile.role === 'admin' || titles.includes('Owner') ? 'admin' : 'staff'
+    const titles = Array.isArray(profile.titles) ? profile.titles : []
+    const role: AppRole =
+      profile.role === 'admin' || titles.includes('Owner') ? 'admin' : 'staff'
 
-      if (isRouteAllowed(request.nextUrl.pathname, role, titles)) {
+    if (profile.isSuspended) {
+      if (pathname === '/suspended') {
+        return response
+      }
+
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/suspended'
+      redirectUrl.search = ''
+
+      return copyCookies(response, NextResponse.redirect(redirectUrl))
+    }
+
+    if (pathname === '/suspended') {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = getAuthenticatedHomePath(role, titles)
+      redirectUrl.search = ''
+
+      return copyCookies(response, NextResponse.redirect(redirectUrl))
+    }
+
+    if (!isPublicPath) {
+      if (isRouteAllowed(pathname, role, titles)) {
         return response
       }
 
@@ -106,12 +127,12 @@ export async function updateSession(request: NextRequest) {
       return copyCookies(response, NextResponse.redirect(redirectUrl))
     }
 
-    if (request.nextUrl.pathname !== '/login') {
+    if (pathname !== '/login') {
       return response
     }
 
     const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = getAuthenticatedHomePath(profile?.role, profile?.titles)
+    redirectUrl.pathname = getAuthenticatedHomePath(profile.role, profile.titles)
     redirectUrl.search = ''
 
     return copyCookies(response, NextResponse.redirect(redirectUrl))
