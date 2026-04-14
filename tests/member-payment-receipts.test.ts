@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildMemberPaymentReceipt,
   buildMemberPaymentReceiptEmailBody,
+  formatReceiptDateValue,
+  formatReceiptTimestampValue,
 } from '@/lib/member-payment-receipts'
 
 function createReceipt(overrides: Partial<Parameters<typeof buildMemberPaymentReceipt>[0]> = {}) {
@@ -25,12 +27,24 @@ function createReceipt(overrides: Partial<Parameters<typeof buildMemberPaymentRe
 }
 
 describe('member payment receipt email body', () => {
+  it('formats receipt dates without a time component', () => {
+    expect(formatReceiptDateValue('2026-04-12')).toBe('12 April 2026')
+  })
+
+  it('formats receipt timestamps with Jamaica time', () => {
+    expect(formatReceiptTimestampValue('2026-04-12T12:05:00.000Z')).toBe(
+      '12 April 2026 at 7:05 am',
+    )
+  })
+
   it('renders membership start and end rows for membership receipts', () => {
     const receipt = createReceipt()
     const body = buildMemberPaymentReceiptEmailBody(receipt)
 
     expect(body).toContain('Membership Start')
     expect(body).toContain('Membership End')
+    expect(body).toContain('31 March 2026 at 7:00 pm')
+    expect(body).toContain('30 April 2026 at 6:59 pm')
   })
 
   it('omits membership start and end rows for card fee receipts', () => {

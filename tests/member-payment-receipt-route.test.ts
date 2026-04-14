@@ -327,6 +327,40 @@ describe('member payment receipt route', () => {
     expect(receiptSentAtUpdates).toEqual(['2026-04-12T12:05:00.000Z'])
   })
 
+  it('returns idempotent success when another request already holds the receipt reservation', async () => {
+    const { client, receiptSentAtUpdates } = createReceiptRouteClient(createReceiptPaymentRow())
+    const deliveryStore = createDeliveryStore({
+      readReceiptDelivery: vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          status: 'pending',
+          createdAt: '2026-04-12T12:00:00.000Z',
+          sentAt: null,
+          isStale: false,
+        }),
+      reserveReceiptDelivery: vi.fn().mockResolvedValue('pending'),
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
+    mockAdminUser()
+
+    const response = await POST(new Request('http://localhost', { method: 'POST' }), {
+      params: Promise.resolve({ id: 'member-1', paymentId: 'payment-1' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      alreadySent: true,
+      receiptSentAt: null,
+    })
+    expect(sendAdminResendEmailToRecipientMock).not.toHaveBeenCalled()
+    expect(deliveryStore.markReceiptDeliverySent).not.toHaveBeenCalled()
+    expect(deliveryStore.releasePendingReceiptDelivery).not.toHaveBeenCalled()
+    expect(receiptSentAtUpdates).toEqual([])
+  })
+
   it('returns 429 when the daily quota is exhausted', async () => {
     const { client } = createReceiptRouteClient(createReceiptPaymentRow())
     const deliveryStore = createDeliveryStore({

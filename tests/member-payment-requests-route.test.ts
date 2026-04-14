@@ -1015,6 +1015,44 @@ describe('member payment request routes', () => {
     })
   })
 
+  it('returns 404 when the approval RPC reports the membership type missing', async () => {
+    const { client, rpcCalls } = createPaymentRequestsClient({
+      approvalRpcError: {
+        message: 'Membership type not found.',
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-payment-requests/payment-request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'approve',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'payment-request-1' }),
+      },
+    )
+
+    expect(rpcCalls).toHaveLength(1)
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Membership type not found.',
+    })
+  })
+
   it('returns 404 when the request is missing before approval starts', async () => {
     const { client, rpcCalls } = createPaymentRequestsClient({
       existingRequestRow: null,

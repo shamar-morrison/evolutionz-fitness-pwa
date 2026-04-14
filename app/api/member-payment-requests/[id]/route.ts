@@ -92,7 +92,11 @@ function normalizeOptionalText(value: string | null | undefined) {
 }
 
 function getApprovalRpcErrorStatus(message: string) {
-  if (message === 'Member payment request not found.' || message === 'Member not found.') {
+  if (
+    message === 'Member payment request not found.' ||
+    message === 'Member not found.' ||
+    message === 'Membership type not found.'
+  ) {
     return 404
   }
 

@@ -88,7 +88,7 @@ function readJsonError(responseBody: unknown, fallback: string) {
   return fallback
 }
 
-function formatDateValueInJamaica(value: string) {
+function formatDateInJamaica(value: string) {
   const date = new Date(`${value}T00:00:00${JAMAICA_OFFSET}`)
 
   if (Number.isNaN(date.getTime())) {
@@ -121,6 +121,8 @@ function formatTimestampInJamaica(value: string | null) {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
   }).format(timestamp)
 }
 
@@ -219,7 +221,7 @@ export function buildMemberPaymentReceiptEmailBody(receipt: MemberPaymentReceipt
           </tr>
           <tr>
             <td style="padding:8px 0;font-weight:600;vertical-align:top;">Payment Date</td>
-            <td style="padding:8px 0;">${escapeHtml(formatDateValueInJamaica(receipt.paymentDate))}</td>
+            <td style="padding:8px 0;">${escapeHtml(formatDateInJamaica(receipt.paymentDate))}</td>
           </tr>
           ${membershipDatesMarkup}
           <tr>
@@ -301,7 +303,7 @@ export async function sendMemberPaymentReceipt(
 }
 
 export function formatReceiptDateValue(value: string) {
-  return formatDateValueInJamaica(value)
+  return formatDateInJamaica(value)
 }
 
 export function formatReceiptTimestampValue(value: string | null) {

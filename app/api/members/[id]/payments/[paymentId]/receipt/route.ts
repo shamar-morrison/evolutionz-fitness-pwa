@@ -317,11 +317,11 @@ export async function POST(
       idempotencyKey: paymentId,
     })
 
-    if (reservationState === 'sent') {
+    if (reservationState === 'sent' || reservationState === 'pending') {
       const sentAt =
         normalizeText((await deliveryStore.readReceiptDelivery({ paymentId }))?.sentAt) || null
 
-      if (sentAt && !receipt.receiptSentAt) {
+      if (reservationState === 'sent' && sentAt && !receipt.receiptSentAt) {
         await syncReceiptSentAt(supabase, paymentId, sentAt)
       }
 
