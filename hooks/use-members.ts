@@ -1,10 +1,12 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useMemo } from 'react'
+import { useAuth } from '@/contexts/auth-context'
 import { fetchMember as fetchPersistedMember, fetchMembers as fetchPersistedMembers } from '@/lib/members'
 import { matchesMemberSearch } from '@/lib/member-search'
 import { queryKeys } from '@/lib/query-keys'
+import { createClient } from '@/lib/supabase/client'
 import {
   applySessionMemberOverride,
   applySessionMemberOverrides,
@@ -20,13 +22,42 @@ type UseMembersOptions = {
 }
 
 export function useMembers(options: UseMembersOptions = {}) {
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
   const [sessionMemberOverrides, setSessionMemberOverrides] = useState(() => getSessionMemberOverrides())
   const membersQuery = useQuery({
     queryKey: queryKeys.members.all,
     queryFn: fetchPersistedMembers,
+    placeholderData: keepPreviousData,
   })
 
   useEffect(() => subscribeToSessionMemberOverrides(setSessionMemberOverrides), [])
+
+  useEffect(() => {
+    if (!user?.id) {
+      return
+    }
+
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`members-inserts-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'members',
+        },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.members.all })
+        },
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [queryClient, user?.id])
 
   const mergedMembers = useMemo(
     () => applySessionMemberOverrides(membersQuery.data ?? [], sessionMemberOverrides),
