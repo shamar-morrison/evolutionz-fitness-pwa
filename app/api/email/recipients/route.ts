@@ -8,6 +8,7 @@ import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 const recipientFiltersSchema = z.object({
   activeMembers: z.enum(['true', 'false']).default('false'),
   expiringMembers: z.enum(['true', 'false']).default('false'),
+  expiredMembers: z.enum(['true', 'false']).default('false'),
   memberTypeIds: z.string().default(''),
   individualIds: z.string().default(''),
 })
@@ -77,6 +78,7 @@ export async function GET(request: Request) {
     const parsedFilters = recipientFiltersSchema.parse({
       activeMembers: searchParams.get('activeMembers') ?? 'false',
       expiringMembers: searchParams.get('expiringMembers') ?? 'false',
+      expiredMembers: searchParams.get('expiredMembers') ?? 'false',
       memberTypeIds: searchParams.get('memberTypeIds') ?? '',
       individualIds: searchParams.get('individualIds') ?? '',
     })
@@ -114,6 +116,16 @@ export async function GET(request: Request) {
             .gte('end_time', startInclusive)
             .lt('end_time', endExclusive)
             .order('end_time', { ascending: true }),
+        ),
+      )
+    }
+
+    if (parsedFilters.expiredMembers === 'true') {
+      addRecipients(
+        await executeRecipientQuery(
+          supabase.from('members').select('id, name, email').eq('status', 'Expired').order('name', {
+            ascending: true,
+          }),
         ),
       )
     }
