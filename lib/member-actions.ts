@@ -502,6 +502,5 @@ export async function recoverMemberCard(
 }
 
 export async function revokeCardAccess(id: string): Promise<void> {
-  console.log('Revoking card access for member:', id)
   await new Promise((resolve) => setTimeout(resolve, 500))
 }
