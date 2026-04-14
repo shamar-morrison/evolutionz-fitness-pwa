@@ -196,6 +196,18 @@ async function clickButton(container: ParentNode, label: string) {
   })
 }
 
+function getButton(container: ParentNode, label: string) {
+  const button = Array.from(container.querySelectorAll('button')).find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`${label} button not found.`)
+  }
+
+  return button
+}
+
 describe('PendingMemberRequestsPage', () => {
   let container: HTMLDivElement
   let root: Root
@@ -250,6 +262,58 @@ describe('PendingMemberRequestsPage', () => {
     expect(container.textContent).toContain('Review Member Request')
     expect(container.textContent).not.toContain('Payment')
     expect(container.querySelector('#member-request-payment-amount')).toBeNull()
+  })
+
+  it('keeps approve disabled until the cards query finishes successfully', async () => {
+    useAvailableCardsMock.mockReturnValue({
+      cards: [],
+      isLoading: true,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<PendingMemberRequestsPage />)
+    })
+
+    await clickButton(container, 'Review')
+
+    let approveButton = getButton(container, 'Approve')
+
+    expect(approveButton.disabled).toBe(true)
+    expect(approveButton.querySelector('[aria-label="Loading"]')).not.toBeNull()
+
+    useAvailableCardsMock.mockReturnValue({
+      cards: [],
+      isLoading: false,
+      error: 'Failed to load available cards.',
+    })
+
+    await act(async () => {
+      root.render(<PendingMemberRequestsPage />)
+    })
+
+    approveButton = getButton(container, 'Approve')
+
+    expect(approveButton.disabled).toBe(true)
+    expect(approveButton.querySelector('[aria-label="Loading"]')).toBeNull()
+
+    useAvailableCardsMock.mockReturnValue({
+      cards: [
+        { cardNo: '0102857149', cardCode: 'A18' },
+        { cardNo: '0102857150', cardCode: 'A19' },
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<PendingMemberRequestsPage />)
+    })
+
+    approveButton = getButton(container, 'Approve')
+
+    expect(approveButton.disabled).toBe(false)
+    expect(approveButton.querySelector('[aria-label="Loading"]')).toBeNull()
   })
 
   it('approves the request with the selected card only and invalidates the related queries', async () => {

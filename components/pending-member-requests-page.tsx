@@ -50,6 +50,8 @@ export function PendingMemberRequestsPage() {
   } = useAvailableCards({ enabled: Boolean(selectedRequest) })
 
   const isSubmitting = submittingAction !== null
+  const isApproveDisabled = isSubmitting || isCardsLoading || Boolean(cardsError)
+  const isApproveLoading = submittingAction === 'approved' || isCardsLoading
   const selectedAvailableCard = useMemo(
     () => availableCards.find((card) => card.cardNo === selectedCardNo) ?? null,
     [availableCards, selectedCardNo],
@@ -360,8 +362,8 @@ export function PendingMemberRequestsPage() {
             <Button
               type="button"
               onClick={() => void handleApprove()}
-              disabled={isSubmitting}
-              loading={submittingAction === 'approved'}
+              disabled={isApproveDisabled}
+              loading={isApproveLoading}
             >
               Approve
             </Button>
