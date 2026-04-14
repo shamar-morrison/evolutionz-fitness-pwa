@@ -18,6 +18,7 @@ import {
   readMemberWithCardCode,
   type MembersReadClient,
 } from '@/lib/members'
+import { resolveMemberStatusForAccessWindowUpdate } from '@/lib/member-status'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -136,6 +137,11 @@ export async function PATCH(
     }
 
     const prefixedName = buildHikMemberName(input.name, currentMember.cardCode)
+    const accessWindowChanged = hasAccessWindowChanged(
+      currentMember,
+      input.beginTime,
+      input.endTime,
+    )
     const memberTypeUpdateValues = await buildMemberTypeUpdateValues(
       supabase,
       input.member_type_id,
@@ -152,6 +158,14 @@ export async function PATCH(
         remark: normalizeOptionalText(input.remark),
         begin_time: input.beginTime,
         end_time: input.endTime,
+        ...(accessWindowChanged
+          ? {
+              status: resolveMemberStatusForAccessWindowUpdate({
+                currentStatus: currentMember.status,
+                endTime: input.endTime,
+              }),
+            }
+          : {}),
       })
       .eq('id', id)
       .select(MEMBER_RECORD_SELECT)
@@ -170,7 +184,7 @@ export async function PATCH(
       buildCardLookupFromMember(currentMember),
     )
 
-    if (!hasAccessWindowChanged(currentMember, input.beginTime, input.endTime)) {
+    if (!accessWindowChanged) {
       return NextResponse.json({
         ok: true,
         member,

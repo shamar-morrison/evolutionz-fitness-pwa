@@ -427,7 +427,7 @@ export async function reactivateMember(id: string): Promise<Member> {
   const response = await requestMemberMutation(`/api/members/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: {
-      status: 'Active',
+      refreshStatus: true,
     },
     errorMessage: 'Failed to reactivate member.',
   })

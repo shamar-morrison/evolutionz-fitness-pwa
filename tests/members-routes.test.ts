@@ -114,6 +114,7 @@ function createMembersAdminClient({
 
 describe('members API routes', () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
     resetServerAuthMocks()
@@ -306,7 +307,7 @@ describe('members API routes', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          status: 'Active',
+          refreshStatus: true,
         }),
       }),
       {
@@ -388,8 +389,35 @@ describe('members API routes', () => {
     })
   })
 
+  it('rejects the legacy status trigger field on PATCH', async () => {
+    const response = await patchMember(
+      new Request('http://localhost/api/members/member-2', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'Active',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-2' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining('status'),
+    })
+  })
+
   it('reactivates a member and returns the updated detail row', async () => {
-    const memberUpdates: Array<{ status: 'Active'; id: string }> = []
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-01T00:00:00Z'))
+
+    const memberUpdates: Array<{ status: 'Active' | 'Expired'; id: string }> = []
+    let memberReadCount = 0
 
     getSupabaseAdminClientMock.mockReturnValue({
       from(table: string) {
@@ -400,6 +428,8 @@ describe('members API routes', () => {
                 eq() {
                   return {
                     maybeSingle() {
+                      memberReadCount += 1
+
                       return Promise.resolve({
                         data: {
                           id: 'member-2',
@@ -407,7 +437,7 @@ describe('members API routes', () => {
                           name: 'Marcus Brown',
                           card_no: null,
                           type: 'Student/BPO',
-                          status: 'Active',
+                          status: memberReadCount === 1 ? 'Suspended' : 'Active',
                           gender: null,
                           email: null,
                           phone: null,
@@ -482,7 +512,7 @@ describe('members API routes', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        status: 'Active',
+        refreshStatus: true,
       }),
     }), {
       params: Promise.resolve({ id: 'member-2' }),
@@ -511,6 +541,139 @@ describe('members API routes', () => {
         photoUrl: null,
         beginTime: '2026-03-01T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
+      },
+    })
+  })
+
+  it('reactivates a suspended member as expired when the stored end time is already in the past', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-01T00:00:00Z'))
+
+    const memberUpdates: Array<{ status: 'Active' | 'Expired'; id: string }> = []
+    let memberReadCount = 0
+
+    getSupabaseAdminClientMock.mockReturnValue({
+      from(table: string) {
+        if (table === 'members') {
+          return {
+            select() {
+              return {
+                eq() {
+                  return {
+                    maybeSingle() {
+                      memberReadCount += 1
+
+                      return Promise.resolve({
+                        data: {
+                          id: 'member-2',
+                          employee_no: '000777',
+                          name: 'Marcus Brown',
+                          card_no: null,
+                          type: 'Student/BPO',
+                          status: memberReadCount === 1 ? 'Suspended' : 'Expired',
+                          gender: null,
+                          email: null,
+                          phone: null,
+                          remark: 'Requires weekend access',
+                          photo_url: null,
+                          begin_time: '2026-03-01T00:00:00Z',
+                          end_time: '2026-03-15T23:59:59Z',
+                          balance: 0,
+                          created_at: '2026-03-01T10:00:00Z',
+                          updated_at: '2026-03-01T10:05:00Z',
+                        },
+                        error: null,
+                      })
+                    },
+                  }
+                },
+              }
+            },
+            update(values: { status: 'Active' | 'Expired' }) {
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('id')
+                  memberUpdates.push({
+                    status: values.status,
+                    id: value,
+                  })
+
+                  return {
+                    select(columns: string) {
+                      expect(columns).toBe(MEMBER_RECORD_SELECT)
+
+                      return {
+                        maybeSingle() {
+                          return Promise.resolve({
+                            data: {
+                              id: 'member-2',
+                            },
+                            error: null,
+                          })
+                        },
+                      }
+                    },
+                  }
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'cards') {
+          return {
+            select() {
+              return {
+                in() {
+                  return Promise.resolve({
+                    data: [],
+                    error: null,
+                  })
+                },
+              }
+            },
+          }
+        }
+
+        throw new Error(`Unexpected table: ${table}`)
+      },
+    })
+
+    const response = await patchMember(new Request('http://localhost/api/members/member-2', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        refreshStatus: true,
+      }),
+    }), {
+      params: Promise.resolve({ id: 'member-2' }),
+    })
+
+    expect(memberUpdates).toEqual([{ status: 'Expired', id: 'member-2' }])
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      member: {
+        id: 'member-2',
+        employeeNo: '000777',
+        name: 'Marcus Brown',
+        cardNo: null,
+        cardCode: null,
+        cardStatus: null,
+        cardLostAt: null,
+        type: 'Student/BPO',
+        memberTypeId: null,
+        status: 'Expired',
+        deviceAccessState: 'ready',
+        gender: null,
+        email: null,
+        phone: null,
+        remark: 'Requires weekend access',
+        photoUrl: null,
+        beginTime: '2026-03-01T00:00:00.000Z',
+        endTime: '2026-03-15T23:59:59.000Z',
       },
     })
   })

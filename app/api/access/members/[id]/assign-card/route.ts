@@ -7,6 +7,7 @@ import {
 } from '@/lib/access-control-jobs'
 import { parseLocalDateTime } from '@/lib/member-access-time'
 import { DEFAULT_PLACEHOLDER_SLOT_PATTERN, buildAddCardPayload } from '@/lib/member-job'
+import { resolveMembershipLifecycleStatus } from '@/lib/member-status'
 import {
   MEMBER_RECORD_SELECT,
   readMemberWithCardCode,
@@ -419,6 +420,7 @@ export async function POST(
       .update({
         begin_time: input.beginTime,
         end_time: input.endTime,
+        status: resolveMembershipLifecycleStatus(input.endTime),
       })
       .eq('id', id)
       .eq('employee_no', memberEmployeeNo)

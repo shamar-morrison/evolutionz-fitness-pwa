@@ -244,7 +244,7 @@ describe('PATCH /api/members/[id]/edit', () => {
   })
 
   it('queues add_user when the access window changes', async () => {
-    const { client, insertedJobs } = createEditAdminClient({
+    const { client, insertedJobs, memberUpdates } = createEditAdminClient({
       updatedMemberRow: {
         id: 'member-1',
         employee_no: '000611',
@@ -300,6 +300,177 @@ describe('PATCH /api/members/[id]/edit', () => {
         },
       },
     ])
+    expect(memberUpdates).toEqual([
+      {
+        name: 'A18 Jane Doe',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Original remark',
+        begin_time: '2026-03-30T08:00:00',
+        end_time: '2026-05-29T23:59:59',
+        status: 'Active',
+      },
+    ])
+  })
+
+  it('reactivates an expired member when the edited access window ends in the future', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-15T00:00:00Z'))
+
+    const { client, memberUpdates } = createEditAdminClient({
+      currentMemberRow: {
+        id: 'member-1',
+        employee_no: '000611',
+        name: 'A18 Jane Doe',
+        card_no: '0102857149',
+        type: 'General',
+        status: 'Expired',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Original remark',
+        photo_url: null,
+        begin_time: '2026-02-01T00:00:00Z',
+        end_time: '2026-02-28T23:59:59Z',
+        balance: 0,
+        created_at: '2026-03-30T14:15:16Z',
+        updated_at: '2026-03-30T14:15:16Z',
+      },
+      updatedMemberRow: {
+        id: 'member-1',
+        employee_no: '000611',
+        name: 'A18 Jane Doe',
+        card_no: '0102857149',
+        type: 'General',
+        status: 'Active',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Original remark',
+        photo_url: null,
+        begin_time: '2026-04-01T00:00:00Z',
+        end_time: '2026-06-30T23:59:59Z',
+        balance: 0,
+        created_at: '2026-03-30T14:15:16Z',
+        updated_at: '2026-03-30T14:15:16Z',
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await PATCH(
+      new Request('http://localhost/api/members/member-1/edit', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Jane Doe',
+          gender: 'Female',
+          email: 'jane@example.com',
+          phone: '876-555-1212',
+          remark: 'Original remark',
+          beginTime: '2026-04-01T00:00:00',
+          endTime: '2026-06-30T23:59:59',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(memberUpdates).toEqual([
+      expect.objectContaining({
+        begin_time: '2026-04-01T00:00:00',
+        end_time: '2026-06-30T23:59:59',
+        status: 'Active',
+      }),
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      member: expect.objectContaining({
+        status: 'Active',
+      }),
+    })
+  })
+
+  it('preserves suspension when editing a suspended member access window', async () => {
+    const { client, memberUpdates } = createEditAdminClient({
+      currentMemberRow: {
+        id: 'member-1',
+        employee_no: '000611',
+        name: 'A18 Jane Doe',
+        card_no: '0102857149',
+        type: 'General',
+        status: 'Suspended',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Original remark',
+        photo_url: null,
+        begin_time: '2026-03-30T00:00:00Z',
+        end_time: '2026-04-29T23:59:59Z',
+        balance: 0,
+        created_at: '2026-03-30T14:15:16Z',
+        updated_at: '2026-03-30T14:15:16Z',
+      },
+      updatedMemberRow: {
+        id: 'member-1',
+        employee_no: '000611',
+        name: 'A18 Jane Doe',
+        card_no: '0102857149',
+        type: 'General',
+        status: 'Suspended',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Original remark',
+        photo_url: null,
+        begin_time: '2026-04-01T00:00:00Z',
+        end_time: '2026-06-30T23:59:59Z',
+        balance: 0,
+        created_at: '2026-03-30T14:15:16Z',
+        updated_at: '2026-03-30T14:15:16Z',
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await PATCH(
+      new Request('http://localhost/api/members/member-1/edit', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Jane Doe',
+          gender: 'Female',
+          email: 'jane@example.com',
+          phone: '876-555-1212',
+          remark: 'Original remark',
+          beginTime: '2026-04-01T00:00:00',
+          endTime: '2026-06-30T23:59:59',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(memberUpdates).toEqual([
+      expect.objectContaining({
+        begin_time: '2026-04-01T00:00:00',
+        end_time: '2026-06-30T23:59:59',
+        status: 'Suspended',
+      }),
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      member: expect.objectContaining({
+        status: 'Suspended',
+      }),
+    })
   })
 
   it('returns a warning when the device sync fails after the member row is updated', async () => {

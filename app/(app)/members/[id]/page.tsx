@@ -108,6 +108,7 @@ export default function MemberDetailPage() {
         await suspendMember(member)
       }
 
+      setActiveDialog(null)
       void invalidateMemberQueries()
     } catch (error) {
       console.error('Failed to update member status:', error)
@@ -129,6 +130,7 @@ export default function MemberDetailPage() {
 
     try {
       await unassignMemberCard(member)
+      setActiveDialog(null)
       void invalidateMemberAndCardQueries()
     } catch (error) {
       console.error('Failed to unassign member card:', error)
@@ -150,6 +152,7 @@ export default function MemberDetailPage() {
 
     try {
       await reportMemberCardLost(member)
+      setActiveDialog(null)
       void invalidateMemberQueries()
     } catch (error) {
       console.error('Failed to report member card lost:', error)
@@ -171,6 +174,7 @@ export default function MemberDetailPage() {
 
     try {
       await recoverMemberCard(member)
+      setActiveDialog(null)
       void invalidateMemberQueries()
     } catch (error) {
       console.error('Failed to recover member card:', error)
