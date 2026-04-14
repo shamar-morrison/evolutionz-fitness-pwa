@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { getArchivableNotificationTypes } from '@/lib/notification-archive'
 import { normalizeNotification, type Notification } from '@/lib/pt-scheduling'
 import { queryKeys } from '@/lib/query-keys'
@@ -21,9 +21,63 @@ type NotificationRow = {
 }
 
 type NotificationInsertPayload = {
-  new: {
-    type?: string
-  } | null
+  new: NotificationRealtimeRow | null
+}
+
+type NotificationUpdatePayload = {
+  old: NotificationRealtimeRow | null
+  new: NotificationRealtimeRow | null
+}
+
+type NotificationRealtimeRow = {
+  type?: string | null
+  archived_at?: string | null
+}
+
+function getNotificationType(row: NotificationRealtimeRow | null): Notification['type'] | null {
+  return typeof row?.type === 'string' ? (row.type as Notification['type']) : null
+}
+
+function invalidatePendingApprovalQueries(
+  queryClient: QueryClient,
+  notificationType: Notification['type'] | null,
+) {
+  if (notificationType === 'reschedule_request') {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.rescheduleRequests.all })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.rescheduleRequests.pending })
+  }
+
+  if (notificationType === 'member_edit_request') {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.memberEditRequests.all })
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.memberEditRequests.pending,
+    })
+  }
+
+  if (notificationType === 'member_create_request') {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.all })
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.memberApprovalRequests.pending,
+    })
+  }
+
+  if (notificationType === 'member_payment_request') {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.memberPaymentRequests.all })
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.memberPaymentRequests.pending,
+    })
+  }
+
+  if (notificationType === 'status_change_request') {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessionUpdateRequests.all })
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.sessionUpdateRequests.pending,
+    })
+  }
+}
+
+function didArchiveNotification(payload: NotificationUpdatePayload) {
+  return payload.old?.archived_at === null && typeof payload.new?.archived_at === 'string'
 }
 
 async function fetchNotifications(profileId: string) {
@@ -197,41 +251,14 @@ export function useNotifications(profileId: string) {
           filter: `recipient_id=eq.${profileId}`,
         },
         (payload: NotificationInsertPayload) => {
-          const notificationType =
-            typeof payload.new === 'object' && payload.new !== null && 'type' in payload.new
-              ? String(payload.new.type)
-              : null
+          const notificationType = getNotificationType(payload.new)
 
           void queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all(profileId) })
           void queryClient.invalidateQueries({
             queryKey: queryKeys.notifications.unreadCount(profileId),
           })
 
-          if (notificationType === 'reschedule_request') {
-            void queryClient.invalidateQueries({ queryKey: queryKeys.rescheduleRequests.all })
-            void queryClient.invalidateQueries({ queryKey: queryKeys.rescheduleRequests.pending })
-          }
-
-          if (notificationType === 'member_edit_request') {
-            void queryClient.invalidateQueries({ queryKey: queryKeys.memberEditRequests.all })
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.memberEditRequests.pending,
-            })
-          }
-
-          if (notificationType === 'member_create_request') {
-            void queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.all })
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.memberApprovalRequests.pending,
-            })
-          }
-
-          if (notificationType === 'member_payment_request') {
-            void queryClient.invalidateQueries({ queryKey: queryKeys.memberPaymentRequests.all })
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.memberPaymentRequests.pending,
-            })
-          }
+          invalidatePendingApprovalQueries(queryClient, notificationType)
 
           if (
             notificationType === 'reschedule_request' ||
@@ -244,13 +271,6 @@ export function useNotifications(profileId: string) {
             void queryClient.invalidateQueries({
               queryKey: queryKeys.ptScheduling.sessions({}),
               exact: false,
-            })
-          }
-
-          if (notificationType === 'status_change_request') {
-            void queryClient.invalidateQueries({ queryKey: queryKeys.sessionUpdateRequests.all })
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.sessionUpdateRequests.pending,
             })
           }
 
@@ -267,6 +287,29 @@ export function useNotifications(profileId: string) {
               exact: false,
             })
           }
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_id=eq.${profileId}`,
+        },
+        (payload: NotificationUpdatePayload) => {
+          if (!didArchiveNotification(payload)) {
+            return
+          }
+
+          const notificationType = getNotificationType(payload.new)
+
+          void queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all(profileId) })
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.notifications.unreadCount(profileId),
+          })
+
+          invalidatePendingApprovalQueries(queryClient, notificationType)
         },
       )
       .subscribe()

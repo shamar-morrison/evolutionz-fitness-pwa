@@ -138,6 +138,9 @@ function createMemberApprovalRequestsClient({
   updatedRequestRow = createRequestRecord(),
   memberTypeRow = createMemberTypeRecord(),
   selectedCardRow = { card_no: '0102857149', card_code: 'A18' },
+  approveUpdateMatches = true,
+  denyUpdateMatches = true,
+  requestUpdateError = null,
   paymentInsertError = null,
 }: {
   requestRows?: MemberApprovalRequestRecord[]
@@ -146,6 +149,9 @@ function createMemberApprovalRequestsClient({
   updatedRequestRow?: MemberApprovalRequestRecord
   memberTypeRow?: MemberTypeRecord | null
   selectedCardRow?: { card_no: string; card_code: string | null } | null
+  approveUpdateMatches?: boolean
+  denyUpdateMatches?: boolean
+  requestUpdateError?: { message: string } | null
   paymentInsertError?: { message: string } | null
 } = {}) {
   const requestInserts: Array<Record<string, unknown>> = []
@@ -273,18 +279,34 @@ function createMemberApprovalRequestsClient({
 
               return {
                 eq(column: string, value: string) {
-                  expect(column).toBe('id')
-                  expect(value).toBe('request-1')
+                  expect(column).toBe('status')
+                  expect(value).toBe('pending')
 
                   return {
-                    select(columns: string) {
-                      expect(columns).toBe(MEMBER_APPROVAL_REQUEST_SELECT)
+                    eq(nextColumn: string, nextValue: string) {
+                      expect(nextColumn).toBe('id')
+                      expect(nextValue).toBe('request-1')
 
                       return {
-                        maybeSingle() {
+                        select(columns: string) {
+                          expect(columns).toBe(MEMBER_APPROVAL_REQUEST_SELECT)
+
+                          const updateMatches =
+                            values.status === 'approved'
+                              ? approveUpdateMatches
+                              : denyUpdateMatches
+
                           return Promise.resolve({
-                            data: updatedRequestRow,
-                            error: null,
+                            data:
+                              updateMatches && updatedRequestRow
+                                ? [
+                                    {
+                                      ...updatedRequestRow,
+                                      ...values,
+                                    } as MemberApprovalRequestRecord,
+                                  ]
+                                : [],
+                            error: requestUpdateError,
                           })
                         },
                       }
@@ -647,6 +669,40 @@ describe('member approval request routes', () => {
     })
   })
 
+  it('returns 400 when a deny race finds the request already reviewed', async () => {
+    const { client } = createMemberApprovalRequestsClient({
+      denyUpdateMatches: false,
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'denied',
+          review_note: 'Missing ID verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(archiveResolvedRequestNotificationsMock).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'This request has already been reviewed.',
+    })
+  })
+
   it('approves a pending member approval request and archives matching notifications', async () => {
     const updatedRequest = createRequestRecord({
       status: 'approved',
@@ -739,6 +795,56 @@ describe('member approval request routes', () => {
         memberId: 'member-77',
         memberTypeId: MEMBER_TYPE_ID_CIVIL_SERVANT,
       }),
+    })
+  })
+
+  it('returns 400 when an approve race finds the request already reviewed', async () => {
+    const { client } = createMemberApprovalRequestsClient({
+      approveUpdateMatches: false,
+      memberTypeRow: createMemberTypeRecord({
+        id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        name: 'Civil Servant',
+        monthly_rate: 7500,
+      }),
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+    provisionMemberAccessMock.mockResolvedValue({
+      ok: true,
+      member: createApprovedMember(),
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'approved',
+          selected_card_no: '0102857149',
+          member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+          payment_method: 'cash',
+          amount_paid: 7500,
+          promotion: 'Promo',
+          payment_date: '2026-04-09',
+          notes: 'Collected at front desk',
+          review_note: 'Approved after verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(archiveResolvedRequestNotificationsMock).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'This request has already been reviewed.',
     })
   })
 

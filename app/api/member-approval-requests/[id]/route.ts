@@ -56,6 +56,16 @@ type QueryResult<T> = PromiseLike<{
   error: QueryError | null
 }>
 
+type MemberApprovalRequestReviewRow = MemberApprovalRequestRecord
+
+type MemberApprovalRequestGuardedUpdateQuery = {
+  eq(column: 'status', value: 'pending'): {
+    eq(column: 'id', value: string): {
+      select(columns: string): QueryResult<MemberApprovalRequestReviewRow[]>
+    }
+  }
+}
+
 type MemberApprovalRequestReviewClient = MemberTypesReadClient &
   MemberPhotoStorageClient & {
   from(table: 'member_approval_requests'): {
@@ -75,13 +85,7 @@ type MemberApprovalRequestReviewClient = MemberTypesReadClient &
       reviewed_at: string
       review_note: string | null
       updated_at: string
-    }): {
-      eq(column: 'id', value: string): {
-        select(columns: string): {
-          maybeSingle(): QueryResult<MemberApprovalRequestRecord>
-        }
-      }
-    }
+    }): MemberApprovalRequestGuardedUpdateQuery
   }
   from(table: 'cards'): {
     select(columns: 'card_no, card_code'): {
@@ -248,7 +252,7 @@ export async function PATCH(
     }
 
     if (input.status === 'denied') {
-      const { data, error } = await supabase
+      const { data: deniedRequests, error } = await supabase
         .from('member_approval_requests')
         .update({
           status: 'denied',
@@ -257,21 +261,23 @@ export async function PATCH(
           review_note: normalizeOptionalText(input.review_note),
           updated_at: reviewTimestamp,
         })
+        .eq('status', 'pending')
         .eq('id', id)
         .select(MEMBER_APPROVAL_REQUEST_SELECT)
-        .maybeSingle()
 
       if (error) {
         throw new Error(`Failed to deny member approval request ${id}: ${error.message}`)
       }
 
-      if (!data) {
-        return createErrorResponse('Member approval request not found.', 404)
+      const deniedRequest = deniedRequests?.[0] ?? null
+
+      if (!deniedRequest) {
+        return createErrorResponse('This request has already been reviewed.', 400)
       }
 
       try {
         await archiveResolvedRequestNotifications(supabase, {
-          requestId: existingRequest.id,
+          requestId: deniedRequest.id,
           type: 'member_create_request',
           archivedAt: reviewTimestamp,
         })
@@ -284,7 +290,7 @@ export async function PATCH(
 
       return NextResponse.json({
         ok: true,
-        request: mapMemberApprovalRequestRecord(data as MemberApprovalRequestRecord),
+        request: mapMemberApprovalRequestRecord(deniedRequest),
       })
     }
 
@@ -369,7 +375,7 @@ export async function PATCH(
       throw paymentError
     }
 
-    const { data, error } = await supabase
+    const { data: approvedRequests, error } = await supabase
       .from('member_approval_requests')
       .update({
         status: 'approved',
@@ -386,21 +392,23 @@ export async function PATCH(
         review_note: normalizeOptionalText(input.review_note),
         updated_at: reviewTimestamp,
       })
+      .eq('status', 'pending')
       .eq('id', id)
       .select(MEMBER_APPROVAL_REQUEST_SELECT)
-      .maybeSingle()
 
     if (error) {
       throw new Error(`Failed to approve member approval request ${id}: ${error.message}`)
     }
 
-    if (!data) {
-      return createErrorResponse('Member approval request not found.', 404)
+    const approvedRequest = approvedRequests?.[0] ?? null
+
+    if (!approvedRequest) {
+      return createErrorResponse('This request has already been reviewed.', 400)
     }
 
     try {
       await archiveResolvedRequestNotifications(supabase, {
-        requestId: existingRequest.id,
+        requestId: approvedRequest.id,
         type: 'member_create_request',
         archivedAt: reviewTimestamp,
       })
@@ -413,7 +421,7 @@ export async function PATCH(
 
     return NextResponse.json({
       ok: true,
-      request: mapMemberApprovalRequestRecord(data as MemberApprovalRequestRecord),
+      request: mapMemberApprovalRequestRecord(approvedRequest),
     })
   } catch (error) {
     if (error instanceof SyntaxError) {
