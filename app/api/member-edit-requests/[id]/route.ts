@@ -27,8 +27,7 @@ import { type MemberTypesReadClient } from '@/lib/member-types-server'
 import { readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import type { Member } from '@/types'
-import type { MemberGender } from '@/types'
+import type { Member, MemberGender, MemberStatus, MemberType } from '@/types'
 
 const UPDATE_MEMBER_WARNING = 'Member updated but device sync failed. Please try again.'
 const UPDATE_MEMBER_TIMEOUT_ERROR = 'Member update request timed out after 10 seconds.'
@@ -50,6 +49,18 @@ type QueryResult<T> = PromiseLike<{
 }>
 
 type MemberEditRequestReviewRow = MemberEditRequestRecord
+
+type MemberEditRequestMemberUpdateValues = {
+  name?: string
+  gender?: MemberGender | null
+  phone?: string | null
+  email?: string | null
+  member_type_id?: string | null
+  begin_time?: string
+  end_time?: string
+  status?: MemberStatus
+  type?: MemberType
+}
 
 type MemberEditRequestGuardedUpdateQuery = {
   eq(column: 'status', value: 'pending'): {
@@ -74,16 +85,7 @@ type MemberEditRequestReviewClient = AccessControlJobsClient & MemberTypesReadCl
     }): MemberEditRequestGuardedUpdateQuery
   }
   from(table: 'members'): {
-    update(values: {
-      name?: string
-      gender?: MemberGender | null
-      phone?: string | null
-      email?: string | null
-      member_type_id?: string | null
-      begin_time?: string
-      end_time?: string
-      type?: string
-    }): {
+    update(values: MemberEditRequestMemberUpdateValues): {
       eq(column: 'id', value: string): {
         select(columns: 'id'): {
           maybeSingle(): QueryResult<{
@@ -298,7 +300,7 @@ export async function PATCH(
       return createErrorResponse('This request has already been reviewed.', 400)
     }
 
-    const memberUpdateValues: Record<string, unknown> = {}
+    const memberUpdateValues: MemberEditRequestMemberUpdateValues = {}
 
     if (existingRequest.proposed_name) {
       memberUpdateValues.name = buildHikMemberName(
@@ -344,16 +346,7 @@ export async function PATCH(
 
     const { error: memberUpdateError } = await supabase
       .from('members')
-      .update(memberUpdateValues as {
-        name?: string
-        gender?: MemberGender | null
-        phone?: string | null
-        email?: string | null
-        member_type_id?: string | null
-        begin_time?: string
-        end_time?: string
-        type?: string
-      })
+      .update(memberUpdateValues)
       .eq('id', existingRequest.member_id)
       .select('id')
       .maybeSingle()

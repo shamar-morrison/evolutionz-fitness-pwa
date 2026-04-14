@@ -315,6 +315,9 @@ describe('PATCH /api/members/[id]/edit', () => {
   })
 
   it('reactivates an expired member when the edited access window ends in the future', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-15T00:00:00Z'))
+
     const { client, memberUpdates } = createEditAdminClient({
       currentMemberRow: {
         id: 'member-1',

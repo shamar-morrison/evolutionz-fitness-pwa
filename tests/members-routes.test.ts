@@ -114,6 +114,7 @@ function createMembersAdminClient({
 
 describe('members API routes', () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
     resetServerAuthMocks()
@@ -306,7 +307,7 @@ describe('members API routes', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          status: 'Active',
+          refreshStatus: true,
         }),
       }),
       {
@@ -388,7 +389,33 @@ describe('members API routes', () => {
     })
   })
 
+  it('rejects the legacy status trigger field on PATCH', async () => {
+    const response = await patchMember(
+      new Request('http://localhost/api/members/member-2', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'Active',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-2' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining('status'),
+    })
+  })
+
   it('reactivates a member and returns the updated detail row', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-01T00:00:00Z'))
+
     const memberUpdates: Array<{ status: 'Active' | 'Expired'; id: string }> = []
     let memberReadCount = 0
 
@@ -485,7 +512,7 @@ describe('members API routes', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        status: 'Active',
+        refreshStatus: true,
       }),
     }), {
       params: Promise.resolve({ id: 'member-2' }),
@@ -519,6 +546,9 @@ describe('members API routes', () => {
   })
 
   it('reactivates a suspended member as expired when the stored end time is already in the past', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-01T00:00:00Z'))
+
     const memberUpdates: Array<{ status: 'Active' | 'Expired'; id: string }> = []
     let memberReadCount = 0
 
@@ -615,7 +645,7 @@ describe('members API routes', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        status: 'Active',
+        refreshStatus: true,
       }),
     }), {
       params: Promise.resolve({ id: 'member-2' }),

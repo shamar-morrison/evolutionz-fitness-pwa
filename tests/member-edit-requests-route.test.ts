@@ -382,6 +382,7 @@ function createEditRequestsClient({
 
 describe('member edit request routes', () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     archiveResolvedRequestNotificationsMock.mockReset()
     archiveResolvedRequestNotificationsMock.mockResolvedValue(undefined)
@@ -870,6 +871,9 @@ describe('member edit request routes', () => {
   })
 
   it('approves a partial access window request using the current duration and syncs the device', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-15T00:00:00Z'))
+
     const existingRequestRow = createEditRequestRecord({
       proposed_name: null,
       proposed_start_time: '08:30:00',
@@ -962,6 +966,9 @@ describe('member edit request routes', () => {
   })
 
   it('approves a full access window request and syncs the device with the final values', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-15T00:00:00Z'))
+
     const existingRequestRow = createEditRequestRecord({
       proposed_name: 'Jane Updated',
       proposed_start_date: '2026-04-05',

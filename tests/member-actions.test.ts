@@ -391,7 +391,7 @@ describe('member actions', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/members/member-1')
     expect(fetchMock.mock.calls[0][1]?.method).toBe('PATCH')
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
-      status: 'Active',
+      refreshStatus: true,
     })
     expect(member.status).toBe('Active')
   })

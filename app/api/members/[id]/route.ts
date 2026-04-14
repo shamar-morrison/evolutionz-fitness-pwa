@@ -20,7 +20,7 @@ import type { MemberStatus, MemberType } from '@/types'
 
 const updateMemberRequestSchema = z
   .object({
-    status: z.literal('Active').optional(),
+    refreshStatus: z.boolean().optional(),
     member_type_id: z.string().trim().uuid().nullable().optional(),
   })
   .strict()
@@ -52,6 +52,12 @@ type DeleteMemberRow = {
   employee_no: string | null
   card_no: string | null
   photo_url: string | null
+}
+
+type MemberPatchUpdateValues = {
+  status?: MemberStatus
+  member_type_id?: string | null
+  type?: MemberType
 }
 
 type DeleteMemberAdminClient = MemberPhotoStorageClient &
@@ -190,7 +196,7 @@ export async function PATCH(
       )
     }
 
-    if (input.status === undefined && input.member_type_id === undefined) {
+    if (input.refreshStatus !== true && input.member_type_id === undefined) {
       return NextResponse.json(
         {
           ok: false,
@@ -207,11 +213,7 @@ export async function PATCH(
     )
 
     const { data, error } = await (supabase.from('members') as unknown as {
-      update(values: {
-        status?: MemberStatus
-        member_type_id?: string | null
-        type?: MemberType
-      }): {
+      update(values: MemberPatchUpdateValues): {
         eq(column: 'id', value: string): {
           select(columns: typeof MEMBER_RECORD_SELECT): {
             maybeSingle(): PromiseLike<{
@@ -223,7 +225,7 @@ export async function PATCH(
       }
     })
       .update({
-        ...(input.status
+        ...(input.refreshStatus
           ? { status: resolveMembershipLifecycleStatus(currentMember.endTime) }
           : {}),
         ...memberTypeUpdateValues,
