@@ -127,6 +127,7 @@ function getResponseErrorMessage(responseBody: unknown, fallback: string) {
 function buildRecipientsLookupUrl(input: {
   activeMembers: boolean
   expiringMembers: boolean
+  expiredMembers: boolean
   memberTypeIds: string[]
   individualIds: string[]
 }) {
@@ -138,6 +139,10 @@ function buildRecipientsLookupUrl(input: {
 
   if (input.expiringMembers) {
     searchParams.set('expiringMembers', 'true')
+  }
+
+  if (input.expiredMembers) {
+    searchParams.set('expiredMembers', 'true')
   }
 
   if (input.memberTypeIds.length > 0) {
@@ -155,6 +160,7 @@ function buildRecipientsLookupUrl(input: {
 export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   const [includeActiveMembers, setIncludeActiveMembers] = useState(false)
   const [includeExpiringMembers, setIncludeExpiringMembers] = useState(false)
+  const [includeExpiredMembers, setIncludeExpiredMembers] = useState(false)
   const [includeMemberTypes, setIncludeMemberTypes] = useState(false)
   const [selectedMemberTypeIds, setSelectedMemberTypeIds] = useState<string[]>([])
   const [selectedIndividuals, setSelectedIndividuals] = useState<EmailRecipientWithId[]>([])
@@ -180,6 +186,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
       resolveDraftEmailRecipients(members, {
         activeMembers: includeActiveMembers,
         expiringMembers: includeExpiringMembers,
+        expiredMembers: includeExpiredMembers,
         includeMemberTypes,
         memberTypeIds: selectedMemberTypeIds,
         individualIds: selectedIndividualIds,
@@ -187,6 +194,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     [
       includeActiveMembers,
       includeExpiringMembers,
+      includeExpiredMembers,
       includeMemberTypes,
       members,
       selectedIndividualIds,
@@ -257,6 +265,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     const recipientToAdd = resolveDraftEmailRecipients(members, {
       activeMembers: false,
       expiringMembers: false,
+      expiredMembers: false,
       includeMemberTypes: false,
       memberTypeIds: [],
       individualIds: [memberId],
@@ -319,6 +328,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   const resetForm = () => {
     setIncludeActiveMembers(false)
     setIncludeExpiringMembers(false)
+    setIncludeExpiredMembers(false)
     setIncludeMemberTypes(false)
     setSelectedMemberTypeIds([])
     setSelectedIndividuals([])
@@ -351,6 +361,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
         buildRecipientsLookupUrl({
           activeMembers: includeActiveMembers,
           expiringMembers: includeExpiringMembers,
+          expiredMembers: includeExpiredMembers,
           memberTypeIds: includeMemberTypes ? selectedMemberTypeIds : [],
           individualIds: selectedIndividualIds,
         }),
@@ -503,6 +514,24 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
                     <Label htmlFor="email-expiring-members" className="cursor-pointer">All expiring members</Label>
                     <p className="text-xs text-muted-foreground">
                       Active members whose membership ends within the next 7 days.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-lg border border-transparent hover:bg-muted/50 p-2 -mx-2 transition-colors">
+                  <Checkbox
+                    id="email-expired-members"
+                    checked={includeExpiredMembers}
+                    onCheckedChange={(checked) => {
+                      handleDraftChanged()
+                      setIncludeExpiredMembers(checked === true)
+                    }}
+                    className="mt-1"
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="email-expired-members" className="cursor-pointer">All expired members</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Members whose status is currently Expired.
                     </p>
                   </div>
                 </div>

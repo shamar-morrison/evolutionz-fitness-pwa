@@ -167,7 +167,7 @@ describe('GET /api/email/recipients', () => {
 
     const response = await GET(
       new Request(
-        `http://localhost/api/email/recipients?activeMembers=true&expiringMembers=true&memberTypeIds=${memberTypeId}&individualIds=${directMemberId}`,
+        `http://localhost/api/email/recipients?activeMembers=true&expiringMembers=true&expiredMembers=true&memberTypeIds=${memberTypeId}&individualIds=${directMemberId}`,
       ),
     )
 

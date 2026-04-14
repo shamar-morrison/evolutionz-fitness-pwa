@@ -18,7 +18,22 @@ const {
   useQueryMock: vi.fn(),
 }))
 
-let insertCallback: ((payload: { new: { type?: string } | null }) => void) | null = null
+type NotificationRealtimeRow = {
+  type?: string | null
+  archived_at?: string | null
+}
+
+type NotificationInsertPayload = {
+  new: NotificationRealtimeRow | null
+}
+
+type NotificationUpdatePayload = {
+  old: NotificationRealtimeRow | null
+  new: NotificationRealtimeRow | null
+}
+
+let insertCallback: ((payload: NotificationInsertPayload) => void) | null = null
+let updateCallback: ((payload: NotificationUpdatePayload) => void) | null = null
 let subscribedChannel: { topic: string } | null = null
 
 vi.mock('@tanstack/react-query', () => ({
@@ -40,6 +55,50 @@ function TestComponent() {
   return null
 }
 
+async function renderComponent(root: Root) {
+  await act(async () => {
+    root.render(<TestComponent />)
+  })
+}
+
+async function emitInsert(payload: NotificationInsertPayload) {
+  if (!insertCallback) {
+    throw new Error('Insert callback was not registered.')
+  }
+
+  await act(async () => {
+    insertCallback?.(payload)
+  })
+}
+
+async function emitUpdate(payload: NotificationUpdatePayload) {
+  if (!updateCallback) {
+    throw new Error('Update callback was not registered.')
+  }
+
+  await act(async () => {
+    updateCallback?.(payload)
+  })
+}
+
+function expectNotificationListInvalidation() {
+  expect(invalidateQueriesMock).toHaveBeenCalledWith({
+    queryKey: ['notifications', 'user-1'],
+  })
+}
+
+function expectUnreadCountInvalidation() {
+  expect(invalidateQueriesMock).toHaveBeenCalledWith({
+    queryKey: ['notifications', 'user-1', 'unread-count'],
+  })
+}
+
+function expectArchivedNotificationsInvalidation() {
+  expect(invalidateQueriesMock).toHaveBeenCalledWith({
+    queryKey: ['notifications', 'user-1', 'archived'],
+  })
+}
+
 describe('useNotifications', () => {
   let container: HTMLDivElement
   let root: Root
@@ -51,6 +110,7 @@ describe('useNotifications', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     insertCallback = null
+    updateCallback = null
     subscribedChannel = { topic: 'notifications:user-1' }
     useQueryMock.mockReset()
     useQueryMock
@@ -67,22 +127,29 @@ describe('useNotifications', () => {
     subscribeMock.mockReset()
     subscribeMock.mockImplementation(() => subscribedChannel)
     createClientMock.mockReset()
-    createClientMock.mockReturnValue({
-      channel: vi.fn(() => ({
-        on: vi.fn(
-          (
-            _event: string,
-            _filter: Record<string, string>,
-            callback: (payload: { new: { type?: string } | null }) => void,
-          ) => {
-            insertCallback = callback
+    const channelMock = {
+      on: vi.fn(),
+      subscribe: subscribeMock,
+    }
+    channelMock.on.mockImplementation(
+      (
+        _event: string,
+        filter: Record<string, string>,
+        callback: ((payload: NotificationInsertPayload) => void) | ((payload: NotificationUpdatePayload) => void),
+      ) => {
+        if (filter.event === 'INSERT') {
+          insertCallback = callback as (payload: NotificationInsertPayload) => void
+        }
 
-            return {
-              subscribe: subscribeMock,
-            }
-          },
-        ),
-      })),
+        if (filter.event === 'UPDATE') {
+          updateCallback = callback as (payload: NotificationUpdatePayload) => void
+        }
+
+        return channelMock
+      },
+    )
+    createClientMock.mockReturnValue({
+      channel: vi.fn(() => channelMock),
       removeChannel: removeChannelMock,
     })
   })
@@ -100,28 +167,15 @@ describe('useNotifications', () => {
   })
 
   it('invalidates member edit request queries when a member edit notification arrives', async () => {
-    await act(async () => {
-      root.render(<TestComponent />)
+    await renderComponent(root)
+    await emitInsert({
+      new: {
+        type: 'member_edit_request',
+      },
     })
 
-    if (!insertCallback) {
-      throw new Error('Insert callback was not registered.')
-    }
-
-    await act(async () => {
-      insertCallback?.({
-        new: {
-          type: 'member_edit_request',
-        },
-      })
-    })
-
-    expect(invalidateQueriesMock).toHaveBeenCalledWith({
-      queryKey: ['notifications', 'user-1'],
-    })
-    expect(invalidateQueriesMock).toHaveBeenCalledWith({
-      queryKey: ['notifications', 'user-1', 'unread-count'],
-    })
+    expectNotificationListInvalidation()
+    expectUnreadCountInvalidation()
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['memberEditRequests'],
     })
@@ -131,28 +185,15 @@ describe('useNotifications', () => {
   })
 
   it('invalidates member approval request queries when a member create notification arrives', async () => {
-    await act(async () => {
-      root.render(<TestComponent />)
+    await renderComponent(root)
+    await emitInsert({
+      new: {
+        type: 'member_create_request',
+      },
     })
 
-    if (!insertCallback) {
-      throw new Error('Insert callback was not registered.')
-    }
-
-    await act(async () => {
-      insertCallback?.({
-        new: {
-          type: 'member_create_request',
-        },
-      })
-    })
-
-    expect(invalidateQueriesMock).toHaveBeenCalledWith({
-      queryKey: ['notifications', 'user-1'],
-    })
-    expect(invalidateQueriesMock).toHaveBeenCalledWith({
-      queryKey: ['notifications', 'user-1', 'unread-count'],
-    })
+    expectNotificationListInvalidation()
+    expectUnreadCountInvalidation()
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['memberApprovalRequests'],
     })
@@ -162,33 +203,91 @@ describe('useNotifications', () => {
   })
 
   it('invalidates member payment request queries when a member payment notification arrives', async () => {
-    await act(async () => {
-      root.render(<TestComponent />)
+    await renderComponent(root)
+    await emitInsert({
+      new: {
+        type: 'member_payment_request',
+      },
     })
 
-    if (!insertCallback) {
-      throw new Error('Insert callback was not registered.')
-    }
-
-    await act(async () => {
-      insertCallback?.({
-        new: {
-          type: 'member_payment_request',
-        },
-      })
-    })
-
-    expect(invalidateQueriesMock).toHaveBeenCalledWith({
-      queryKey: ['notifications', 'user-1'],
-    })
-    expect(invalidateQueriesMock).toHaveBeenCalledWith({
-      queryKey: ['notifications', 'user-1', 'unread-count'],
-    })
+    expectNotificationListInvalidation()
+    expectUnreadCountInvalidation()
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['memberPaymentRequests'],
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['memberPaymentRequests', 'pending'],
     })
+  })
+
+  it.each([
+    {
+      notificationType: 'member_create_request',
+      expectedAllKey: ['memberApprovalRequests'],
+      expectedPendingKey: ['memberApprovalRequests', 'pending'],
+    },
+    {
+      notificationType: 'member_edit_request',
+      expectedAllKey: ['memberEditRequests'],
+      expectedPendingKey: ['memberEditRequests', 'pending'],
+    },
+    {
+      notificationType: 'member_payment_request',
+      expectedAllKey: ['memberPaymentRequests'],
+      expectedPendingKey: ['memberPaymentRequests', 'pending'],
+    },
+    {
+      notificationType: 'reschedule_request',
+      expectedAllKey: ['reschedule-requests'],
+      expectedPendingKey: ['reschedule-requests', 'pending'],
+    },
+    {
+      notificationType: 'status_change_request',
+      expectedAllKey: ['session-update-requests'],
+      expectedPendingKey: ['session-update-requests', 'pending'],
+    },
+  ])(
+    'invalidates the correct pending queries when an archived $notificationType notification update arrives',
+    async ({ notificationType, expectedAllKey, expectedPendingKey }) => {
+      await renderComponent(root)
+
+      await emitUpdate({
+        old: {
+          type: notificationType,
+          archived_at: null,
+        },
+        new: {
+          type: notificationType,
+          archived_at: '2026-04-13T12:00:00.000Z',
+        },
+      })
+
+      expectNotificationListInvalidation()
+      expectArchivedNotificationsInvalidation()
+      expectUnreadCountInvalidation()
+      expect(invalidateQueriesMock).toHaveBeenCalledWith({
+        queryKey: expectedAllKey,
+      })
+      expect(invalidateQueriesMock).toHaveBeenCalledWith({
+        queryKey: expectedPendingKey,
+      })
+    },
+  )
+
+  it('does not invalidate queries when a notification update does not archive the row', async () => {
+    await renderComponent(root)
+
+    await emitUpdate({
+      old: {
+        type: 'member_create_request',
+        archived_at: null,
+      },
+      new: {
+        type: 'member_create_request',
+        archived_at: null,
+      },
+    })
+
+    expect(invalidateQueriesMock).not.toHaveBeenCalled()
   })
 })

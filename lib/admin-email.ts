@@ -116,6 +116,7 @@ export function resolveDraftEmailRecipients(
   options: {
     activeMembers: boolean
     expiringMembers: boolean
+    expiredMembers: boolean
     includeMemberTypes: boolean
     memberTypeIds: string[]
     individualIds: string[]
@@ -134,6 +135,7 @@ export function resolveDraftEmailRecipients(
 
     const matchesActiveMembers = options.activeMembers && member.status === 'Active'
     const matchesExpiringMembers = options.expiringMembers && isMemberExpiringSoon(member, now)
+    const matchesExpiredMembers = options.expiredMembers && member.status === 'Expired'
     const matchesMemberType =
       options.includeMemberTypes &&
       member.status === 'Active' &&
@@ -144,6 +146,7 @@ export function resolveDraftEmailRecipients(
     if (
       !matchesActiveMembers &&
       !matchesExpiringMembers &&
+      !matchesExpiredMembers &&
       !matchesMemberType &&
       !matchesIndividual
     ) {

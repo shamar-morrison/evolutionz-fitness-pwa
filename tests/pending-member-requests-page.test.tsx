@@ -23,9 +23,7 @@ const {
     loading: false,
   },
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
-  reviewMemberApprovalRequestMock: vi.fn().mockResolvedValue({
-    ok: true,
-  }),
+  reviewMemberApprovalRequestMock: vi.fn().mockResolvedValue({}),
   toastMock: vi.fn(),
   useAvailableCardsMock: vi.fn(),
   useMemberApprovalRequestsMock: vi.fn(),
@@ -225,6 +223,7 @@ async function clickButton(container: ParentNode, label: string) {
     button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     await Promise.resolve()
     await Promise.resolve()
+    await Promise.resolve()
   })
 }
 
@@ -245,6 +244,10 @@ describe('PendingMemberRequestsPage', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    invalidateQueriesMock.mockClear()
+    reviewMemberApprovalRequestMock.mockReset()
+    reviewMemberApprovalRequestMock.mockResolvedValue({})
+    toastMock.mockClear()
     useMemberApprovalRequestsMock.mockReturnValue({
       requests: [createRequest()],
       isLoading: false,
@@ -343,6 +346,27 @@ describe('PendingMemberRequestsPage', () => {
     })
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Member approved',
+    })
+  })
+
+  it('shows an approval warning in the success toast when the review response includes one', async () => {
+    reviewMemberApprovalRequestMock.mockResolvedValueOnce({
+      warning:
+        'Member was approved and provisioned successfully, but the request record could not be fully updated. Please verify the member details manually.',
+    })
+
+    await act(async () => {
+      root.render(<PendingMemberRequestsPage />)
+    })
+
+    await clickButton(container, 'Review')
+    await clickButton(container, 'Cash')
+    await clickButton(container, 'Approve')
+
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Member approved',
+      description:
+        'Member was approved and provisioned successfully, but the request record could not be fully updated. Please verify the member details manually.',
     })
   })
 

@@ -284,19 +284,88 @@ describe('EmailClient', () => {
   })
 
   it('shows the configured daily limit in the warning copy', async () => {
+    useMembersMock.mockReturnValue({
+      members: [
+        createMember({
+          id: 'member-1',
+          name: 'Alpha',
+          email: 'alpha@example.com',
+          status: 'Active',
+        }),
+        createMember({
+          id: 'member-2',
+          name: 'Beta',
+          email: 'beta@example.com',
+          status: 'Active',
+        }),
+        createMember({
+          id: 'member-3',
+          name: 'Gamma',
+          email: 'gamma@example.com',
+          status: 'Expired',
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+
     await act(async () => {
       root.render(<EmailClient resendDailyLimit={2} />)
     })
 
     const activeMembersCheckbox = container.querySelector('#email-active-members')
+    const expiredMembersCheckbox = container.querySelector('#email-expired-members')
 
     expect(activeMembersCheckbox).toBeInstanceOf(HTMLInputElement)
+    expect(expiredMembersCheckbox).toBeInstanceOf(HTMLInputElement)
 
     await clickElement(activeMembersCheckbox as HTMLInputElement)
+    await clickElement(expiredMembersCheckbox as HTMLInputElement)
 
     expect(container.textContent).toContain(
       'You can send up to 2 recipients per day. Only the first 2 recipients will receive this email.',
     )
+  })
+
+  it('renders the expired members checkbox and updates the live recipient count', async () => {
+    useMembersMock.mockReturnValue({
+      members: [
+        createMember({
+          id: 'member-1',
+          name: 'Alpha',
+          email: 'alpha@example.com',
+          status: 'Active',
+        }),
+        createMember({
+          id: 'member-2',
+          name: 'Beta',
+          email: 'beta@example.com',
+          status: 'Expired',
+        }),
+        createMember({
+          id: 'member-3',
+          name: 'Gamma',
+          email: 'gamma@example.com',
+          status: 'Suspended',
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<EmailClient resendDailyLimit={5} />)
+    })
+
+    const expiredMembersCheckbox = container.querySelector('#email-expired-members')
+
+    expect(expiredMembersCheckbox).toBeInstanceOf(HTMLInputElement)
+    expect(container.textContent).toContain('0Recipients Selected')
+
+    await clickElement(expiredMembersCheckbox as HTMLInputElement)
+
+    expect(container.textContent).toContain('1Recipient Selected')
+    expect(container.textContent).toContain('All expired members')
   })
 
   it('reuses the idempotency key after a failed send and regenerates it after a draft edit', async () => {
@@ -305,6 +374,7 @@ describe('EmailClient', () => {
       .mockReturnValueOnce('11111111-1111-4111-8111-111111111111')
       .mockReturnValueOnce('22222222-2222-4222-8222-222222222222')
     const sentKeys: string[] = []
+    const recipientLookupUrls: string[] = []
     let sendAttemptCount = 0
 
     vi.stubGlobal('crypto', {
@@ -321,6 +391,7 @@ describe('EmailClient', () => {
               : input.url
 
         if (url.startsWith('/api/email/recipients')) {
+          recipientLookupUrls.push(url)
           return new Response(
             JSON.stringify({
               ok: true,
@@ -377,6 +448,7 @@ describe('EmailClient', () => {
     })
 
     const activeMembersCheckbox = container.querySelector('#email-active-members')
+    const expiredMembersCheckbox = container.querySelector('#email-expired-members')
     const subjectInput = container.querySelector('#email-subject')
     const bodyInput = container.querySelector('textarea[aria-label="Email body editor"]')
     const sendButton = Array.from(container.querySelectorAll('button')).find(
@@ -384,11 +456,13 @@ describe('EmailClient', () => {
     )
 
     expect(activeMembersCheckbox).toBeInstanceOf(HTMLInputElement)
+    expect(expiredMembersCheckbox).toBeInstanceOf(HTMLInputElement)
     expect(subjectInput).toBeInstanceOf(HTMLInputElement)
     expect(bodyInput).toBeInstanceOf(HTMLTextAreaElement)
     expect(sendButton).toBeInstanceOf(HTMLButtonElement)
 
     await clickElement(activeMembersCheckbox as HTMLInputElement)
+    await clickElement(expiredMembersCheckbox as HTMLInputElement)
     await setInputValue(subjectInput as HTMLInputElement, 'Hello members')
     await setInputValue(bodyInput as HTMLTextAreaElement, '<p>Hello team</p>')
 
@@ -401,6 +475,10 @@ describe('EmailClient', () => {
       '11111111-1111-4111-8111-111111111111',
       '11111111-1111-4111-8111-111111111111',
     ])
+    expect(recipientLookupUrls).toEqual([
+      '/api/email/recipients?activeMembers=true&expiredMembers=true',
+      '/api/email/recipients?activeMembers=true&expiredMembers=true',
+    ])
 
     await setInputValue(subjectInput as HTMLInputElement, 'Updated subject')
     await clickElement(sendButton as HTMLButtonElement)
@@ -410,6 +488,11 @@ describe('EmailClient', () => {
       '11111111-1111-4111-8111-111111111111',
       '11111111-1111-4111-8111-111111111111',
       '22222222-2222-4222-8222-222222222222',
+    ])
+    expect(recipientLookupUrls).toEqual([
+      '/api/email/recipients?activeMembers=true&expiredMembers=true',
+      '/api/email/recipients?activeMembers=true&expiredMembers=true',
+      '/api/email/recipients?activeMembers=true&expiredMembers=true',
     ])
     expect(randomUUIDMock).toHaveBeenCalledTimes(2)
   })

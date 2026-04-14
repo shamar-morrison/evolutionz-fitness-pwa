@@ -118,6 +118,7 @@ describe('admin email helpers', () => {
     const recipients = resolveDraftEmailRecipients(members, {
       activeMembers: true,
       expiringMembers: true,
+      expiredMembers: false,
       includeMemberTypes: true,
       memberTypeIds: [MEMBER_TYPE_ID],
       individualIds: ['123e4567-e89b-12d3-a456-426614174004'],
@@ -134,6 +135,57 @@ describe('admin email helpers', () => {
       'active@example.com',
       'expire@example.com',
       'type@example.com',
+    ])
+  })
+
+  it('includes expired members only when the expired filter is selected', () => {
+    const members = [
+      createMember({
+        id: '123e4567-e89b-12d3-a456-426614174010',
+        name: 'Active Member',
+        email: 'shared@example.com',
+        status: 'Active',
+      }),
+      createMember({
+        id: '123e4567-e89b-12d3-a456-426614174011',
+        name: 'Expired Member',
+        email: 'shared@example.com',
+        status: 'Expired',
+      }),
+      createMember({
+        id: '123e4567-e89b-12d3-a456-426614174012',
+        name: 'Suspended Member',
+        email: 'suspended@example.com',
+        status: 'Suspended',
+      }),
+    ]
+
+    expect(
+      resolveDraftEmailRecipients(members, {
+        activeMembers: false,
+        expiringMembers: false,
+        expiredMembers: false,
+        includeMemberTypes: false,
+        memberTypeIds: [],
+        individualIds: [],
+      }),
+    ).toEqual([])
+
+    const expiredRecipients = resolveDraftEmailRecipients(members, {
+      activeMembers: true,
+      expiringMembers: false,
+      expiredMembers: true,
+      includeMemberTypes: false,
+      memberTypeIds: [],
+      individualIds: [],
+    })
+
+    expect(expiredRecipients.map((recipient) => recipient.id)).toEqual([
+      '123e4567-e89b-12d3-a456-426614174010',
+      '123e4567-e89b-12d3-a456-426614174011',
+    ])
+    expect(dedupeRecipientsByEmail(expiredRecipients).map((recipient) => recipient.email)).toEqual([
+      'shared@example.com',
     ])
   })
 })

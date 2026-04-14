@@ -176,7 +176,7 @@ export function PendingMemberRequestsPage() {
     setSubmittingAction('approved')
 
     try {
-      await reviewMemberApprovalRequest(selectedRequest.id, {
+      const { warning } = await reviewMemberApprovalRequest(selectedRequest.id, {
         status: 'approved',
         selected_card_no: selectedCardNo,
         member_type_id: paymentForm.memberTypeId,
@@ -189,9 +189,16 @@ export function PendingMemberRequestsPage() {
       })
       await invalidateQueries()
       resetReviewState()
-      toast({
-        title: 'Member approved',
-      })
+      toast(
+        warning
+          ? {
+              title: 'Member approved',
+              description: warning,
+            }
+          : {
+              title: 'Member approved',
+            },
+      )
     } catch (approvalError) {
       toast({
         title: 'Approval failed',

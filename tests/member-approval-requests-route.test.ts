@@ -135,29 +135,49 @@ function createMemberApprovalRequestsClient({
   requestRows = [createRequestRecord()],
   existingRequestRow = createRequestRecord(),
   insertedRequestRow = createRequestRecord(),
-  updatedRequestRow = createRequestRecord(),
+  deniedRequestRow = createRequestRecord({ status: 'denied' }),
+  claimedApprovedRequestRow = createRequestRecord({ status: 'approved' }),
+  finalizedApprovedRequestRow = createRequestRecord({ status: 'approved' }),
   memberTypeRow = createMemberTypeRecord(),
   selectedCardRow = { card_no: '0102857149', card_code: 'A18' },
+  approveClaimMatches = true,
+  denyUpdateMatches = true,
+  requestUpdateError = null,
+  finalizeUpdateMatches = true,
+  finalizeUpdateError = null,
   paymentInsertError = null,
 }: {
   requestRows?: MemberApprovalRequestRecord[]
   existingRequestRow?: MemberApprovalRequestRecord | null
   insertedRequestRow?: MemberApprovalRequestRecord
-  updatedRequestRow?: MemberApprovalRequestRecord
+  deniedRequestRow?: MemberApprovalRequestRecord
+  claimedApprovedRequestRow?: MemberApprovalRequestRecord
+  finalizedApprovedRequestRow?: MemberApprovalRequestRecord
   memberTypeRow?: MemberTypeRecord | null
   selectedCardRow?: { card_no: string; card_code: string | null } | null
+  approveClaimMatches?: boolean
+  denyUpdateMatches?: boolean
+  requestUpdateError?: { message: string } | null
+  finalizeUpdateMatches?: boolean
+  finalizeUpdateError?: { message: string } | null
   paymentInsertError?: { message: string } | null
 } = {}) {
   const requestInserts: Array<Record<string, unknown>> = []
-  const requestUpdates: Array<Record<string, unknown>> = []
+  const denyUpdates: Array<Record<string, unknown>> = []
+  const approvalClaimUpdates: Array<Record<string, unknown>> = []
+  const approvalFinalizeUpdates: Array<Record<string, unknown>> = []
   const paymentInserts: Array<Record<string, unknown>> = []
   const memberPhotoUpdates: Array<Record<string, unknown>> = []
+  const operations: string[] = []
 
   return {
     requestInserts,
-    requestUpdates,
+    denyUpdates,
+    approvalClaimUpdates,
+    approvalFinalizeUpdates,
     paymentInserts,
     memberPhotoUpdates,
+    operations,
     client: {
       from(table: string) {
         if (table === 'member_types') {
@@ -269,8 +289,62 @@ function createMemberApprovalRequestsClient({
               }
             },
             update(values: Record<string, unknown>) {
-              requestUpdates.push(values)
+              const isStatusUpdate = typeof values.status === 'string'
 
+              if (isStatusUpdate) {
+                if (values.status === 'approved') {
+                  approvalClaimUpdates.push(values)
+                  operations.push('approval-claim')
+                } else {
+                  denyUpdates.push(values)
+                  operations.push('deny-update')
+                }
+
+                return {
+                  eq(column: string, value: string) {
+                    expect(column).toBe('id')
+                    expect(value).toBe('request-1')
+
+                    return {
+                      eq(nextColumn: string, nextValue: string) {
+                        expect(nextColumn).toBe('status')
+                        expect(nextValue).toBe('pending')
+
+                        return {
+                          select(columns: string) {
+                            expect(columns).toBe(MEMBER_APPROVAL_REQUEST_SELECT)
+
+                            const updateMatches =
+                              values.status === 'approved'
+                                ? approveClaimMatches
+                                : denyUpdateMatches
+                            const updatedRow =
+                              values.status === 'approved'
+                                ? claimedApprovedRequestRow
+                                : deniedRequestRow
+
+                            return Promise.resolve({
+                              data:
+                                updateMatches && updatedRow
+                                  ? [
+                                      {
+                                        ...updatedRow,
+                                        ...values,
+                                      } as MemberApprovalRequestRecord,
+                                    ]
+                                  : [],
+                              error: requestUpdateError,
+                            })
+                          },
+                        }
+                      },
+                    }
+                  },
+                }
+              }
+
+              approvalFinalizeUpdates.push(values)
+              operations.push('approval-finalize')
               return {
                 eq(column: string, value: string) {
                   expect(column).toBe('id')
@@ -283,8 +357,14 @@ function createMemberApprovalRequestsClient({
                       return {
                         maybeSingle() {
                           return Promise.resolve({
-                            data: updatedRequestRow,
-                            error: null,
+                            data:
+                              finalizeUpdateMatches && finalizedApprovedRequestRow
+                                ? ({
+                                    ...finalizedApprovedRequestRow,
+                                    ...values,
+                                  } as MemberApprovalRequestRecord)
+                                : null,
+                            error: finalizeUpdateError,
                           })
                         },
                       }
@@ -300,6 +380,7 @@ function createMemberApprovalRequestsClient({
           return {
             insert(values: Record<string, unknown>) {
               paymentInserts.push(values)
+              operations.push('payment-insert')
 
               return {
                 select(columns: string) {
@@ -323,6 +404,7 @@ function createMemberApprovalRequestsClient({
           return {
             update(values: Record<string, unknown>) {
               memberPhotoUpdates.push(values)
+              operations.push('member-photo-update')
 
               return {
                 eq(column: string, value: string) {
@@ -590,15 +672,15 @@ describe('member approval request routes', () => {
   })
 
   it('denies a pending member approval request and archives matching notifications', async () => {
-    const updatedRequest = createRequestRecord({
+    const deniedRequest = createRequestRecord({
       status: 'denied',
       reviewed_by: 'admin-1',
       reviewed_at: '2026-04-09T15:00:00.000Z',
       review_note: 'Missing ID verification.',
       reviewedByProfile: { name: 'Admin User' },
     })
-    const { client, requestUpdates } = createMemberApprovalRequestsClient({
-      updatedRequestRow: updatedRequest,
+    const { client, denyUpdates } = createMemberApprovalRequestsClient({
+      deniedRequestRow: deniedRequest,
     })
 
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -622,7 +704,7 @@ describe('member approval request routes', () => {
       },
     )
 
-    expect(requestUpdates).toEqual([
+    expect(denyUpdates).toEqual([
       expect.objectContaining({
         status: 'denied',
         reviewed_by: 'admin-1',
@@ -647,8 +729,42 @@ describe('member approval request routes', () => {
     })
   })
 
+  it('returns 400 when a deny race finds the request already reviewed', async () => {
+    const { client } = createMemberApprovalRequestsClient({
+      denyUpdateMatches: false,
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'denied',
+          review_note: 'Missing ID verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(archiveResolvedRequestNotificationsMock).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'This request has already been reviewed.',
+    })
+  })
+
   it('approves a pending member approval request and archives matching notifications', async () => {
-    const updatedRequest = createRequestRecord({
+    const finalizedApprovedRequest = createRequestRecord({
       status: 'approved',
       member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
       member_id: 'member-77',
@@ -658,8 +774,14 @@ describe('member approval request routes', () => {
       memberType: { name: 'Civil Servant' },
       reviewedByProfile: { name: 'Admin User' },
     })
-    const { client, paymentInserts, requestUpdates } = createMemberApprovalRequestsClient({
-      updatedRequestRow: updatedRequest,
+    const {
+      client,
+      paymentInserts,
+      approvalClaimUpdates,
+      approvalFinalizeUpdates,
+      operations,
+    } = createMemberApprovalRequestsClient({
+      finalizedApprovedRequestRow: finalizedApprovedRequest,
       memberTypeRow: createMemberTypeRecord({
         id: MEMBER_TYPE_ID_CIVIL_SERVANT,
         name: 'Civil Servant',
@@ -671,9 +793,13 @@ describe('member approval request routes', () => {
     mockAdminUser({
       profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
     })
-    provisionMemberAccessMock.mockResolvedValue({
-      ok: true,
-      member: createApprovedMember(),
+    provisionMemberAccessMock.mockImplementation(async () => {
+      operations.push('provision')
+
+      return {
+        ok: true,
+        member: createApprovedMember(),
+      }
     })
 
     const response = await PATCH(
@@ -711,19 +837,30 @@ describe('member approval request routes', () => {
         notes: 'Collected at front desk',
       },
     ])
-    expect(requestUpdates).toEqual([
+    expect(approvalClaimUpdates).toEqual([
       expect.objectContaining({
         status: 'approved',
-        card_no: '0102857149',
-        card_code: 'A18',
-        member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
-        member_id: 'member-77',
-        photo_url: null,
         reviewed_by: 'admin-1',
         reviewed_at: expect.any(String),
         review_note: 'Approved after verification.',
         updated_at: expect.any(String),
       }),
+    ])
+    expect(approvalFinalizeUpdates).toEqual([
+      expect.objectContaining({
+        card_no: '0102857149',
+        card_code: 'A18',
+        member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        member_id: 'member-77',
+        photo_url: null,
+        updated_at: expect.any(String),
+      }),
+    ])
+    expect(operations).toEqual([
+      'approval-claim',
+      'provision',
+      'payment-insert',
+      'approval-finalize',
     ])
     expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
       requestId: 'request-1',
@@ -742,8 +879,71 @@ describe('member approval request routes', () => {
     })
   })
 
+  it('returns 400 when an approve race finds the request already reviewed', async () => {
+    const { client, approvalClaimUpdates, approvalFinalizeUpdates, paymentInserts } =
+      createMemberApprovalRequestsClient({
+        approveClaimMatches: false,
+        memberTypeRow: createMemberTypeRecord({
+          id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+          name: 'Civil Servant',
+          monthly_rate: 7500,
+        }),
+      })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+    provisionMemberAccessMock.mockResolvedValue({
+      ok: true,
+      member: createApprovedMember(),
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'approved',
+          selected_card_no: '0102857149',
+          member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+          payment_method: 'cash',
+          amount_paid: 7500,
+          promotion: 'Promo',
+          payment_date: '2026-04-09',
+          notes: 'Collected at front desk',
+          review_note: 'Approved after verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(approvalClaimUpdates).toEqual([
+      expect.objectContaining({
+        status: 'approved',
+        reviewed_by: 'admin-1',
+        reviewed_at: expect.any(String),
+        review_note: 'Approved after verification.',
+        updated_at: expect.any(String),
+      }),
+    ])
+    expect(provisionMemberAccessMock).not.toHaveBeenCalled()
+    expect(paymentInserts).toEqual([])
+    expect(approvalFinalizeUpdates).toEqual([])
+    expect(archiveResolvedRequestNotificationsMock).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'This request has already been reviewed.',
+    })
+  })
+
   it('logs and ignores member create notification archive failures after denial', async () => {
-    const updatedRequest = createRequestRecord({
+    const deniedRequest = createRequestRecord({
       status: 'denied',
       reviewed_by: 'admin-1',
       reviewed_at: '2026-04-09T15:00:00.000Z',
@@ -751,7 +951,7 @@ describe('member approval request routes', () => {
       reviewedByProfile: { name: 'Admin User' },
     })
     const { client } = createMemberApprovalRequestsClient({
-      updatedRequestRow: updatedRequest,
+      deniedRequestRow: deniedRequest,
     })
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -791,13 +991,225 @@ describe('member approval request routes', () => {
     })
   })
 
+  it('returns a warning when approval finalization fails after provisioning succeeds', async () => {
+    const {
+      client,
+      approvalClaimUpdates,
+      approvalFinalizeUpdates,
+      paymentInserts,
+      operations,
+    } = createMemberApprovalRequestsClient({
+      memberTypeRow: createMemberTypeRecord({
+        id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        name: 'Civil Servant',
+        monthly_rate: 7500,
+      }),
+      finalizeUpdateError: { message: 'update failed' },
+    })
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+    provisionMemberAccessMock.mockImplementation(async () => {
+      operations.push('provision')
+
+      return {
+        ok: true,
+        member: createApprovedMember(),
+      }
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'approved',
+          selected_card_no: '0102857149',
+          member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+          payment_method: 'cash',
+          amount_paid: 7500,
+          promotion: 'Promo',
+          payment_date: '2026-04-09',
+          notes: 'Collected at front desk',
+          review_note: 'Approved after verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(approvalClaimUpdates).toEqual([
+      expect.objectContaining({
+        status: 'approved',
+        reviewed_by: 'admin-1',
+        reviewed_at: expect.any(String),
+        review_note: 'Approved after verification.',
+        updated_at: expect.any(String),
+      }),
+    ])
+    expect(paymentInserts).toEqual([
+      {
+        member_id: 'member-77',
+        member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        payment_method: 'cash',
+        amount_paid: 7500,
+        promotion: 'Promo',
+        recorded_by: 'admin-1',
+        payment_date: '2026-04-09',
+        notes: 'Collected at front desk',
+      },
+    ])
+    expect(approvalFinalizeUpdates).toEqual([
+      expect.objectContaining({
+        card_no: '0102857149',
+        card_code: 'A18',
+        member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        member_id: 'member-77',
+        photo_url: null,
+        updated_at: expect.any(String),
+      }),
+    ])
+    expect(operations).toEqual([
+      'approval-claim',
+      'provision',
+      'payment-insert',
+      'approval-finalize',
+    ])
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to finalize approved member request request-1: update failed',
+    )
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'request-1',
+      type: 'member_create_request',
+      archivedAt: expect.any(String),
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      warning:
+        'Member was approved and provisioned successfully, but the request record could not be fully updated. Please verify the member details manually.',
+    })
+  })
+
+  it('returns a warning when approval finalization does not return the updated row', async () => {
+    const {
+      client,
+      approvalClaimUpdates,
+      approvalFinalizeUpdates,
+      paymentInserts,
+      operations,
+    } = createMemberApprovalRequestsClient({
+      memberTypeRow: createMemberTypeRecord({
+        id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        name: 'Civil Servant',
+        monthly_rate: 7500,
+      }),
+      finalizeUpdateMatches: false,
+    })
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+    provisionMemberAccessMock.mockImplementation(async () => {
+      operations.push('provision')
+
+      return {
+        ok: true,
+        member: createApprovedMember(),
+      }
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'approved',
+          selected_card_no: '0102857149',
+          member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+          payment_method: 'cash',
+          amount_paid: 7500,
+          promotion: 'Promo',
+          payment_date: '2026-04-09',
+          notes: 'Collected at front desk',
+          review_note: 'Approved after verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(approvalClaimUpdates).toEqual([
+      expect.objectContaining({
+        status: 'approved',
+        reviewed_by: 'admin-1',
+        reviewed_at: expect.any(String),
+        review_note: 'Approved after verification.',
+        updated_at: expect.any(String),
+      }),
+    ])
+    expect(paymentInserts).toEqual([
+      {
+        member_id: 'member-77',
+        member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        payment_method: 'cash',
+        amount_paid: 7500,
+        promotion: 'Promo',
+        recorded_by: 'admin-1',
+        payment_date: '2026-04-09',
+        notes: 'Collected at front desk',
+      },
+    ])
+    expect(approvalFinalizeUpdates).toEqual([
+      expect.objectContaining({
+        card_no: '0102857149',
+        card_code: 'A18',
+        member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        member_id: 'member-77',
+        photo_url: null,
+        updated_at: expect.any(String),
+      }),
+    ])
+    expect(operations).toEqual([
+      'approval-claim',
+      'provision',
+      'payment-insert',
+      'approval-finalize',
+    ])
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to finalize approved member request request-1: missing updated row',
+    )
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'request-1',
+      type: 'member_create_request',
+      archivedAt: expect.any(String),
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      warning:
+        'Member was approved and provisioned successfully, but the request record could not be fully updated. Please verify the member details manually.',
+    })
+  })
+
   it('fails approval when recording the payment fails', async () => {
     const existingRequest = createRequestRecord({
       photo_url: 'pending-member-requests/request-1.jpg',
       member_type_id: MEMBER_TYPE_ID_GENERAL,
       memberType: { name: 'General' },
     })
-    const updatedRequest = createRequestRecord({
+    const finalizedApprovedRequest = createRequestRecord({
       status: 'approved',
       member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
       member_id: 'member-77',
@@ -808,10 +1220,15 @@ describe('member approval request routes', () => {
       memberType: { name: 'Civil Servant' },
       reviewedByProfile: { name: 'Admin User' },
     })
-    const { client, memberPhotoUpdates, paymentInserts, requestUpdates } =
-      createMemberApprovalRequestsClient({
+    const {
+      client,
+      memberPhotoUpdates,
+      paymentInserts,
+      approvalClaimUpdates,
+      approvalFinalizeUpdates,
+    } = createMemberApprovalRequestsClient({
         existingRequestRow: existingRequest,
-        updatedRequestRow: updatedRequest,
+        finalizedApprovedRequestRow: finalizedApprovedRequest,
         memberTypeRow: createMemberTypeRecord({
           id: MEMBER_TYPE_ID_CIVIL_SERVANT,
           name: 'Civil Servant',
@@ -893,7 +1310,16 @@ describe('member approval request routes', () => {
       'Failed to record member approval payment:',
       expect.any(Error),
     )
-    expect(requestUpdates).toEqual([])
+    expect(approvalClaimUpdates).toEqual([
+      expect.objectContaining({
+        status: 'approved',
+        reviewed_by: 'admin-1',
+        reviewed_at: expect.any(String),
+        review_note: 'Approved after payment.',
+        updated_at: expect.any(String),
+      }),
+    ])
+    expect(approvalFinalizeUpdates).toEqual([])
     expect(response.status).toBe(500)
     await expect(response.json()).resolves.toEqual({
       ok: false,

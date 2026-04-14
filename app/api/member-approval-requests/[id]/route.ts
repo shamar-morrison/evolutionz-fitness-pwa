@@ -18,6 +18,9 @@ import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import type { MemberPaymentMethod, MemberType } from '@/types'
 
+const APPROVE_MEMBER_REQUEST_WARNING =
+  'Member was approved and provisioned successfully, but the request record could not be fully updated. Please verify the member details manually.'
+
 const denyMemberApprovalRequestSchema = z
   .object({
     status: z.literal('denied'),
@@ -56,6 +59,36 @@ type QueryResult<T> = PromiseLike<{
   error: QueryError | null
 }>
 
+type MemberApprovalRequestReviewRow = MemberApprovalRequestRecord
+
+type MemberApprovalRequestStatusUpdateValues = {
+  status: 'approved' | 'denied'
+  reviewed_by: string
+  reviewed_at: string
+  review_note: string | null
+  updated_at: string
+}
+
+type MemberApprovalRequestFinalizeValues = {
+  card_no: string
+  card_code: string
+  member_type_id: string
+  member_id: string
+  photo_url: string | null
+  updated_at: string
+}
+
+type MemberApprovalRequestUpdateQuery = {
+  eq(column: 'id', value: string): {
+    eq(column: 'status', value: 'pending'): {
+      select(columns: string): QueryResult<MemberApprovalRequestReviewRow[]>
+    }
+    select(columns: string): {
+      maybeSingle(): QueryResult<MemberApprovalRequestReviewRow>
+    }
+  }
+}
+
 type MemberApprovalRequestReviewClient = MemberTypesReadClient &
   MemberPhotoStorageClient & {
   from(table: 'member_approval_requests'): {
@@ -64,24 +97,9 @@ type MemberApprovalRequestReviewClient = MemberTypesReadClient &
         maybeSingle(): QueryResult<MemberApprovalRequestRecord>
       }
     }
-    update(values: {
-      status: 'approved' | 'denied'
-      card_no?: string
-      card_code?: string
-      member_type_id?: string
-      member_id?: string
-      photo_url?: string | null
-      reviewed_by: string
-      reviewed_at: string
-      review_note: string | null
-      updated_at: string
-    }): {
-      eq(column: 'id', value: string): {
-        select(columns: string): {
-          maybeSingle(): QueryResult<MemberApprovalRequestRecord>
-        }
-      }
-    }
+    update(
+      values: MemberApprovalRequestStatusUpdateValues | MemberApprovalRequestFinalizeValues,
+    ): MemberApprovalRequestUpdateQuery
   }
   from(table: 'cards'): {
     select(columns: 'card_no, card_code'): {
@@ -142,6 +160,25 @@ function createErrorResponse(error: string, status: number) {
 function normalizeOptionalText(value: string | null | undefined) {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || null
+}
+
+async function archiveMemberCreateRequestNotifications(
+  supabase: MemberApprovalRequestReviewClient,
+  requestId: string,
+  archivedAt: string,
+) {
+  try {
+    await archiveResolvedRequestNotifications(supabase, {
+      requestId,
+      type: 'member_create_request',
+      archivedAt,
+    })
+  } catch (archiveError) {
+    console.error(
+      'Failed to archive resolved member create request notifications:',
+      archiveError,
+    )
+  }
 }
 
 async function moveRequestPhotoToMember(
@@ -248,7 +285,7 @@ export async function PATCH(
     }
 
     if (input.status === 'denied') {
-      const { data, error } = await supabase
+      const { data: deniedRequests, error } = await supabase
         .from('member_approval_requests')
         .update({
           status: 'denied',
@@ -258,33 +295,24 @@ export async function PATCH(
           updated_at: reviewTimestamp,
         })
         .eq('id', id)
+        .eq('status', 'pending')
         .select(MEMBER_APPROVAL_REQUEST_SELECT)
-        .maybeSingle()
 
       if (error) {
         throw new Error(`Failed to deny member approval request ${id}: ${error.message}`)
       }
 
-      if (!data) {
-        return createErrorResponse('Member approval request not found.', 404)
+      const deniedRequest = deniedRequests?.[0] ?? null
+
+      if (!deniedRequest) {
+        return createErrorResponse('This request has already been reviewed.', 400)
       }
 
-      try {
-        await archiveResolvedRequestNotifications(supabase, {
-          requestId: existingRequest.id,
-          type: 'member_create_request',
-          archivedAt: reviewTimestamp,
-        })
-      } catch (archiveError) {
-        console.error(
-          'Failed to archive resolved member create request notifications:',
-          archiveError,
-        )
-      }
+      await archiveMemberCreateRequestNotifications(supabase, deniedRequest.id, reviewTimestamp)
 
       return NextResponse.json({
         ok: true,
-        request: mapMemberApprovalRequestRecord(data as MemberApprovalRequestRecord),
+        request: mapMemberApprovalRequestRecord(deniedRequest),
       })
     }
 
@@ -318,6 +346,35 @@ export async function PATCH(
       return createErrorResponse('The request access window is invalid.', 400)
     }
 
+    const reviewNote = normalizeOptionalText(input.review_note)
+    const cardCode =
+      typeof selectedCard.card_code === 'string' && selectedCard.card_code.trim()
+        ? selectedCard.card_code.trim()
+        : existingRequest.card_code
+
+    const { data: approvedClaims, error: approvedClaimError } = await supabase
+      .from('member_approval_requests')
+      .update({
+        status: 'approved',
+        reviewed_by: authResult.profile.id,
+        reviewed_at: reviewTimestamp,
+        review_note: reviewNote,
+        updated_at: reviewTimestamp,
+      })
+      .eq('id', id)
+      .eq('status', 'pending')
+      .select(MEMBER_APPROVAL_REQUEST_SELECT)
+
+    if (approvedClaimError) {
+      throw new Error(
+        `Failed to approve member approval request ${id}: ${approvedClaimError.message}`,
+      )
+    }
+
+    if (!approvedClaims?.[0]) {
+      return createErrorResponse('This request has already been reviewed.', 400)
+    }
+
     const provisionResult = await provisionMemberAccess({
       name: existingRequest.name,
       type: memberType.name as MemberType,
@@ -329,10 +386,7 @@ export async function PATCH(
       beginTime,
       endTime,
       cardNo: selectedCard.card_no,
-      cardCode:
-        typeof selectedCard.card_code === 'string' && selectedCard.card_code.trim()
-          ? selectedCard.card_code.trim()
-          : existingRequest.card_code,
+      cardCode,
     })
 
     if (!provisionResult.ok) {
@@ -369,51 +423,47 @@ export async function PATCH(
       throw paymentError
     }
 
-    const { data, error } = await supabase
+    const { data: approvedRequest, error: approvedRequestError } = await supabase
       .from('member_approval_requests')
       .update({
-        status: 'approved',
         card_no: selectedCard.card_no,
-        card_code:
-          typeof selectedCard.card_code === 'string' && selectedCard.card_code.trim()
-            ? selectedCard.card_code.trim()
-            : existingRequest.card_code,
+        card_code: cardCode,
         member_type_id: memberType.id,
         member_id: provisionResult.member.id,
         photo_url: approvedPhotoPath ? null : existingRequest.photo_url,
-        reviewed_by: authResult.profile.id,
-        reviewed_at: reviewTimestamp,
-        review_note: normalizeOptionalText(input.review_note),
         updated_at: reviewTimestamp,
       })
       .eq('id', id)
       .select(MEMBER_APPROVAL_REQUEST_SELECT)
       .maybeSingle()
 
-    if (error) {
-      throw new Error(`Failed to approve member approval request ${id}: ${error.message}`)
-    }
-
-    if (!data) {
-      return createErrorResponse('Member approval request not found.', 404)
-    }
-
-    try {
-      await archiveResolvedRequestNotifications(supabase, {
-        requestId: existingRequest.id,
-        type: 'member_create_request',
-        archivedAt: reviewTimestamp,
-      })
-    } catch (archiveError) {
+    if (approvedRequestError) {
       console.error(
-        'Failed to archive resolved member create request notifications:',
-        archiveError,
+        `Failed to finalize approved member request ${id}: ${approvedRequestError.message}`,
       )
+      await archiveMemberCreateRequestNotifications(supabase, id, reviewTimestamp)
+
+      return NextResponse.json({
+        ok: true,
+        warning: APPROVE_MEMBER_REQUEST_WARNING,
+      })
     }
+
+    if (!approvedRequest) {
+      console.error(`Failed to finalize approved member request ${id}: missing updated row`)
+      await archiveMemberCreateRequestNotifications(supabase, id, reviewTimestamp)
+
+      return NextResponse.json({
+        ok: true,
+        warning: APPROVE_MEMBER_REQUEST_WARNING,
+      })
+    }
+
+    await archiveMemberCreateRequestNotifications(supabase, approvedRequest.id, reviewTimestamp)
 
     return NextResponse.json({
       ok: true,
-      request: mapMemberApprovalRequestRecord(data as MemberApprovalRequestRecord),
+      request: mapMemberApprovalRequestRecord(approvedRequest),
     })
   } catch (error) {
     if (error instanceof SyntaxError) {
