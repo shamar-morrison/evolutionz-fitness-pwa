@@ -21,11 +21,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useAuth } from '@/contexts/auth-context'
 import { useStaffProfile } from '@/hooks/use-staff'
+import { usePermissions } from '@/hooks/use-permissions'
 import { toast } from '@/hooks/use-toast'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import { queryKeys } from '@/lib/query-keys'
-import { archiveStaff, deleteStaff, deleteStaffPhoto } from '@/lib/staff-actions'
+import {
+  archiveStaff,
+  deleteStaff,
+  deleteStaffPhoto,
+  setStaffSuspended,
+} from '@/lib/staff-actions'
 import { formatStaffGenderLabel, hasStaffTitle } from '@/lib/staff'
 import { useQueryClient } from '@tanstack/react-query'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -44,13 +51,15 @@ function StaffDetailPageContent() {
   const params = useParams()
   const router = useProgressRouter()
   const queryClient = useQueryClient()
+  const { profile: currentProfile } = useAuth()
+  const { can } = usePermissions()
   const profileId = params.id as string
   const { profile, removal, isLoading, error } = useStaffProfile(profileId)
   const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [activeDialog, setActiveDialog] = useState<
-    null | 'archive-blocked' | 'archive-staff' | 'delete-photo' | 'delete-staff'
+    null | 'archive-blocked' | 'archive-staff' | 'delete-photo' | 'delete-staff' | 'suspend-staff'
   >(null)
 
   useEffect(() => {
@@ -149,6 +158,38 @@ function StaffDetailPageContent() {
     }
   }
 
+  const handleSetSuspended = async (suspended: boolean) => {
+    if (!profile) {
+      return
+    }
+
+    setIsActionLoading(true)
+
+    try {
+      await setStaffSuspended(profile.id, suspended)
+      setActiveDialog(null)
+      await invalidateStaffQueries()
+      toast({
+        title: suspended ? 'Staff suspended' : 'Access restored',
+        description: suspended
+          ? `${profile.name} was suspended and can no longer access the app.`
+          : `${profile.name} can sign in again.`,
+      })
+    } catch (suspensionError) {
+      console.error('Failed to update staff suspension:', suspensionError)
+      toast({
+        title: suspended ? 'Suspension failed' : 'Restore failed',
+        description:
+          suspensionError instanceof Error
+            ? suspensionError.message
+            : `Failed to ${suspended ? 'suspend' : 'restore'} this staff account.`,
+        variant: 'destructive',
+      })
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   if (error) {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center gap-4">
@@ -196,6 +237,11 @@ function StaffDetailPageContent() {
     removal && removal.activeAssignments > 0
       ? `This trainer still has ${removal.activeAssignments} active PT assignment${removal.activeAssignments === 1 ? '' : 's'}. Reassign or inactivate them before archiving this staff account.`
       : null
+  const canToggleSuspension =
+    can('staff.suspend') &&
+    !isArchived &&
+    !hasStaffTitle(profile.titles, 'Owner') &&
+    currentProfile?.id !== profile.id
   const handleRemovalActionClick = () => {
     if (!removalAction) {
       return
@@ -253,7 +299,12 @@ function StaffDetailPageContent() {
               ) : null}
             </div>
 
-            <h2 className="mt-4 text-center text-xl font-bold">{profile.name}</h2>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <h2 className="text-center text-xl font-bold">{profile.name}</h2>
+              {profile.isSuspended ? (
+                <Badge className="bg-red-600 text-white hover:bg-red-600">Suspended</Badge>
+              ) : null}
+            </div>
 
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               {isArchived ? (
@@ -294,6 +345,21 @@ function StaffDetailPageContent() {
                   {removalAction.label}
                 </Button>
               ) : null}
+
+              {canToggleSuspension ? (
+                <Button
+                  variant={profile.isSuspended ? 'outline' : 'destructive'}
+                  className="w-full"
+                  onClick={() =>
+                    profile.isSuspended
+                      ? void handleSetSuspended(false)
+                      : setActiveDialog('suspend-staff')
+                  }
+                  disabled={isActionLoading}
+                >
+                  {profile.isSuspended ? 'Restore Access' : 'Suspend Account'}
+                </Button>
+              ) : null}
             </div>
           </CardContent>
         </Card>
@@ -330,6 +396,20 @@ function StaffDetailPageContent() {
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Role</p>
                 <p className="font-medium">{profile.role === 'admin' ? 'Admin' : 'Staff'}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Access Status</p>
+                <div className="flex flex-wrap gap-2">
+                  <Badge
+                    className={
+                      profile.isSuspended
+                        ? 'bg-red-600 text-white hover:bg-red-600'
+                        : 'bg-emerald-600 text-white hover:bg-emerald-600'
+                    }
+                  >
+                    {profile.isSuspended ? 'Suspended' : 'Active'}
+                  </Badge>
+                </div>
               </div>
               <div className="space-y-1">
                 <p className="text-sm text-muted-foreground">Phone</p>
@@ -423,6 +503,19 @@ function StaffDetailPageContent() {
         confirmLabel="Archive Staff"
         cancelLabel="Cancel"
         onConfirm={() => void handleArchiveStaff()}
+        onCancel={() => setActiveDialog(null)}
+        isLoading={isActionLoading}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={activeDialog === 'suspend-staff'}
+        onOpenChange={(open) => setActiveDialog(open ? 'suspend-staff' : null)}
+        title="Suspend staff account?"
+        description={`Are you sure you want to suspend ${profile.name}? They will be immediately logged out and will not be able to log back in until you restore their access.`}
+        confirmLabel="Confirm"
+        cancelLabel="Cancel"
+        onConfirm={() => void handleSetSuspended(true)}
         onCancel={() => setActiveDialog(null)}
         isLoading={isActionLoading}
         variant="destructive"

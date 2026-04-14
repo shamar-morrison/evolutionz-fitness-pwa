@@ -38,6 +38,8 @@ export function useMembers(options: UseMembersOptions = {}) {
       return
     }
 
+    console.log('[members realtime] effect fired, user:', user.id)
+
     const supabase = createClient()
     const channel = supabase
       .channel(`members-inserts-${user.id}`)
@@ -49,10 +51,13 @@ export function useMembers(options: UseMembersOptions = {}) {
           table: 'members',
         },
         () => {
+          console.log('[members realtime] INSERT received, invalidating query')
           void queryClient.invalidateQueries({ queryKey: queryKeys.members.all })
         },
       )
       .subscribe()
+
+    console.log('[members realtime] channel subscribed, user:', user.id)
 
     return () => {
       void supabase.removeChannel(channel)

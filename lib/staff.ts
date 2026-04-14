@@ -63,7 +63,7 @@ export type ReadStaffOptions = {
 }
 
 export const STAFF_PROFILE_SELECT =
-  'id, name, email, role, titles, phone, gender, remark, specialties, photoUrl:photo_url, archivedAt:archived_at, created_at'
+  'id, name, email, role, titles, isSuspended:is_suspended, phone, gender, remark, specialties, photoUrl:photo_url, archivedAt:archived_at, created_at'
 
 type StaffListSuccessResponse = {
   staff: Profile[]
@@ -91,6 +91,7 @@ const profileRecordSchema = z.object({
   email: z.string().trim().min(1, 'Email is required.'),
   role: z.enum(['admin', 'staff']),
   titles: z.array(z.string()).nullable().optional(),
+  isSuspended: z.boolean().optional().default(false),
   phone: z.string().trim().min(1).nullable(),
   gender: staffGenderSchema.nullable(),
   remark: z.string().trim().min(1).nullable(),
@@ -242,6 +243,7 @@ export function mapProfileRecordToProfile(
     email: normalizeText(record.email),
     role: deriveRoleFromTitles(titles),
     titles,
+    isSuspended: record.isSuspended,
     phone: normalizeNullableText(record.phone),
     gender: record.gender,
     remark: normalizeNullableText(record.remark),

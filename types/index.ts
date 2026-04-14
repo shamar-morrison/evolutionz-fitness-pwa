@@ -241,6 +241,7 @@ export type Profile = {
   email: string
   role: UserRole
   titles: string[]
+  isSuspended: boolean
   phone: string | null
   gender: StaffGender | null
   remark: string | null

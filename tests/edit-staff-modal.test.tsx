@@ -30,6 +30,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     email: overrides.email ?? 'jane@evolutionzfitness.com',
     role: overrides.role ?? 'staff',
     titles: overrides.titles ?? ['Trainer'],
+    isSuspended: overrides.isSuspended ?? false,
     phone: overrides.phone ?? '876-555-0100',
     gender: overrides.gender ?? 'female',
     remark: overrides.remark ?? 'Existing staff member',

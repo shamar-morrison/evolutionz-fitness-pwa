@@ -19,6 +19,7 @@ describe('permissions', () => {
     expect(permissions.has('door.unlock')).toBe(true)
     expect(permissions.has('pt.assign')).toBe(true)
     expect(permissions.has('classes.manage')).toBe(true)
+    expect(permissions.has('staff.suspend')).toBe(true)
   })
 
   it('never requires approval for admins', () => {
