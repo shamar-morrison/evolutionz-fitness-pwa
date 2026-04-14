@@ -373,6 +373,27 @@ describe('StaffDetailPage', () => {
     expect(invalidateQueriesMock).toHaveBeenCalled()
   })
 
+  it('shows archived access status with archived priority over suspension', async () => {
+    useStaffProfileMock.mockReturnValue({
+      profile: createProfile({
+        archivedAt: '2026-04-10T00:00:00.000Z',
+        isSuspended: true,
+      }),
+      removal: createRemoval(),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<StaffDetailPage />)
+    })
+
+    const accessStatusBadge = container.querySelector('[aria-label="Access status: Archived"]')
+
+    expect(accessStatusBadge?.textContent).toBe('Archived')
+    expect(container.querySelector('[aria-label="Access status: Suspended"]')).toBeNull()
+  })
+
   it('does not render suspension controls for owner accounts', async () => {
     useStaffProfileMock.mockReturnValue({
       profile: createProfile({

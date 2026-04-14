@@ -91,7 +91,7 @@ const profileRecordSchema = z.object({
   email: z.string().trim().min(1, 'Email is required.'),
   role: z.enum(['admin', 'staff']),
   titles: z.array(z.string()).nullable().optional(),
-  isSuspended: z.boolean().optional().default(false),
+  isSuspended: z.boolean(),
   phone: z.string().trim().min(1).nullable(),
   gender: staffGenderSchema.nullable(),
   remark: z.string().trim().min(1).nullable(),

@@ -177,6 +177,28 @@ describe('POST /api/staff/[id]/suspend', () => {
     expect(response.status).toBe(403)
   })
 
+  it('returns 400 when the request body is malformed JSON', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/staff/staff-1/suspend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: '{',
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-1' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Invalid JSON body.',
+    })
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+    expect(readStaffProfileMock).not.toHaveBeenCalled()
+  })
+
   it('suspends a staff account and revokes active sessions', async () => {
     const { client, rpcCalls, updateCalls } = createSuspendAdminClient()
 
@@ -245,6 +267,37 @@ describe('POST /api/staff/[id]/suspend', () => {
         },
       },
     ])
+    expect(rpcCalls).toEqual([])
+    await expect(response.json()).resolves.toEqual({ ok: true })
+  })
+
+  it('returns success without writing when the requested suspension state is unchanged', async () => {
+    const { client, rpcCalls, updateCalls } = createSuspendAdminClient()
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readStaffProfileMock.mockResolvedValue(
+      createProfile({
+        isSuspended: true,
+      }),
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/staff/staff-1/suspend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          suspended: true,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(updateCalls).toEqual([])
     expect(rpcCalls).toEqual([])
     await expect(response.json()).resolves.toEqual({ ok: true })
   })
@@ -337,6 +390,40 @@ describe('POST /api/staff/[id]/suspend', () => {
     )
 
     expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Archived staff accounts are read-only.',
+    })
+  })
+
+  it('preserves archived guard errors even when the requested state already matches', async () => {
+    const { client, rpcCalls, updateCalls } = createSuspendAdminClient()
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readStaffProfileMock.mockResolvedValue(
+      createProfile({
+        archivedAt: '2026-04-10T00:00:00.000Z',
+        isSuspended: true,
+      }),
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/staff/staff-1/suspend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          suspended: true,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-1' }),
+      },
+    )
+
+    expect(response.status).toBe(409)
+    expect(updateCalls).toEqual([])
+    expect(rpcCalls).toEqual([])
     await expect(response.json()).resolves.toMatchObject({
       error: 'Archived staff accounts are read-only.',
     })

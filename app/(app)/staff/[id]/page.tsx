@@ -219,6 +219,21 @@ function StaffDetailPageContent() {
   }
 
   const isArchived = Boolean(profile.archivedAt)
+  const accessStatus = isArchived
+    ? {
+        label: 'Archived',
+        className:
+          'bg-slate-200 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-800',
+      }
+    : profile.isSuspended
+      ? {
+          label: 'Suspended',
+          className: 'bg-red-600 text-white hover:bg-red-600',
+        }
+      : {
+          label: 'Active',
+          className: 'bg-emerald-600 text-white hover:bg-emerald-600',
+        }
   const removalAction =
     isArchived || !removal
       ? null
@@ -401,13 +416,10 @@ function StaffDetailPageContent() {
                 <p className="text-sm text-muted-foreground">Access Status</p>
                 <div className="flex flex-wrap gap-2">
                   <Badge
-                    className={
-                      profile.isSuspended
-                        ? 'bg-red-600 text-white hover:bg-red-600'
-                        : 'bg-emerald-600 text-white hover:bg-emerald-600'
-                    }
+                    className={accessStatus.className}
+                    aria-label={`Access status: ${accessStatus.label}`}
                   >
-                    {profile.isSuspended ? 'Suspended' : 'Active'}
+                    {accessStatus.label}
                   </Badge>
                 </div>
               </div>

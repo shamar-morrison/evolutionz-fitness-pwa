@@ -50,6 +50,7 @@ function buildProfileRow(overrides: Partial<Record<string, unknown>> = {}) {
     email: 'admin@evolutionzfitness.com',
     role: 'admin',
     titles: ['Owner'],
+    isSuspended: false,
     phone: null,
     gender: null,
     remark: null,

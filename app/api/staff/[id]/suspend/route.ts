@@ -91,7 +91,15 @@ export async function POST(
     }
 
     const { id } = await params
-    const input = suspendStaffRequestSchema.parse(await request.json())
+    let requestBody: unknown
+
+    try {
+      requestBody = await request.json()
+    } catch {
+      return createErrorResponse('Invalid JSON body.', 400)
+    }
+
+    const input = suspendStaffRequestSchema.parse(requestBody)
 
     if (authResult.profile.id === id) {
       return createErrorResponse('You cannot suspend your own account.', 400)
@@ -112,6 +120,13 @@ export async function POST(
       return createErrorResponse('Admin accounts cannot be suspended.', 400)
     }
 
+    if (input.suspended === existingProfile.isSuspended) {
+      return NextResponse.json({
+        ok: true,
+      })
+    }
+
+    const priorSuspended = existingProfile.isSuspended
     const updateResult = await updateSuspensionState(supabase, id, input.suspended)
 
     if (updateResult.error) {
@@ -135,7 +150,7 @@ export async function POST(
     })
 
     if (sessionInvalidationError) {
-      const rollbackResult = await updateSuspensionState(supabase, id, false)
+      const rollbackResult = await updateSuspensionState(supabase, id, priorSuspended)
 
       if (rollbackResult.error || !rollbackResult.data) {
         const rollbackMessage =

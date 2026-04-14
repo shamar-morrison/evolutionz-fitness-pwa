@@ -153,7 +153,7 @@ describe('staff helpers', () => {
     expect(profile?.isSuspended).toBe(true)
   })
 
-  it('defaults missing suspension state to false during normalization', () => {
+  it('fails normalization when suspension state is missing', () => {
     const profile = normalizeProfile({
       profile: {
         id: 'staff-1',
@@ -171,6 +171,6 @@ describe('staff helpers', () => {
       },
     })
 
-    expect(profile?.isSuspended).toBe(false)
+    expect(profile).toBeNull()
   })
 })
