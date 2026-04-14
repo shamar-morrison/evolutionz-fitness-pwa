@@ -2,6 +2,7 @@ import type {
   MemberApprovalRequestStatus,
   MemberPaymentMethod,
   MemberPaymentRequest,
+  MemberPaymentType,
 } from '@/types'
 
 export const MEMBER_PAYMENT_REQUEST_SELECT = [
@@ -13,13 +14,14 @@ export const MEMBER_PAYMENT_REQUEST_SELECT = [
   'payment_method',
   'payment_date',
   'member_type_id',
+  'payment_type',
   'notes',
   'reviewed_by',
   'reviewed_at',
   'rejection_reason',
   'created_at',
   'updated_at',
-  'member:members!member_payment_requests_member_id_fkey(id, name)',
+  'member:members!member_payment_requests_member_id_fkey(id, name, email)',
   'memberType:member_types!member_payment_requests_member_type_id_fkey(name)',
   'requestedByProfile:profiles!member_payment_requests_requested_by_fkey(name)',
   'reviewedByProfile:profiles!member_payment_requests_reviewed_by_fkey(name)',
@@ -34,6 +36,7 @@ export type MemberPaymentRequestRecord = {
   payment_method: MemberPaymentMethod
   payment_date: string
   member_type_id: string | null
+  payment_type: MemberPaymentType
   notes: string | null
   reviewed_by: string | null
   reviewed_at: string | null
@@ -43,6 +46,7 @@ export type MemberPaymentRequestRecord = {
   member?: {
     id: string
     name: string
+    email: string | null
   } | null
   memberType?: {
     name: string | null
@@ -87,7 +91,9 @@ export function mapMemberPaymentRequestRecord(
     id: normalizeText(record.id),
     memberId: normalizeText(record.member_id),
     memberName: normalizeText(record.member?.name),
+    memberEmail: normalizeNullableText(record.member?.email),
     amount: typeof record.amount === 'number' ? record.amount : Number(record.amount),
+    paymentType: record.payment_type,
     paymentMethod: record.payment_method,
     paymentDate: normalizeText(record.payment_date),
     memberTypeId: normalizeNullableText(record.member_type_id),

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 import {
   MEMBER_PAYMENT_REQUEST_SELECT,
   mapMemberPaymentRequestRecord,
@@ -11,11 +12,15 @@ import {
 } from '@/lib/pt-notifications-server'
 import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import type { MemberPaymentMethod } from '@/types'
+import type {
+  MemberPaymentMethod,
+  MemberPaymentType,
+} from '@/types'
 
-const createMemberPaymentRequestSchema = z
+const membershipPaymentRequestSchema = z
   .object({
     member_id: z.string().trim().uuid('Member is required.'),
+    payment_type: z.literal('membership'),
     amount: z.number().finite().positive('Amount must be greater than 0.'),
     payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
     payment_date: z
@@ -26,6 +31,24 @@ const createMemberPaymentRequestSchema = z
     notes: z.string().trim().min(1).nullable().optional(),
   })
   .strict()
+
+const cardFeePaymentRequestSchema = z
+  .object({
+    member_id: z.string().trim().uuid('Member is required.'),
+    payment_type: z.literal('card_fee'),
+    payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+    payment_date: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Payment date must be in YYYY-MM-DD format.'),
+    notes: z.string().trim().min(1).nullable().optional(),
+  })
+  .strict()
+
+const createMemberPaymentRequestSchema = z.discriminatedUnion('payment_type', [
+  membershipPaymentRequestSchema,
+  cardFeePaymentRequestSchema,
+])
 
 type QueryError = {
   message: string
@@ -39,6 +62,7 @@ type QueryResult<T> = PromiseLike<{
 type MemberPaymentRequestMemberRow = {
   id: string
   member_type_id: string | null
+  email: string | null
 }
 
 type MemberPaymentRequestsRouteClient = {
@@ -58,9 +82,10 @@ type MemberPaymentRequestsRouteClient = {
       requested_by: string
       status: 'pending'
       amount: number
+      payment_type: MemberPaymentType
       payment_method: MemberPaymentMethod
       payment_date: string
-      member_type_id: string
+      member_type_id: string | null
       notes?: string | null
     }): {
       select(columns: string): {
@@ -69,7 +94,7 @@ type MemberPaymentRequestsRouteClient = {
     }
   }
   from(table: 'members'): {
-    select(columns: 'id, member_type_id'): {
+    select(columns: 'id, member_type_id, email'): {
       eq(column: 'id', value: string): {
         maybeSingle(): QueryResult<MemberPaymentRequestMemberRow>
       }
@@ -139,7 +164,7 @@ export async function POST(request: Request) {
     const supabase = getSupabaseAdminClient() as unknown as MemberPaymentRequestsRouteClient
     const { data: existingMember, error: existingMemberError } = await supabase
       .from('members')
-      .select('id, member_type_id')
+      .select('id, member_type_id, email')
       .eq('id', input.member_id)
       .maybeSingle()
 
@@ -151,9 +176,19 @@ export async function POST(request: Request) {
       return createErrorResponse('Member not found.', 404)
     }
 
-    const effectiveMemberTypeId = input.member_type_id ?? existingMember.member_type_id
+    if (!existingMember.email?.trim()) {
+      return createErrorResponse(
+        'Add an email address to the member profile before submitting a payment.',
+        400,
+      )
+    }
 
-    if (!effectiveMemberTypeId) {
+    const effectiveMemberTypeId =
+      input.payment_type === 'membership'
+        ? input.member_type_id ?? existingMember.member_type_id
+        : null
+
+    if (input.payment_type === 'membership' && !effectiveMemberTypeId) {
       return createErrorResponse('Membership type is required for this payment request.', 400)
     }
 
@@ -163,7 +198,11 @@ export async function POST(request: Request) {
         member_id: input.member_id,
         requested_by: authResult.user.id,
         status: 'pending',
-        amount: input.amount,
+        amount:
+          input.payment_type === 'membership'
+            ? input.amount
+            : CARD_FEE_AMOUNT_JMD,
+        payment_type: input.payment_type,
         payment_method: input.payment_method,
         payment_date: input.payment_date,
         member_type_id: effectiveMemberTypeId,
@@ -196,6 +235,7 @@ export async function POST(request: Request) {
             requestedBy,
             amount: requestRecord.amount,
             paymentMethod: requestRecord.payment_method,
+            paymentType: requestRecord.payment_type,
           },
         })),
       )

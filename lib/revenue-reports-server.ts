@@ -1,6 +1,7 @@
 import {
   REVENUE_REPORT_MEMBER_TYPE_ORDER,
   REVENUE_REPORT_PAYMENT_METHOD_ORDER,
+  type CardFeeRevenueReport,
   type MembershipRevenueReport,
   type OverallRevenueReport,
   formatPaymentMethodLabel,
@@ -9,7 +10,7 @@ import {
 import { getDateRangeBoundsInJamaica } from '@/lib/pt-scheduling'
 import type { MemberPaymentMethod } from '@/types'
 
-type RevenueReportsAdminClient = {
+export type RevenueReportsAdminClient = {
   from(table: string): any
 }
 
@@ -17,6 +18,7 @@ type MemberPaymentRow = {
   id: string
   member_id: string
   member_type_id: string | null
+  payment_type: 'membership' | 'card_fee'
   payment_method: MemberPaymentMethod
   amount_paid: number | string
   payment_date: string
@@ -183,7 +185,8 @@ export async function readMembershipRevenueReport(
 ): Promise<MembershipRevenueReport> {
   const { data, error } = await supabase
     .from('member_payments')
-    .select('id, member_id, member_type_id, payment_method, amount_paid, payment_date, notes')
+    .select('id, member_id, member_type_id, payment_type, payment_method, amount_paid, payment_date, notes')
+    .eq('payment_type', 'membership')
     .gte('payment_date', filters.from)
     .lte('payment_date', filters.to)
     .order('payment_date', { ascending: false })
@@ -323,6 +326,85 @@ export async function readMembershipRevenueReport(
   }
 }
 
+export async function readCardFeeRevenueReport(
+  supabase: RevenueReportsAdminClient,
+  filters: {
+    from: string
+    to: string
+  },
+): Promise<CardFeeRevenueReport> {
+  const { data, error } = await supabase
+    .from('member_payments')
+    .select('id, member_id, member_type_id, payment_type, payment_method, amount_paid, payment_date, notes')
+    .eq('payment_type', 'card_fee')
+    .gte('payment_date', filters.from)
+    .lte('payment_date', filters.to)
+    .order('payment_date', { ascending: false })
+
+  if (error) {
+    throw new Error(`Failed to read card fee payments for the revenue report: ${error.message}`)
+  }
+
+  const payments = (data ?? []) as MemberPaymentRow[]
+
+  if (payments.length === 0) {
+    return {
+      summary: {
+        totalRevenue: 0,
+        totalPayments: 0,
+      },
+      payments: [],
+      monthlyBreakdown: [],
+    }
+  }
+
+  const memberIds = Array.from(new Set(payments.map((payment) => payment.member_id)))
+  const memberById = await loadMemberNames(supabase, memberIds)
+  const monthlyTotals = new Map<
+    string,
+    {
+      month: string
+      totalRevenue: number
+      paymentCount: number
+    }
+  >()
+
+  const reportPayments = payments.map((payment) => {
+    const memberName = normalizeText(memberById.get(payment.member_id)?.name) || 'Unknown member'
+    const amount = normalizeAmount(payment.amount_paid)
+    const month = payment.payment_date.slice(0, 7)
+    const monthlyTotal = monthlyTotals.get(month) ?? {
+      month,
+      totalRevenue: 0,
+      paymentCount: 0,
+    }
+
+    monthlyTotal.totalRevenue += amount
+    monthlyTotal.paymentCount += 1
+    monthlyTotals.set(month, monthlyTotal)
+
+    return {
+      id: payment.id,
+      memberName,
+      amount,
+      paymentMethod: payment.payment_method,
+      paymentDate: payment.payment_date,
+      notes: normalizeText(payment.notes) || null,
+    }
+  })
+
+  return {
+    summary: {
+      totalRevenue: reportPayments.reduce((sum, payment) => sum + payment.amount, 0),
+      totalPayments: reportPayments.length,
+    },
+    payments: reportPayments,
+    monthlyBreakdown: Array.from(monthlyTotals.values()).sort((left, right) =>
+      left.month.localeCompare(right.month),
+    ),
+  }
+}
+
 export async function readPtRevenueReport(
   supabase: RevenueReportsAdminClient,
   filters: {
@@ -423,14 +505,16 @@ export async function readOverallRevenueReport(
     to: string
   },
 ): Promise<OverallRevenueReport> {
-  const [membershipReport, ptReport] = await Promise.all([
+  const [membershipReport, cardFeeReport, ptReport] = await Promise.all([
     readMembershipRevenueReport(supabase, filters),
+    readCardFeeRevenueReport(supabase, filters),
     readPtRevenueReport(supabase, filters),
   ])
 
   const membershipRevenue = membershipReport.summary.totalRevenue
+  const cardFeeRevenue = cardFeeReport.summary.totalRevenue
   const ptRevenue = ptReport.summary.totalRevenue
-  const grandTotal = membershipRevenue + ptRevenue
+  const grandTotal = membershipRevenue + cardFeeRevenue + ptRevenue
 
   const percentageOf = (amount: number) => (grandTotal > 0 ? (amount / grandTotal) * 100 : 0)
 
@@ -438,6 +522,7 @@ export async function readOverallRevenueReport(
     summary: {
       grandTotal,
       membershipRevenue,
+      cardFeeRevenue,
       ptRevenue,
     },
     breakdown: [
@@ -445,6 +530,11 @@ export async function readOverallRevenueReport(
         revenueStream: 'Membership',
         amount: membershipRevenue,
         percentageOfTotal: percentageOf(membershipRevenue),
+      },
+      {
+        revenueStream: 'Card Fees',
+        amount: cardFeeRevenue,
+        percentageOfTotal: percentageOf(cardFeeRevenue),
       },
       {
         revenueStream: 'PT Revenue',

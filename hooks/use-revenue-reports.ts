@@ -2,9 +2,11 @@
 
 import { useQuery } from '@tanstack/react-query'
 import {
+  fetchCardFeeRevenueReport,
   fetchMembershipRevenueReport,
   fetchOverallRevenueReport,
   fetchPtRevenueReport,
+  type CardFeeRevenueReport,
   type MembershipRevenueReport,
   type OverallRevenueReport,
   type PtRevenueReport,
@@ -28,6 +30,28 @@ export function useMembershipRevenueReport(
 
   return {
     report: (query.data ?? null) as MembershipRevenueReport | null,
+    isLoading: enabled ? query.isFetching && !query.data : false,
+    isFetching: query.isFetching,
+    error: query.error ?? null,
+    refetch: () => query.refetch(),
+  }
+}
+
+export function useCardFeeRevenueReport(
+  from: string,
+  to: string,
+  options: { enabled?: boolean } = {},
+) {
+  const enabled = Boolean(from) && Boolean(to) && (options.enabled ?? true)
+  const query = useQuery({
+    queryKey: queryKeys.reports.cardFeeRevenue(from, to),
+    queryFn: () => fetchCardFeeRevenueReport(from, to),
+    enabled,
+    staleTime: FIVE_MINUTES_MS,
+  })
+
+  return {
+    report: (query.data ?? null) as CardFeeRevenueReport | null,
     isLoading: enabled ? query.isFetching && !query.data : false,
     isFetching: query.isFetching,
     error: query.error ?? null,

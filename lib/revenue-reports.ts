@@ -47,6 +47,30 @@ const membershipRevenueReportSchema = z.object({
   ),
 })
 
+const cardFeeRevenueReportSchema = z.object({
+  summary: z.object({
+    totalRevenue: z.number().finite(),
+    totalPayments: z.number().int().nonnegative(),
+  }),
+  payments: z.array(
+    z.object({
+      id: z.string().trim().min(1),
+      memberName: z.string().trim().min(1),
+      amount: z.number().finite(),
+      paymentMethod: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+      paymentDate: z.string().trim().min(1),
+      notes: z.string().nullable(),
+    }),
+  ),
+  monthlyBreakdown: z.array(
+    z.object({
+      month: z.string().trim().min(1),
+      totalRevenue: z.number().finite(),
+      paymentCount: z.number().int().nonnegative(),
+    }),
+  ),
+})
+
 const ptRevenueReportSchema = z.object({
   summary: z.object({
     totalRevenue: z.number().finite(),
@@ -75,11 +99,12 @@ const overallRevenueReportSchema = z.object({
   summary: z.object({
     grandTotal: z.number().finite(),
     membershipRevenue: z.number().finite(),
+    cardFeeRevenue: z.number().finite(),
     ptRevenue: z.number().finite(),
   }),
   breakdown: z.array(
     z.object({
-      revenueStream: z.enum(['Membership', 'PT Revenue']),
+      revenueStream: z.enum(['Membership', 'Card Fees', 'PT Revenue']),
       amount: z.number().finite(),
       percentageOfTotal: z.number().finite(),
     }),
@@ -94,6 +119,7 @@ export type DateRangeValue = {
 }
 
 export type MembershipRevenueReport = z.infer<typeof membershipRevenueReportSchema>
+export type CardFeeRevenueReport = z.infer<typeof cardFeeRevenueReportSchema>
 export type PtRevenueReport = z.infer<typeof ptRevenueReportSchema>
 export type OverallRevenueReport = z.infer<typeof overallRevenueReportSchema>
 
@@ -178,6 +204,20 @@ export function formatRevenueReportDate(value: string) {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
+  }).format(date)
+}
+
+export function formatRevenueReportMonth(value: string) {
+  const date = new Date(`${value}-01T00:00:00${JAMAICA_OFFSET}`)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('en-JM', {
+    timeZone: JAMAICA_TIME_ZONE,
+    year: 'numeric',
+    month: 'long',
   }).format(date)
 }
 
@@ -288,6 +328,30 @@ export async function fetchMembershipRevenueReport(
 
   if (!parsed.success) {
     throw new Error('Failed to load the membership revenue report.')
+  }
+
+  return parsed.data
+}
+
+export async function fetchCardFeeRevenueReport(
+  from: string,
+  to: string,
+): Promise<CardFeeRevenueReport> {
+  const searchParams = buildSearchParams({ from, to })
+  const response = await fetch(`/api/reports/revenue/card-fees?${searchParams.toString()}`, {
+    method: 'GET',
+    cache: 'no-store',
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to load the card fee revenue report.'))
+  }
+
+  const parsed = cardFeeRevenueReportSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to load the card fee revenue report.')
   }
 
   return parsed.data

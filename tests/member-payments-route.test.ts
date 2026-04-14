@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 import { MEMBER_PAYMENT_RECORD_SELECT } from '@/lib/member-payment-records'
 import {
   mockAdminUser,
@@ -34,6 +35,9 @@ function createPaymentsRouteClient({
     id: 'member-1',
     type: 'General',
     member_type_id: MEMBER_TYPE_ID_GENERAL,
+    email: 'member@example.com',
+    begin_time: '2026-04-01T00:00:00.000Z',
+    end_time: '2026-04-30T23:59:59.000Z',
   },
   memberTypeRow = {
     id: MEMBER_TYPE_ID_CIVIL_SERVANT,
@@ -46,12 +50,17 @@ function createPaymentsRouteClient({
     id: 'payment-1',
     member_id: 'member-1',
     member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+    payment_type: 'membership',
     payment_method: 'cash',
     amount_paid: 7500,
     promotion: null,
     recorded_by: 'profile-1',
     payment_date: '2026-04-09',
     notes: null,
+    receipt_number: 'EF-2026-00001',
+    receipt_sent_at: null,
+    membership_begin_time: '2026-04-01T00:00:00.000Z',
+    membership_end_time: '2026-04-30T23:59:59.000Z',
     created_at: '2026-04-09T12:00:00.000Z',
   },
 }: {
@@ -59,6 +68,9 @@ function createPaymentsRouteClient({
     id: string
     type: string
     member_type_id: string | null
+    email: string | null
+    begin_time: string | null
+    end_time: string | null
   } | null
   memberTypeRow?: Record<string, unknown> | null
   insertedPaymentRow?: Record<string, unknown> | null
@@ -74,7 +86,7 @@ function createPaymentsRouteClient({
         if (table === 'members') {
           return {
             select(columns: string) {
-              expect(columns).toBe('id, type, member_type_id')
+              expect(columns).toBe('id, type, member_type_id, email, begin_time, end_time')
 
               return {
                 eq(column: string, value: string) {
@@ -331,6 +343,7 @@ describe('POST /api/members/[id]/payments', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          payment_type: 'membership',
           member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
           payment_method: 'cash',
           amount_paid: 7500,
@@ -354,12 +367,15 @@ describe('POST /api/members/[id]/payments', () => {
       {
         member_id: 'member-1',
         member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        payment_type: 'membership',
         payment_method: 'cash',
         amount_paid: 7500,
         promotion: null,
         recorded_by: 'profile-1',
         payment_date: '2026-04-09',
         notes: null,
+        membership_begin_time: '2026-04-01T00:00:00.000Z',
+        membership_end_time: '2026-04-30T23:59:59.000Z',
       },
     ])
     expect(response.status).toBe(200)
@@ -369,12 +385,17 @@ describe('POST /api/members/[id]/payments', () => {
         id: 'payment-1',
         member_id: 'member-1',
         member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        payment_type: 'membership',
         payment_method: 'cash',
         amount_paid: 7500,
         promotion: null,
         recorded_by: 'profile-1',
         payment_date: '2026-04-09',
         notes: null,
+        receipt_number: 'EF-2026-00001',
+        receipt_sent_at: null,
+        membership_begin_time: '2026-04-01T00:00:00.000Z',
+        membership_end_time: '2026-04-30T23:59:59.000Z',
         created_at: '2026-04-09T12:00:00.000Z',
       },
     })
@@ -390,6 +411,7 @@ describe('POST /api/members/[id]/payments', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          payment_type: 'membership',
           member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
           payment_method: 'cash',
           amount_paid: 7500,
@@ -415,6 +437,9 @@ describe('POST /api/members/[id]/payments', () => {
         id: 'member-1',
         type: 'Civil Servant',
         member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        email: 'member@example.com',
+        begin_time: '2026-04-01T00:00:00.000Z',
+        end_time: '2026-04-30T23:59:59.000Z',
       },
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -433,6 +458,7 @@ describe('POST /api/members/[id]/payments', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          payment_type: 'membership',
           member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
           payment_method: 'fygaro',
           amount_paid: 7500,
@@ -451,15 +477,145 @@ describe('POST /api/members/[id]/payments', () => {
       {
         member_id: 'member-1',
         member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+        payment_type: 'membership',
         payment_method: 'fygaro',
         amount_paid: 7500,
         promotion: 'Promo',
         recorded_by: 'profile-9',
         payment_date: '2026-04-09',
         notes: 'Paid online',
+        membership_begin_time: '2026-04-01T00:00:00.000Z',
+        membership_end_time: '2026-04-30T23:59:59.000Z',
       },
     ])
     expect(response.status).toBe(200)
+  })
+
+  it('records a card fee payment without syncing the member type', async () => {
+    const { client, memberUpdates, paymentInserts } = createPaymentsRouteClient({
+      insertedPaymentRow: {
+        id: 'payment-card-fee-1',
+        member_id: 'member-1',
+        member_type_id: null,
+        payment_type: 'card_fee',
+        payment_method: 'cash',
+        amount_paid: CARD_FEE_AMOUNT_JMD,
+        promotion: null,
+        recorded_by: 'profile-1',
+        payment_date: '2026-04-09',
+        notes: 'Replacement card',
+        receipt_number: 'EF-2026-00002',
+        receipt_sent_at: null,
+        membership_begin_time: '2026-04-01T00:00:00.000Z',
+        membership_end_time: '2026-04-30T23:59:59.000Z',
+        created_at: '2026-04-09T12:30:00.000Z',
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'profile-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/members/member-1/payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          payment_type: 'card_fee',
+          payment_method: 'cash',
+          payment_date: '2026-04-09',
+          notes: 'Replacement card',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(memberUpdates).toEqual([])
+    expect(paymentInserts).toEqual([
+      {
+        member_id: 'member-1',
+        member_type_id: null,
+        payment_type: 'card_fee',
+        payment_method: 'cash',
+        amount_paid: CARD_FEE_AMOUNT_JMD,
+        promotion: null,
+        recorded_by: 'profile-1',
+        payment_date: '2026-04-09',
+        notes: 'Replacement card',
+        membership_begin_time: '2026-04-01T00:00:00.000Z',
+        membership_end_time: '2026-04-30T23:59:59.000Z',
+      },
+    ])
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      payment: {
+        id: 'payment-card-fee-1',
+        member_id: 'member-1',
+        member_type_id: null,
+        payment_type: 'card_fee',
+        payment_method: 'cash',
+        amount_paid: CARD_FEE_AMOUNT_JMD,
+        promotion: null,
+        recorded_by: 'profile-1',
+        payment_date: '2026-04-09',
+        notes: 'Replacement card',
+        receipt_number: 'EF-2026-00002',
+        receipt_sent_at: null,
+        membership_begin_time: '2026-04-01T00:00:00.000Z',
+        membership_end_time: '2026-04-30T23:59:59.000Z',
+        created_at: '2026-04-09T12:30:00.000Z',
+      },
+    })
+  })
+
+  it('returns 400 when the member has no email on file', async () => {
+    const { client, paymentInserts } = createPaymentsRouteClient({
+      existingMemberRow: {
+        id: 'member-1',
+        type: 'General',
+        member_type_id: MEMBER_TYPE_ID_GENERAL,
+        email: null,
+        begin_time: '2026-04-01T00:00:00.000Z',
+        end_time: '2026-04-30T23:59:59.000Z',
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser()
+
+    const response = await POST(
+      new Request('http://localhost/api/members/member-1/payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          payment_type: 'membership',
+          member_type_id: MEMBER_TYPE_ID_GENERAL,
+          payment_method: 'cash',
+          amount_paid: 12000,
+          payment_date: '2026-04-09',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(paymentInserts).toEqual([])
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Add an email address to the member profile before recording a payment.',
+    })
   })
 })
 
@@ -478,12 +634,15 @@ describe('GET /api/members/[id]/payments', () => {
           id: 'payment-2',
           member_id: 'member-1',
           member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
+          payment_type: 'membership',
           payment_method: 'fygaro',
           amount_paid: '7500',
           promotion: null,
           recorded_by: 'admin-1',
           payment_date: '2026-04-12',
           notes: null,
+          receipt_number: null,
+          receipt_sent_at: null,
           created_at: '2026-04-12T15:30:00.000Z',
           memberType: { name: 'Civil Servant' },
           recordedByProfile: { name: 'Admin User' },
@@ -492,12 +651,15 @@ describe('GET /api/members/[id]/payments', () => {
           id: 'payment-1',
           member_id: 'member-1',
           member_type_id: MEMBER_TYPE_ID_GENERAL,
+          payment_type: 'membership',
           payment_method: 'cash',
           amount_paid: 12000,
           promotion: 'Promo',
           recorded_by: null,
           payment_date: '2026-04-10',
           notes: 'April renewal',
+          receipt_number: null,
+          receipt_sent_at: null,
           created_at: '2026-04-10T12:00:00.000Z',
           memberType: { name: 'General' },
           recordedByProfile: null,
@@ -531,6 +693,7 @@ describe('GET /api/members/[id]/payments', () => {
           memberId: 'member-1',
           memberTypeId: MEMBER_TYPE_ID_CIVIL_SERVANT,
           memberTypeName: 'Civil Servant',
+          paymentType: 'membership',
           paymentMethod: 'fygaro',
           amountPaid: 7500,
           promotion: null,
@@ -538,6 +701,8 @@ describe('GET /api/members/[id]/payments', () => {
           recordedByName: 'Admin User',
           paymentDate: '2026-04-12',
           notes: null,
+          receiptNumber: null,
+          receiptSentAt: null,
           createdAt: '2026-04-12T15:30:00.000Z',
         },
         {
@@ -545,6 +710,7 @@ describe('GET /api/members/[id]/payments', () => {
           memberId: 'member-1',
           memberTypeId: MEMBER_TYPE_ID_GENERAL,
           memberTypeName: 'General',
+          paymentType: 'membership',
           paymentMethod: 'cash',
           amountPaid: 12000,
           promotion: 'Promo',
@@ -552,6 +718,8 @@ describe('GET /api/members/[id]/payments', () => {
           recordedByName: null,
           paymentDate: '2026-04-10',
           notes: 'April renewal',
+          receiptNumber: null,
+          receiptSentAt: null,
           createdAt: '2026-04-10T12:00:00.000Z',
         },
       ],

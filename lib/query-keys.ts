@@ -90,6 +90,8 @@ export const queryKeys = {
     ) => ['reports', 'class-payments', startDate, endDate, status, includeZero] as const,
     membershipRevenue: (from: string, to: string) =>
       ['reports', 'membership-revenue', from, to] as const,
+    cardFeeRevenue: (from: string, to: string) =>
+      ['reports', 'card-fee-revenue', from, to] as const,
     ptRevenue: (from: string, to: string) =>
       ['reports', 'pt-revenue', from, to] as const,
     overallRevenue: (from: string, to: string) =>
