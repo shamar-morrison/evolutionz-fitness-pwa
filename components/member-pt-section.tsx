@@ -236,51 +236,59 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
         <CardContent className="space-y-4">
           {assignment ? (
             <>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <p className="text-muted-foreground text-sm">Trainer</p>
-                  <Link
-                    href={`/staff/${assignment.trainerId}`}
-                    className="font-medium hover:underline"
-                  >
-                    {assignment.trainerName ?? 'Unknown trainer'}
-                  </Link>
-                  <div className="flex flex-wrap gap-2">
-                    {(assignment.trainerTitles ?? []).map((title) => (
-                      <Badge key={title} variant="outline">
-                        {title}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-muted-foreground text-sm">Schedule</p>
-                  <p className="font-medium">
-                    {formatScheduleSummary(assignment.scheduledSessions, assignment.sessionsPerWeek)}
-                  </p>
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <p className="text-muted-foreground text-sm">Training Plan</p>
-                  {normalizeTrainingPlan(assignment.trainingPlan).length > 0 ? (
-                    <ul className="space-y-1 font-medium">
-                      {normalizeTrainingPlan(assignment.trainingPlan).map((entry) => (
-                        <li key={entry.day}>
-                          {entry.day} &rarr; {entry.trainingTypeName}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="font-medium">Not set</p>
-                  )}
-                </div>
-                {!isFrontDesk ? (
+              <div className="grid gap-6 sm:grid-cols-2">
+                <div className="space-y-6">
                   <div className="space-y-1">
-                    <p className="text-muted-foreground text-sm">PT Fee</p>
-                    <p className="font-medium">{formatJmdCurrency(assignment.ptFee)}</p>
+                    <p className="text-muted-foreground text-sm">Trainer</p>
+                    <Link
+                      href={`/staff/${assignment.trainerId}`}
+                      className="font-medium hover:underline block"
+                    >
+                      {assignment.trainerName ?? 'Unknown trainer'}
+                    </Link>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {(assignment.trainerTitles ?? []).map((title) => (
+                        <Badge key={title} variant="outline">
+                          {title}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                ) : null}
+
+                  {!isFrontDesk ? (
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground text-sm">PT Fee</p>
+                      <p className="font-medium">{formatJmdCurrency(assignment.ptFee)}</p>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground text-sm">Schedule</p>
+                    <p className="font-medium">
+                      {formatScheduleSummary(assignment.scheduledSessions, assignment.sessionsPerWeek)}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground text-sm">Training Plan</p>
+                    {normalizeTrainingPlan(assignment.trainingPlan).length > 0 ? (
+                      <ul className="space-y-1 font-medium">
+                        {normalizeTrainingPlan(assignment.trainingPlan).map((entry) => (
+                          <li key={entry.day}>
+                            {entry.day} &rarr; {entry.trainingTypeName}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="font-medium">Not set</p>
+                    )}
+                  </div>
+                </div>
+
                 {assignment.notes ? (
-                  <div className="space-y-1 sm:col-span-2">
+                  <div className="space-y-1 sm:col-span-2 pt-2">
                     <p className="text-muted-foreground text-sm">Notes</p>
                     <p className="whitespace-pre-wrap font-medium">{assignment.notes}</p>
                   </div>
