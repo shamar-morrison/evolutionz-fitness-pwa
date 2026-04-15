@@ -23,9 +23,9 @@ export function TrainerClientsSection({ trainerId }: TrainerClientsSectionProps)
           <Users className="h-5 w-5 text-muted-foreground" />
           <CardTitle>Clients</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <Skeleton className="h-52 w-full rounded-xl" />
+          <Skeleton className="h-52 w-full rounded-xl" />
         </CardContent>
       </Card>
     )
@@ -62,47 +62,63 @@ export function TrainerClientsSection({ trainerId }: TrainerClientsSectionProps)
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {assignments.map((assignment) => (
-              <div
-                key={assignment.id}
-                className="flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <MemberAvatar
-                    name={assignment.memberName ?? 'Member'}
-                    photoUrl={assignment.memberPhotoUrl ?? null}
-                    size="md"
-                  />
-                  <div className="space-y-1">
-                    <p className="font-medium">{assignment.memberName ?? 'Unknown member'}</p>
-                    <p className="text-muted-foreground text-sm">
-                      {formatScheduleSummary(assignment.scheduledSessions, assignment.sessionsPerWeek)}
-                    </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            {assignments.map((assignment) => {
+              const trainingPlan = normalizeTrainingPlan(assignment.trainingPlan)
+
+              return (
+                <div
+                  key={assignment.id}
+                  className="flex h-full flex-col rounded-xl border border-border/80 bg-background/70 p-5"
+                >
+                  <div className="flex items-start gap-3">
+                    <MemberAvatar
+                      name={assignment.memberName ?? 'Member'}
+                      photoUrl={assignment.memberPhotoUrl ?? null}
+                      size="md"
+                    />
+                    <div className="min-w-0 space-y-1">
+                      <p className="font-medium leading-tight">
+                        {assignment.memberName ?? 'Unknown member'}
+                      </p>
+                      <p className="text-muted-foreground text-sm">
+                        {formatScheduleSummary(assignment.scheduledSessions, assignment.sessionsPerWeek)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-4">
                     <div className="text-sm">
                       <p className="text-muted-foreground">Training Plan</p>
-                      {normalizeTrainingPlan(assignment.trainingPlan).length > 0 ? (
-                        <ul className="space-y-1">
-                          {normalizeTrainingPlan(assignment.trainingPlan).map((entry) => (
+                      {trainingPlan.length > 0 ? (
+                        <ul className="mt-2 space-y-1.5">
+                          {trainingPlan.map((entry) => (
                             <li key={entry.day}>
                               {entry.day} &rarr; {entry.trainingTypeName}
                             </li>
                           ))}
                         </ul>
                       ) : (
-                        <p>Not set</p>
+                        <p className="mt-2">Not set</p>
                       )}
                     </div>
-                    <p className="text-sm">{formatJmdCurrency(assignment.ptFee)}</p>
+
+                    <div className="text-sm">
+                      <p className="text-muted-foreground">PT Fee</p>
+                      <p className="mt-1 font-medium">{formatJmdCurrency(assignment.ptFee)}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-auto flex justify-end pt-4">
+                    <Button asChild variant="outline" className='min-w-full'>
+                      <Link data-progress href={`/members/${assignment.memberId}`}>
+                        View
+                      </Link>
+                    </Button>
                   </div>
                 </div>
-                <Button asChild variant="outline">
-                  <Link data-progress href={`/members/${assignment.memberId}`}>
-                    View
-                  </Link>
-                </Button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </CardContent>
