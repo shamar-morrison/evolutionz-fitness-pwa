@@ -178,7 +178,7 @@ function MembersPageContent() {
               type="button"
               variant="outline"
               onClick={() => void handleSyncMembers()}
-              disabled={isSyncingMembers}
+              disabled={isSyncingMembers || true}
             >
               {isSyncingMembers ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}
               Sync Members
