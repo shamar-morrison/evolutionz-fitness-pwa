@@ -268,37 +268,36 @@ export function PendingMemberEditRequestsPage() {
 
               return (
                 <Card key={request.id}>
-                  <CardContent className="flex flex-col gap-4 px-5 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <h3 className="text-base font-semibold">{request.memberName}</h3>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                          <span>Requested by: {request.requestedByName ?? 'Unknown staff'}</span>
-                          <span>Submitted: {formatRequestTimestamp(request.createdAt)}</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-muted-foreground">Proposed Changes</p>
-                        <div className="space-y-2">
-                          {changes.map((change) => (
-                            <div
-                              key={change.label}
-                              className="rounded-lg border bg-muted/30 px-3 py-2 text-sm"
-                            >
-                              <p className="font-medium">{change.label}</p>
-                              <p className="text-muted-foreground">
-                                {change.from} {'->'} {change.to}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
+                  <CardContent className="space-y-5 px-5">
+                    <div className="space-y-1">
+                      <h3 className="text-base font-semibold">{request.memberName}</h3>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                        <span>Requested by: {request.requestedByName ?? 'Unknown staff'}</span>
+                        <span>Submitted: {formatRequestTimestamp(request.createdAt)}</span>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2 xl:justify-end">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">Proposed Changes</p>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {changes.map((change) => (
+                          <div
+                            key={change.label}
+                            className="rounded-lg border bg-muted/30 px-3 py-2 text-sm"
+                          >
+                            <p className="font-medium">{change.label}</p>
+                            <p className="text-muted-foreground">
+                              {change.from} {'->'} {change.to}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 border-t pt-4">
                       <Button
                         type="button"
+                        className="w-full"
                         onClick={() => void reviewRequest(request, 'approve')}
                         disabled={isReviewing}
                       >
@@ -307,6 +306,7 @@ export function PendingMemberEditRequestsPage() {
                       <Button
                         type="button"
                         variant="outline"
+                        className="w-full"
                         onClick={() => {
                           setDenyRequest(request)
                           setRejectionReason('')
