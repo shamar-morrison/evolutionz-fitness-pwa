@@ -1,7 +1,7 @@
 'use client'
 
 import { Check, ChevronsUpDown } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Command,
@@ -32,6 +32,12 @@ type SearchableSelectProps = {
   className?: string
 }
 
+function findDialogContent(element: Element | null): HTMLElement | null {
+  const dialogContent = element?.closest('[data-slot="dialog-content"]')
+
+  return dialogContent instanceof HTMLElement ? dialogContent : null
+}
+
 export function SearchableSelect({
   value,
   onValueChange,
@@ -43,6 +49,8 @@ export function SearchableSelect({
   className,
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false)
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
     [options, value],
@@ -52,11 +60,15 @@ export function SearchableSelect({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          ref={triggerRef}
           type="button"
           variant="outline"
           role="combobox"
           aria-expanded={open}
           disabled={disabled}
+          onClickCapture={(event) => {
+            setPortalContainer(findDialogContent(event.currentTarget))
+          }}
           className={cn('w-full justify-between', className)}
         >
           <span className="truncate text-left">
@@ -65,7 +77,11 @@ export function SearchableSelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+        align="start"
+        container={portalContainer ?? findDialogContent(triggerRef.current) ?? undefined}
+      >
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>

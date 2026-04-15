@@ -43,7 +43,7 @@ type ButtonProps = React.ComponentProps<'button'> &
     loading?: boolean
   }
 
-function Button(buttonProps: ButtonProps) {
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>((buttonProps, ref) => {
   const {
     className,
     variant,
@@ -60,6 +60,7 @@ function Button(buttonProps: ButtonProps) {
 
   return (
     <Comp
+      ref={ref}
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       disabled={isDisabled}
@@ -77,6 +78,8 @@ function Button(buttonProps: ButtonProps) {
       )}
     </Comp>
   )
-}
+})
+
+Button.displayName = 'Button'
 
 export { Button, buttonVariants }
