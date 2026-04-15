@@ -323,6 +323,12 @@ export type UpdateClassAttendanceInput = {
   marked_by: string | null
 }
 
+export type UpdateClassSettingsInput = {
+  monthly_fee: number
+  per_session_fee: number | null
+  trainer_compensation_percent: number
+}
+
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -649,7 +655,9 @@ export function isClassRegistrationEligibleForSession(
 }
 
 export function formatOptionalJmd(value: number | null) {
-  return typeof value === 'number' ? formatJmdCurrency(value) : 'Not set'
+  return typeof value === 'number'
+    ? `JMD ${formatJmdCurrency(value).replace(/^JMD\s*/u, '')}`
+    : 'Not set'
 }
 
 export function getDefaultClassDateValue(now = new Date()) {
@@ -1045,6 +1053,29 @@ export async function updateClassPeriodStart(id: string, current_period_start: s
 
   if (!parsed.success) {
     throw new Error('Failed to update the class billing period.')
+  }
+
+  return parsed.data.class as ClassWithTrainers
+}
+
+export async function updateClassSettings(id: string, input: UpdateClassSettingsInput) {
+  const response = await fetch(`/api/classes/${encodeURIComponent(id)}/settings`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to update class settings.'))
+  }
+
+  const parsed = classMutationResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to update class settings.')
   }
 
   return parsed.data.class as ClassWithTrainers

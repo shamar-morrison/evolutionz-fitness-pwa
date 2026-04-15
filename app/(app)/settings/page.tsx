@@ -31,8 +31,15 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
+import { useClasses } from '@/hooks/use-classes'
 import { useMembershipExpiryEmailSettings } from '@/hooks/use-membership-expiry-email-settings'
 import { useMemberTypes } from '@/hooks/use-member-types'
+import {
+  formatOptionalJmd,
+  type ClassWithTrainers,
+  type UpdateClassSettingsInput,
+  updateClassSettings,
+} from '@/lib/classes'
 import {
   MEMBERSHIP_EXPIRY_EMAIL_TEMPLATE_TOKENS,
   normalizeMembershipExpiryEmailSettingsInput,
@@ -75,6 +82,86 @@ function formatLastRunStatus(lastRun: MembershipExpiryEmailLastRun | null) {
   }
 
   return `${lastRun.status.slice(0, 1).toUpperCase()}${lastRun.status.slice(1)}`
+}
+
+type ClassSettingsValidationErrors = {
+  monthly_fee?: string
+  per_session_fee?: string
+  trainer_compensation_percent?: string
+}
+
+function validateClassSettingsInput({
+  monthlyFeeInput,
+  perSessionFeeInput,
+  trainerCompensationInput,
+}: {
+  monthlyFeeInput: string
+  perSessionFeeInput: string
+  trainerCompensationInput: string
+}): {
+  errors: ClassSettingsValidationErrors
+  parsedInput: UpdateClassSettingsInput | null
+} {
+  const errors: ClassSettingsValidationErrors = {}
+  const normalizedMonthlyFeeInput = monthlyFeeInput.trim()
+  const normalizedPerSessionFeeInput = perSessionFeeInput.trim()
+  const normalizedTrainerCompensationInput = trainerCompensationInput.trim()
+
+  if (!normalizedMonthlyFeeInput) {
+    errors.monthly_fee = 'Monthly fee is required.'
+  }
+
+  const monthlyFee = Number(normalizedMonthlyFeeInput)
+
+  if (
+    normalizedMonthlyFeeInput &&
+    (!Number.isFinite(monthlyFee) || monthlyFee <= 0)
+  ) {
+    errors.monthly_fee = 'Monthly fee must be greater than zero.'
+  }
+
+  let perSessionFee: number | null = null
+
+  if (normalizedPerSessionFeeInput) {
+    const parsedPerSessionFee = Number(normalizedPerSessionFeeInput)
+
+    if (!Number.isFinite(parsedPerSessionFee) || parsedPerSessionFee <= 0) {
+      errors.per_session_fee = 'Per session fee must be greater than zero or left blank.'
+    } else {
+      perSessionFee = parsedPerSessionFee
+    }
+  }
+
+  if (!normalizedTrainerCompensationInput) {
+    errors.trainer_compensation_percent = 'Trainer compensation is required.'
+  }
+
+  const trainerCompensationPercent = Number(normalizedTrainerCompensationInput)
+
+  if (
+    normalizedTrainerCompensationInput &&
+    (!Number.isFinite(trainerCompensationPercent) ||
+      trainerCompensationPercent < 0 ||
+      trainerCompensationPercent > 100)
+  ) {
+    errors.trainer_compensation_percent = 'Trainer compensation must be between 0 and 100.'
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return {
+      errors,
+      parsedInput: null,
+    }
+  }
+
+  return {
+    errors: {},
+    parsedInput: {
+      monthly_fee: monthlyFee,
+      per_session_fee: perSessionFee,
+      trainer_compensation_percent: trainerCompensationPercent,
+    },
+  }
 }
 
 function MembershipExpiryEmailSettingsSection({
@@ -341,7 +428,16 @@ export default function SettingsPage() {
 
 function SettingsPageContent() {
   const queryClient = useQueryClient()
-  const { memberTypes, isLoading, error } = useMemberTypes()
+  const {
+    memberTypes,
+    isLoading: isLoadingMemberTypes,
+    error: memberTypesError,
+  } = useMemberTypes()
+  const {
+    classes,
+    isLoading: isLoadingClasses,
+    error: classesError,
+  } = useClasses()
   const {
     settings: membershipExpiryEmailSettings,
     isLoading: isLoadingMembershipExpiryEmailSettings,
@@ -349,7 +445,13 @@ function SettingsPageContent() {
   } = useMembershipExpiryEmailSettings()
   const [editingMemberType, setEditingMemberType] = useState<MemberTypeRecord | null>(null)
   const [monthlyRateInput, setMonthlyRateInput] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
+  const [isSavingMemberType, setIsSavingMemberType] = useState(false)
+  const [editingClass, setEditingClass] = useState<ClassWithTrainers | null>(null)
+  const [classMonthlyFeeInput, setClassMonthlyFeeInput] = useState('')
+  const [classPerSessionFeeInput, setClassPerSessionFeeInput] = useState('')
+  const [classTrainerCompensationInput, setClassTrainerCompensationInput] = useState('')
+  const [classSettingsErrors, setClassSettingsErrors] = useState<ClassSettingsValidationErrors>({})
+  const [isSavingClassSettings, setIsSavingClassSettings] = useState(false)
   const [remindersEnabled, setRemindersEnabled] = useState(false)
   const [dayOffsetInput, setDayOffsetInput] = useState('')
   const [dayOffsets, setDayOffsets] = useState<number[]>([])
@@ -398,10 +500,30 @@ function SettingsPageContent() {
     setMonthlyRateInput(String(memberType.monthly_rate))
   }
 
-  const handleDialogOpenChange = (open: boolean) => {
-    if (!open && !isSaving) {
+  const handleMemberTypeDialogOpenChange = (open: boolean) => {
+    if (!open && !isSavingMemberType) {
       setEditingMemberType(null)
       setMonthlyRateInput('')
+    }
+  }
+
+  const handleClassEditClick = (classItem: ClassWithTrainers) => {
+    setEditingClass(classItem)
+    setClassMonthlyFeeInput(classItem.monthly_fee === null ? '' : String(classItem.monthly_fee))
+    setClassPerSessionFeeInput(
+      classItem.per_session_fee === null ? '' : String(classItem.per_session_fee),
+    )
+    setClassTrainerCompensationInput(String(classItem.trainer_compensation_pct))
+    setClassSettingsErrors({})
+  }
+
+  const handleClassDialogOpenChange = (open: boolean) => {
+    if (!open && !isSavingClassSettings) {
+      setEditingClass(null)
+      setClassMonthlyFeeInput('')
+      setClassPerSessionFeeInput('')
+      setClassTrainerCompensationInput('')
+      setClassSettingsErrors({})
     }
   }
 
@@ -423,7 +545,7 @@ function SettingsPageContent() {
       return
     }
 
-    setIsSaving(true)
+    setIsSavingMemberType(true)
 
     try {
       await updateMemberTypeRate(editingMemberType.id, {
@@ -449,7 +571,58 @@ function SettingsPageContent() {
         variant: 'destructive',
       })
     } finally {
-      setIsSaving(false)
+      setIsSavingMemberType(false)
+    }
+  }
+
+  const handleClassSettingsSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!editingClass) {
+      return
+    }
+
+    const { errors, parsedInput } = validateClassSettingsInput({
+      monthlyFeeInput: classMonthlyFeeInput,
+      perSessionFeeInput: classPerSessionFeeInput,
+      trainerCompensationInput: classTrainerCompensationInput,
+    })
+
+    if (!parsedInput) {
+      setClassSettingsErrors(errors)
+      return
+    }
+
+    setClassSettingsErrors({})
+    setIsSavingClassSettings(true)
+
+    try {
+      await updateClassSettings(editingClass.id, parsedInput)
+
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.classes.all,
+        exact: false,
+      })
+
+      toast({
+        title: 'Class settings updated',
+        description: `${editingClass.name} will use the updated fees and trainer compensation going forward.`,
+      })
+
+      setEditingClass(null)
+      setClassMonthlyFeeInput('')
+      setClassPerSessionFeeInput('')
+      setClassTrainerCompensationInput('')
+      setClassSettingsErrors({})
+    } catch (saveError) {
+      toast({
+        title: 'Update failed',
+        description:
+          saveError instanceof Error ? saveError.message : 'Unable to update the class settings.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSavingClassSettings(false)
     }
   }
 
@@ -566,17 +739,17 @@ function SettingsPageContent() {
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0">
-          {isLoading ? (
+          {isLoadingMemberTypes ? (
             <div className="space-y-3 px-6 pb-6">
               {Array.from({ length: 3 }).map((_, index) => (
                 <Skeleton key={index} className="h-12 w-full" />
               ))}
             </div>
-          ) : error ? (
+          ) : memberTypesError ? (
             <div className="px-6 pb-6">
               <p className="text-sm text-destructive">
-                {error instanceof Error
-                  ? error.message
+                {memberTypesError instanceof Error
+                  ? memberTypesError.message
                   : 'Failed to load membership types.'}
               </p>
             </div>
@@ -618,6 +791,69 @@ function SettingsPageContent() {
         </CardContent>
       </Card>
 
+      <Card className="mt-8 overflow-hidden gap-4 py-0">
+        <CardHeader className="pt-6">
+          <CardTitle className="text-lg tracking-tight">Class Settings</CardTitle>
+          <CardDescription>
+            Configure fees and trainer compensation for each class. Changes apply to new billing
+            periods going forward.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-0">
+          {isLoadingClasses ? (
+            <div className="space-y-3 px-6 pb-6">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <Skeleton key={index} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : classesError ? (
+            <div className="px-6 pb-6">
+              <p className="text-sm text-destructive">
+                {classesError instanceof Error ? classesError.message : 'Failed to load classes.'}
+              </p>
+            </div>
+          ) : classes.length === 0 ? (
+            <div className="px-6 pb-6">
+              <p className="text-sm text-muted-foreground">No classes found.</p>
+            </div>
+          ) : (
+            <Table size="compact">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Class name</TableHead>
+                  <TableHead>Monthly fee</TableHead>
+                  <TableHead>Per session fee</TableHead>
+                  <TableHead>Trainer compensation</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {classes.map((classItem) => (
+                  <TableRow key={classItem.id}>
+                    <TableCell className="font-medium">{classItem.name}</TableCell>
+                    <TableCell>{formatOptionalJmd(classItem.monthly_fee)}</TableCell>
+                    <TableCell>{formatOptionalJmd(classItem.per_session_fee)}</TableCell>
+                    <TableCell>{`${classItem.trainer_compensation_pct}%`}</TableCell>
+                    <TableCell>
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleClassEditClick(classItem)}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
       <MembershipExpiryEmailSettingsSection
         settings={membershipExpiryEmailSettings}
         isLoading={isLoadingMembershipExpiryEmailSettings}
@@ -638,8 +874,8 @@ function SettingsPageContent() {
         onSubmit={(event) => void handleMembershipExpiryEmailSettingsSave(event)}
       />
 
-      <Dialog open={Boolean(editingMemberType)} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="sm:max-w-md" isLoading={isSaving}>
+      <Dialog open={Boolean(editingMemberType)} onOpenChange={handleMemberTypeDialogOpenChange}>
+        <DialogContent className="sm:max-w-md" isLoading={isSavingMemberType}>
           <form className="space-y-4" onSubmit={(event) => void handleSave(event)}>
             <DialogHeader>
               <DialogTitle>{editingMemberType?.name ?? 'Edit Rate'}</DialogTitle>
@@ -663,12 +899,122 @@ function SettingsPageContent() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => handleDialogOpenChange(false)}
-                disabled={isSaving}
+                onClick={() => handleMemberTypeDialogOpenChange(false)}
+                disabled={isSavingMemberType}
               >
                 Cancel
               </Button>
-              <Button type="submit" loading={isSaving}>
+              <Button type="submit" loading={isSavingMemberType}>
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editingClass)} onOpenChange={handleClassDialogOpenChange}>
+        <DialogContent className="sm:max-w-md" isLoading={isSavingClassSettings}>
+          <form
+            className="space-y-4"
+            noValidate
+            onSubmit={(event) => void handleClassSettingsSave(event)}
+          >
+            <DialogHeader>
+              <DialogTitle>Edit Class Settings</DialogTitle>
+              <DialogDescription>
+                Update class fees and trainer compensation for future billing periods.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2">
+              <Label htmlFor="class-settings-name">Class name</Label>
+              <Input id="class-settings-name" value={editingClass?.name ?? ''} readOnly />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="class-settings-monthly-fee">Monthly fee (JMD)</Label>
+              <Input
+                id="class-settings-monthly-fee"
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={classMonthlyFeeInput}
+                onChange={(event) => {
+                  setClassMonthlyFeeInput(event.target.value)
+                  setClassSettingsErrors((currentValue) => ({
+                    ...currentValue,
+                    monthly_fee: undefined,
+                  }))
+                }}
+                aria-invalid={Boolean(classSettingsErrors.monthly_fee)}
+              />
+              {classSettingsErrors.monthly_fee ? (
+                <p className="text-xs text-destructive">{classSettingsErrors.monthly_fee}</p>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="class-settings-per-session-fee">Per session fee (JMD)</Label>
+              <Input
+                id="class-settings-per-session-fee"
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={classPerSessionFeeInput}
+                onChange={(event) => {
+                  setClassPerSessionFeeInput(event.target.value)
+                  setClassSettingsErrors((currentValue) => ({
+                    ...currentValue,
+                    per_session_fee: undefined,
+                  }))
+                }}
+                aria-invalid={Boolean(classSettingsErrors.per_session_fee)}
+              />
+              {classSettingsErrors.per_session_fee ? (
+                <p className="text-xs text-destructive">{classSettingsErrors.per_session_fee}</p>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="class-settings-trainer-compensation">
+                Trainer compensation (%)
+              </Label>
+              <Input
+                id="class-settings-trainer-compensation"
+                type="number"
+                min={0}
+                max={100}
+                step={0.01}
+                inputMode="decimal"
+                value={classTrainerCompensationInput}
+                onChange={(event) => {
+                  setClassTrainerCompensationInput(event.target.value)
+                  setClassSettingsErrors((currentValue) => ({
+                    ...currentValue,
+                    trainer_compensation_percent: undefined,
+                  }))
+                }}
+                aria-invalid={Boolean(classSettingsErrors.trainer_compensation_percent)}
+              />
+              {classSettingsErrors.trainer_compensation_percent ? (
+                <p className="text-xs text-destructive">
+                  {classSettingsErrors.trainer_compensation_percent}
+                </p>
+              ) : null}
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleClassDialogOpenChange(false)}
+                disabled={isSavingClassSettings}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" loading={isSavingClassSettings}>
                 Save
               </Button>
             </DialogFooter>
