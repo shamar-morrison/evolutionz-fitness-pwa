@@ -117,10 +117,10 @@ function MembershipExpiryEmailSettingsSection({
   return (
     <section className="mt-8 rounded-2xl border border-border bg-card p-6 shadow-sm">
       <div className="space-y-2">
-        <h2 className="text-xl font-semibold tracking-tight">Membership Expiry Emails</h2>
-        <p className="text-sm text-muted-foreground">
+        <CardTitle className="text-lg tracking-tight">Membership Expiry Emails</CardTitle>
+        <CardDescription>
           Manage automated reminder emails for members whose access is about to expire.
-        </p>
+        </CardDescription>
       </div>
 
       {isLoading ? (
@@ -247,7 +247,7 @@ function MembershipExpiryEmailSettingsSection({
               id="membership-expiry-body-template"
               value={bodyTemplate}
               onChange={(event) => onBodyTemplateChange(event.target.value)}
-              rows={9}
+              rows={11}
               className="w-full rounded-2xl border border-input bg-background px-3 py-3 text-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
               disabled={isSaving}
             />
@@ -559,7 +559,7 @@ function SettingsPageContent() {
 
       <Card className="mt-8 overflow-hidden gap-4 py-0">
         <CardHeader className="pt-6">
-          <CardTitle>Membership Types</CardTitle>
+          <CardTitle className="text-lg tracking-tight">Membership Types</CardTitle>
           <CardDescription>
             Configure monthly rates for each membership type. Rates apply to new payments going
             forward.
