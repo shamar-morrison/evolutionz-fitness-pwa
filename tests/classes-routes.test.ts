@@ -3,6 +3,7 @@ import {
   mockAdminUser,
   mockAuthenticatedUser,
   mockForbidden,
+  mockUnauthorized,
   resetServerAuthMocks,
 } from '@/tests/support/server-auth'
 import type { Profile } from '@/types'
@@ -72,6 +73,7 @@ vi.mock('@/lib/server-auth', async () => {
 
 import { GET as getClasses } from '@/app/api/classes/route'
 import { GET as getClass, PATCH as patchClass } from '@/app/api/classes/[id]/route'
+import { PATCH as patchClassSettings } from '@/app/api/classes/[id]/settings/route'
 import {
   GET as getClassTrainers,
   POST as postClassTrainer,
@@ -206,7 +208,10 @@ function buildAttendance(overrides: Partial<Record<string, unknown>> = {}) {
   }
 }
 
-function createClassPatchClient() {
+function createClassPatchClient(options: {
+  updatedRow?: { id: string } | null
+  error?: { message: string } | null
+} = {}) {
   const updateValues: Array<Record<string, unknown>> = []
 
   return {
@@ -230,8 +235,8 @@ function createClassPatchClient() {
 
                     return {
                       maybeSingle: vi.fn().mockResolvedValue({
-                        data: { id: 'class-1' },
-                        error: null,
+                        data: options.updatedRow === undefined ? { id: 'class-1' } : options.updatedRow,
+                        error: options.error ?? null,
                       }),
                     }
                   },
@@ -995,6 +1000,241 @@ describe('classes routes', () => {
     expect(response.status).toBe(200)
     expect(updateValues).toEqual([{ current_period_start: '2026-04-08' }])
     expect(body.class.current_period_start).toBe('2026-04-08')
+  })
+
+  it('returns 401 when class settings are updated without a session', async () => {
+    mockUnauthorized()
+
+    const response = await patchClassSettings(
+      new Request('http://localhost/api/classes/class-1/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          monthly_fee: 16500,
+          per_session_fee: 1200,
+          trainer_compensation_percent: 35,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+
+    expect(response.status).toBe(401)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Unauthorized',
+    })
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('blocks class settings updates for non-admin users', async () => {
+    mockForbidden()
+
+    const response = await patchClassSettings(
+      new Request('http://localhost/api/classes/class-1/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          monthly_fee: 16500,
+          per_session_fee: 1200,
+          trainer_compensation_percent: 35,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+
+    expect(response.status).toBe(403)
+  })
+
+  it('updates class settings for admins', async () => {
+    mockAdminUser()
+    const { client, updateValues } = createClassPatchClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readClassByIdMock.mockResolvedValue(
+      buildClass({
+        monthly_fee: 16500,
+        per_session_fee: 1200,
+        trainer_compensation_pct: 35,
+      }),
+    )
+
+    const response = await patchClassSettings(
+      new Request('http://localhost/api/classes/class-1/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          monthly_fee: 16500,
+          per_session_fee: 1200,
+          trainer_compensation_percent: 35,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(updateValues).toEqual([
+      {
+        monthly_fee: 16500,
+        per_session_fee: 1200,
+        trainer_compensation_pct: 35,
+      },
+    ])
+    expect(body.class.monthly_fee).toBe(16500)
+    expect(body.class.per_session_fee).toBe(1200)
+    expect(body.class.trainer_compensation_pct).toBe(35)
+  })
+
+  it('allows admins to clear the per-session fee', async () => {
+    mockAdminUser()
+    const { client, updateValues } = createClassPatchClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readClassByIdMock.mockResolvedValue(
+      buildClass({
+        monthly_fee: 15500,
+        per_session_fee: null,
+        trainer_compensation_pct: 30,
+      }),
+    )
+
+    const response = await patchClassSettings(
+      new Request('http://localhost/api/classes/class-1/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          monthly_fee: 15500,
+          per_session_fee: null,
+          trainer_compensation_percent: 30,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(updateValues).toEqual([
+      {
+        monthly_fee: 15500,
+        per_session_fee: null,
+        trainer_compensation_pct: 30,
+      },
+    ])
+    expect(body.class.per_session_fee).toBeNull()
+  })
+
+  it('rejects invalid JSON bodies for the class settings route', async () => {
+    const response = await patchClassSettings(
+      new Request('http://localhost/api/classes/class-1/settings', {
+        method: 'PATCH',
+        body: '{',
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Invalid JSON body.',
+    })
+  })
+
+  it('rejects non-positive monthly fees on the class settings route', async () => {
+    const response = await patchClassSettings(
+      new Request('http://localhost/api/classes/class-1/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          monthly_fee: 0,
+          per_session_fee: 1200,
+          trainer_compensation_percent: 35,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'monthly_fee must be a positive number.',
+    })
+  })
+
+  it('rejects invalid per-session fees on the class settings route', async () => {
+    const response = await patchClassSettings(
+      new Request('http://localhost/api/classes/class-1/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          monthly_fee: 16500,
+          per_session_fee: -50,
+          trainer_compensation_percent: 35,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'per_session_fee must be a positive number or null.',
+    })
+  })
+
+  it('rejects out-of-range trainer compensation on the class settings route', async () => {
+    const response = await patchClassSettings(
+      new Request('http://localhost/api/classes/class-1/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          monthly_fee: 16500,
+          per_session_fee: 1200,
+          trainer_compensation_percent: 120,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'trainer_compensation_percent must be between 0 and 100.',
+    })
+  })
+
+  it('returns 404 when the class settings route targets a missing class', async () => {
+    mockAdminUser()
+    const { client } = createClassPatchClient({
+      updatedRow: null,
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await patchClassSettings(
+      new Request('http://localhost/api/classes/class-1/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          monthly_fee: 16500,
+          per_session_fee: 1200,
+          trainer_compensation_percent: 35,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Class not found.',
+    })
+    expect(readClassByIdMock).not.toHaveBeenCalled()
   })
 
   it('uses the requested status filter for admin registration reads', async () => {
