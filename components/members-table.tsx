@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { ArrowDown, ArrowUp } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import { PaginationControls } from '@/components/pagination-controls'
 import { formatAccessDate } from '@/lib/member-access-time'
@@ -30,18 +31,85 @@ type MembersTableProps = {
 }
 
 const PAGE_SIZE_OPTIONS = ['10', '25', '50'] as const
+type SortColumn = 'beginTime' | 'endTime'
+type SortDirection = 'asc' | 'desc'
+
+function getSortableDateTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return null
+  }
+
+  const timestamp = Date.parse(value)
+
+  if (Number.isNaN(timestamp)) {
+    return null
+  }
+
+  return timestamp
+}
 
 export function MembersTable({ members }: MembersTableProps) {
   const router = useProgressRouter()
   const [pageSize, setPageSize] = useState<number>(Number(PAGE_SIZE_OPTIONS[0]))
   const [currentPage, setCurrentPage] = useState(0)
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection | null>(null)
+
+  const sortedMembers = useMemo(() => {
+    if (!sortColumn || !sortDirection) {
+      return members
+    }
+
+    return [...members].sort((leftMember, rightMember) => {
+      const leftTimestamp = getSortableDateTimestamp(leftMember[sortColumn])
+      const rightTimestamp = getSortableDateTimestamp(rightMember[sortColumn])
+
+      if (leftTimestamp === null && rightTimestamp === null) {
+        return 0
+      }
+
+      if (leftTimestamp === null) {
+        return 1
+      }
+
+      if (rightTimestamp === null) {
+        return -1
+      }
+
+      return sortDirection === 'asc'
+        ? leftTimestamp - rightTimestamp
+        : rightTimestamp - leftTimestamp
+    })
+  }, [members, sortColumn, sortDirection])
 
   const totalPages = Math.max(1, Math.ceil(members.length / pageSize))
-  const paginatedMembers = members.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+  const paginatedMembers = sortedMembers.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
 
   useEffect(() => {
     setCurrentPage((page) => Math.max(0, Math.min(page, totalPages - 1)))
   }, [totalPages])
+
+  useEffect(() => {
+    setCurrentPage(0)
+  }, [sortColumn, sortDirection])
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn !== column) {
+      setSortColumn(column)
+      setSortDirection('asc')
+      return
+    }
+
+    setSortDirection((currentDirection) => (currentDirection === 'asc' ? 'desc' : 'asc'))
+  }
+
+  const getAriaSort = (column: SortColumn) => {
+    if (sortColumn !== column || !sortDirection) {
+      return undefined
+    }
+
+    return sortDirection === 'asc' ? 'ascending' : 'descending'
+  }
 
   return (
     <div className="overflow-hidden rounded-lg border bg-background">
@@ -52,8 +120,42 @@ export function MembersTable({ members }: MembersTableProps) {
             <TableHead className="h-14 px-4 text-sm font-semibold">Card ID</TableHead>
             <TableHead className="h-14 px-4 text-sm font-semibold">Type</TableHead>
             <TableHead className="h-14 px-4 text-sm font-semibold">Status</TableHead>
-            <TableHead className="h-14 px-4 text-sm font-semibold">Start Date</TableHead>
-            <TableHead className="h-14 px-4 text-sm font-semibold">End Date</TableHead>
+            <TableHead
+              aria-sort={getAriaSort('beginTime')}
+              className="h-14 px-4 text-sm font-semibold"
+            >
+              <button
+                type="button"
+                className="flex items-center gap-1 text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onClick={() => handleSort('beginTime')}
+              >
+                <span>Start Date</span>
+                {sortColumn === 'beginTime' && sortDirection === 'asc' ? (
+                  <ArrowUp aria-hidden="true" className="h-4 w-4 shrink-0" />
+                ) : null}
+                {sortColumn === 'beginTime' && sortDirection === 'desc' ? (
+                  <ArrowDown aria-hidden="true" className="h-4 w-4 shrink-0" />
+                ) : null}
+              </button>
+            </TableHead>
+            <TableHead
+              aria-sort={getAriaSort('endTime')}
+              className="h-14 px-4 text-sm font-semibold"
+            >
+              <button
+                type="button"
+                className="flex items-center gap-1 text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onClick={() => handleSort('endTime')}
+              >
+                <span>End Date</span>
+                {sortColumn === 'endTime' && sortDirection === 'asc' ? (
+                  <ArrowUp aria-hidden="true" className="h-4 w-4 shrink-0" />
+                ) : null}
+                {sortColumn === 'endTime' && sortDirection === 'desc' ? (
+                  <ArrowDown aria-hidden="true" className="h-4 w-4 shrink-0" />
+                ) : null}
+              </button>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
