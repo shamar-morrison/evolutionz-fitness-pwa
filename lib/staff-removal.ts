@@ -44,6 +44,9 @@ export async function readStaffRemovalState(
     rescheduleRequestsReviewed,
     sessionUpdateRequestsRequested,
     sessionUpdateRequestsReviewed,
+    memberApprovalRequestsSubmitted,
+    memberEditRequestsReviewed,
+    memberPaymentRequestsReviewed,
   ] = await Promise.all([
     readIdRows(supabase, 'trainer_clients', [['trainer_id', profileId]]),
     readIdRows(supabase, 'trainer_clients', [
@@ -56,6 +59,9 @@ export async function readStaffRemovalState(
     readIdRows(supabase, 'pt_reschedule_requests', [['reviewed_by', profileId]]),
     readIdRows(supabase, 'pt_session_update_requests', [['requested_by', profileId]]),
     readIdRows(supabase, 'pt_session_update_requests', [['reviewed_by', profileId]]),
+    readIdRows(supabase, 'member_approval_requests', [['submitted_by', profileId]]),
+    readIdRows(supabase, 'member_edit_requests', [['reviewed_by', profileId]]),
+    readIdRows(supabase, 'member_payment_requests', [['reviewed_by', profileId]]),
   ])
 
   const history: StaffRemovalHistory = {
@@ -66,6 +72,9 @@ export async function readStaffRemovalState(
     rescheduleRequestsReviewed: rescheduleRequestsReviewed.length,
     sessionUpdateRequestsRequested: sessionUpdateRequestsRequested.length,
     sessionUpdateRequestsReviewed: sessionUpdateRequestsReviewed.length,
+    memberApprovalRequestsSubmitted: memberApprovalRequestsSubmitted.length,
+    memberEditRequestsReviewed: memberEditRequestsReviewed.length,
+    memberPaymentRequestsReviewed: memberPaymentRequestsReviewed.length,
     total:
       trainerAssignments.length +
       ptSessions.length +
@@ -73,7 +82,10 @@ export async function readStaffRemovalState(
       rescheduleRequestsRequested.length +
       rescheduleRequestsReviewed.length +
       sessionUpdateRequestsRequested.length +
-      sessionUpdateRequestsReviewed.length,
+      sessionUpdateRequestsReviewed.length +
+      memberApprovalRequestsSubmitted.length +
+      memberEditRequestsReviewed.length +
+      memberPaymentRequestsReviewed.length,
   }
 
   return {

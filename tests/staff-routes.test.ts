@@ -146,6 +146,9 @@ function createStaffAdminClient({
   ptRescheduleReviewedRows = [],
   ptSessionUpdateRequestedRows = [],
   ptSessionUpdateReviewedRows = [],
+  memberApprovalRequestRows = [],
+  memberEditRequestRows = [],
+  memberPaymentRequestRows = [],
   insertResult = {
     data: buildProfileRow(),
     error: null,
@@ -191,6 +194,9 @@ function createStaffAdminClient({
   ptRescheduleReviewedRows?: Array<Record<string, unknown>>
   ptSessionUpdateRequestedRows?: Array<Record<string, unknown>>
   ptSessionUpdateReviewedRows?: Array<Record<string, unknown>>
+  memberApprovalRequestRows?: Array<Record<string, unknown>>
+  memberEditRequestRows?: Array<Record<string, unknown>>
+  memberPaymentRequestRows?: Array<Record<string, unknown>>
   insertResult?: QueryResult<Record<string, unknown>>
   existingEmailResult?: QueryResult<Record<string, unknown>>
   updateResult?: QueryResult<Record<string, unknown>>
@@ -260,7 +266,13 @@ function createStaffAdminClient({
                         ? [...ptRescheduleRequestedRows, ...ptRescheduleReviewedRows]
                         : table === 'pt_session_update_requests'
                           ? [...ptSessionUpdateRequestedRows, ...ptSessionUpdateReviewedRows]
-                          : []
+                          : table === 'member_approval_requests'
+                            ? memberApprovalRequestRows
+                            : table === 'member_edit_requests'
+                              ? memberEditRequestRows
+                              : table === 'member_payment_requests'
+                                ? memberPaymentRequestRows
+                                : []
               const filters: Record<string, string> = {}
               const query = {
                 eq(column: string, value: string) {
@@ -1507,6 +1519,9 @@ describe('staff API routes', () => {
           rescheduleRequestsReviewed: 0,
           sessionUpdateRequestsRequested: 0,
           sessionUpdateRequestsReviewed: 0,
+          memberApprovalRequestsSubmitted: 0,
+          memberEditRequestsReviewed: 0,
+          memberPaymentRequestsReviewed: 0,
           total: 0,
         },
       },
@@ -1562,6 +1577,9 @@ describe('staff API routes', () => {
           rescheduleRequestsReviewed: 0,
           sessionUpdateRequestsRequested: 0,
           sessionUpdateRequestsReviewed: 0,
+          memberApprovalRequestsSubmitted: 0,
+          memberEditRequestsReviewed: 0,
+          memberPaymentRequestsReviewed: 0,
           total: 2,
         },
       },
@@ -1661,7 +1679,7 @@ describe('staff API routes', () => {
     expect(response.status).toBe(409)
     await expect(response.json()).resolves.toEqual({
       ok: false,
-      error: 'This staff account has retained PT or history records and should be archived instead of deleted.',
+      error: 'This staff account has retained history records and should be archived instead of deleted.',
       code: 'HAS_HISTORY',
       removal: {
         mode: 'archive',
@@ -1674,6 +1692,58 @@ describe('staff API routes', () => {
           rescheduleRequestsReviewed: 0,
           sessionUpdateRequestsRequested: 0,
           sessionUpdateRequestsReviewed: 0,
+          memberApprovalRequestsSubmitted: 0,
+          memberEditRequestsReviewed: 0,
+          memberPaymentRequestsReviewed: 0,
+          total: 1,
+        },
+      },
+    })
+  })
+
+  it('blocks deletion when the staff account has submitted member approval requests', async () => {
+    const { client, deleteUserCalls } = createStaffAdminClient({
+      detailReads: [
+        buildProfileRow({
+          id: 'staff-approval-history',
+          role: 'staff',
+          titles: ['Assistant'],
+        }),
+      ],
+      memberApprovalRequestRows: [
+        { id: 'approval-1', submitted_by: 'staff-approval-history' },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await deleteStaff(
+      new Request('http://localhost/api/staff/staff-approval-history'),
+      {
+        params: Promise.resolve({ id: 'staff-approval-history' }),
+      },
+    )
+
+    expect(response.status).toBe(409)
+    expect(deleteUserCalls).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error:
+        'This staff account has submitted member approval requests and should be archived instead of deleted.',
+      code: 'HAS_HISTORY',
+      removal: {
+        mode: 'archive',
+        activeAssignments: 0,
+        history: {
+          trainerAssignments: 0,
+          ptSessions: 0,
+          sessionChanges: 0,
+          rescheduleRequestsRequested: 0,
+          rescheduleRequestsReviewed: 0,
+          sessionUpdateRequestsRequested: 0,
+          sessionUpdateRequestsReviewed: 0,
+          memberApprovalRequestsSubmitted: 1,
+          memberEditRequestsReviewed: 0,
+          memberPaymentRequestsReviewed: 0,
           total: 1,
         },
       },
@@ -1721,6 +1791,9 @@ describe('staff API routes', () => {
           rescheduleRequestsReviewed: 0,
           sessionUpdateRequestsRequested: 0,
           sessionUpdateRequestsReviewed: 0,
+          memberApprovalRequestsSubmitted: 0,
+          memberEditRequestsReviewed: 0,
+          memberPaymentRequestsReviewed: 0,
           total: 1,
         },
       },
@@ -1806,5 +1879,41 @@ describe('staff API routes', () => {
         'The staff profile was deleted, but the auth user could not be removed. Delete the user manually from Supabase Auth.',
     })
     consoleErrorSpy.mockRestore()
+  })
+
+  it('translates profile foreign key delete conflicts into a readable admin message', async () => {
+    const { client, deleteUserCalls } = createStaffAdminClient({
+      detailReads: [
+        buildProfileRow({
+          id: 'staff-delete-conflict',
+          role: 'staff',
+          titles: ['Assistant'],
+        }),
+      ],
+      deleteResult: {
+        data: null,
+        error: {
+          message:
+            'update or delete on table "profiles" violates foreign key constraint "member_approval_requests_submitted_by_fkey" on table "member_approval_requests"',
+        },
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await deleteStaff(
+      new Request('http://localhost/api/staff/staff-delete-conflict'),
+      {
+        params: Promise.resolve({ id: 'staff-delete-conflict' }),
+      },
+    )
+
+    expect(response.status).toBe(409)
+    expect(deleteUserCalls).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error:
+        'This staff account cannot be deleted because it submitted member approval requests. Archive the account instead so those approval records remain intact.',
+      code: 'HAS_HISTORY',
+    })
   })
 })

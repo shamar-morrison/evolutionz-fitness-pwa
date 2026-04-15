@@ -78,6 +78,24 @@ const ARCHIVED_STAFF_ERROR = 'Archived staff accounts are read-only.'
 const DELETE_STAFF_AUTH_WARNING =
   'The staff profile was deleted, but the auth user could not be removed. Delete the user manually from Supabase Auth.'
 const SELF_DEMOTION_ERROR = 'You cannot remove your own admin access.'
+const STAFF_DELETE_FOREIGN_KEY_CONFLICT_MESSAGES: Record<string, string> = {
+  member_approval_requests_submitted_by_fkey:
+    'This staff account cannot be deleted because it submitted member approval requests. Archive the account instead so those approval records remain intact.',
+  member_edit_requests_reviewed_by_fkey:
+    'This staff account cannot be deleted because it reviewed member edit requests. Archive the account instead so those review records remain intact.',
+  member_payment_requests_reviewed_by_fkey:
+    'This staff account cannot be deleted because it reviewed member payment requests. Archive the account instead so those review records remain intact.',
+}
+const STAFF_DELETE_REFERENCE_LABELS: Record<string, string> = {
+  trainer_clients: 'trainer assignments',
+  pt_sessions: 'PT sessions',
+  pt_session_changes: 'PT session change history',
+  pt_reschedule_requests: 'PT reschedule requests',
+  pt_session_update_requests: 'PT session update requests',
+  member_approval_requests: 'member approval requests',
+  member_edit_requests: 'member edit requests',
+  member_payment_requests: 'member payment requests',
+}
 
 const updateStaffRequestSchema = z
   .object({
@@ -123,13 +141,44 @@ function createRemovalConflictResponse(removal: StaffRemoval) {
   }
 
   return createErrorResponse(
-    'This staff account has retained PT or history records and should be archived instead of deleted.',
+    removal.history.memberApprovalRequestsSubmitted > 0
+      ? 'This staff account has submitted member approval requests and should be archived instead of deleted.'
+      : removal.history.memberEditRequestsReviewed > 0
+        ? 'This staff account has reviewed member edit requests and should be archived instead of deleted.'
+        : removal.history.memberPaymentRequestsReviewed > 0
+          ? 'This staff account has reviewed member payment requests and should be archived instead of deleted.'
+          : 'This staff account has retained history records and should be archived instead of deleted.',
     409,
     {
       code: 'HAS_HISTORY',
       removal,
     },
   )
+}
+
+function formatStaffDeleteConflict(errorMessage: string) {
+  if (!/violates foreign key constraint/i.test(errorMessage)) {
+    return null
+  }
+
+  const constraintMatch = errorMessage.match(/constraint "([^"]+)"/i)
+  const constraint = constraintMatch?.[1]
+
+  if (constraint && constraint in STAFF_DELETE_FOREIGN_KEY_CONFLICT_MESSAGES) {
+    return STAFF_DELETE_FOREIGN_KEY_CONFLICT_MESSAGES[constraint]
+  }
+
+  const tableMatches = [...errorMessage.matchAll(/on table "([^"]+)"/gi)]
+  const referencedTable = tableMatches.at(-1)?.[1]
+
+  if (referencedTable && referencedTable !== 'profiles') {
+    const referenceLabel =
+      STAFF_DELETE_REFERENCE_LABELS[referencedTable] ?? referencedTable.replaceAll('_', ' ')
+
+    return `This staff account cannot be deleted because there are still related ${referenceLabel}. Archive the account instead or remove those references first.`
+  }
+
+  return 'This staff account cannot be deleted because other records still reference it. Archive the account instead or remove those references first.'
 }
 
 export async function GET(
@@ -322,6 +371,14 @@ export async function DELETE(
       .maybeSingle()
 
     if (error) {
+      const deleteConflictMessage = formatStaffDeleteConflict(error.message)
+
+      if (deleteConflictMessage) {
+        return createErrorResponse(deleteConflictMessage, 409, {
+          code: 'HAS_HISTORY',
+        })
+      }
+
       throw new Error(`Failed to delete staff profile ${id}: ${error.message}`)
     }
 
