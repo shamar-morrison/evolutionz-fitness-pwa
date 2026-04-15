@@ -759,7 +759,7 @@ function SettingsPageContent() {
             </div>
           ) : (
             <Table size="compact">
-              <TableHeader>
+              <TableHeader className='bg-gray-100'>
                 <TableRow>
                   <TableHead>Type name</TableHead>
                   <TableHead>Monthly rate</TableHead>
@@ -818,7 +818,7 @@ function SettingsPageContent() {
             </div>
           ) : (
             <Table size="compact">
-              <TableHeader>
+              <TableHeader className='bg-gray-100'>
                 <TableRow>
                   <TableHead>Class name</TableHead>
                   <TableHead>Monthly fee</TableHead>
