@@ -12,6 +12,9 @@ export const queryKeys = {
   memberTypes: {
     all: ['memberTypes'] as const,
   },
+  cardFeeSettings: {
+    settings: ['cardFeeSettings', 'settings'] as const,
+  },
   membershipExpiryEmails: {
     settings: ['membershipExpiryEmails', 'settings'] as const,
   },

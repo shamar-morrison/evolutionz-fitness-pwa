@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
+import { readCardFeeSettings } from '@/lib/card-fee-settings-server'
 import {
   mapMemberPaymentRecord,
   MEMBER_PAYMENT_RECORD_SELECT,
@@ -327,6 +327,11 @@ export async function POST(
       }
     }
 
+    const cardFeeSettings =
+      input.payment_type === 'card_fee'
+        ? await readCardFeeSettings(supabase)
+        : null
+
     const { data, error } = await supabase
       .from('member_payments')
       .insert({
@@ -338,7 +343,7 @@ export async function POST(
         amount_paid:
           input.payment_type === 'membership'
             ? input.amount_paid
-            : CARD_FEE_AMOUNT_JMD,
+            : cardFeeSettings?.amountJmd ?? 0,
         promotion:
           input.payment_type === 'membership'
             ? normalizeOptionalText(input.promotion)

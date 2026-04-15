@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { getJamaicaDateInputValue } from '@/lib/member-access-time'
-import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 import type {
   MemberPayment,
   MemberPaymentHistoryResponse,
@@ -124,8 +123,8 @@ export function getMemberPaymentTypeLabel(
   return memberTypeName?.trim() || 'Unknown'
 }
 
-export function getCardFeeAmountInputValue() {
-  return formatPaymentAmountInputValue(CARD_FEE_AMOUNT_JMD)
+export function getCardFeeAmountInputValue(amount: number | null | undefined) {
+  return typeof amount === 'number' ? formatPaymentAmountInputValue(amount) : ''
 }
 
 export async function fetchMemberPayments(

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
+import { DEFAULT_CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 import {
   mockAdminUser,
   mockAuthenticatedUser,
@@ -117,6 +117,12 @@ function createPaymentRequestsClient({
     name: 'Civil Servant',
     monthly_rate: 7500,
   }),
+  cardFeeSettingsRow = {
+    id: 1,
+    amount_jmd: DEFAULT_CARD_FEE_AMOUNT_JMD,
+    created_at: '2026-04-01T00:00:00.000Z',
+    updated_at: '2026-04-01T00:00:00.000Z',
+  },
   denyUpdateMatches = true,
   requestUpdateError = null,
   approvalRpcResult = 'payment-1',
@@ -134,6 +140,7 @@ function createPaymentRequestsClient({
     end_time: string | null
   } | null
   memberTypeRow?: MemberTypeRecord | null
+  cardFeeSettingsRow?: Record<string, unknown> | null
   denyUpdateMatches?: boolean
   requestUpdateError?: { message: string } | null
   approvalRpcResult?: string | null
@@ -306,6 +313,30 @@ function createPaymentRequestsClient({
                     maybeSingle() {
                       return Promise.resolve({
                         data: memberTypeRow && memberTypeRow.id === value ? memberTypeRow : null,
+                        error: null,
+                      })
+                    },
+                  }
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'card_fee_settings') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('*')
+
+              return {
+                eq(column: string, value: number) {
+                  expect(column).toBe('id')
+                  expect(value).toBe(1)
+
+                  return {
+                    maybeSingle() {
+                      return Promise.resolve({
+                        data: cardFeeSettingsRow,
                         error: null,
                       })
                     },
@@ -516,8 +547,14 @@ describe('member payment request routes', () => {
 
   it('creates a pending card fee request with the fixed amount and no membership type', async () => {
     const { client, requestInserts } = createPaymentRequestsClient({
+      cardFeeSettingsRow: {
+        id: 1,
+        amount_jmd: 3200,
+        created_at: '2026-04-01T00:00:00.000Z',
+        updated_at: '2026-04-12T00:00:00.000Z',
+      },
       insertedRequestRow: createPaymentRequestRecord({
-        amount: CARD_FEE_AMOUNT_JMD,
+        amount: 3200,
         payment_type: 'card_fee',
         payment_date: '2026-04-12',
         member_type_id: null,
@@ -550,7 +587,7 @@ describe('member payment request routes', () => {
         member_id: MEMBER_ID,
         requested_by: 'staff-auth-1',
         status: 'pending',
-        amount: CARD_FEE_AMOUNT_JMD,
+        amount: 3200,
         payment_type: 'card_fee',
         payment_method: 'cash',
         payment_date: '2026-04-12',
@@ -569,7 +606,7 @@ describe('member payment request routes', () => {
     await expect(response.json()).resolves.toEqual({
       ok: true,
       request: expect.objectContaining({
-        amount: CARD_FEE_AMOUNT_JMD,
+        amount: 3200,
         paymentType: 'card_fee',
         memberTypeId: null,
       }),

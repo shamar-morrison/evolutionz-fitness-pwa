@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
+import { readCardFeeSettings } from '@/lib/card-fee-settings-server'
 import {
   MEMBER_PAYMENT_REQUEST_SELECT,
   mapMemberPaymentRequestRecord,
@@ -192,6 +192,11 @@ export async function POST(request: Request) {
       return createErrorResponse('Membership type is required for this payment request.', 400)
     }
 
+    const cardFeeSettings =
+      input.payment_type === 'card_fee'
+        ? await readCardFeeSettings(supabase)
+        : null
+
     const { data, error } = await supabase
       .from('member_payment_requests')
       .insert({
@@ -201,7 +206,7 @@ export async function POST(request: Request) {
         amount:
           input.payment_type === 'membership'
             ? input.amount
-            : CARD_FEE_AMOUNT_JMD,
+            : cardFeeSettings?.amountJmd ?? 0,
         payment_type: input.payment_type,
         payment_method: input.payment_method,
         payment_date: input.payment_date,

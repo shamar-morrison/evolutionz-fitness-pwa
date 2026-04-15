@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClassWithTrainers } from '@/lib/classes'
 import type {
+  CardFeeSettings,
   MemberTypeRecord,
   MembershipExpiryEmailSettings,
 } from '@/types'
@@ -111,6 +112,14 @@ function createClass(overrides: Partial<ClassWithTrainers> = {}): ClassWithTrain
   }
 }
 
+function createCardFeeSettings(
+  overrides: Partial<CardFeeSettings> = {},
+): CardFeeSettings {
+  return {
+    amountJmd: overrides.amountJmd ?? 2500,
+  }
+}
+
 async function flushAsyncWork() {
   await act(async () => {
     await Promise.resolve()
@@ -210,6 +219,7 @@ describe('SettingsPage', () => {
   let root: Root
   let queryClient: QueryClient
   let classesState: ClassWithTrainers[]
+  let cardFeeSettingsState: CardFeeSettings
   let memberTypesState: MemberTypeRecord[]
   let membershipExpiryEmailSettingsState: MembershipExpiryEmailSettings
   let fetchMock: ReturnType<typeof vi.fn>
@@ -230,6 +240,7 @@ describe('SettingsPage', () => {
         created_at: '2026-04-02T00:00:00.000Z',
       }),
     ]
+    cardFeeSettingsState = createCardFeeSettings()
     memberTypesState = [
       createMemberType(),
       createMemberType({
@@ -282,6 +293,37 @@ describe('SettingsPage', () => {
           JSON.stringify({
             ok: true,
             memberType: updatedMemberType,
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        )
+      }
+
+      if (url.endsWith('/api/settings/card-fee') && (!init?.method || init.method === 'GET')) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            settings: cardFeeSettingsState,
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        )
+      }
+
+      if (url.endsWith('/api/settings/card-fee') && init?.method === 'PATCH') {
+        const requestBody = JSON.parse(String(init.body)) as CardFeeSettings
+        cardFeeSettingsState = {
+          amountJmd: requestBody.amountJmd,
+        }
+
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            settings: cardFeeSettingsState,
           }),
           {
             status: 200,
@@ -430,12 +472,17 @@ describe('SettingsPage', () => {
 
     expect(container.textContent).toContain('Settings')
     expect(container.textContent).toContain('Membership Types')
+    expect(container.textContent).toContain('Card Fee')
     expect(container.textContent).toContain('Class Settings')
     expect(container.textContent).toContain('Membership Expiry Emails')
     expect(container.textContent).toContain('Configure monthly rates for each membership type.')
     expect(container.textContent).toContain(
+      'Configure the card fee amount in JMD. Changes apply to new card-fee payments and requests going forward.',
+    )
+    expect(container.textContent).toContain(
       'Configure fees and trainer compensation for each class. Changes apply to new billing periods going forward.',
     )
+    expect(container.textContent).toContain('JMD $2,500')
     expect(container.textContent).toContain('Not set')
     expect(container.textContent).toContain('Status: Success')
     expect(container.textContent).toContain('4 sent, 1 skipped, 0 duplicates, 0 errors')
@@ -500,6 +547,84 @@ describe('SettingsPage', () => {
     })
   })
 
+  it('updates the card fee amount and refreshes the section', async () => {
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <SettingsPage />
+        </QueryClientProvider>,
+      )
+    })
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain('Card fee amount')
+    })
+
+    await clickButtonByLabel(container, 'Edit')
+
+    const amountInput = container.querySelector('#card-fee-amount')
+
+    if (!(amountInput instanceof HTMLInputElement)) {
+      throw new Error('Card fee amount input not found.')
+    }
+
+    await setInputValue(amountInput, '3200')
+    await clickButtonByLabel(container, 'Save')
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain('JMD $3,200')
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/settings/card-fee',
+      expect.objectContaining({
+        method: 'PATCH',
+      }),
+    )
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Card fee updated',
+      description: 'New card fee payments will use JMD $3,200.',
+    })
+  })
+
+  it('rejects invalid card fee amounts without sending a patch request', async () => {
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <SettingsPage />
+        </QueryClientProvider>,
+      )
+    })
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain('Card fee amount')
+    })
+
+    await clickButtonByLabel(container, 'Edit')
+
+    const amountInput = container.querySelector('#card-fee-amount')
+
+    if (!(amountInput instanceof HTMLInputElement)) {
+      throw new Error('Card fee amount input not found.')
+    }
+
+    await setInputValue(amountInput, '1.5')
+    await clickButtonByLabel(container, 'Save')
+
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Invalid card fee amount',
+      description: 'Enter a whole-number card fee amount in JMD.',
+      variant: 'destructive',
+    })
+    expect(
+      fetchMock.mock.calls.find(
+        ([url, init]) =>
+          url === '/api/settings/card-fee' &&
+          typeof init === 'object' &&
+          init?.method === 'PATCH',
+      ),
+    ).toBeUndefined()
+  })
+
   it('shows inline validation errors when class settings inputs are invalid', async () => {
     await act(async () => {
       root.render(
@@ -513,7 +638,7 @@ describe('SettingsPage', () => {
       expect(container.textContent).toContain('Weight Loss Club')
     })
 
-    await clickButtonByLabel(container, 'Edit')
+    await clickButtonByLabel(container, 'Edit', 1)
 
     const monthlyFeeInput = container.querySelector('#class-settings-monthly-fee')
     const perSessionFeeInput = container.querySelector('#class-settings-per-session-fee')
@@ -565,7 +690,7 @@ describe('SettingsPage', () => {
       expect(container.textContent).toContain('Weight Loss Club')
     })
 
-    await clickButtonByLabel(container, 'Edit')
+    await clickButtonByLabel(container, 'Edit', 1)
 
     expect(container.textContent).toContain('Edit Class Settings')
     expect(container.textContent).toContain('Class name')

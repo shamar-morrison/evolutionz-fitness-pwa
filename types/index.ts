@@ -55,6 +55,10 @@ export type MembershipExpiryEmailSettings = {
   lastRun: MembershipExpiryEmailLastRun | null
 }
 
+export type CardFeeSettings = {
+  amountJmd: number
+}
+
 export type MemberPaymentMethod = 'cash' | 'fygaro' | 'bank_transfer' | 'point_of_sale'
 export type MemberPaymentType = 'membership' | 'card_fee'
 export type MemberApprovalRequestStatus = 'pending' | 'approved' | 'denied'

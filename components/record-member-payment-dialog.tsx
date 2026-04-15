@@ -29,8 +29,9 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
+import { useCardFeeSettings } from '@/hooks/use-card-fee-settings'
 import { useMemberTypes } from '@/hooks/use-member-types'
+import { formatCardFeeAmount } from '@/lib/card-fee-settings'
 import { toast } from '@/hooks/use-toast'
 import {
   getCardFeeAmountInputValue,
@@ -85,6 +86,13 @@ export function RecordMemberPaymentDialog({
   requiresApproval = false,
 }: RecordMemberPaymentDialogProps) {
   const queryClient = useQueryClient()
+  const {
+    settings: cardFeeSettings,
+    isLoading: isCardFeeSettingsLoading,
+    error: cardFeeSettingsError,
+  } = useCardFeeSettings({
+    enabled: open,
+  })
   const { memberTypes, isLoading: isMemberTypesLoading, error: memberTypesError } = useMemberTypes({
     enabled: open,
   })
@@ -102,6 +110,10 @@ export function RecordMemberPaymentDialog({
   const previousOpenRef = useRef(false)
   const previousMemberIdRef = useRef(member.id)
   const memberHasEmail = Boolean(member.email?.trim())
+  const cardFeeSettingsErrorMessage =
+    cardFeeSettingsError instanceof Error ? cardFeeSettingsError.message : null
+  const isCardFeeSettingsUnavailable =
+    isCardFeeSettingsLoading || Boolean(cardFeeSettingsErrorMessage) || !cardFeeSettings
 
   useEffect(() => {
     const memberChanged = previousMemberIdRef.current !== member.id
@@ -220,6 +232,25 @@ export function RecordMemberPaymentDialog({
   }
 
   const handleCardFeeSubmit = async () => {
+    if (isCardFeeSettingsLoading) {
+      toast({
+        title: 'Card fee loading',
+        description: 'Wait for the configured card fee amount to finish loading.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (cardFeeSettingsErrorMessage || !cardFeeSettings) {
+      toast({
+        title: 'Card fee unavailable',
+        description:
+          cardFeeSettingsErrorMessage ?? 'The configured card fee amount is unavailable right now.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     if (!cardFeeFormData.paymentMethod) {
       toast({
         title: 'Payment method required',
@@ -419,13 +450,25 @@ export function RecordMemberPaymentDialog({
                         <Label htmlFor="record-card-fee-amount">Amount</Label>
                         <Input
                           id="record-card-fee-amount"
-                          value={getCardFeeAmountInputValue()}
+                          value={getCardFeeAmountInputValue(cardFeeSettings?.amountJmd)}
                           readOnly
                           disabled
                         />
-                        <p className="text-xs text-muted-foreground">
-                          Fixed card fee amount: JMD {CARD_FEE_AMOUNT_JMD.toLocaleString('en-JM')}
-                        </p>
+                        {isCardFeeSettingsLoading ? (
+                          <p className="text-xs text-muted-foreground">
+                            Loading configured card fee amount...
+                          </p>
+                        ) : cardFeeSettingsErrorMessage ? (
+                          <p className="text-xs text-destructive">{cardFeeSettingsErrorMessage}</p>
+                        ) : cardFeeSettings ? (
+                          <p className="text-xs text-muted-foreground">
+                            Configured card fee amount: {formatCardFeeAmount(cardFeeSettings.amountJmd)}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-destructive">
+                            The configured card fee amount is unavailable right now.
+                          </p>
+                        )}
                       </div>
 
                       <div className="grid gap-2">
@@ -509,7 +552,15 @@ export function RecordMemberPaymentDialog({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" loading={isSubmitting} disabled={isSubmitting || !memberHasEmail}>
+                <Button
+                  type="submit"
+                  loading={isSubmitting}
+                  disabled={
+                    isSubmitting ||
+                    !memberHasEmail ||
+                    (activeTab === 'card_fee' && isCardFeeSettingsUnavailable)
+                  }
+                >
                   {requiresApproval ? 'Submit Request' : 'Record Payment'}
                 </Button>
               </DialogFooter>

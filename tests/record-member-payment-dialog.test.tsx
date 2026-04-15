@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
+import { DEFAULT_CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 
 const {
   createMemberPaymentRequestMock,
@@ -11,6 +11,7 @@ const {
   onOpenChangeMock,
   recordMemberPaymentMock,
   toastMock,
+  useCardFeeSettingsMock,
   useMemberTypesMock,
 } = vi.hoisted(() => ({
   createMemberPaymentRequestMock: vi.fn().mockResolvedValue({
@@ -36,6 +37,7 @@ const {
     created_at: '2026-04-09T12:00:00.000Z',
   }),
   toastMock: vi.fn(),
+  useCardFeeSettingsMock: vi.fn(),
   useMemberTypesMock: vi.fn(),
 }))
 
@@ -47,6 +49,10 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@/hooks/use-member-types', () => ({
   useMemberTypes: useMemberTypesMock,
+}))
+
+vi.mock('@/hooks/use-card-fee-settings', () => ({
+  useCardFeeSettings: useCardFeeSettingsMock,
 }))
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -299,6 +305,11 @@ describe('RecordMemberPaymentDialog', () => {
     isLoading: boolean
     error: Error | null
   }
+  let cardFeeSettingsState: {
+    settings: { amountJmd: number } | null
+    isLoading: boolean
+    error: Error | null
+  }
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -316,7 +327,13 @@ describe('RecordMemberPaymentDialog', () => {
       isLoading: false,
       error: null,
     }
+    cardFeeSettingsState = {
+      settings: { amountJmd: DEFAULT_CARD_FEE_AMOUNT_JMD },
+      isLoading: false,
+      error: null,
+    }
     useMemberTypesMock.mockImplementation(() => memberTypesState)
+    useCardFeeSettingsMock.mockImplementation(() => cardFeeSettingsState)
   })
 
   afterEach(async () => {
@@ -443,13 +460,18 @@ describe('RecordMemberPaymentDialog', () => {
   })
 
   it('records a card fee payment with the fixed amount payload', async () => {
+    cardFeeSettingsState = {
+      settings: { amountJmd: 3200 },
+      isLoading: false,
+      error: null,
+    }
     recordMemberPaymentMock.mockResolvedValueOnce({
       id: 'payment-card-fee-1',
       member_id: 'member-1',
       member_type_id: null,
       payment_type: 'card_fee',
       payment_method: 'cash',
-      amount_paid: CARD_FEE_AMOUNT_JMD,
+      amount_paid: 3200,
       promotion: null,
       recorded_by: 'admin-1',
       payment_date: '2026-04-09',
@@ -480,8 +502,8 @@ describe('RecordMemberPaymentDialog', () => {
       throw new Error('Card fee amount input not found.')
     }
 
-    expect(amountInput.value).toBe(String(CARD_FEE_AMOUNT_JMD))
-    expect(container.textContent).toContain('Fixed card fee amount')
+    expect(amountInput.value).toBe('3200')
+    expect(container.textContent).toContain('Configured card fee amount: JMD $3,200')
 
     await clickButton(container, 'Cash')
     await clickButton(container, 'Record Payment')
@@ -493,6 +515,74 @@ describe('RecordMemberPaymentDialog', () => {
       payment_date: '2026-04-09',
       notes: null,
     })
+  })
+
+  it('disables card fee submission while the configured amount is loading', async () => {
+    cardFeeSettingsState = {
+      settings: null,
+      isLoading: true,
+      error: null,
+    }
+
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    await clickButton(container, 'Card Fee')
+    await flushAsyncWork()
+
+    expect(container.textContent).toContain('Loading configured card fee amount...')
+
+    const submitButton = Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.trim() === 'Record Payment',
+    )
+
+    if (!(submitButton instanceof HTMLButtonElement)) {
+      throw new Error('Record Payment button not found.')
+    }
+
+    expect(submitButton.disabled).toBe(true)
+    expect(recordMemberPaymentMock).not.toHaveBeenCalled()
+  })
+
+  it('disables card fee submission when the configured amount fails to load', async () => {
+    cardFeeSettingsState = {
+      settings: null,
+      isLoading: false,
+      error: new Error('Failed to load card fee settings.'),
+    }
+
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    await clickButton(container, 'Card Fee')
+    await flushAsyncWork()
+
+    expect(container.textContent).toContain('Failed to load card fee settings.')
+
+    const submitButton = Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.trim() === 'Record Payment',
+    )
+
+    if (!(submitButton instanceof HTMLButtonElement)) {
+      throw new Error('Record Payment button not found.')
+    }
+
+    expect(submitButton.disabled).toBe(true)
+    expect(recordMemberPaymentMock).not.toHaveBeenCalled()
   })
 
   it('blocks submission when the member has no email on file', async () => {

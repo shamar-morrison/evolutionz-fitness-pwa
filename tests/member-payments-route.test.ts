@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
+import { DEFAULT_CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 import { MEMBER_PAYMENT_RECORD_SELECT } from '@/lib/member-payment-records'
 import {
   mockAdminUser,
@@ -46,6 +46,12 @@ function createPaymentsRouteClient({
     is_active: true,
     created_at: '2026-04-01T00:00:00.000Z',
   },
+  cardFeeSettingsRow = {
+    id: 1,
+    amount_jmd: DEFAULT_CARD_FEE_AMOUNT_JMD,
+    created_at: '2026-04-01T00:00:00.000Z',
+    updated_at: '2026-04-01T00:00:00.000Z',
+  },
   insertedPaymentRow = {
     id: 'payment-1',
     member_id: 'member-1',
@@ -73,6 +79,7 @@ function createPaymentsRouteClient({
     end_time: string | null
   } | null
   memberTypeRow?: Record<string, unknown> | null
+  cardFeeSettingsRow?: Record<string, unknown> | null
   insertedPaymentRow?: Record<string, unknown> | null
 } = {}) {
   const memberUpdates: Array<Record<string, unknown>> = []
@@ -146,6 +153,30 @@ function createPaymentsRouteClient({
                     maybeSingle() {
                       return Promise.resolve({
                         data: memberTypeRow,
+                        error: null,
+                      })
+                    },
+                  }
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'card_fee_settings') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('*')
+
+              return {
+                eq(column: string, value: number) {
+                  expect(column).toBe('id')
+                  expect(value).toBe(1)
+
+                  return {
+                    maybeSingle() {
+                      return Promise.resolve({
+                        data: cardFeeSettingsRow,
                         error: null,
                       })
                     },
@@ -493,13 +524,19 @@ describe('POST /api/members/[id]/payments', () => {
 
   it('records a card fee payment without syncing the member type', async () => {
     const { client, memberUpdates, paymentInserts } = createPaymentsRouteClient({
+      cardFeeSettingsRow: {
+        id: 1,
+        amount_jmd: 3200,
+        created_at: '2026-04-01T00:00:00.000Z',
+        updated_at: '2026-04-09T00:00:00.000Z',
+      },
       insertedPaymentRow: {
         id: 'payment-card-fee-1',
         member_id: 'member-1',
         member_type_id: null,
         payment_type: 'card_fee',
         payment_method: 'cash',
-        amount_paid: CARD_FEE_AMOUNT_JMD,
+        amount_paid: 3200,
         promotion: null,
         recorded_by: 'profile-1',
         payment_date: '2026-04-09',
@@ -545,7 +582,7 @@ describe('POST /api/members/[id]/payments', () => {
         member_type_id: null,
         payment_type: 'card_fee',
         payment_method: 'cash',
-        amount_paid: CARD_FEE_AMOUNT_JMD,
+        amount_paid: 3200,
         promotion: null,
         recorded_by: 'profile-1',
         payment_date: '2026-04-09',
@@ -563,7 +600,7 @@ describe('POST /api/members/[id]/payments', () => {
         member_type_id: null,
         payment_type: 'card_fee',
         payment_method: 'cash',
-        amount_paid: CARD_FEE_AMOUNT_JMD,
+        amount_paid: 3200,
         promotion: null,
         recorded_by: 'profile-1',
         payment_date: '2026-04-09',

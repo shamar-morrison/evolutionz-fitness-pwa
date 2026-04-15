@@ -31,9 +31,14 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
+import { useCardFeeSettings } from '@/hooks/use-card-fee-settings'
 import { useClasses } from '@/hooks/use-classes'
 import { useMembershipExpiryEmailSettings } from '@/hooks/use-membership-expiry-email-settings'
 import { useMemberTypes } from '@/hooks/use-member-types'
+import {
+  formatCardFeeAmount,
+  updateCardFeeSettings,
+} from '@/lib/card-fee-settings'
 import {
   formatOptionalJmd,
   type ClassWithTrainers,
@@ -49,7 +54,12 @@ import {
 import { formatMemberTypeRate, updateMemberTypeRate } from '@/lib/member-types'
 import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
-import type { MemberTypeRecord, MembershipExpiryEmailLastRun, MembershipExpiryEmailSettings } from '@/types'
+import type {
+  CardFeeSettings,
+  MemberTypeRecord,
+  MembershipExpiryEmailLastRun,
+  MembershipExpiryEmailSettings,
+} from '@/types'
 
 function formatLastRunTimestamp(value: string | null) {
   if (!value) {
@@ -439,6 +449,11 @@ function SettingsPageContent() {
     error: classesError,
   } = useClasses()
   const {
+    settings: cardFeeSettings,
+    isLoading: isLoadingCardFeeSettings,
+    error: cardFeeSettingsError,
+  } = useCardFeeSettings()
+  const {
     settings: membershipExpiryEmailSettings,
     isLoading: isLoadingMembershipExpiryEmailSettings,
     error: membershipExpiryEmailSettingsError,
@@ -446,6 +461,9 @@ function SettingsPageContent() {
   const [editingMemberType, setEditingMemberType] = useState<MemberTypeRecord | null>(null)
   const [monthlyRateInput, setMonthlyRateInput] = useState('')
   const [isSavingMemberType, setIsSavingMemberType] = useState(false)
+  const [editingCardFeeSettings, setEditingCardFeeSettings] = useState<CardFeeSettings | null>(null)
+  const [cardFeeAmountInput, setCardFeeAmountInput] = useState('')
+  const [isSavingCardFeeSettings, setIsSavingCardFeeSettings] = useState(false)
   const [editingClass, setEditingClass] = useState<ClassWithTrainers | null>(null)
   const [classMonthlyFeeInput, setClassMonthlyFeeInput] = useState('')
   const [classPerSessionFeeInput, setClassPerSessionFeeInput] = useState('')
@@ -504,6 +522,18 @@ function SettingsPageContent() {
     if (!open && !isSavingMemberType) {
       setEditingMemberType(null)
       setMonthlyRateInput('')
+    }
+  }
+
+  const handleCardFeeEditClick = (settings: CardFeeSettings) => {
+    setEditingCardFeeSettings(settings)
+    setCardFeeAmountInput(String(settings.amountJmd))
+  }
+
+  const handleCardFeeDialogOpenChange = (open: boolean) => {
+    if (!open && !isSavingCardFeeSettings) {
+      setEditingCardFeeSettings(null)
+      setCardFeeAmountInput('')
     }
   }
 
@@ -623,6 +653,58 @@ function SettingsPageContent() {
       })
     } finally {
       setIsSavingClassSettings(false)
+    }
+  }
+
+  const handleCardFeeSettingsSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (!editingCardFeeSettings) {
+      return
+    }
+
+    const parsedAmount = Number(cardFeeAmountInput)
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0 || !Number.isInteger(parsedAmount)) {
+      toast({
+        title: 'Invalid card fee amount',
+        description: 'Enter a whole-number card fee amount in JMD.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setIsSavingCardFeeSettings(true)
+
+    try {
+      const updatedSettings = await updateCardFeeSettings({
+        amountJmd: parsedAmount,
+      })
+
+      queryClient.setQueryData(queryKeys.cardFeeSettings.settings, updatedSettings)
+
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.cardFeeSettings.settings,
+      })
+
+      toast({
+        title: 'Card fee updated',
+        description: `New card fee payments will use ${formatCardFeeAmount(parsedAmount)}.`,
+      })
+
+      setEditingCardFeeSettings(null)
+      setCardFeeAmountInput('')
+    } catch (saveError) {
+      toast({
+        title: 'Card fee update failed',
+        description:
+          saveError instanceof Error
+            ? saveError.message
+            : 'Unable to update the card fee settings.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsSavingCardFeeSettings(false)
     }
   }
 
@@ -785,6 +867,63 @@ function SettingsPageContent() {
                     </TableCell>
                   </TableRow>
                 ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-8 overflow-hidden gap-4 py-0">
+        <CardHeader className="pt-6">
+          <CardTitle className="text-lg tracking-tight">Card Fee</CardTitle>
+          <CardDescription>
+            Configure the card fee amount in JMD. Changes apply to new card-fee payments and
+            requests going forward.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-0">
+          {isLoadingCardFeeSettings ? (
+            <div className="space-y-3 px-6 pb-6">
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : cardFeeSettingsError ? (
+            <div className="px-6 pb-6">
+              <p className="text-sm text-destructive">
+                {cardFeeSettingsError instanceof Error
+                  ? cardFeeSettingsError.message
+                  : 'Failed to load card fee settings.'}
+              </p>
+            </div>
+          ) : !cardFeeSettings ? (
+            <div className="px-6 pb-6">
+              <p className="text-sm text-muted-foreground">Card fee settings are unavailable right now.</p>
+            </div>
+          ) : (
+            <Table size="compact">
+              <TableHeader className='bg-gray-100'>
+                <TableRow>
+                  <TableHead>Setting</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">Card fee amount</TableCell>
+                  <TableCell>{formatCardFeeAmount(cardFeeSettings.amountJmd)}</TableCell>
+                  <TableCell>
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCardFeeEditClick(cardFeeSettings)}
+                      >
+                        Edit
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
               </TableBody>
             </Table>
           )}
@@ -1015,6 +1154,50 @@ function SettingsPageContent() {
                 Cancel
               </Button>
               <Button type="submit" loading={isSavingClassSettings}>
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editingCardFeeSettings)} onOpenChange={handleCardFeeDialogOpenChange}>
+        <DialogContent className="sm:max-w-md" isLoading={isSavingCardFeeSettings}>
+          <form
+            className="space-y-4"
+            noValidate
+            onSubmit={(event) => void handleCardFeeSettingsSave(event)}
+          >
+            <DialogHeader>
+              <DialogTitle>Edit Card Fee</DialogTitle>
+              <DialogDescription>
+                Update the card fee amount in JMD for new payments and requests.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2">
+              <Label htmlFor="card-fee-amount">Card fee amount (JMD)</Label>
+              <Input
+                id="card-fee-amount"
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={cardFeeAmountInput}
+                onChange={(event) => setCardFeeAmountInput(event.target.value)}
+              />
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleCardFeeDialogOpenChange(false)}
+                disabled={isSavingCardFeeSettings}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" loading={isSavingCardFeeSettings}>
                 Save
               </Button>
             </DialogFooter>
