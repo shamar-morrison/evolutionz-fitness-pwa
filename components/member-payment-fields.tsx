@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import {
   formatPaymentAmountInputValue,
@@ -53,6 +54,7 @@ type MemberPaymentFieldsProps = {
   disabled?: boolean
   formData: MemberPaymentFormState
   idPrefix: string
+  isMembershipDefaultsLoading?: boolean
   isMemberTypesLoading?: boolean
   memberTypes: MemberTypeRecord[]
   memberTypesError?: string | null
@@ -69,6 +71,7 @@ export function MemberPaymentFields({
   disabled = false,
   formData,
   idPrefix,
+  isMembershipDefaultsLoading = false,
   isMemberTypesLoading = false,
   memberTypes,
   memberTypesError = null,
@@ -126,12 +129,21 @@ export function MemberPaymentFields({
                 memberTypeId: value === EMPTY_MEMBER_TYPE_VALUE ? '' : value,
               }))
             }}
-            disabled={disabled || isMemberTypesLoading}
+            disabled={disabled || isMemberTypesLoading || isMembershipDefaultsLoading}
           >
             <SelectTrigger id={`${idPrefix}-member-type`}>
-              <SelectValue
-                placeholder={isMemberTypesLoading ? 'Loading membership types...' : 'Select type'}
-              />
+              {isMembershipDefaultsLoading ? (
+                <SelectValue>
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    <Spinner className="size-4" />
+                    <span>Loading membership type...</span>
+                  </span>
+                </SelectValue>
+              ) : (
+                <SelectValue
+                  placeholder={isMemberTypesLoading ? 'Loading membership types...' : 'Select type'}
+                />
+              )}
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={EMPTY_MEMBER_TYPE_VALUE}>Select type</SelectItem>
@@ -147,22 +159,35 @@ export function MemberPaymentFields({
 
         <div className="grid gap-2">
           <Label htmlFor={`${idPrefix}-amount`}>Amount</Label>
-          <Input
-            id={`${idPrefix}-amount`}
-            type="number"
-            min={0}
-            step="0.01"
-            value={formData.amount}
-            onChange={(event) => {
-              setAmountDirty(true)
-              setFormData((currentFormData) => ({
-                ...currentFormData,
-                amount: event.target.value,
-              }))
-            }}
-            disabled={disabled}
-            required
-          />
+          {isMembershipDefaultsLoading ? (
+            <div
+              id={`${idPrefix}-amount-loading`}
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+              className="text-muted-foreground flex h-9 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm"
+            >
+              <Spinner className="size-4" />
+              <span>Loading amount...</span>
+            </div>
+          ) : (
+            <Input
+              id={`${idPrefix}-amount`}
+              type="number"
+              min={0}
+              step="0.01"
+              value={formData.amount}
+              onChange={(event) => {
+                setAmountDirty(true)
+                setFormData((currentFormData) => ({
+                  ...currentFormData,
+                  amount: event.target.value,
+                }))
+              }}
+              disabled={disabled}
+              required
+            />
+          )}
         </div>
       </div>
 

@@ -171,8 +171,18 @@ vi.mock('@/components/ui/select', async () => {
         </button>
       )
     },
-    SelectValue: ({ placeholder }: { placeholder?: string }) => {
+    SelectValue: ({
+      children,
+      placeholder,
+    }: {
+      children?: React.ReactNode
+      placeholder?: string
+    }) => {
       const context = React.useContext(SelectContext)
+
+      if (children) {
+        return <span>{children}</span>
+      }
 
       return <span>{context?.value || placeholder}</span>
     },
@@ -613,7 +623,7 @@ describe('RecordMemberPaymentDialog', () => {
     expect(createMemberPaymentRequestMock).not.toHaveBeenCalled()
   })
 
-  it('auto-fills the amount after member types finish loading when the dialog opens first', async () => {
+  it('shows membership type and amount loaders until member types finish loading on first open', async () => {
     memberTypesState = {
       memberTypes: [],
       isLoading: true,
@@ -630,13 +640,20 @@ describe('RecordMemberPaymentDialog', () => {
       )
     })
 
-    let amountInput = container.querySelector('#record-payment-amount')
+    const loadingIndicators = container.querySelectorAll('[aria-label="Loading"]')
+    const submitButton = Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.trim() === 'Record Payment',
+    )
 
-    if (!(amountInput instanceof HTMLInputElement)) {
-      throw new Error('Amount input not found.')
+    if (!(submitButton instanceof HTMLButtonElement)) {
+      throw new Error('Record Payment button not found.')
     }
 
-    expect(amountInput.value).toBe('')
+    expect(container.textContent).toContain('Loading membership type...')
+    expect(container.textContent).toContain('Loading amount...')
+    expect(container.querySelector('#record-payment-amount')).toBeNull()
+    expect(loadingIndicators).toHaveLength(2)
+    expect(submitButton.disabled).toBe(true)
 
     await act(async () => {
       memberTypesState = {
@@ -657,13 +674,23 @@ describe('RecordMemberPaymentDialog', () => {
       )
     })
 
-    amountInput = container.querySelector('#record-payment-amount')
+    const amountInput = container.querySelector('#record-payment-amount')
+    const updatedSubmitButton = Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.trim() === 'Record Payment',
+    )
 
     if (!(amountInput instanceof HTMLInputElement)) {
       throw new Error('Amount input not found after member types loaded.')
     }
 
+    if (!(updatedSubmitButton instanceof HTMLButtonElement)) {
+      throw new Error('Record Payment button not found after member types loaded.')
+    }
+
+    expect(container.textContent).not.toContain('Loading membership type...')
+    expect(container.textContent).not.toContain('Loading amount...')
     expect(amountInput.value).toBe('12000')
+    expect(updatedSubmitButton.disabled).toBe(false)
   })
 
   it('shows membership type guidance in a tooltip and keeps load errors under the field', async () => {

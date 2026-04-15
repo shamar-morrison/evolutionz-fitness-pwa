@@ -114,6 +114,13 @@ export function RecordMemberPaymentDialog({
     cardFeeSettingsError instanceof Error ? cardFeeSettingsError.message : null
   const isCardFeeSettingsUnavailable =
     isCardFeeSettingsLoading || Boolean(cardFeeSettingsErrorMessage) || !cardFeeSettings
+  const hasResolvedMembershipType = membershipFormData.memberTypeId
+    ? memberTypes.some((memberType) => memberType.id === membershipFormData.memberTypeId)
+    : false
+  const isMembershipDefaultsLoading =
+    Boolean(membershipFormData.memberTypeId) &&
+    isMemberTypesLoading &&
+    !hasResolvedMembershipType
 
   useEffect(() => {
     const memberChanged = previousMemberIdRef.current !== member.id
@@ -434,6 +441,7 @@ export function RecordMemberPaymentDialog({
                     disabled={isSubmitting}
                     formData={membershipFormData}
                     idPrefix="record-payment"
+                    isMembershipDefaultsLoading={isMembershipDefaultsLoading}
                     isMemberTypesLoading={isMemberTypesLoading}
                     memberTypes={memberTypes}
                     memberTypesError={memberTypesError instanceof Error ? memberTypesError.message : null}
@@ -558,6 +566,7 @@ export function RecordMemberPaymentDialog({
                   disabled={
                     isSubmitting ||
                     !memberHasEmail ||
+                    (activeTab === 'membership' && isMembershipDefaultsLoading) ||
                     (activeTab === 'card_fee' && isCardFeeSettingsUnavailable)
                   }
                 >
