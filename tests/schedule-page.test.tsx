@@ -220,9 +220,26 @@ function getBadge(container: HTMLDivElement, label: string) {
   return badge
 }
 
+function getByTestId(container: HTMLDivElement, testId: string) {
+  const element = container.querySelector(`[data-testid="${testId}"]`)
+
+  if (!(element instanceof HTMLElement)) {
+    throw new Error(`${testId} element not found.`)
+  }
+
+  return element
+}
+
 async function clickButton(container: HTMLDivElement, label: string) {
   await act(async () => {
     getButton(container, label).dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+async function scrollElement(element: HTMLElement, scrollLeft: number) {
+  await act(async () => {
+    element.scrollLeft = scrollLeft
+    element.dispatchEvent(new Event('scroll', { bubbles: true }))
   })
 }
 
@@ -279,6 +296,39 @@ describe('SchedulePage', () => {
       trainerId: undefined,
       status: 'active',
     })
+  })
+
+  it('renders a sticky calendar header and keeps it aligned with the horizontal calendar body', async () => {
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    const stickyHeader = getByTestId(container, 'schedule-calendar-sticky-header')
+    const headerScroll = getByTestId(container, 'schedule-calendar-header-scroll')
+    const scrollWrapper = getByTestId(container, 'schedule-calendar-scroll')
+    const calendarSurface = getByTestId(container, 'schedule-calendar-surface')
+    const monthHeader = getByTestId(container, 'schedule-calendar-month-header')
+    const weekdayHeader = getByTestId(container, 'schedule-calendar-weekday-header')
+    const calendarGrid = getByTestId(container, 'schedule-calendar-grid')
+
+    expect(container.textContent?.match(/April 2026/g) ?? []).toHaveLength(2)
+    expect(monthHeader.textContent?.trim()).toBe('April 2026')
+    expect(stickyHeader.className).toContain('sticky')
+    expect(stickyHeader.className).toContain('top-0')
+    expect(weekdayHeader.className).toContain('grid-cols-7')
+    expect(headerScroll.className).toContain('overflow-x-auto')
+    expect(scrollWrapper.className).toContain('overflow-x-auto')
+    expect(calendarSurface.className).toContain('min-w-[70rem]')
+    expect(calendarGrid.className).toContain('grid-cols-7')
+    expect(calendarGrid.className).not.toContain('md:grid-cols-7')
+
+    for (const weekday of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
+      expect(weekdayHeader.textContent).toContain(weekday)
+    }
+
+    await scrollElement(scrollWrapper, 240)
+
+    expect(headerScroll.scrollLeft).toBe(240)
   })
 
   it('invalidates all PT session list queries after generating sessions from the schedule page', async () => {

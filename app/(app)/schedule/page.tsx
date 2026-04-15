@@ -1,15 +1,15 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, CalendarDays, WandSparkles } from 'lucide-react'
+import { ChevronLeft, ChevronRight, WandSparkles } from 'lucide-react'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { PtSessionDialog } from '@/components/pt-session-dialog'
 import { RoleGuard } from '@/components/role-guard'
 import { SearchableSelect } from '@/components/searchable-select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -153,6 +153,9 @@ function getScheduleCalendarStatusBadgeClassName(status: SessionStatus) {
 
 function SchedulePageContent() {
   const queryClient = useQueryClient()
+  const calendarHeaderScrollRef = useRef<HTMLDivElement | null>(null)
+  const calendarBodyScrollRef = useRef<HTMLDivElement | null>(null)
+  const scrollSyncSourceRef = useRef<'header' | 'body' | null>(null)
   const [monthValue, setMonthValue] = useState(() => getMonthValueInJamaica())
   const [trainerFilter, setTrainerFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<'all' | PtSessionFilterStatus>('active')
@@ -168,6 +171,7 @@ function SchedulePageContent() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const monthParts = parseMonthValue(monthValue)
+  const calendarMonthLabel = monthParts ? getMonthLabel(monthParts.month, monthParts.year) : monthValue
   const generateMonthParts = parseMonthValue(generateMonthValue)
   const calendarCells = useMemo(() => getCalendarCells(monthValue), [monthValue])
   const { sessions, isLoading, error } = usePtSessions({
@@ -196,6 +200,35 @@ function SchedulePageContent() {
 
     return groupedSessions
   }, [sessions])
+
+  const syncCalendarScroll = (source: 'header' | 'body', scrollLeft: number) => {
+    const target = source === 'header' ? calendarBodyScrollRef.current : calendarHeaderScrollRef.current
+
+    if (!target || target.scrollLeft === scrollLeft) {
+      return
+    }
+
+    scrollSyncSourceRef.current = source
+    target.scrollLeft = scrollLeft
+
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        if (scrollSyncSourceRef.current === source) {
+          scrollSyncSourceRef.current = null
+        }
+      })
+    } else {
+      scrollSyncSourceRef.current = null
+    }
+  }
+
+  const handleCalendarScroll = (source: 'header' | 'body', scrollLeft: number) => {
+    if (scrollSyncSourceRef.current && scrollSyncSourceRef.current !== source) {
+      return
+    }
+
+    syncCalendarScroll(source, scrollLeft)
+  }
 
   const handleGenerate = async (override = false) => {
     if (!generateAssignmentId || !generateMonthParts) {
@@ -266,7 +299,7 @@ function SchedulePageContent() {
                 Previous
               </Button>
               <div className="min-w-[140px] text-center font-medium">
-                {monthParts ? getMonthLabel(monthParts.month, monthParts.year) : monthValue}
+                {calendarMonthLabel}
               </div>
               <Button variant="outline" onClick={() => setMonthValue((current) => shiftMonthValue(current, 1))}>
                 Next
@@ -323,83 +356,126 @@ function SchedulePageContent() {
 
         <Card>
           <CardContent className="p-0">
-            <div className="grid grid-cols-7 border-b">
-              {WEEKDAY_LABELS.map((weekday) => (
-                <div key={weekday} className="bg-muted/40 p-3 text-center text-sm font-medium">
-                  {weekday}
+            <div
+              data-testid="schedule-calendar-sticky-header"
+              className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+            >
+              <div
+                data-testid="schedule-calendar-header-scroll"
+                ref={calendarHeaderScrollRef}
+                onScroll={(event) => handleCalendarScroll('header', event.currentTarget.scrollLeft)}
+                className="overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                <div data-testid="schedule-calendar-surface" className="min-w-[70rem]">
+                  <div
+                    data-testid="schedule-calendar-month-header"
+                    className="flex h-12 items-center justify-center border-b px-4 text-sm font-semibold tracking-[0.24em] uppercase"
+                  >
+                    {calendarMonthLabel}
+                  </div>
+
+                  <div
+                    data-testid="schedule-calendar-weekday-header"
+                    className="grid grid-cols-7"
+                  >
+                    {WEEKDAY_LABELS.map((weekday) => (
+                      <div
+                        key={weekday}
+                        className="bg-muted/50 border-r p-3 text-center text-sm font-medium last:border-r-0"
+                      >
+                        {weekday}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              </div>
             </div>
 
-            {isLoading ? (
-              <div className="grid grid-cols-1 gap-4 p-6">
-                <Skeleton className="h-[480px] w-full" />
-              </div>
-            ) : error ? (
-              <div className="p-6">
-                <p className="text-destructive text-sm">
-                  {error instanceof Error ? error.message : 'Failed to load PT sessions.'}
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-7">
-                {calendarCells.map((cell) => {
-                  const daySessions = sessionsByDate.get(cell.dateValue) ?? []
-
-                  return (
-                    <div
-                      key={cell.dateValue}
-                      className="min-h-[180px] border-b p-3 md:border-r"
-                    >
-                      <div className="mb-3 flex items-center justify-between">
-                        <span
-                          className={
-                            cell.isCurrentMonth
-                              ? 'font-medium'
-                              : 'text-muted-foreground text-sm'
-                          }
-                        >
-                          {Number(cell.dateValue.slice(-2))}
-                        </span>
-                        {daySessions.length > 0 ? (
-                          <Badge variant="outline">{daySessions.length}</Badge>
-                        ) : null}
-                      </div>
-
-                      <div className="space-y-2">
-                        {daySessions.map((session) => (
-                          <button
-                            key={session.id}
-                            type="button"
-                            onClick={() => setSelectedSessionId(session.id)}
-                            className="bg-muted/40 hover:bg-muted flex w-full flex-col gap-1 rounded-md border p-2 text-left transition-colors"
-                          >
-                            <span className="truncate text-sm font-medium">
-                              {session.memberName ?? 'Unknown member'}
-                            </span>
-                            <span className="text-muted-foreground truncate text-xs">
-                              {session.trainerName ?? 'Unknown trainer'}
-                            </span>
-                            <span className="text-xs">{formatPtSessionTime(session.scheduledAt)}</span>
-                            {session.trainingTypeName ? (
-                              <span className="text-muted-foreground truncate text-xs">
-                                {session.trainingTypeName}
-                              </span>
-                            ) : null}
-                            <Badge
-                              variant="secondary"
-                              className={getScheduleCalendarStatusBadgeClassName(session.status)}
-                            >
-                              {formatPtSessionStatusLabel(session.status)}
-                            </Badge>
-                          </button>
-                        ))}
-                      </div>
+            <div
+              data-testid="schedule-calendar-scroll"
+              ref={calendarBodyScrollRef}
+              onScroll={(event) => handleCalendarScroll('body', event.currentTarget.scrollLeft)}
+              className="overflow-x-auto"
+            >
+              <div className="min-w-[70rem]">
+                {isLoading ? (
+                  <div className="grid grid-cols-7">
+                    <div className="col-span-7 p-6">
+                      <Skeleton className="h-[480px] w-full" />
                     </div>
-                  )
-                })}
+                  </div>
+                ) : error ? (
+                  <div className="grid grid-cols-7">
+                    <div className="col-span-7 p-6">
+                      <p className="text-destructive text-sm">
+                        {error instanceof Error ? error.message : 'Failed to load PT sessions.'}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    data-testid="schedule-calendar-grid"
+                    className="grid grid-cols-7 [&>*:nth-child(7n)]:border-r-0"
+                  >
+                    {calendarCells.map((cell) => {
+                      const daySessions = sessionsByDate.get(cell.dateValue) ?? []
+
+                      return (
+                        <div
+                          key={cell.dateValue}
+                          className="min-h-[180px] border-b border-r p-3"
+                        >
+                          <div className="mb-3 flex items-center justify-between">
+                            <span
+                              className={
+                                cell.isCurrentMonth
+                                  ? 'font-medium'
+                                  : 'text-muted-foreground text-sm'
+                              }
+                            >
+                              {Number(cell.dateValue.slice(-2))}
+                            </span>
+                            {daySessions.length > 0 ? (
+                              <Badge variant="outline">{daySessions.length}</Badge>
+                            ) : null}
+                          </div>
+
+                          <div className="space-y-2">
+                            {daySessions.map((session) => (
+                              <button
+                                key={session.id}
+                                type="button"
+                                onClick={() => setSelectedSessionId(session.id)}
+                                className="bg-muted/40 hover:bg-muted flex w-full flex-col gap-1 rounded-md border p-2 text-left transition-colors"
+                              >
+                                <span className="truncate text-sm font-medium">
+                                  {session.memberName ?? 'Unknown member'}
+                                </span>
+                                <span className="text-muted-foreground truncate text-xs">
+                                  {session.trainerName ?? 'Unknown trainer'}
+                                </span>
+                                <span className="text-xs">{formatPtSessionTime(session.scheduledAt)}</span>
+                                {session.trainingTypeName ? (
+                                  <span className="text-muted-foreground truncate text-xs">
+                                    {session.trainingTypeName}
+                                  </span>
+                                ) : null}
+                                <Badge
+                                  variant="secondary"
+                                  className={getScheduleCalendarStatusBadgeClassName(session.status)}
+                                >
+                                  {formatPtSessionStatusLabel(session.status)}
+                                </Badge>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
       </div>
