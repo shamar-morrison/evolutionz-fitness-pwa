@@ -100,9 +100,12 @@ function createClass(overrides: Partial<ClassWithTrainers> = {}): ClassWithTrain
     name: overrides.name ?? 'Weight Loss Club',
     schedule_description: overrides.schedule_description ?? '3 times per week',
     per_session_fee: overrides.per_session_fee ?? null,
-    monthly_fee: overrides.monthly_fee ?? 15500,
+    monthly_fee: overrides.monthly_fee === undefined ? 15500 : overrides.monthly_fee,
     trainer_compensation_pct: overrides.trainer_compensation_pct ?? 30,
-    current_period_start: overrides.current_period_start ?? '2026-04-01',
+    current_period_start:
+      overrides.current_period_start === undefined
+        ? '2026-04-01'
+        : overrides.current_period_start,
     created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
     trainers: overrides.trainers ?? [],
   }
@@ -400,6 +403,16 @@ describe('SettingsPage', () => {
     document.body.innerHTML = ''
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       false
+  })
+
+  it('preserves explicit null class fixture overrides for nullable fields', () => {
+    const classItem = createClass({
+      monthly_fee: null,
+      current_period_start: null,
+    })
+
+    expect(classItem.monthly_fee).toBeNull()
+    expect(classItem.current_period_start).toBeNull()
   })
 
   it('renders the settings page, the membership types section, and the reminder settings summary', async () => {

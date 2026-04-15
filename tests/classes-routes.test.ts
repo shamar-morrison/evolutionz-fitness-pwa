@@ -1124,6 +1124,47 @@ describe('classes routes', () => {
     expect(body.class.per_session_fee).toBeNull()
   })
 
+  it('logs unexpected class settings update failures and returns a generic 500 response', async () => {
+    const consoleErrorMock = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      mockAdminUser()
+      const { client } = createClassPatchClient({
+        error: {
+          message: 'database write failed',
+        },
+      })
+      getSupabaseAdminClientMock.mockReturnValue(client)
+
+      const response = await patchClassSettings(
+        new Request('http://localhost/api/classes/class-1/settings', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            monthly_fee: 16500,
+            per_session_fee: 1200,
+            trainer_compensation_percent: 35,
+          }),
+        }),
+        {
+          params: Promise.resolve({ id: 'class-1' }),
+        },
+      )
+
+      expect(response.status).toBe(500)
+      await expect(response.json()).resolves.toEqual({
+        ok: false,
+        error: 'Unexpected server error while updating class settings.',
+      })
+      expect(consoleErrorMock).toHaveBeenCalledWith(
+        'Unexpected error while updating class settings.',
+        expect.any(Error),
+      )
+      expect(readClassByIdMock).not.toHaveBeenCalled()
+    } finally {
+      consoleErrorMock.mockRestore()
+    }
+  })
+
   it('rejects invalid JSON bodies for the class settings route', async () => {
     const response = await patchClassSettings(
       new Request('http://localhost/api/classes/class-1/settings', {

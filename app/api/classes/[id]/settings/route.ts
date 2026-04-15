@@ -96,9 +96,8 @@ export async function PATCH(
       return createErrorResponse(error.issues[0]?.message ?? 'Invalid class settings.', 400)
     }
 
-    return createErrorResponse(
-      error instanceof Error ? error.message : 'Unexpected server error while updating class settings.',
-      500,
-    )
+    console.error('Unexpected error while updating class settings.', error)
+
+    return createErrorResponse('Unexpected server error while updating class settings.', 500)
   }
 }
