@@ -368,7 +368,7 @@ export default function MemberDetailPage() {
                 </Button>
               ) : null}
             </div>
-            <h2 className="mt-4 text-xl font-bold">{memberDisplayName}</h2>
+            <h2 className="mt-4 text-xl font-bold text-center">{memberDisplayName}</h2>
             {!isFrontDesk ? (
               <Badge variant="outline" className="mt-2">
                 {member.type}
