@@ -24,8 +24,11 @@ type CardRow = {
 
 type MemberRow = {
   card_no: string | null
+  employee_no: string | null
   name: string | null
 }
+
+const ZERO_PADDED_EMPLOYEE_NO_LENGTH = 8
 
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
@@ -60,6 +63,36 @@ function normalizeFetchedAt(value: unknown) {
   }
 
   return parsedValue.toISOString()
+}
+
+function canonicalizeEmployeeNo(value: unknown) {
+  const normalizedValue = normalizeText(value)
+
+  if (!normalizedValue || !/^\d+$/u.test(normalizedValue)) {
+    return null
+  }
+
+  return normalizedValue.replace(/^0+/, '') || '0'
+}
+
+function getEmployeeNoLookupCandidates(value: unknown) {
+  const exactEmployeeNo = normalizeText(value)
+
+  if (!exactEmployeeNo) {
+    return [] as string[]
+  }
+
+  const candidates = [exactEmployeeNo]
+  const canonicalEmployeeNo = canonicalizeEmployeeNo(exactEmployeeNo)
+
+  if (!canonicalEmployeeNo) {
+    return candidates
+  }
+
+  candidates.push(canonicalEmployeeNo)
+  candidates.push(canonicalEmployeeNo.padStart(ZERO_PADDED_EMPLOYEE_NO_LENGTH, '0'))
+
+  return Array.from(new Set(candidates))
 }
 
 function createErrorResponse(error: string, status: number) {
@@ -103,12 +136,36 @@ function enrichDoorHistoryEvents(
       })
       .filter((entry): entry is readonly [string, string] => entry !== null),
   )
+  const memberNameByEmployeeNo = new Map(
+    members
+      .map((member) => {
+        const employeeNo = normalizeText(member.employee_no)
+        const memberName = normalizeText(member.name)
+
+        if (!employeeNo || !memberName) {
+          return null
+        }
+
+        return [employeeNo, memberName] as const
+      })
+      .filter((entry): entry is readonly [string, string] => entry !== null),
+  )
 
   return sortDoorHistoryEvents(
     events.map((event) => {
       const cardNo = normalizeText(event.cardNo)
       const cardCode = cardCodeByCardNo.get(cardNo) ?? event.cardCode
-      const memberName = memberNameByCardNo.get(cardNo)
+      let memberName = cardNo ? memberNameByCardNo.get(cardNo) ?? null : null
+
+      if (!cardNo) {
+        for (const employeeNoCandidate of getEmployeeNoLookupCandidates(event.employeeNo)) {
+          memberName = memberNameByEmployeeNo.get(employeeNoCandidate) ?? null
+
+          if (memberName) {
+            break
+          }
+        }
+      }
 
       return {
         ...event,
@@ -161,6 +218,13 @@ export async function GET(request: Request) {
     const cardNos = Array.from(
       new Set(events.map((event) => normalizeText(event.cardNo)).filter(Boolean)),
     )
+    const employeeNos = Array.from(
+      new Set(
+        events
+          .filter((event) => !normalizeText(event.cardNo))
+          .flatMap((event) => getEmployeeNoLookupCandidates(event.employeeNo)),
+      ),
+    )
 
     let cards: CardRow[] = []
     let members: MemberRow[] = []
@@ -169,7 +233,7 @@ export async function GET(request: Request) {
       const [{ data: cardRows, error: cardsError }, { data: memberRows, error: membersError }] =
         await Promise.all([
           supabase.from('cards').select('card_no, card_code').in('card_no', cardNos),
-          supabase.from('members').select('card_no, name').in('card_no', cardNos),
+          supabase.from('members').select('card_no, employee_no, name').in('card_no', cardNos),
         ])
 
       if (cardsError) {
@@ -181,7 +245,20 @@ export async function GET(request: Request) {
       }
 
       cards = (cardRows ?? []) as CardRow[]
-      members = (memberRows ?? []) as MemberRow[]
+      members = [...members, ...((memberRows ?? []) as MemberRow[])]
+    }
+
+    if (employeeNos.length > 0) {
+      const { data: memberRows, error: membersError } = await supabase
+        .from('members')
+        .select('card_no, employee_no, name')
+        .in('employee_no', employeeNos)
+
+      if (membersError) {
+        throw new Error(`Failed to read door history members by employee number: ${membersError.message}`)
+      }
+
+      members = [...members, ...((memberRows ?? []) as MemberRow[])]
     }
 
     const enrichedEvents = enrichDoorHistoryEvents(events, cards, members)

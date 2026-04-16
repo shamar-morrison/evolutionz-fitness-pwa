@@ -38,6 +38,7 @@ type CardRow = {
 
 type MemberRow = {
   card_no: string | null
+  employee_no: string | null
   name: string | null
 }
 
@@ -47,6 +48,7 @@ function createDoorHistoryReadClient({
     events: [
       {
         cardNo: '0102857149',
+        employeeNo: null,
         cardCode: null,
         memberName: null,
         time: '2026-04-14T07:15:00-05:00',
@@ -56,6 +58,7 @@ function createDoorHistoryReadClient({
       },
       {
         cardNo: '0102857149',
+        employeeNo: null,
         cardCode: null,
         memberName: null,
         time: '2026-04-14T09:30:00-05:00',
@@ -70,19 +73,27 @@ function createDoorHistoryReadClient({
   cacheError = null,
   cards = [{ card_no: '0102857149', card_code: 'A18' }] satisfies CardRow[],
   cardsError = null,
-  members = [{ card_no: '0102857149', name: 'A18 Jordan Miles' }] satisfies MemberRow[],
-  membersError = null,
+  membersByCardNo = [
+    { card_no: '0102857149', employee_no: '00000611', name: 'A18 Jordan Miles' },
+  ] satisfies MemberRow[],
+  memberCardLookupError = null,
+  membersByEmployeeNo = [] satisfies MemberRow[],
+  memberEmployeeLookupError = null,
 }: {
   cacheRow?: DoorHistoryCacheRow | null
   cacheError?: { message: string } | null
   cards?: CardRow[]
   cardsError?: { message: string } | null
-  members?: MemberRow[]
-  membersError?: { message: string } | null
+  membersByCardNo?: MemberRow[]
+  memberCardLookupError?: { message: string } | null
+  membersByEmployeeNo?: MemberRow[]
+  memberEmployeeLookupError?: { message: string } | null
 } = {}) {
   const recorded = {
     cacheDates: [] as string[],
     cardNos: [] as string[][],
+    memberCardNos: [] as string[][],
+    memberEmployeeNos: [] as string[][],
   }
 
   return {
@@ -136,17 +147,29 @@ function createDoorHistoryReadClient({
         if (table === 'members') {
           return {
             select(columns: string) {
-              expect(columns).toBe('card_no, name')
+              expect(columns).toBe('card_no, employee_no, name')
 
               return {
                 in(column: string, values: string[]) {
-                  expect(column).toBe('card_no')
-                  recorded.cardNos.push(values)
+                  if (column === 'card_no') {
+                    recorded.memberCardNos.push(values)
 
-                  return Promise.resolve({
-                    data: members,
-                    error: membersError,
-                  } satisfies QueryResult<MemberRow[]>)
+                    return Promise.resolve({
+                      data: membersByCardNo,
+                      error: memberCardLookupError,
+                    } satisfies QueryResult<MemberRow[]>)
+                  }
+
+                  if (column === 'employee_no') {
+                    recorded.memberEmployeeNos.push(values)
+
+                    return Promise.resolve({
+                      data: membersByEmployeeNo,
+                      error: memberEmployeeLookupError,
+                    } satisfies QueryResult<MemberRow[]>)
+                  }
+
+                  throw new Error(`Unexpected members lookup column: ${column}`)
                 },
               }
             },
@@ -175,12 +198,15 @@ describe('GET /api/door-history', () => {
 
     expect(response.status).toBe(200)
     expect(recorded.cacheDates).toEqual(['2026-04-14'])
-    expect(recorded.cardNos).toEqual([['0102857149'], ['0102857149']])
+    expect(recorded.cardNos).toEqual([['0102857149']])
+    expect(recorded.memberCardNos).toEqual([['0102857149']])
+    expect(recorded.memberEmployeeNos).toEqual([])
     await expect(response.json()).resolves.toEqual({
       ok: true,
       events: [
         {
           cardNo: '0102857149',
+          employeeNo: null,
           cardCode: 'A18',
           memberName: 'Jordan Miles',
           time: '2026-04-14T09:30:00-05:00',
@@ -190,6 +216,7 @@ describe('GET /api/door-history', () => {
         },
         {
           cardNo: '0102857149',
+          employeeNo: null,
           cardCode: 'A18',
           memberName: 'Jordan Miles',
           time: '2026-04-14T07:15:00-05:00',
@@ -224,6 +251,207 @@ describe('GET /api/door-history', () => {
       fetchedAt: null,
       totalMatches: 0,
       cacheDate: '2026-04-15',
+    })
+  })
+
+  it('normalizes older cached events without employeeNo to null', async () => {
+    const { client, recorded } = createDoorHistoryReadClient({
+      cacheRow: {
+        cache_date: '2026-04-14',
+        events: [
+          {
+            cardNo: '',
+            cardCode: null,
+            memberName: null,
+            time: '2026-04-14T09:30:00-05:00',
+            accessGranted: true,
+            doorName: 'Main Door',
+            eventType: 'Access granted',
+          },
+        ],
+        fetched_at: '2026-04-15T12:34:56.000Z',
+        total_matches: 1,
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(new Request('http://localhost/api/door-history?date=2026-04-14'))
+
+    expect(response.status).toBe(200)
+    expect(recorded.cardNos).toEqual([])
+    expect(recorded.memberCardNos).toEqual([])
+    expect(recorded.memberEmployeeNos).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      events: [
+        {
+          cardNo: '',
+          employeeNo: null,
+          cardCode: null,
+          memberName: null,
+          time: '2026-04-14T09:30:00-05:00',
+          accessGranted: true,
+          doorName: 'Main Door',
+          eventType: 'Access granted',
+        },
+      ],
+      fetchedAt: '2026-04-15T12:34:56.000Z',
+      totalMatches: 1,
+      cacheDate: '2026-04-14',
+    })
+  })
+
+  it('falls back to employee number lookups when cardNo is blank and the event employee number is padded', async () => {
+    const { client, recorded } = createDoorHistoryReadClient({
+      cacheRow: {
+        cache_date: '2026-04-14',
+        events: [
+          {
+            cardNo: '',
+            employeeNo: '00000302',
+            cardCode: null,
+            memberName: null,
+            time: '2026-04-14T09:30:00-05:00',
+            accessGranted: true,
+            doorName: 'Main Door',
+            eventType: 'Access granted',
+          },
+        ],
+        fetched_at: '2026-04-15T12:34:56.000Z',
+        total_matches: 1,
+      },
+      cards: [],
+      membersByCardNo: [],
+      membersByEmployeeNo: [{ card_no: null, employee_no: '302', name: 'Jordan Miles' }],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(new Request('http://localhost/api/door-history?date=2026-04-14'))
+
+    expect(response.status).toBe(200)
+    expect(recorded.cardNos).toEqual([])
+    expect(recorded.memberCardNos).toEqual([])
+    expect(recorded.memberEmployeeNos).toEqual([['00000302', '302']])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      events: [
+        {
+          cardNo: '',
+          employeeNo: '00000302',
+          cardCode: null,
+          memberName: 'Jordan Miles',
+          time: '2026-04-14T09:30:00-05:00',
+          accessGranted: true,
+          doorName: 'Main Door',
+          eventType: 'Access granted',
+        },
+      ],
+      fetchedAt: '2026-04-15T12:34:56.000Z',
+      totalMatches: 1,
+      cacheDate: '2026-04-14',
+    })
+  })
+
+  it('falls back to employee number lookups when cardNo is blank and the event employee number is unpadded', async () => {
+    const { client, recorded } = createDoorHistoryReadClient({
+      cacheRow: {
+        cache_date: '2026-04-14',
+        events: [
+          {
+            cardNo: '',
+            employeeNo: '302',
+            cardCode: null,
+            memberName: null,
+            time: '2026-04-14T09:30:00-05:00',
+            accessGranted: true,
+            doorName: 'Main Door',
+            eventType: 'Access granted',
+          },
+        ],
+        fetched_at: '2026-04-15T12:34:56.000Z',
+        total_matches: 1,
+      },
+      cards: [],
+      membersByCardNo: [],
+      membersByEmployeeNo: [{ card_no: null, employee_no: '00000302', name: 'Jordan Miles' }],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(new Request('http://localhost/api/door-history?date=2026-04-14'))
+
+    expect(response.status).toBe(200)
+    expect(recorded.cardNos).toEqual([])
+    expect(recorded.memberCardNos).toEqual([])
+    expect(recorded.memberEmployeeNos).toEqual([['302', '00000302']])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      events: [
+        {
+          cardNo: '',
+          employeeNo: '302',
+          cardCode: null,
+          memberName: 'Jordan Miles',
+          time: '2026-04-14T09:30:00-05:00',
+          accessGranted: true,
+          doorName: 'Main Door',
+          eventType: 'Access granted',
+        },
+      ],
+      fetchedAt: '2026-04-15T12:34:56.000Z',
+      totalMatches: 1,
+      cacheDate: '2026-04-14',
+    })
+  })
+
+  it('prefers an exact employee number match over alternate padded forms', async () => {
+    const { client, recorded } = createDoorHistoryReadClient({
+      cacheRow: {
+        cache_date: '2026-04-14',
+        events: [
+          {
+            cardNo: '',
+            employeeNo: '00000302',
+            cardCode: null,
+            memberName: null,
+            time: '2026-04-14T09:30:00-05:00',
+            accessGranted: true,
+            doorName: 'Main Door',
+            eventType: 'Access granted',
+          },
+        ],
+        fetched_at: '2026-04-15T12:34:56.000Z',
+        total_matches: 1,
+      },
+      cards: [],
+      membersByCardNo: [],
+      membersByEmployeeNo: [
+        { card_no: null, employee_no: '302', name: 'Alternate Match' },
+        { card_no: null, employee_no: '00000302', name: 'Exact Match' },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(new Request('http://localhost/api/door-history?date=2026-04-14'))
+
+    expect(response.status).toBe(200)
+    expect(recorded.memberEmployeeNos).toEqual([['00000302', '302']])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      events: [
+        {
+          cardNo: '',
+          employeeNo: '00000302',
+          cardCode: null,
+          memberName: 'Exact Match',
+          time: '2026-04-14T09:30:00-05:00',
+          accessGranted: true,
+          doorName: 'Main Door',
+          eventType: 'Access granted',
+        },
+      ],
+      fetchedAt: '2026-04-15T12:34:56.000Z',
+      totalMatches: 1,
+      cacheDate: '2026-04-14',
     })
   })
 

@@ -23,6 +23,7 @@ export type AvailableAccessCard = {
 
 export type DoorHistoryEvent = {
   cardNo: string
+  employeeNo: string | null
   cardCode: string | null
   memberName: string | null
   time: string

@@ -247,6 +247,7 @@ function normalizeDoorHistoryEventFromDevice(input: unknown): DoorHistoryEvent |
 
   return {
     cardNo: readStringField(input, ['cardNo', 'card_no']) ?? '',
+    employeeNo: normalizeNullableText(input.employeeNoString),
     cardCode: normalizeNullableText(input.cardCode ?? input.card_code),
     memberName: null,
     time,
@@ -269,6 +270,7 @@ function normalizeCachedDoorHistoryEvent(input: unknown): DoorHistoryEvent | nul
 
   return {
     cardNo: normalizeText(input.cardNo),
+    employeeNo: normalizeNullableText(input.employeeNo),
     cardCode: normalizeNullableText(input.cardCode),
     memberName: normalizeNullableText(input.memberName),
     time,

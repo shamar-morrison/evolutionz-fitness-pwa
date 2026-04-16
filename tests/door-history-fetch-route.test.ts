@@ -47,12 +47,14 @@ function createDoorHistoryFetchClient({
             {
               time: '2026-04-14T09:30:00+08:00',
               cardNo: '0102857149',
+              employeeNoString: '000611',
               minor: '1',
               doorName: 'Main Door',
             },
             {
               time: '2026-04-14T07:15:00+08:00',
               cardNo: '0100000001',
+              employeeNoString: '302',
               minor: '2',
             },
           ],
@@ -194,6 +196,7 @@ describe('POST /api/door-history/fetch', () => {
           events: [
             {
               cardNo: '0102857149',
+              employeeNo: '000611',
               cardCode: null,
               memberName: null,
               time: '2026-04-14T09:30:00-05:00',
@@ -203,6 +206,7 @@ describe('POST /api/door-history/fetch', () => {
             },
             {
               cardNo: '0100000001',
+              employeeNo: '302',
               cardCode: null,
               memberName: null,
               time: '2026-04-14T07:15:00-05:00',
@@ -224,6 +228,7 @@ describe('POST /api/door-history/fetch', () => {
       events: [
         {
           cardNo: '0102857149',
+          employeeNo: '000611',
           cardCode: null,
           memberName: null,
           time: '2026-04-14T09:30:00-05:00',
@@ -233,6 +238,7 @@ describe('POST /api/door-history/fetch', () => {
         },
         {
           cardNo: '0100000001',
+          employeeNo: '302',
           cardCode: null,
           memberName: null,
           time: '2026-04-14T07:15:00-05:00',
