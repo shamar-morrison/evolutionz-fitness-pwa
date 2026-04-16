@@ -73,10 +73,12 @@ vi.mock('@/components/ui/drawer', () => ({
   Drawer: ({
     children,
     direction,
+    handleOnly,
   }: {
     children: React.ReactNode
     direction?: string
-  }) => <div data-direction={direction}>{children}</div>,
+    handleOnly?: boolean
+  }) => <div data-direction={direction} data-handle-only={handleOnly ? 'true' : 'false'}>{children}</div>,
   DrawerClose: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DrawerContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
   DrawerDescription: ({ children }: React.ComponentProps<'p'>) => <p>{children}</p>,
@@ -215,6 +217,7 @@ describe('NotificationsPanel', () => {
 
     expect(container.textContent).toContain('9+')
     expect(container.querySelector('[data-direction="right"]')).not.toBeNull()
+    expect(container.querySelector('[data-handle-only="false"]')).not.toBeNull()
   })
 
   it('routes status change review notifications to the session updates page and marks them as read', async () => {
@@ -546,6 +549,7 @@ describe('NotificationsPanel', () => {
     })
 
     expect(container.querySelector('[data-direction="bottom"]')).not.toBeNull()
+    expect(container.querySelector('[data-handle-only="true"]')).not.toBeNull()
     expect(clearAllButton.disabled).toBe(true)
     expect(markAllNotificationsAsReadMock).toHaveBeenCalledWith('user-1')
     expect(invalidateQueriesMock).toHaveBeenCalledTimes(2)

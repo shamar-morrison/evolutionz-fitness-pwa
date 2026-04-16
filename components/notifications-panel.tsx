@@ -287,7 +287,12 @@ export function NotificationsPanel() {
   }
 
   return (
-    <Drawer open={open} onOpenChange={handleOpenChange} direction={isMobile ? 'bottom' : 'right'}>
+    <Drawer
+      open={open}
+      onOpenChange={handleOpenChange}
+      direction={isMobile ? 'bottom' : 'right'}
+      handleOnly={isMobile}
+    >
       <DrawerTrigger asChild>
         <Button
           type="button"
@@ -307,11 +312,15 @@ export function NotificationsPanel() {
       <DrawerContent
         className={
           isMobile
-            ? 'max-h-[85vh] w-full overflow-hidden rounded-t-3xl p-0'
+            ? 'h-[85vh] max-h-[85vh] min-h-0 w-full overflow-hidden rounded-t-3xl p-0'
             : 'h-full w-full overflow-hidden p-0 sm:max-w-lg'
         }
       >
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as NotificationTab)} className="flex h-full flex-col gap-0">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as NotificationTab)}
+          className="min-h-0 flex flex-1 flex-col gap-0"
+        >
           <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
             <DrawerHeader className="gap-4 px-4 py-4 sm:px-5 text-left!">
               <div className="flex items-start justify-between gap-3">
@@ -346,7 +355,7 @@ export function NotificationsPanel() {
             value="inbox"
             className="min-h-0 flex-1 flex flex-col outline-none"
           >
-            <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-6">
+            <div className="flex-1 overflow-y-auto overscroll-y-contain px-4 py-4 sm:px-5 sm:py-6">
               {error ? (
                 <p className="text-sm text-destructive">
                   {error instanceof Error ? error.message : 'Failed to load notifications.'}
@@ -399,7 +408,7 @@ export function NotificationsPanel() {
             value="archived"
             className="min-h-0 flex-1 flex flex-col outline-none"
           >
-            <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-6 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+            <div className="flex-1 overflow-y-auto overscroll-y-contain px-4 py-4 sm:px-5 sm:py-6 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
               {archivedNotificationsError ? (
                 <p className="text-sm text-destructive">
                   {archivedNotificationsError instanceof Error
