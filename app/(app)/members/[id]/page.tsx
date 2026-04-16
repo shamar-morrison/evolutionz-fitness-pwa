@@ -1,8 +1,8 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
 import { AssignCardModal } from '@/components/assign-card-modal'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -41,19 +41,58 @@ import { toast } from '@/hooks/use-toast'
 import { useBackLink } from '@/hooks/use-back-link'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useProgressRouter } from '@/hooks/use-progress-router'
+import { isRouteAllowed } from '@/lib/route-config'
 import { isFrontDeskStaff } from '@/lib/staff'
 import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, Trash2, User, BanknoteIcon, X } from 'lucide-react'
 
+function resolveReturnToPath(
+  value: string | null,
+  fallbackPath: string,
+  role: 'admin' | 'staff',
+  titles: string[],
+) {
+  if (!value || !value.startsWith('/')) {
+    return fallbackPath
+  }
+
+  try {
+    const currentOrigin =
+      typeof window === 'undefined' ? 'http://localhost' : window.location.origin
+    const url = new URL(value, currentOrigin)
+
+    if (url.origin !== currentOrigin || !isRouteAllowed(url.pathname, role, titles)) {
+      return fallbackPath
+    }
+
+    return `${url.pathname}${url.search}${url.hash}`
+  } catch {
+    return fallbackPath
+  }
+}
+
 export default function MemberDetailPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const router = useProgressRouter()
   const memberId = params.id as string
   const queryClient = useQueryClient()
   const { profile } = useAuth()
   const { member, isLoading, error } = useMember(memberId)
-  const backLink = useBackLink('/members', '/trainer/clients')
+  const fallbackBackLink = useBackLink('/members', '/trainer/clients')
   const { can, requiresApproval, role } = usePermissions()
+  const appRole = role === 'admin' ? 'admin' : 'staff'
   const isFrontDesk = isFrontDeskStaff(profile?.titles)
+  const returnToParam = searchParams?.get('returnTo') ?? null
+  const backLink = useMemo(
+    () =>
+      resolveReturnToPath(
+        returnToParam,
+        fallbackBackLink,
+        appRole,
+        profile?.titles ?? [],
+      ),
+    [appRole, fallbackBackLink, profile?.titles, returnToParam],
+  )
   const [showEditModal, setShowEditModal] = useState(false)
   const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false)
   const [showAssignCardModal, setShowAssignCardModal] = useState(false)
@@ -260,7 +299,7 @@ export default function MemberDetailPage() {
           result.warning ??
           `${buildMemberDisplayName(member.name, member.cardCode)} was permanently deleted.`,
       })
-      router.replace('/members')
+      router.replace(backLink)
     } catch (error) {
       console.error('Failed to delete member:', error)
       toast({

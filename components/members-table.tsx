@@ -1,7 +1,8 @@
 'use client'
 
+import { usePathname, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
 import { ArrowDown, ArrowUp } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import { PaginationControls } from '@/components/pagination-controls'
 import { formatAccessDate } from '@/lib/member-access-time'
@@ -15,7 +16,6 @@ import {
 } from '@/components/ui/table'
 import { StatusBadge } from '@/components/status-badge'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   Select,
   SelectContent,
@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { replaceCurrentUrl } from '@/lib/client-history'
 import { buildMemberDisplayName } from '@/lib/member-name'
 import type { Member } from '@/types'
 
@@ -33,6 +34,44 @@ type MembersTableProps = {
 const PAGE_SIZE_OPTIONS = ['10', '25', '50'] as const
 type SortColumn = 'beginTime' | 'endTime'
 type SortDirection = 'asc' | 'desc'
+
+const DEFAULT_PAGE_SIZE = Number(PAGE_SIZE_OPTIONS[0])
+
+function isValidPageSize(value: string | null): value is (typeof PAGE_SIZE_OPTIONS)[number] {
+  return value !== null && PAGE_SIZE_OPTIONS.includes(value as (typeof PAGE_SIZE_OPTIONS)[number])
+}
+
+function isValidSortColumn(value: string | null): value is SortColumn {
+  return value === 'beginTime' || value === 'endTime'
+}
+
+function isValidSortDirection(value: string | null): value is SortDirection {
+  return value === 'asc' || value === 'desc'
+}
+
+function parsePositiveInteger(value: string | null, fallback: number) {
+  if (!value || !/^\d+$/u.test(value)) {
+    return fallback
+  }
+
+  const parsedValue = Number(value)
+
+  if (!Number.isInteger(parsedValue) || parsedValue < 1) {
+    return fallback
+  }
+
+  return parsedValue
+}
+
+function buildReturnTo(pathname: string | null, searchParams: ReadonlyURLSearchParams | null) {
+  if (!pathname) {
+    return null
+  }
+
+  const query = searchParams?.toString() ?? ''
+
+  return query ? `${pathname}?${query}` : pathname
+}
 
 function getSortableDateTimestamp(value: string | null | undefined) {
   if (!value) {
@@ -50,10 +89,20 @@ function getSortableDateTimestamp(value: string | null | undefined) {
 
 export function MembersTable({ members }: MembersTableProps) {
   const router = useProgressRouter()
-  const [pageSize, setPageSize] = useState<number>(Number(PAGE_SIZE_OPTIONS[0]))
-  const [currentPage, setCurrentPage] = useState(0)
-  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null)
-  const [sortDirection, setSortDirection] = useState<SortDirection | null>(null)
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const searchParamsString = searchParams?.toString() ?? ''
+  const pageSizeParam = searchParams?.get('pageSize') ?? null
+  const sortParam = searchParams?.get('sort') ?? null
+  const directionParam = searchParams?.get('direction') ?? null
+  const pageSize = isValidPageSize(pageSizeParam)
+    ? Number(pageSizeParam)
+    : DEFAULT_PAGE_SIZE
+  const sortColumn = isValidSortColumn(sortParam) ? sortParam : null
+  const sortDirection =
+    sortColumn && isValidSortDirection(directionParam)
+      ? directionParam
+      : null
 
   const sortedMembers = useMemo(() => {
     if (!sortColumn || !sortDirection) {
@@ -82,25 +131,100 @@ export function MembersTable({ members }: MembersTableProps) {
     })
   }, [members, sortColumn, sortDirection])
 
-  const totalPages = Math.max(1, Math.ceil(members.length / pageSize))
+  const totalPages = Math.max(1, Math.ceil(sortedMembers.length / pageSize))
+  const requestedPage = parsePositiveInteger(searchParams?.get('page') ?? null, 1) - 1
+  const currentPage = Math.max(0, Math.min(requestedPage, totalPages - 1))
   const paginatedMembers = sortedMembers.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
 
-  useEffect(() => {
-    setCurrentPage((page) => Math.max(0, Math.min(page, totalPages - 1)))
-  }, [totalPages])
+  const updateSearchParams = useCallback(
+    (nextState: {
+      page?: number
+      pageSize?: number
+      sortColumn?: SortColumn | null
+      sortDirection?: SortDirection | null
+    }) => {
+      const nextPage = nextState.page ?? currentPage
+      const nextPageSize = nextState.pageSize ?? pageSize
+      const nextSortColumn =
+        nextState.sortColumn === undefined ? sortColumn : nextState.sortColumn
+      const nextSortDirection =
+        nextState.sortDirection === undefined ? sortDirection : nextState.sortDirection
+      const params = new URLSearchParams(searchParamsString)
+
+      if (nextPage > 0) {
+        params.set('page', String(nextPage + 1))
+      } else {
+        params.delete('page')
+      }
+
+      if (nextPageSize !== DEFAULT_PAGE_SIZE) {
+        params.set('pageSize', String(nextPageSize))
+      } else {
+        params.delete('pageSize')
+      }
+
+      if (nextSortColumn && nextSortDirection) {
+        params.set('sort', nextSortColumn)
+        params.set('direction', nextSortDirection)
+      } else {
+        params.delete('sort')
+        params.delete('direction')
+      }
+
+      const query = params.toString()
+      const href = query ? `${pathname}?${query}` : pathname
+
+      replaceCurrentUrl(href)
+    },
+    [currentPage, pageSize, pathname, searchParamsString, sortColumn, sortDirection],
+  )
 
   useEffect(() => {
-    setCurrentPage(0)
-  }, [sortColumn, sortDirection])
+    const params = new URLSearchParams(searchParamsString)
+
+    if (currentPage > 0) {
+      params.set('page', String(currentPage + 1))
+    } else {
+      params.delete('page')
+    }
+
+    if (pageSize !== DEFAULT_PAGE_SIZE) {
+      params.set('pageSize', String(pageSize))
+    } else {
+      params.delete('pageSize')
+    }
+
+    if (sortColumn && sortDirection) {
+      params.set('sort', sortColumn)
+      params.set('direction', sortDirection)
+    } else {
+      params.delete('sort')
+      params.delete('direction')
+    }
+
+    const normalizedQuery = params.toString()
+
+    if (normalizedQuery !== searchParamsString) {
+      const href = normalizedQuery ? `${pathname}?${normalizedQuery}` : pathname
+      replaceCurrentUrl(href)
+    }
+  }, [currentPage, pageSize, pathname, searchParamsString, sortColumn, sortDirection])
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn !== column) {
-      setSortColumn(column)
-      setSortDirection('asc')
+      updateSearchParams({
+        page: 0,
+        sortColumn: column,
+        sortDirection: 'asc',
+      })
       return
     }
 
-    setSortDirection((currentDirection) => (currentDirection === 'asc' ? 'desc' : 'asc'))
+    updateSearchParams({
+      page: 0,
+      sortColumn: column,
+      sortDirection: sortDirection === 'asc' ? 'desc' : 'asc',
+    })
   }
 
   const getAriaSort = (column: SortColumn) => {
@@ -169,7 +293,14 @@ export function MembersTable({ members }: MembersTableProps) {
             paginatedMembers.map((member) => (
               <TableRow
                 key={member.id}
-                onClick={() => router.push(`/members/${member.id}`)}
+                onClick={() => {
+                  const returnTo = buildReturnTo(pathname, searchParams)
+                  const href = returnTo
+                    ? `/members/${member.id}?returnTo=${encodeURIComponent(returnTo)}`
+                    : `/members/${member.id}`
+
+                  router.push(href)
+                }}
                 className="cursor-pointer hover:bg-muted/20"
               >
                 <TableCell className="px-4 py-4">
@@ -218,8 +349,10 @@ export function MembersTable({ members }: MembersTableProps) {
               <Select
                 value={String(pageSize)}
                 onValueChange={(value) => {
-                  setPageSize(Number(value))
-                  setCurrentPage(0)
+                  updateSearchParams({
+                    page: 0,
+                    pageSize: Number(value),
+                  })
                 }}
               >
                 <SelectTrigger className="h-9 w-[92px] rounded-md bg-background text-sm shadow-none">
@@ -241,7 +374,7 @@ export function MembersTable({ members }: MembersTableProps) {
             <PaginationControls
               currentPage={currentPage}
               totalPages={totalPages}
-              onPageChange={setCurrentPage}
+              onPageChange={(page) => updateSearchParams({ page })}
             />
           </div>
         </div>

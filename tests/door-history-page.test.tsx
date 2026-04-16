@@ -11,6 +11,7 @@ const {
   pushMock,
   refreshDoorHistoryMock,
   refetchMock,
+  searchParamsValue,
   toastMock,
   useDoorHistoryMock,
 } = vi.hoisted(() => ({
@@ -18,6 +19,9 @@ const {
   pushMock: vi.fn(),
   refreshDoorHistoryMock: vi.fn().mockResolvedValue(undefined),
   refetchMock: vi.fn(),
+  searchParamsValue: {
+    value: '',
+  },
   toastMock: vi.fn(),
   useDoorHistoryMock: vi.fn(),
 }))
@@ -151,11 +155,15 @@ vi.mock('@/components/ui/switch', () => ({
 }))
 
 vi.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => '/door-history',
+  useSearchParams: () => new URLSearchParams(searchParamsValue.value),
 }))
 
 vi.mock('@/hooks/use-progress-router', () => ({
-  useProgressRouter: () => ({ push: pushMock, replace: vi.fn() }),
+  useProgressRouter: () => ({
+    push: pushMock,
+    replace: vi.fn(),
+  }),
 }))
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -163,6 +171,10 @@ vi.mock('@/hooks/use-toast', () => ({
 }))
 
 import DoorHistoryPage from '@/app/(app)/door-history/page'
+
+function syncSearchParamsFromLocation() {
+  searchParamsValue.value = window.location.search.replace(/^\?/u, '')
+}
 
 function buildEvent(index: number) {
   return {
@@ -200,6 +212,8 @@ describe('DoorHistoryPage', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    searchParamsValue.value = ''
+    window.history.replaceState({}, '', '/door-history')
     useDoorHistoryMock.mockImplementation((date: string) => ({
       data: {
         ok: true,
@@ -226,10 +240,14 @@ describe('DoorHistoryPage', () => {
     vi.clearAllMocks()
   })
 
-  it('shows the empty state when no cached data exists for the selected date', async () => {
+  async function renderPage() {
     await act(async () => {
       root.render(<DoorHistoryPage />)
     })
+  }
+
+  it('shows the empty state when no cached data exists for the selected date', async () => {
+    await renderPage()
 
     expect(container.textContent).toContain('No cached door history')
     expect(container.textContent).toContain(
@@ -238,9 +256,7 @@ describe('DoorHistoryPage', () => {
   })
 
   it('reloads data for the newly selected date', async () => {
-    await act(async () => {
-      root.render(<DoorHistoryPage />)
-    })
+    await renderPage()
 
     const dateTrigger = container.querySelector('#door-history-date')
     const calendarSelectButton = container.querySelector('[data-testid="door-history-calendar-select"]')
@@ -261,13 +277,14 @@ describe('DoorHistoryPage', () => {
       )
     })
 
+    syncSearchParamsFromLocation()
+    await renderPage()
+
     expect(useDoorHistoryMock).toHaveBeenLastCalledWith('2026-04-14')
   })
 
   it('shows the access filter with the same labeled select pattern used elsewhere in the app', async () => {
-    await act(async () => {
-      root.render(<DoorHistoryPage />)
-    })
+    await renderPage()
 
     const accessLabel = container.querySelector('label[for="door-history-access-filter"]')
     const accessTrigger = container.querySelector('#door-history-access-filter')
@@ -296,9 +313,7 @@ describe('DoorHistoryPage', () => {
       refetch: refetchMock,
     }))
 
-    await act(async () => {
-      root.render(<DoorHistoryPage />)
-    })
+    await renderPage()
 
     const refreshButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent?.includes('Refresh'),
@@ -335,9 +350,7 @@ describe('DoorHistoryPage', () => {
       refetch: refetchMock,
     }))
 
-    await act(async () => {
-      root.render(<DoorHistoryPage />)
-    })
+    await renderPage()
 
     expect(container.textContent).toContain('1 Row')
     expect(container.textContent).toContain('Page 1 of 1')
@@ -372,9 +385,7 @@ describe('DoorHistoryPage', () => {
       refetch: refetchMock,
     }))
 
-    await act(async () => {
-      root.render(<DoorHistoryPage />)
-    })
+    await renderPage()
 
     const grantedOption = container.querySelector('button[data-select-item-value="granted"]')
 
@@ -385,6 +396,9 @@ describe('DoorHistoryPage', () => {
     await act(async () => {
       grantedOption.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
+
+    syncSearchParamsFromLocation()
+    await renderPage()
 
     const rows = Array.from(container.querySelectorAll('tbody tr'))
 
@@ -411,9 +425,7 @@ describe('DoorHistoryPage', () => {
       refetch: refetchMock,
     }))
 
-    await act(async () => {
-      root.render(<DoorHistoryPage />)
-    })
+    await renderPage()
 
     const deniedOption = container.querySelector('button[data-select-item-value="denied"]')
 
@@ -424,6 +436,9 @@ describe('DoorHistoryPage', () => {
     await act(async () => {
       deniedOption.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
+
+    syncSearchParamsFromLocation()
+    await renderPage()
 
     const rows = Array.from(container.querySelectorAll('tbody tr'))
 
@@ -449,9 +464,7 @@ describe('DoorHistoryPage', () => {
       refetch: refetchMock,
     }))
 
-    await act(async () => {
-      root.render(<DoorHistoryPage />)
-    })
+    await renderPage()
 
     const getBodyRows = () => Array.from(container.querySelectorAll('tbody tr'))
 
@@ -470,13 +483,53 @@ describe('DoorHistoryPage', () => {
       nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
 
+    syncSearchParamsFromLocation()
+    await renderPage()
+
     expect(container.textContent).toContain('51 Rows')
     expect(container.textContent).toContain('Page 2 of 2')
     expect(getBodyRows()).toHaveLength(1)
     expect(getBodyRows()[0]?.textContent).toContain('formatted:2026-04-15T00:00:00-05:00')
   })
 
-  it('resets to the first page when the access filter changes', async () => {
+  it('initializes the current page from the URL and preserves returnTo when opening a member', async () => {
+    const events = Array.from({ length: 51 }, (_, index) => buildEvent(index))
+    searchParamsValue.value = 'page=2'
+
+    useDoorHistoryMock.mockImplementation((date: string) => ({
+      data: {
+        ok: true,
+        events,
+        fetchedAt: '2026-04-15T12:34:56.000Z',
+        totalMatches: events.length,
+        cacheDate: date,
+      },
+      isLoading: false,
+      error: null,
+      refetch: refetchMock,
+    }))
+
+    await renderPage()
+
+    expect(container.textContent).toContain('Page 2 of 2')
+    expect(container.querySelector('tbody tr')?.textContent).toContain('formatted:2026-04-15T00:00:00-05:00')
+
+    const firstRow = container.querySelector('tbody tr')
+
+    if (!(firstRow instanceof HTMLTableRowElement)) {
+      throw new Error('Door history row not found.')
+    }
+
+    await act(async () => {
+      firstRow.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(pushMock).toHaveBeenCalledWith(
+      '/members/member-0?returnTo=%2Fdoor-history%3Fpage%3D2',
+    )
+  })
+
+  it('writes page params to the URL and resets to the first page when the access filter changes', async () => {
     const events = Array.from({ length: 51 }, (_, index) => buildEvent(index))
 
     useDoorHistoryMock.mockImplementation((date: string) => ({
@@ -492,9 +545,7 @@ describe('DoorHistoryPage', () => {
       refetch: refetchMock,
     }))
 
-    await act(async () => {
-      root.render(<DoorHistoryPage />)
-    })
+    await renderPage()
 
     const nextButton = container.querySelector('button[aria-label="Go to next page"]')
 
@@ -505,6 +556,11 @@ describe('DoorHistoryPage', () => {
     await act(async () => {
       nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
+
+    syncSearchParamsFromLocation()
+    expect(window.location.pathname + window.location.search).toBe('/door-history?page=2')
+
+    await renderPage()
 
     expect(container.textContent).toContain('Page 2 of 2')
 
@@ -517,6 +573,11 @@ describe('DoorHistoryPage', () => {
     await act(async () => {
       deniedOption.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
+
+    syncSearchParamsFromLocation()
+    expect(window.location.pathname + window.location.search).toBe('/door-history?access=denied')
+
+    await renderPage()
 
     expect(container.textContent).toContain('25 Rows')
     expect(container.textContent).toContain('Page 1 of 1')
@@ -539,9 +600,7 @@ describe('DoorHistoryPage', () => {
       refetch: refetchMock,
     }))
 
-    await act(async () => {
-      root.render(<DoorHistoryPage />)
-    })
+    await renderPage()
 
     expect(container.textContent).toContain('2 Rows')
     expect(container.textContent).not.toContain('formatted:2026-04-15T02:01:00-05:00')
@@ -557,10 +616,15 @@ describe('DoorHistoryPage', () => {
       unknownToggle.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
 
+    syncSearchParamsFromLocation()
+    await renderPage()
+
     expect(container.textContent).toContain('4 Rows')
     expect(container.textContent).toContain('formatted:2026-04-15T02:01:00-05:00')
     expect(container.textContent).toContain('formatted:2026-04-15T02:00:00-05:00')
-    expect(unknownToggle.getAttribute('aria-pressed')).toBe('true')
+    expect(container.querySelector('#door-history-show-unknown')?.getAttribute('aria-pressed')).toBe(
+      'true',
+    )
   })
 
   it('uses the visible dataset for pagination counts when unknown rows are hidden', async () => {
@@ -581,9 +645,7 @@ describe('DoorHistoryPage', () => {
       refetch: refetchMock,
     }))
 
-    await act(async () => {
-      root.render(<DoorHistoryPage />)
-    })
+    await renderPage()
 
     expect(container.textContent).toContain('50 Rows')
     expect(container.textContent).toContain('Page 1 of 1')
@@ -597,6 +659,9 @@ describe('DoorHistoryPage', () => {
     await act(async () => {
       unknownToggle.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
+
+    syncSearchParamsFromLocation()
+    await renderPage()
 
     expect(container.textContent).toContain('60 Rows')
     expect(container.textContent).toContain('Page 1 of 2')
@@ -620,9 +685,7 @@ describe('DoorHistoryPage', () => {
       refetch: refetchMock,
     }))
 
-    await act(async () => {
-      root.render(<DoorHistoryPage />)
-    })
+    await renderPage()
 
     const nextButton = container.querySelector('button[aria-label="Go to next page"]')
 
@@ -633,6 +696,11 @@ describe('DoorHistoryPage', () => {
     await act(async () => {
       nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
+
+    syncSearchParamsFromLocation()
+    expect(window.location.pathname + window.location.search).toBe('/door-history?page=2')
+
+    await renderPage()
 
     expect(container.textContent).toContain('Page 2 of 2')
 
@@ -645,6 +713,11 @@ describe('DoorHistoryPage', () => {
     await act(async () => {
       unknownToggle.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
+
+    syncSearchParamsFromLocation()
+    expect(window.location.pathname + window.location.search).toBe('/door-history?unknown=1')
+
+    await renderPage()
 
     expect(container.textContent).toContain('Page 1 of 2')
     expect(container.querySelector('tbody tr')?.textContent).toContain('formatted:2026-04-15T02:09:00-05:00')
@@ -666,9 +739,7 @@ describe('DoorHistoryPage', () => {
       refetch: refetchMock,
     }))
 
-    await act(async () => {
-      root.render(<DoorHistoryPage />)
-    })
+    await renderPage()
 
     const deniedOption = container.querySelector('button[data-select-item-value="denied"]')
 
@@ -679,6 +750,9 @@ describe('DoorHistoryPage', () => {
     await act(async () => {
       deniedOption.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
+
+    syncSearchParamsFromLocation()
+    await renderPage()
 
     expect(container.textContent).toContain('No denied access events found for this date.')
     expect(container.textContent).not.toContain('No cached door history')
