@@ -1220,6 +1220,12 @@ function PushNotificationsSection() {
     setIsPending(true)
     try {
       await requestPermission()
+    } catch (error) {
+      toast({
+        title: 'Could not enable push notifications',
+        description: error instanceof Error ? error.message : 'Unexpected error.',
+        variant: 'destructive',
+      })
     } finally {
       setIsPending(false)
     }
@@ -1229,6 +1235,12 @@ function PushNotificationsSection() {
     setIsPending(true)
     try {
       await unsubscribe()
+    } catch (error) {
+      toast({
+        title: 'Could not disable push notifications',
+        description: error instanceof Error ? error.message : 'Unexpected error.',
+        variant: 'destructive',
+      })
     } finally {
       setIsPending(false)
     }

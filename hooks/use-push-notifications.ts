@@ -34,6 +34,14 @@ function serializeSubscription(subscription: PushSubscription) {
   }
 }
 
+function getError(error: unknown, fallbackMessage: string) {
+  if (error instanceof Error) {
+    return error
+  }
+
+  return new Error(fallbackMessage)
+}
+
 export function usePushNotifications(): UsePushNotificationsResult {
   const { profile } = useOptionalAuth()
   const isAdmin = profile?.role === 'admin'
@@ -126,12 +134,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
 
     const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
     if (!publicKey) {
-      toast({
-        title: 'Push notifications unavailable',
-        description: 'Missing VAPID public key configuration.',
-        variant: 'destructive',
-      })
-      return
+      throw new Error('Missing VAPID public key configuration.')
     }
 
     try {
@@ -141,12 +144,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
 
       const registration = await navigator.serviceWorker.getRegistration()
       if (!registration) {
-        toast({
-          title: 'Push notifications unavailable',
-          description: 'Service worker is not registered on this device.',
-          variant: 'destructive',
-        })
-        return
+        throw new Error('Service worker is not registered on this device.')
       }
 
       const existing = await registration.pushManager.getSubscription()
@@ -182,12 +180,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
       }
     } catch (error) {
       console.error('Failed to enable push notifications:', error)
-      toast({
-        title: 'Could not enable push notifications',
-        description:
-          error instanceof Error ? error.message : 'Unexpected error.',
-        variant: 'destructive',
-      })
+      throw getError(error, 'Unexpected error.')
     }
   }, [isAdmin, isSupported])
 
@@ -198,10 +191,6 @@ export function usePushNotifications(): UsePushNotificationsResult {
       const registration = await navigator.serviceWorker.getRegistration()
       const subscription = await registration?.pushManager.getSubscription()
       const endpoint = subscription?.endpoint
-
-      if (subscription) {
-        await subscription.unsubscribe()
-      }
 
       if (endpoint) {
         const response = await fetch('/api/push/subscribe', {
@@ -214,6 +203,10 @@ export function usePushNotifications(): UsePushNotificationsResult {
         }
       }
 
+      if (subscription) {
+        await subscription.unsubscribe()
+      }
+
       setIsSubscribed(false)
       toast({
         title: 'Push notifications disabled',
@@ -221,12 +214,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
       })
     } catch (error) {
       console.error('Failed to disable push notifications:', error)
-      toast({
-        title: 'Could not disable push notifications',
-        description:
-          error instanceof Error ? error.message : 'Unexpected error.',
-        variant: 'destructive',
-      })
+      throw getError(error, 'Unexpected error.')
     }
   }, [isAdmin, isSupported])
 
