@@ -103,9 +103,8 @@ const adminNavItems: NavItem[] = [
   { href: '/email', label: 'Send Email', icon: Mail },
   { href: '/classes', label: 'Classes', icon: GraduationCap },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
+  { href: '/door-history', label: 'Door History', icon: History },
 ]
-
-const adminFooterItems: NavItem[] = [{ href: '/door-history', label: 'Door History', icon: History }]
 
 const adminReportItems: NavItem[] = [
   { href: '/reports/pt-payments', label: 'PT Trainer Payments', icon: BarChart3 },
@@ -416,25 +415,6 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-3">
-        {role === 'admin' ? (
-          <SidebarMenu className="mb-1">
-            {adminFooterItems.map((item) => (
-              <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={isActivePath(pathname, item.href)}
-                  tooltip={item.label}
-                >
-                  <Link data-progress href={item.href} onClick={handleNavigationClick}>
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        ) : null}
-
         {can('door.unlock') ? (
           <Button
             type="button"

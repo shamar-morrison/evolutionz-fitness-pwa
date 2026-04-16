@@ -126,7 +126,7 @@ describe('DoorHistoryPage', () => {
 
     expect(container.textContent).toContain('No cached door history')
     expect(container.textContent).toContain(
-      'Click Refresh to load door access events for 2026-04-15.',
+      'Click Refresh to load door access events for Apr. 15, 2026.',
     )
   })
 

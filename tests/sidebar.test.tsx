@@ -458,6 +458,7 @@ describe('Sidebar', () => {
     expect(groupLabels).toContain('Notifications')
     expect(links.indexOf('/staff')).toBeLessThan(links.indexOf('/email'))
     expect(links.indexOf('/email')).toBeLessThan(links.indexOf('/classes'))
+    expect(links.indexOf('/schedule')).toBeLessThan(links.indexOf('/door-history'))
 
     const badges = Array.from(container.querySelectorAll('[data-sidebar="menu-badge"]')).map(
       (badge) => badge.textContent?.trim(),
