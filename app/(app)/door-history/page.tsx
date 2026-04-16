@@ -29,6 +29,13 @@ import { Calendar } from '@/components/ui/calendar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useDoorHistory } from '@/hooks/use-door-history'
 import {
   formatDoorHistoryEventTime,
@@ -42,6 +49,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
 
 const PAGE_SIZE = 50
+type AccessFilter = 'all' | 'granted' | 'denied'
 
 function AccessBadge({ accessGranted }: { accessGranted: boolean }) {
   return (
@@ -61,26 +69,44 @@ function AccessBadge({ accessGranted }: { accessGranted: boolean }) {
 function DoorHistoryPageContent() {
   const queryClient = useQueryClient()
   const [selectedDate, setSelectedDate] = useState(() => getDoorHistoryTodayDateValue())
+  const [accessFilter, setAccessFilter] = useState<AccessFilter>('all')
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const { data, isLoading, error, refetch } = useDoorHistory(selectedDate)
   const sortedEvents = useMemo(() => sortDoorHistoryEvents(data?.events ?? []), [data?.events])
+  const filteredEvents = useMemo(() => {
+    switch (accessFilter) {
+      case 'granted':
+        return sortedEvents.filter((event) => event.accessGranted)
+      case 'denied':
+        return sortedEvents.filter((event) => !event.accessGranted)
+      default:
+        return sortedEvents
+    }
+  }, [accessFilter, sortedEvents])
   const paginatedEvents = useMemo(
-    () => sortedEvents.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
-    [currentPage, sortedEvents],
+    () => filteredEvents.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
+    [currentPage, filteredEvents],
   )
-  const totalRows = sortedEvents.length
+  const totalRows = filteredEvents.length
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE))
   const todayDateValue = getDoorHistoryTodayDateValue()
   const selectedCalendarDate = parseDateInputValue(selectedDate)
   const displayedSelectedDate = selectedCalendarDate
     ? format(selectedCalendarDate, 'MMM. d, yyyy')
     : 'Select a date'
+  const hasFilteredResults = sortedEvents.length > 0 && totalRows === 0
+  const emptyTableMessage =
+    accessFilter === 'granted'
+      ? 'No granted access events found for this date.'
+      : accessFilter === 'denied'
+        ? 'No denied access events found for this date.'
+        : 'No door events found for this date.'
 
   useEffect(() => {
     setCurrentPage(0)
-  }, [selectedDate])
+  }, [accessFilter, selectedDate])
 
   useEffect(() => {
     setCurrentPage((page) => Math.max(0, Math.min(page, totalPages - 1)))
@@ -148,38 +174,60 @@ function DoorHistoryPageContent() {
       </div>
 
       <div className="rounded-lg border bg-background p-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-2">
-            <Label htmlFor="door-history-date">Date</Label>
-            <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  id="door-history-date"
-                  type="button"
-                  variant="outline"
-                  className="w-full justify-between px-3 text-left font-normal md:w-[220px]"
-                >
-                  <span>{displayedSelectedDate}</span>
-                  <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={selectedCalendarDate ?? undefined}
-                  defaultMonth={selectedCalendarDate ?? undefined}
-                  onSelect={(date) => {
-                    if (!date) {
-                      return
-                    }
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <div className="grid grid-cols-2 gap-4 md:flex md:flex-wrap md:items-end">
+              <div className="min-w-0 space-y-2 md:w-[220px]">
+                <Label htmlFor="door-history-date">Date</Label>
+                <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="door-history-date"
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-between px-3 text-left font-normal"
+                    >
+                      <span>{displayedSelectedDate}</span>
+                      <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedCalendarDate ?? undefined}
+                      defaultMonth={selectedCalendarDate ?? undefined}
+                      onSelect={(date) => {
+                        if (!date) {
+                          return
+                        }
 
-                    handleSelectedDateChange(formatDateInputValue(date))
-                    setIsDatePickerOpen(false)
-                  }}
-                  disabled={(date) => formatDateInputValue(date) > todayDateValue}
-                />
-              </PopoverContent>
-            </Popover>
+                        handleSelectedDateChange(formatDateInputValue(date))
+                        setIsDatePickerOpen(false)
+                      }}
+                      disabled={(date) => formatDateInputValue(date) > todayDateValue}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="min-w-0 space-y-2 md:w-[220px]">
+                <Label htmlFor="door-history-access-filter">Access</Label>
+                <Select
+                  value={accessFilter}
+                  onValueChange={(value) => setAccessFilter(value as AccessFilter)}
+                >
+                  <SelectTrigger id="door-history-access-filter" className="w-full">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="granted">Granted</SelectItem>
+                    <SelectItem value="denied">Denied</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <p className="text-sm text-muted-foreground">
               {data?.fetchedAt
                 ? `Last fetched: ${formatDoorHistoryFetchedAt(data.fetchedAt)}`
@@ -187,7 +235,12 @@ function DoorHistoryPageContent() {
             </p>
           </div>
 
-          <Button type="button" onClick={() => void handleRefresh()} disabled={isRefreshing}>
+          <Button
+            type="button"
+            className="w-full lg:w-auto"
+            onClick={() => void handleRefresh()}
+            disabled={isRefreshing}
+          >
             <RefreshCw className={isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
             {isRefreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
@@ -234,7 +287,7 @@ function DoorHistoryPageContent() {
               {totalRows === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 px-4 text-center text-muted-foreground">
-                    No door events found for this date.
+                    {hasFilteredResults ? emptyTableMessage : 'No door events found for this date.'}
                   </TableCell>
                 </TableRow>
               ) : (
