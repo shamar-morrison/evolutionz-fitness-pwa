@@ -1,6 +1,8 @@
 import { z } from 'zod'
+import { JAMAICA_OFFSET, JAMAICA_TIME_ZONE } from '@/lib/jamaica-time'
 import { normalizeTimeInputValue } from '@/lib/member-access-time'
 
+export { JAMAICA_OFFSET, JAMAICA_TIME_ZONE }
 export const SESSION_STATUSES = ['scheduled', 'completed', 'missed', 'rescheduled', 'cancelled'] as const
 export type SessionStatus = typeof SESSION_STATUSES[number]
 export const PT_SESSION_FILTER_STATUSES = ['active', ...SESSION_STATUSES] as const
@@ -37,8 +39,6 @@ export const PREDEFINED_TRAINING_TYPES = [
 export const PT_ASSIGNMENT_STATUSES = ['active', 'inactive'] as const
 export type TrainerClientStatus = typeof PT_ASSIGNMENT_STATUSES[number]
 
-export const JAMAICA_TIME_ZONE = 'America/Jamaica'
-export const JAMAICA_OFFSET = '-05:00'
 export const TRAINER_PAYOUT_PER_CLIENT_JMD = 10500
 export const DEFAULT_PT_SESSION_TIME = '07:00'
 export const DEFAULT_PT_SESSIONS_PER_WEEK = 3

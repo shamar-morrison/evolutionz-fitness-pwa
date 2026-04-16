@@ -1,10 +1,9 @@
 import { addDays } from 'date-fns'
+import { JAMAICA_OFFSET, JAMAICA_TIME_ZONE } from '@/lib/jamaica-time'
 import { formatDateInputValue, getJamaicaDateInputValue, parseDateInputValue } from '@/lib/member-access-time'
 import { convertHikEventTimeToJamaicaIso } from '@/lib/member-events'
 import type { DoorHistoryEvent, DoorHistoryResponse } from '@/types'
 
-const JAMAICA_TIME_ZONE = 'America/Jamaica'
-const JAMAICA_OFFSET = '-05:00'
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u
 const THIRTY_MINUTES_MS = 30 * 60 * 1000
 

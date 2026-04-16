@@ -156,7 +156,8 @@ export async function GET(request: Request) {
       })
     }
 
-    const events = normalizeCachedDoorHistoryEvents((cachedRow as DoorHistoryCacheRow).events)
+    const row = cachedRow as DoorHistoryCacheRow
+    const events = normalizeCachedDoorHistoryEvents(row.events)
     const cardNos = Array.from(
       new Set(events.map((event) => normalizeText(event.cardNo)).filter(Boolean)),
     )
@@ -185,14 +186,14 @@ export async function GET(request: Request) {
 
     const enrichedEvents = enrichDoorHistoryEvents(events, cards, members)
     const totalMatches = Math.max(
-      normalizeInteger((cachedRow as DoorHistoryCacheRow).total_matches, 0),
+      normalizeInteger(row.total_matches, 0),
       enrichedEvents.length,
     )
 
     return NextResponse.json({
       ok: true,
       events: enrichedEvents,
-      fetchedAt: normalizeFetchedAt((cachedRow as DoorHistoryCacheRow).fetched_at),
+      fetchedAt: normalizeFetchedAt(row.fetched_at),
       totalMatches,
       cacheDate: parsedDate.date,
     })

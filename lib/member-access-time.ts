@@ -1,4 +1,5 @@
 import { addDays, subDays } from 'date-fns'
+import { JAMAICA_OFFSET, JAMAICA_TIME_ZONE } from '@/lib/jamaica-time'
 
 export type MemberDurationValue =
   | '1_day'
@@ -69,8 +70,6 @@ const MEMBER_DURATION_DAYS: Record<MemberDurationValue, number> = {
   '13_months': 364,
 }
 
-const JAMAICA_TIME_ZONE = 'America/Jamaica'
-const JAMAICA_OFFSET = '-05:00'
 const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/
 const timePattern = /^(\d{2}):(\d{2})(?::(\d{2}))?$/
 const dateTimePattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/
