@@ -16,6 +16,7 @@ import {
 } from '@/lib/pt-notifications-server'
 import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { sendPushToProfiles } from '@/lib/web-push'
 import type { MemberGender } from '@/types'
 
 const createMemberEditRequestSchema = z
@@ -223,6 +224,15 @@ export async function POST(request: Request) {
             requestedBy,
           },
         })),
+      )
+
+      await sendPushToProfiles(
+        adminRecipients.map((recipient) => recipient.id),
+        {
+          title: 'Edit Request',
+          body: 'A staff member submitted a member edit request.',
+          url: '/pending-approvals/edit-requests',
+        },
       )
     } catch (notificationError) {
       console.error(

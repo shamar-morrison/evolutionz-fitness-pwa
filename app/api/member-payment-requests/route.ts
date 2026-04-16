@@ -12,6 +12,7 @@ import {
 } from '@/lib/pt-notifications-server'
 import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { sendPushToProfiles } from '@/lib/web-push'
 import type {
   MemberPaymentMethod,
   MemberPaymentType,
@@ -243,6 +244,15 @@ export async function POST(request: Request) {
             paymentType: requestRecord.payment_type,
           },
         })),
+      )
+
+      await sendPushToProfiles(
+        adminRecipients.map((recipient) => recipient.id),
+        {
+          title: 'Payment Request',
+          body: 'A staff member submitted a payment request.',
+          url: '/pending-approvals/payment-requests',
+        },
       )
     } catch (notificationError) {
       console.error(

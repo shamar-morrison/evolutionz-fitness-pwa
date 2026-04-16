@@ -8,6 +8,7 @@ import {
 } from '@/lib/pt-notifications-server'
 import { requireAuthenticatedProfile } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { sendPushToProfiles } from '@/lib/web-push'
 
 const markPtSessionSchema = z
   .object({
@@ -215,6 +216,19 @@ export async function POST(
         },
       })),
     )
+
+    try {
+      await sendPushToProfiles(
+        adminRecipients.map((recipient) => recipient.id),
+        {
+          title: 'Session Update',
+          body: 'A trainer submitted a session update request.',
+          url: '/pending-approvals/session-updates',
+        },
+      )
+    } catch (pushError) {
+      console.error('Failed to send session update request push notifications:', pushError)
+    }
 
     return NextResponse.json({
       ok: true,

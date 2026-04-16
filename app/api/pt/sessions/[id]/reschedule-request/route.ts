@@ -15,6 +15,7 @@ import {
 } from '@/lib/pt-notifications-server'
 import { requireAuthenticatedProfile } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { sendPushToProfiles } from '@/lib/web-push'
 
 const createRescheduleRequestSchema = z
   .object({
@@ -166,6 +167,19 @@ export async function POST(
         },
       })),
     )
+
+    try {
+      await sendPushToProfiles(
+        adminRecipients.map((recipient) => recipient.id),
+        {
+          title: 'Reschedule Request',
+          body: 'A trainer submitted a reschedule request.',
+          url: '/pending-approvals/reschedule-requests',
+        },
+      )
+    } catch (pushError) {
+      console.error('Failed to send reschedule request push notifications:', pushError)
+    }
 
     const [requestRecord] = await readPtRescheduleRequests(supabase, { id: requestId })
 

@@ -35,6 +35,7 @@ import { useCardFeeSettings } from '@/hooks/use-card-fee-settings'
 import { useClasses } from '@/hooks/use-classes'
 import { useMembershipExpiryEmailSettings } from '@/hooks/use-membership-expiry-email-settings'
 import { useMemberTypes } from '@/hooks/use-member-types'
+import { usePushNotifications } from '@/hooks/use-push-notifications'
 import {
   formatCardFeeAmount,
   updateCardFeeSettings,
@@ -1013,6 +1014,8 @@ function SettingsPageContent() {
         onSubmit={(event) => void handleMembershipExpiryEmailSettingsSave(event)}
       />
 
+      <PushNotificationsSection />
+
       <Dialog open={Boolean(editingMemberType)} onOpenChange={handleMemberTypeDialogOpenChange}>
         <DialogContent className="sm:max-w-md" isLoading={isSavingMemberType}>
           <form className="space-y-4" onSubmit={(event) => void handleSave(event)}>
@@ -1205,5 +1208,71 @@ function SettingsPageContent() {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+function PushNotificationsSection() {
+  const { isSupported, permission, isSubscribed, requestPermission, unsubscribe } =
+    usePushNotifications()
+  const [isPending, setIsPending] = useState(false)
+
+  const handleEnable = async () => {
+    setIsPending(true)
+    try {
+      await requestPermission()
+    } finally {
+      setIsPending(false)
+    }
+  }
+
+  const handleDisable = async () => {
+    setIsPending(true)
+    try {
+      await unsubscribe()
+    } finally {
+      setIsPending(false)
+    }
+  }
+
+  return (
+    <section className="mt-8 rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <div className="space-y-2">
+        <CardTitle className="text-lg tracking-tight">Push Notifications</CardTitle>
+        <CardDescription>
+          Get native notifications on this device when a new request needs your attention — even
+          when the app is closed.
+        </CardDescription>
+      </div>
+
+      <div className="mt-6">
+        {!isSupported ? (
+          <p className="text-sm text-muted-foreground">
+            Push notifications are not supported on this device.
+          </p>
+        ) : permission === 'denied' ? (
+          <p className="text-sm text-muted-foreground">
+            Push notifications are blocked. Enable them in your browser settings to continue.
+          </p>
+        ) : isSubscribed ? (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-medium text-emerald-600">
+              Push notifications enabled on this device.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleDisable()}
+              loading={isPending}
+            >
+              Disable
+            </Button>
+          </div>
+        ) : (
+          <Button type="button" onClick={() => void handleEnable()} loading={isPending}>
+            Enable push notifications
+          </Button>
+        )}
+      </div>
+    </section>
   )
 }
