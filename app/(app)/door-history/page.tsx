@@ -69,8 +69,12 @@ function parsePositiveInteger(value: string | null, fallback: number) {
   return parsedValue
 }
 
-function buildReturnTo(pathname: string, searchParams: ReadonlyURLSearchParams) {
-  const query = searchParams.toString()
+function buildReturnTo(pathname: string | null, searchParams: ReadonlyURLSearchParams | null) {
+  if (!pathname) {
+    return null
+  }
+
+  const query = searchParams?.toString() ?? ''
 
   return query ? `${pathname}?${query}` : pathname
 }
@@ -98,19 +102,20 @@ function DoorHistoryPageContent() {
   const router = useProgressRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const searchParamsString = searchParams?.toString() ?? ''
   const queryClient = useQueryClient()
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const todayDateValue = getDoorHistoryTodayDateValue()
   const selectedDate = (() => {
-    const param = searchParams.get('date')
+    const param = searchParams?.get('date') ?? null
     return param && DATE_PATTERN.test(param) ? param : todayDateValue
   })()
   const accessFilter = (() => {
-    const param = searchParams.get('access')
+    const param = searchParams?.get('access') ?? null
     return isValidAccessFilter(param) ? param : 'all'
   })()
-  const showUnknownEntries = searchParams.get('unknown') === '1'
+  const showUnknownEntries = searchParams?.get('unknown') === '1'
   const { data, isLoading, error, refetch } = useDoorHistory(selectedDate)
   const sortedEvents = useMemo(() => sortDoorHistoryEvents(data?.events ?? []), [data?.events])
   const filteredEvents = useMemo(() => {
@@ -135,7 +140,7 @@ function DoorHistoryPageContent() {
   }, [accessFilter, showUnknownEntries, sortedEvents])
   const totalRows = filteredEvents.length
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE))
-  const requestedPage = parsePositiveInteger(searchParams.get('page'), 1) - 1
+  const requestedPage = parsePositiveInteger(searchParams?.get('page') ?? null, 1) - 1
   const currentPage = Math.max(0, Math.min(requestedPage, totalPages - 1))
   const paginatedEvents = useMemo(
     () => filteredEvents.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
@@ -155,7 +160,7 @@ function DoorHistoryPageContent() {
 
   const updateSearchParams = useCallback(
     (updates: Record<string, string>) => {
-      const params = new URLSearchParams(searchParams.toString())
+      const params = new URLSearchParams(searchParamsString)
 
       for (const [key, value] of Object.entries(updates)) {
         if (value) {
@@ -168,11 +173,11 @@ function DoorHistoryPageContent() {
       const query = params.toString()
       router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
     },
-    [pathname, router, searchParams],
+    [pathname, router, searchParamsString],
   )
 
   useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString())
+    const params = new URLSearchParams(searchParamsString)
 
     if (selectedDate !== todayDateValue) {
       params.set('date', selectedDate)
@@ -200,7 +205,7 @@ function DoorHistoryPageContent() {
 
     const normalizedQuery = params.toString()
 
-    if (normalizedQuery !== searchParams.toString()) {
+    if (normalizedQuery !== searchParamsString) {
       const href = normalizedQuery ? `${pathname}?${normalizedQuery}` : pathname
       router.replace(href, { scroll: false })
     }
@@ -209,7 +214,7 @@ function DoorHistoryPageContent() {
     currentPage,
     pathname,
     router,
-    searchParams,
+    searchParamsString,
     selectedDate,
     showUnknownEntries,
     todayDateValue,
@@ -424,12 +429,14 @@ function DoorHistoryPageContent() {
                     className={event.memberId ? 'cursor-pointer' : undefined}
                     onClick={
                       event.memberId
-                        ? () =>
-                            router.push(
-                              `/members/${event.memberId}?returnTo=${encodeURIComponent(
-                                buildReturnTo(pathname, searchParams),
-                              )}`,
-                            )
+                        ? () => {
+                            const returnTo = buildReturnTo(pathname, searchParams)
+                            const href = returnTo
+                              ? `/members/${event.memberId}?returnTo=${encodeURIComponent(returnTo)}`
+                              : `/members/${event.memberId}`
+
+                            router.push(href)
+                          }
                         : undefined
                     }
                   >

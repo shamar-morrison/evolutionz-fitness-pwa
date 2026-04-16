@@ -82,15 +82,16 @@ export default function MemberDetailPage() {
   const { can, requiresApproval, role } = usePermissions()
   const appRole = role === 'admin' ? 'admin' : 'staff'
   const isFrontDesk = isFrontDeskStaff(profile?.titles)
+  const returnToParam = searchParams?.get('returnTo') ?? null
   const backLink = useMemo(
     () =>
       resolveReturnToPath(
-        searchParams.get('returnTo'),
+        returnToParam,
         fallbackBackLink,
         appRole,
         profile?.titles ?? [],
       ),
-    [appRole, fallbackBackLink, profile?.titles, searchParams],
+    [appRole, fallbackBackLink, profile?.titles, returnToParam],
   )
   const [showEditModal, setShowEditModal] = useState(false)
   const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false)

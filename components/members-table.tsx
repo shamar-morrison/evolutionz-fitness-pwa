@@ -62,8 +62,12 @@ function parsePositiveInteger(value: string | null, fallback: number) {
   return parsedValue
 }
 
-function buildReturnTo(pathname: string, searchParams: ReadonlyURLSearchParams) {
-  const query = searchParams.toString()
+function buildReturnTo(pathname: string | null, searchParams: ReadonlyURLSearchParams | null) {
+  if (!pathname) {
+    return null
+  }
+
+  const query = searchParams?.toString() ?? ''
 
   return query ? `${pathname}?${query}` : pathname
 }
@@ -86,9 +90,10 @@ export function MembersTable({ members }: MembersTableProps) {
   const router = useProgressRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const pageSizeParam = searchParams.get('pageSize')
-  const sortParam = searchParams.get('sort')
-  const directionParam = searchParams.get('direction')
+  const searchParamsString = searchParams?.toString() ?? ''
+  const pageSizeParam = searchParams?.get('pageSize') ?? null
+  const sortParam = searchParams?.get('sort') ?? null
+  const directionParam = searchParams?.get('direction') ?? null
   const pageSize = isValidPageSize(pageSizeParam)
     ? Number(pageSizeParam)
     : DEFAULT_PAGE_SIZE
@@ -126,7 +131,7 @@ export function MembersTable({ members }: MembersTableProps) {
   }, [members, sortColumn, sortDirection])
 
   const totalPages = Math.max(1, Math.ceil(sortedMembers.length / pageSize))
-  const requestedPage = parsePositiveInteger(searchParams.get('page'), 1) - 1
+  const requestedPage = parsePositiveInteger(searchParams?.get('page') ?? null, 1) - 1
   const currentPage = Math.max(0, Math.min(requestedPage, totalPages - 1))
   const paginatedMembers = sortedMembers.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
 
@@ -143,7 +148,7 @@ export function MembersTable({ members }: MembersTableProps) {
         nextState.sortColumn === undefined ? sortColumn : nextState.sortColumn
       const nextSortDirection =
         nextState.sortDirection === undefined ? sortDirection : nextState.sortDirection
-      const params = new URLSearchParams(searchParams.toString())
+      const params = new URLSearchParams(searchParamsString)
 
       if (nextPage > 0) {
         params.set('page', String(nextPage + 1))
@@ -170,11 +175,11 @@ export function MembersTable({ members }: MembersTableProps) {
 
       router.replace(href, { scroll: false })
     },
-    [currentPage, pageSize, pathname, router, searchParams, sortColumn, sortDirection],
+    [currentPage, pageSize, pathname, router, searchParamsString, sortColumn, sortDirection],
   )
 
   useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString())
+    const params = new URLSearchParams(searchParamsString)
 
     if (currentPage > 0) {
       params.set('page', String(currentPage + 1))
@@ -198,11 +203,11 @@ export function MembersTable({ members }: MembersTableProps) {
 
     const normalizedQuery = params.toString()
 
-    if (normalizedQuery !== searchParams.toString()) {
+    if (normalizedQuery !== searchParamsString) {
       const href = normalizedQuery ? `${pathname}?${normalizedQuery}` : pathname
       router.replace(href, { scroll: false })
     }
-  }, [currentPage, pageSize, pathname, router, searchParams, sortColumn, sortDirection])
+  }, [currentPage, pageSize, pathname, router, searchParamsString, sortColumn, sortDirection])
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn !== column) {
@@ -287,13 +292,14 @@ export function MembersTable({ members }: MembersTableProps) {
             paginatedMembers.map((member) => (
               <TableRow
                 key={member.id}
-                onClick={() =>
-                  router.push(
-                    `/members/${member.id}?returnTo=${encodeURIComponent(
-                      buildReturnTo(pathname, searchParams),
-                    )}`,
-                  )
-                }
+                onClick={() => {
+                  const returnTo = buildReturnTo(pathname, searchParams)
+                  const href = returnTo
+                    ? `/members/${member.id}?returnTo=${encodeURIComponent(returnTo)}`
+                    : `/members/${member.id}`
+
+                  router.push(href)
+                }}
                 className="cursor-pointer hover:bg-muted/20"
               >
                 <TableCell className="px-4 py-4">
