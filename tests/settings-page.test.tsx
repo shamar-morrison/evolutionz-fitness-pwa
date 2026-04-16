@@ -36,6 +36,16 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
 }))
 
+vi.mock('@/hooks/use-push-notifications', () => ({
+  usePushNotifications: () => ({
+    isSupported: false,
+    permission: 'default' as NotificationPermission,
+    isSubscribed: false,
+    requestPermission: vi.fn(),
+    unsubscribe: vi.fn(),
+  }),
+}))
+
 vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({
     children,

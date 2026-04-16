@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useAuth } from '@/contexts/auth-context'
+import { useOptionalAuth } from '@/contexts/auth-context'
 import { toast } from '@/hooks/use-toast'
 
 type UsePushNotificationsResult = {
@@ -35,8 +35,8 @@ function serializeSubscription(subscription: PushSubscription) {
 }
 
 export function usePushNotifications(): UsePushNotificationsResult {
-  const { profile } = useAuth()
-  const isAdmin = profile?.titles?.includes('Owner') ?? false
+  const { profile } = useOptionalAuth()
+  const isAdmin = profile?.role === 'admin'
 
   const [isSupported, setIsSupported] = useState(false)
   const [permission, setPermission] = useState<NotificationPermission>('default')
@@ -86,8 +86,9 @@ export function usePushNotifications(): UsePushNotificationsResult {
           const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
           if (!publicKey) return
 
+          let subscription: PushSubscription | null = null
           try {
-            const subscription = await registration.pushManager.subscribe({
+            subscription = await registration.pushManager.subscribe({
               userVisibleOnly: true,
               applicationServerKey: urlB64ToUint8Array(publicKey),
             })
@@ -96,10 +97,16 @@ export function usePushNotifications(): UsePushNotificationsResult {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(serializeSubscription(subscription)),
             })
-            if (response.ok && !cancelled) {
-              setIsSubscribed(true)
+            if (!response.ok) {
+              throw new Error(
+                `Failed to save subscription on the server (${response.status}).`,
+              )
             }
+            if (!cancelled) setIsSubscribed(true)
           } catch (error) {
+            if (subscription) {
+              await subscription.unsubscribe().catch(() => {})
+            }
             console.error('Failed to auto-resubscribe to push:', error)
           }
         }
@@ -143,6 +150,7 @@ export function usePushNotifications(): UsePushNotificationsResult {
       }
 
       const existing = await registration.pushManager.getSubscription()
+      const createdNow = !existing
       const subscription =
         existing ??
         (await registration.pushManager.subscribe({
@@ -150,21 +158,28 @@ export function usePushNotifications(): UsePushNotificationsResult {
           applicationServerKey: urlB64ToUint8Array(publicKey),
         }))
 
-      const response = await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(serializeSubscription(subscription)),
-      })
+      try {
+        const response = await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(serializeSubscription(subscription)),
+        })
 
-      if (!response.ok) {
-        throw new Error('Failed to save subscription on the server.')
+        if (!response.ok) {
+          throw new Error('Failed to save subscription on the server.')
+        }
+
+        setIsSubscribed(true)
+        toast({
+          title: 'Push notifications enabled',
+          description: 'You will receive updates on this device.',
+        })
+      } catch (error) {
+        if (createdNow) {
+          await subscription.unsubscribe().catch(() => {})
+        }
+        throw error
       }
-
-      setIsSubscribed(true)
-      toast({
-        title: 'Push notifications enabled',
-        description: 'You will receive updates on this device.',
-      })
     } catch (error) {
       console.error('Failed to enable push notifications:', error)
       toast({
@@ -189,11 +204,14 @@ export function usePushNotifications(): UsePushNotificationsResult {
       }
 
       if (endpoint) {
-        await fetch('/api/push/subscribe', {
+        const response = await fetch('/api/push/subscribe', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ endpoint }),
         })
+        if (!response.ok) {
+          throw new Error('Failed to delete subscription on the server.')
+        }
       }
 
       setIsSubscribed(false)

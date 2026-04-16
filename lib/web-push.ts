@@ -1,5 +1,4 @@
 import webpush, { type WebPushError } from 'web-push'
-import { getRequiredServerEnv } from '@/lib/server-env'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 type PushPayload = {
@@ -17,15 +16,28 @@ type PushSubscriptionRow = {
 }
 
 let configured = false
+let warned = false
 
-function ensureConfigured() {
-  if (configured) return
-  webpush.setVapidDetails(
-    getRequiredServerEnv('VAPID_SUBJECT'),
-    getRequiredServerEnv('NEXT_PUBLIC_VAPID_PUBLIC_KEY'),
-    getRequiredServerEnv('VAPID_PRIVATE_KEY'),
-  )
+function ensureConfigured(): boolean {
+  if (configured) return true
+
+  const subject = process.env.VAPID_SUBJECT
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  const privateKey = process.env.VAPID_PRIVATE_KEY
+
+  if (!subject || !publicKey || !privateKey) {
+    if (!warned) {
+      warned = true
+      console.warn(
+        '[web-push] VAPID environment variables not configured — push notifications disabled',
+      )
+    }
+    return false
+  }
+
+  webpush.setVapidDetails(subject, publicKey, privateKey)
   configured = true
+  return true
 }
 
 function isStaleSubscriptionError(error: unknown): boolean {
@@ -36,7 +48,7 @@ function isStaleSubscriptionError(error: unknown): boolean {
 export async function sendPushToProfiles(profileIds: string[], payload: PushPayload) {
   if (profileIds.length === 0) return
 
-  ensureConfigured()
+  if (!ensureConfigured()) return
 
   const supabase = getSupabaseAdminClient()
 
@@ -65,6 +77,16 @@ export async function sendPushToProfiles(profileIds: string[], payload: PushPayl
           },
           payloadString,
         )
+        const { error: updateError } = await supabase
+          .from('push_subscriptions')
+          .update({ last_used_at: new Date().toISOString() })
+          .eq('id', row.id)
+        if (updateError) {
+          console.error(
+            '[web-push] failed to update last_used_at:',
+            updateError.message,
+          )
+        }
       } catch (err) {
         if (isStaleSubscriptionError(err)) {
           const { error: deleteError } = await supabase

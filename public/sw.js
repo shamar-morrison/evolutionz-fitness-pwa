@@ -84,12 +84,33 @@ self.addEventListener('notificationclick', (event) => {
         includeUncontrolled: true,
       })
 
-      const existing = allClients.find((client) => client.url.includes(targetUrl))
-      if (existing) {
-        return existing.focus()
+      const target = new URL(targetUrl, self.location.origin)
+
+      let sameOrigin = null
+      for (const client of allClients) {
+        let clientUrl
+        try {
+          clientUrl = new URL(client.url)
+        } catch (_err) {
+          continue
+        }
+        if (clientUrl.origin !== target.origin) continue
+        if (clientUrl.pathname === target.pathname) {
+          return client.focus()
+        }
+        if (!sameOrigin) sameOrigin = client
       }
 
-      return self.clients.openWindow(targetUrl)
+      if (sameOrigin && 'navigate' in sameOrigin) {
+        try {
+          const navigated = await sameOrigin.navigate(target.href)
+          if (navigated) return navigated.focus()
+        } catch (_err) {
+          // fall through to openWindow
+        }
+      }
+
+      return self.clients.openWindow(target.href)
     })(),
   )
 })

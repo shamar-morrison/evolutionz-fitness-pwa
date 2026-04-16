@@ -125,3 +125,14 @@ export function useAuth() {
   }
   return context
 }
+
+const EMPTY_AUTH: AuthContextType = {
+  user: null,
+  profile: null,
+  role: null,
+  loading: false,
+}
+
+export function useOptionalAuth(): AuthContextType {
+  return useContext(AuthContext) ?? EMPTY_AUTH
+}
