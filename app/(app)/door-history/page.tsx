@@ -208,7 +208,7 @@ function DoorHistoryPageContent() {
             </EmptyMedia>
             <EmptyTitle>No cached door history</EmptyTitle>
             <EmptyDescription>
-              Click Refresh to load door access events for {selectedDate}.
+              Click Refresh to load door access events for {displayedSelectedDate}.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
