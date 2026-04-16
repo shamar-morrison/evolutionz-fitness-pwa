@@ -279,7 +279,7 @@ function DoorHistoryPageContent() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 md:w-fit">
+            <div className="flex items-center gap-3">
               <Label htmlFor="door-history-show-unknown" className="text-sm font-medium">
                 Show unknown entries
               </Label>
