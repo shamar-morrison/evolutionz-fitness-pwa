@@ -1,7 +1,8 @@
 'use client'
 
+import { format } from 'date-fns'
 import { useQueryClient } from '@tanstack/react-query'
-import { RefreshCw } from 'lucide-react'
+import { CalendarIcon, RefreshCw, XIcon } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { AuthenticatedHomeRedirect } from '@/components/authenticated-home-redirect'
 import { PaginationControls } from '@/components/pagination-controls'
@@ -24,9 +25,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Input } from '@/components/ui/input'
+import { Calendar } from '@/components/ui/calendar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useDoorHistory } from '@/hooks/use-door-history'
 import {
   formatDoorHistoryEventTime,
@@ -35,6 +37,7 @@ import {
   refreshDoorHistory,
   sortDoorHistoryEvents,
 } from '@/lib/door-history'
+import { formatDateInputValue, parseDateInputValue } from '@/lib/member-access-time'
 import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
 
@@ -58,6 +61,7 @@ function AccessBadge({ accessGranted }: { accessGranted: boolean }) {
 function DoorHistoryPageContent() {
   const queryClient = useQueryClient()
   const [selectedDate, setSelectedDate] = useState(() => getDoorHistoryTodayDateValue())
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const { data, isLoading, error, refetch } = useDoorHistory(selectedDate)
@@ -69,6 +73,10 @@ function DoorHistoryPageContent() {
   const totalRows = sortedEvents.length
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE))
   const todayDateValue = getDoorHistoryTodayDateValue()
+  const selectedCalendarDate = parseDateInputValue(selectedDate)
+  const displayedSelectedDate = selectedCalendarDate
+    ? format(selectedCalendarDate, 'MMM. d, yyyy')
+    : 'Select a date'
 
   useEffect(() => {
     setCurrentPage(0)
@@ -143,17 +151,35 @@ function DoorHistoryPageContent() {
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2">
             <Label htmlFor="door-history-date">Date</Label>
-            <Input
-              id="door-history-date"
-              type="date"
-              value={selectedDate}
-              max={todayDateValue}
-              onChange={(event) => handleSelectedDateChange(event.target.value)}
-              onInput={(event) =>
-                handleSelectedDateChange((event.target as HTMLInputElement).value)
-              }
-              className="w-full md:w-[220px]"
-            />
+            <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  id="door-history-date"
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between px-3 text-left font-normal md:w-[220px]"
+                >
+                  <span>{displayedSelectedDate}</span>
+                  <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={selectedCalendarDate ?? undefined}
+                  defaultMonth={selectedCalendarDate ?? undefined}
+                  onSelect={(date) => {
+                    if (!date) {
+                      return
+                    }
+
+                    handleSelectedDateChange(formatDateInputValue(date))
+                    setIsDatePickerOpen(false)
+                  }}
+                  disabled={(date) => formatDateInputValue(date) > todayDateValue}
+                />
+              </PopoverContent>
+            </Popover>
             <p className="text-sm text-muted-foreground">
               {data?.fetchedAt
                 ? `Last fetched: ${formatDoorHistoryFetchedAt(data.fetchedAt)}`
@@ -178,7 +204,7 @@ function DoorHistoryPageContent() {
         <Empty className="rounded-lg border bg-background">
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              <RefreshCw className="h-5 w-5" />
+              <XIcon className="h-5 w-5" />
             </EmptyMedia>
             <EmptyTitle>No cached door history</EmptyTitle>
             <EmptyDescription>

@@ -43,6 +43,24 @@ vi.mock('@/components/role-guard', () => ({
   RoleGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
+vi.mock('@/components/ui/popover', () => ({
+  Popover: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PopoverTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PopoverContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+vi.mock('@/components/ui/calendar', () => ({
+  Calendar: ({ onSelect }: { onSelect?: (date: Date) => void }) => (
+    <button
+      type="button"
+      data-testid="door-history-calendar-select"
+      onClick={() => onSelect?.(new Date(2026, 3, 14, 12, 0, 0, 0))}
+    >
+      Select April 14
+    </button>
+  ),
+}))
+
 vi.mock('@/components/authenticated-home-redirect', () => ({
   AuthenticatedHomeRedirect: () => <div>redirecting</div>,
 }))
@@ -117,16 +135,23 @@ describe('DoorHistoryPage', () => {
       root.render(<DoorHistoryPage />)
     })
 
-    const input = container.querySelector('#door-history-date')
+    const dateTrigger = container.querySelector('#door-history-date')
+    const calendarSelectButton = container.querySelector('[data-testid="door-history-calendar-select"]')
 
-    if (!(input instanceof HTMLInputElement)) {
-      throw new Error('Door history date input was not rendered.')
+    if (!(dateTrigger instanceof HTMLButtonElement)) {
+      throw new Error('Door history date trigger was not rendered.')
     }
 
+    if (!(calendarSelectButton instanceof HTMLButtonElement)) {
+      throw new Error('Door history calendar select button was not rendered.')
+    }
+
+    expect(dateTrigger.textContent).toContain('Apr. 15, 2026')
+
     await act(async () => {
-      input.value = '2026-04-14'
-      input.dispatchEvent(new Event('input', { bubbles: true }))
-      input.dispatchEvent(new Event('change', { bubbles: true }))
+      calendarSelectButton.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      )
     })
 
     expect(useDoorHistoryMock).toHaveBeenLastCalledWith('2026-04-14')
