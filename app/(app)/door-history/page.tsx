@@ -29,6 +29,7 @@ import { Calendar } from '@/components/ui/calendar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -70,21 +71,32 @@ function DoorHistoryPageContent() {
   const queryClient = useQueryClient()
   const [selectedDate, setSelectedDate] = useState(() => getDoorHistoryTodayDateValue())
   const [accessFilter, setAccessFilter] = useState<AccessFilter>('all')
+  const [showUnknownEntries, setShowUnknownEntries] = useState(false)
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const { data, isLoading, error, refetch } = useDoorHistory(selectedDate)
   const sortedEvents = useMemo(() => sortDoorHistoryEvents(data?.events ?? []), [data?.events])
   const filteredEvents = useMemo(() => {
-    switch (accessFilter) {
-      case 'granted':
-        return sortedEvents.filter((event) => event.accessGranted)
-      case 'denied':
-        return sortedEvents.filter((event) => !event.accessGranted)
-      default:
-        return sortedEvents
+    const accessFilteredEvents = (() => {
+      switch (accessFilter) {
+        case 'granted':
+          return sortedEvents.filter((event) => event.accessGranted)
+        case 'denied':
+          return sortedEvents.filter((event) => !event.accessGranted)
+        default:
+          return sortedEvents
+      }
+    })()
+
+    if (showUnknownEntries) {
+      return accessFilteredEvents
     }
-  }, [accessFilter, sortedEvents])
+
+    return accessFilteredEvents.filter(
+      (event) => !(event.memberName === null && !event.cardNo),
+    )
+  }, [accessFilter, showUnknownEntries, sortedEvents])
   const paginatedEvents = useMemo(
     () => filteredEvents.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
     [currentPage, filteredEvents],
@@ -106,7 +118,7 @@ function DoorHistoryPageContent() {
 
   useEffect(() => {
     setCurrentPage(0)
-  }, [accessFilter, selectedDate])
+  }, [accessFilter, selectedDate, showUnknownEntries])
 
   useEffect(() => {
     setCurrentPage((page) => Math.max(0, Math.min(page, totalPages - 1)))
@@ -226,6 +238,17 @@ function DoorHistoryPageContent() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 md:w-fit">
+              <Label htmlFor="door-history-show-unknown" className="text-sm font-medium">
+                Show unknown entries
+              </Label>
+              <Switch
+                id="door-history-show-unknown"
+                checked={showUnknownEntries}
+                onCheckedChange={setShowUnknownEntries}
+              />
             </div>
 
             <p className="text-sm text-muted-foreground">

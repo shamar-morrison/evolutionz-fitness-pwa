@@ -127,6 +127,27 @@ vi.mock('@/components/authenticated-home-redirect', () => ({
   AuthenticatedHomeRedirect: () => <div>redirecting</div>,
 }))
 
+vi.mock('@/components/ui/switch', () => ({
+  Switch: ({
+    checked,
+    id,
+    onCheckedChange,
+  }: {
+    checked?: boolean
+    id?: string
+    onCheckedChange?: (checked: boolean) => void
+  }) => (
+    <button
+      id={id}
+      type="button"
+      aria-pressed={checked ? 'true' : 'false'}
+      onClick={() => onCheckedChange?.(!checked)}
+    >
+      {checked ? 'On' : 'Off'}
+    </button>
+  ),
+}))
+
 vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
 }))
@@ -142,6 +163,18 @@ function buildEvent(index: number) {
     accessGranted: index % 2 === 0,
     doorName: null,
     eventType: index % 2 === 0 ? 'Access granted' : 'Access denied',
+  }
+}
+
+function buildUnknownEvent(index: number) {
+  return {
+    cardNo: '',
+    cardCode: null,
+    memberName: null,
+    time: `2026-04-15T02:${String(index).padStart(2, '0')}:00-05:00`,
+    accessGranted: false,
+    doorName: null,
+    eventType: 'Access denied',
   }
 }
 
@@ -226,9 +259,13 @@ describe('DoorHistoryPage', () => {
 
     const accessLabel = container.querySelector('label[for="door-history-access-filter"]')
     const accessTrigger = container.querySelector('#door-history-access-filter')
+    const unknownToggleLabel = container.querySelector('label[for="door-history-show-unknown"]')
+    const unknownToggle = container.querySelector('#door-history-show-unknown')
 
     expect(accessLabel?.textContent).toBe('Access')
     expect(accessTrigger?.textContent).toContain('All')
+    expect(unknownToggleLabel?.textContent).toBe('Show unknown entries')
+    expect(unknownToggle?.getAttribute('aria-pressed')).toBe('false')
   })
 
   it('refreshes the selected date and invalidates only that query key', async () => {
@@ -472,6 +509,133 @@ describe('DoorHistoryPage', () => {
     expect(container.textContent).toContain('25 Rows')
     expect(container.textContent).toContain('Page 1 of 1')
     expect(container.querySelector('tbody tr')?.textContent).toContain('formatted:2026-04-15T00:49:00-05:00')
+  })
+
+  it('hides unknown rows by default and shows them when the toggle is enabled', async () => {
+    const events = [buildEvent(0), buildUnknownEvent(0), buildEvent(1), buildUnknownEvent(1)]
+
+    useDoorHistoryMock.mockImplementation((date: string) => ({
+      data: {
+        ok: true,
+        events,
+        fetchedAt: '2026-04-15T12:34:56.000Z',
+        totalMatches: events.length,
+        cacheDate: date,
+      },
+      isLoading: false,
+      error: null,
+      refetch: refetchMock,
+    }))
+
+    await act(async () => {
+      root.render(<DoorHistoryPage />)
+    })
+
+    expect(container.textContent).toContain('2 Rows')
+    expect(container.textContent).not.toContain('formatted:2026-04-15T02:01:00-05:00')
+    expect(container.textContent).not.toContain('formatted:2026-04-15T02:00:00-05:00')
+
+    const unknownToggle = container.querySelector('#door-history-show-unknown')
+
+    if (!(unknownToggle instanceof HTMLButtonElement)) {
+      throw new Error('Show unknown entries toggle not found.')
+    }
+
+    await act(async () => {
+      unknownToggle.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(container.textContent).toContain('4 Rows')
+    expect(container.textContent).toContain('formatted:2026-04-15T02:01:00-05:00')
+    expect(container.textContent).toContain('formatted:2026-04-15T02:00:00-05:00')
+    expect(unknownToggle.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('uses the visible dataset for pagination counts when unknown rows are hidden', async () => {
+    const knownEvents = Array.from({ length: 50 }, (_, index) => buildEvent(index))
+    const unknownEvents = Array.from({ length: 10 }, (_, index) => buildUnknownEvent(index))
+    const events = [...knownEvents, ...unknownEvents]
+
+    useDoorHistoryMock.mockImplementation((date: string) => ({
+      data: {
+        ok: true,
+        events,
+        fetchedAt: '2026-04-15T12:34:56.000Z',
+        totalMatches: events.length,
+        cacheDate: date,
+      },
+      isLoading: false,
+      error: null,
+      refetch: refetchMock,
+    }))
+
+    await act(async () => {
+      root.render(<DoorHistoryPage />)
+    })
+
+    expect(container.textContent).toContain('50 Rows')
+    expect(container.textContent).toContain('Page 1 of 1')
+
+    const unknownToggle = container.querySelector('#door-history-show-unknown')
+
+    if (!(unknownToggle instanceof HTMLButtonElement)) {
+      throw new Error('Show unknown entries toggle not found.')
+    }
+
+    await act(async () => {
+      unknownToggle.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(container.textContent).toContain('60 Rows')
+    expect(container.textContent).toContain('Page 1 of 2')
+  })
+
+  it('resets to the first page when the unknown-entry toggle changes', async () => {
+    const knownEvents = Array.from({ length: 51 }, (_, index) => buildEvent(index))
+    const unknownEvents = Array.from({ length: 10 }, (_, index) => buildUnknownEvent(index))
+    const events = [...knownEvents, ...unknownEvents]
+
+    useDoorHistoryMock.mockImplementation((date: string) => ({
+      data: {
+        ok: true,
+        events,
+        fetchedAt: '2026-04-15T12:34:56.000Z',
+        totalMatches: events.length,
+        cacheDate: date,
+      },
+      isLoading: false,
+      error: null,
+      refetch: refetchMock,
+    }))
+
+    await act(async () => {
+      root.render(<DoorHistoryPage />)
+    })
+
+    const nextButton = container.querySelector('button[aria-label="Go to next page"]')
+
+    if (!(nextButton instanceof HTMLButtonElement)) {
+      throw new Error('Next-page button not found.')
+    }
+
+    await act(async () => {
+      nextButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(container.textContent).toContain('Page 2 of 2')
+
+    const unknownToggle = container.querySelector('#door-history-show-unknown')
+
+    if (!(unknownToggle instanceof HTMLButtonElement)) {
+      throw new Error('Show unknown entries toggle not found.')
+    }
+
+    await act(async () => {
+      unknownToggle.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(container.textContent).toContain('Page 1 of 2')
+    expect(container.querySelector('tbody tr')?.textContent).toContain('formatted:2026-04-15T02:09:00-05:00')
   })
 
   it('shows filtered empty copy when cached data exists but no rows match the selected access filter', async () => {
