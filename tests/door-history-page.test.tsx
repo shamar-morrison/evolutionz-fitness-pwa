@@ -150,8 +150,12 @@ vi.mock('@/components/ui/switch', () => ({
   ),
 }))
 
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+}))
+
 vi.mock('@/hooks/use-progress-router', () => ({
-  useProgressRouter: () => ({ push: pushMock }),
+  useProgressRouter: () => ({ push: pushMock, replace: vi.fn() }),
 }))
 
 vi.mock('@/hooks/use-toast', () => ({

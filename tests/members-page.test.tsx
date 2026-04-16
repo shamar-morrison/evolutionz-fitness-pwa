@@ -44,6 +44,10 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(searchParamsValue.value),
 }))
 
+vi.mock('@/hooks/use-progress-router', () => ({
+  useProgressRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}))
+
 vi.mock('@/hooks/use-members', () => ({
   useMembers: useMembersMock,
 }))

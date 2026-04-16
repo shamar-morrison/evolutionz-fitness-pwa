@@ -1,8 +1,9 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { useProgressRouter } from '@/hooks/use-progress-router'
 import { useAuth } from '@/contexts/auth-context'
 import { useMembers } from '@/hooks/use-members'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -63,12 +64,27 @@ function MembersPageLoading() {
   )
 }
 
+function isValidStatus(value: string | null): value is MemberStatus {
+  return value === 'Active' || value === 'Expired' || value === 'Suspended'
+}
+
+function isValidType(value: string | null): value is MemberType {
+  return value === 'General' || value === 'Civil Servant' || value === 'Student/BPO'
+}
+
 function MembersPageContent() {
   const searchParams = useSearchParams()
+  const router = useProgressRouter()
   const action = searchParams.get('action')
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<MemberStatus | 'All'>('All')
-  const [typeFilter, setTypeFilter] = useState<MemberType | 'All'>('All')
+  const [search, setSearch] = useState(() => searchParams.get('search') ?? '')
+  const [statusFilter, setStatusFilter] = useState<MemberStatus | 'All'>(() => {
+    const param = searchParams.get('status')
+    return isValidStatus(param) ? param : 'All'
+  })
+  const [typeFilter, setTypeFilter] = useState<MemberType | 'All'>(() => {
+    const param = searchParams.get('type')
+    return isValidType(param) ? param : 'All'
+  })
   const [showAddModal, setShowAddModal] = useState(false)
   const [isSyncingMembers, setIsSyncingMembers] = useState(false)
   const [isSyncingCards, setIsSyncingCards] = useState(false)
@@ -86,6 +102,24 @@ function MembersPageContent() {
     status: statusFilter,
     type: typeFilter,
   })
+
+  const updateSearchParams = useCallback(
+    (updates: Record<string, string>) => {
+      const params = new URLSearchParams(searchParams.toString())
+
+      for (const [key, value] of Object.entries(updates)) {
+        if (value) {
+          params.set(key, value)
+        } else {
+          params.delete(key)
+        }
+      }
+
+      const query = params.toString()
+      router.replace(query ? `?${query}` : '/members', { scroll: false })
+    },
+    [router, searchParams],
+  )
 
   useEffect(() => {
     if (!loading && canCreateMembers && action === 'add') {
@@ -203,7 +237,10 @@ function MembersPageContent() {
           <Input
             placeholder="Search by name or card ID..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              updateSearchParams({ search: e.target.value })
+            }}
             className="pl-9"
           />
         </div>
@@ -213,7 +250,10 @@ function MembersPageContent() {
           </Label>
           <Select
             value={statusFilter}
-            onValueChange={(value: MemberStatus | 'All') => setStatusFilter(value)}
+            onValueChange={(value: MemberStatus | 'All') => {
+              setStatusFilter(value)
+              updateSearchParams({ status: value === 'All' ? '' : value })
+            }}
           >
             <SelectTrigger id="members-status-filter" className="w-[140px]">
               <SelectValue placeholder="Status" />
@@ -233,7 +273,10 @@ function MembersPageContent() {
           </Label>
           <Select
             value={typeFilter}
-            onValueChange={(value: MemberType | 'All') => setTypeFilter(value)}
+            onValueChange={(value: MemberType | 'All') => {
+              setTypeFilter(value)
+              updateSearchParams({ type: value === 'All' ? '' : value })
+            }}
           >
             <SelectTrigger id="members-type-filter" className="w-[160px]">
               <SelectValue placeholder="Type" />

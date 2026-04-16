@@ -3,7 +3,8 @@
 import { format } from 'date-fns'
 import { useQueryClient } from '@tanstack/react-query'
 import { CalendarIcon, RefreshCw, XIcon } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { AuthenticatedHomeRedirect } from '@/components/authenticated-home-redirect'
 import { PaginationControls } from '@/components/pagination-controls'
 import { RoleGuard } from '@/components/role-guard'
@@ -51,7 +52,12 @@ import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
 
 const PAGE_SIZE = 50
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u
 type AccessFilter = 'all' | 'granted' | 'denied'
+
+function isValidAccessFilter(value: string | null): value is AccessFilter {
+  return value === 'all' || value === 'granted' || value === 'denied'
+}
 
 function AccessBadge({ accessGranted }: { accessGranted: boolean }) {
   return (
@@ -70,10 +76,19 @@ function AccessBadge({ accessGranted }: { accessGranted: boolean }) {
 
 function DoorHistoryPageContent() {
   const router = useProgressRouter()
+  const searchParams = useSearchParams()
   const queryClient = useQueryClient()
-  const [selectedDate, setSelectedDate] = useState(() => getDoorHistoryTodayDateValue())
-  const [accessFilter, setAccessFilter] = useState<AccessFilter>('all')
-  const [showUnknownEntries, setShowUnknownEntries] = useState(false)
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const param = searchParams.get('date')
+    return param && DATE_PATTERN.test(param) ? param : getDoorHistoryTodayDateValue()
+  })
+  const [accessFilter, setAccessFilter] = useState<AccessFilter>(() => {
+    const param = searchParams.get('access')
+    return isValidAccessFilter(param) ? param : 'all'
+  })
+  const [showUnknownEntries, setShowUnknownEntries] = useState(
+    () => searchParams.get('unknown') === '1',
+  )
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -126,8 +141,27 @@ function DoorHistoryPageContent() {
     setCurrentPage((page) => Math.max(0, Math.min(page, totalPages - 1)))
   }, [totalPages])
 
+  const updateSearchParams = useCallback(
+    (updates: Record<string, string>) => {
+      const params = new URLSearchParams(searchParams.toString())
+
+      for (const [key, value] of Object.entries(updates)) {
+        if (value) {
+          params.set(key, value)
+        } else {
+          params.delete(key)
+        }
+      }
+
+      const query = params.toString()
+      router.replace(query ? `?${query}` : '/door-history', { scroll: false })
+    },
+    [router, searchParams],
+  )
+
   const handleSelectedDateChange = (value: string) => {
     setSelectedDate(value)
+    updateSearchParams({ date: value === getDoorHistoryTodayDateValue() ? '' : value })
   }
 
   const handleRefresh = async () => {
@@ -228,7 +262,10 @@ function DoorHistoryPageContent() {
                 <Label htmlFor="door-history-access-filter">Access</Label>
                 <Select
                   value={accessFilter}
-                  onValueChange={(value) => setAccessFilter(value as AccessFilter)}
+                  onValueChange={(value) => {
+                    setAccessFilter(value as AccessFilter)
+                    updateSearchParams({ access: value === 'all' ? '' : value })
+                  }}
                 >
                   <SelectTrigger id="door-history-access-filter" className="w-full">
                     <SelectValue placeholder="All" />
@@ -249,7 +286,10 @@ function DoorHistoryPageContent() {
               <Switch
                 id="door-history-show-unknown"
                 checked={showUnknownEntries}
-                onCheckedChange={setShowUnknownEntries}
+                onCheckedChange={(checked) => {
+                  setShowUnknownEntries(checked)
+                  updateSearchParams({ unknown: checked ? '1' : '' })
+                }}
               />
             </div>
 
@@ -368,7 +408,9 @@ function DoorHistoryPageContent() {
 export default function DoorHistoryPage() {
   return (
     <RoleGuard role="admin" fallback={<AuthenticatedHomeRedirect />}>
-      <DoorHistoryPageContent />
+      <Suspense>
+        <DoorHistoryPageContent />
+      </Suspense>
     </RoleGuard>
   )
 }
