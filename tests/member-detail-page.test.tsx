@@ -17,6 +17,7 @@ const {
   releaseMemberSlotMock,
   reportMemberCardLostMock,
   replaceMock,
+  searchParamsValue,
   suspendMemberMock,
   unassignMemberCardMock,
   useMemberMock,
@@ -43,6 +44,9 @@ const {
   releaseMemberSlotMock: vi.fn(),
   reportMemberCardLostMock: vi.fn(),
   replaceMock: vi.fn(),
+  searchParamsValue: {
+    value: '',
+  },
   suspendMemberMock: vi.fn(),
   unassignMemberCardMock: vi.fn(),
   useMemberMock: vi.fn(),
@@ -58,6 +62,7 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'member-1' }),
   usePathname: () => currentPathnameState.pathname,
+  useSearchParams: () => new URLSearchParams(searchParamsValue.value),
 }))
 
 vi.mock('@/hooks/use-progress-router', () => ({
@@ -342,6 +347,7 @@ describe('Member detail page tabs', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     currentPathnameState.pathname = '/members/123e4567-e89b-12d3-a456-426614174000'
+    searchParamsValue.value = ''
     currentRoleState.role = 'admin'
     currentProfileState.profile = {
       id: 'admin-1',
@@ -468,6 +474,20 @@ describe('Member detail page tabs', () => {
     expect(pushMock).toHaveBeenCalledWith('/members')
   })
 
+  it('routes the header back button to a validated returnTo path when provided', async () => {
+    searchParamsValue.value = 'returnTo=%2Fdoor-history%3Fpage%3D2%26access%3Dgranted'
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    await act(async () => {
+      getIconOnlyButton(container).click()
+    })
+
+    expect(pushMock).toHaveBeenCalledWith('/door-history?page=2&access=granted')
+  })
+
   it('routes the error-state back button to the shared members list for administrative assistants', async () => {
     currentRoleState.role = 'staff'
     currentProfileState.profile = {
@@ -487,6 +507,27 @@ describe('Member detail page tabs', () => {
     })
 
     await clickButton(container, 'Back to Members')
+
+    expect(pushMock).toHaveBeenCalledWith('/members')
+  })
+
+  it('ignores disallowed returnTo paths and falls back to the shared members list', async () => {
+    currentRoleState.role = 'staff'
+    currentProfileState.profile = {
+      id: 'assistant-1',
+      name: 'Avery Assistant',
+      role: 'staff',
+      titles: ['Administrative Assistant'],
+    }
+    searchParamsValue.value = 'returnTo=%2Fstaff'
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    await act(async () => {
+      getIconOnlyButton(container).click()
+    })
 
     expect(pushMock).toHaveBeenCalledWith('/members')
   })

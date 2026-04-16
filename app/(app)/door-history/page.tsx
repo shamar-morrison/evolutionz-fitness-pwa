@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { useQueryClient } from '@tanstack/react-query'
 import { CalendarIcon, RefreshCw, XIcon } from 'lucide-react'
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
 import { AuthenticatedHomeRedirect } from '@/components/authenticated-home-redirect'
 import { PaginationControls } from '@/components/pagination-controls'
 import { RoleGuard } from '@/components/role-guard'
@@ -55,6 +55,26 @@ const PAGE_SIZE = 50
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u
 type AccessFilter = 'all' | 'granted' | 'denied'
 
+function parsePositiveInteger(value: string | null, fallback: number) {
+  if (!value || !/^\d+$/u.test(value)) {
+    return fallback
+  }
+
+  const parsedValue = Number(value)
+
+  if (!Number.isInteger(parsedValue) || parsedValue < 1) {
+    return fallback
+  }
+
+  return parsedValue
+}
+
+function buildReturnTo(pathname: string, searchParams: ReadonlyURLSearchParams) {
+  const query = searchParams.toString()
+
+  return query ? `${pathname}?${query}` : pathname
+}
+
 function isValidAccessFilter(value: string | null): value is AccessFilter {
   return value === 'all' || value === 'granted' || value === 'denied'
 }
@@ -76,22 +96,21 @@ function AccessBadge({ accessGranted }: { accessGranted: boolean }) {
 
 function DoorHistoryPageContent() {
   const router = useProgressRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const queryClient = useQueryClient()
-  const [selectedDate, setSelectedDate] = useState(() => {
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const todayDateValue = getDoorHistoryTodayDateValue()
+  const selectedDate = (() => {
     const param = searchParams.get('date')
-    return param && DATE_PATTERN.test(param) ? param : getDoorHistoryTodayDateValue()
-  })
-  const [accessFilter, setAccessFilter] = useState<AccessFilter>(() => {
+    return param && DATE_PATTERN.test(param) ? param : todayDateValue
+  })()
+  const accessFilter = (() => {
     const param = searchParams.get('access')
     return isValidAccessFilter(param) ? param : 'all'
-  })
-  const [showUnknownEntries, setShowUnknownEntries] = useState(
-    () => searchParams.get('unknown') === '1',
-  )
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
-  const [currentPage, setCurrentPage] = useState(0)
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  })()
+  const showUnknownEntries = searchParams.get('unknown') === '1'
   const { data, isLoading, error, refetch } = useDoorHistory(selectedDate)
   const sortedEvents = useMemo(() => sortDoorHistoryEvents(data?.events ?? []), [data?.events])
   const filteredEvents = useMemo(() => {
@@ -114,13 +133,14 @@ function DoorHistoryPageContent() {
       (event) => !(event.memberName === null && !event.cardNo),
     )
   }, [accessFilter, showUnknownEntries, sortedEvents])
+  const totalRows = filteredEvents.length
+  const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE))
+  const requestedPage = parsePositiveInteger(searchParams.get('page'), 1) - 1
+  const currentPage = Math.max(0, Math.min(requestedPage, totalPages - 1))
   const paginatedEvents = useMemo(
     () => filteredEvents.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
     [currentPage, filteredEvents],
   )
-  const totalRows = filteredEvents.length
-  const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE))
-  const todayDateValue = getDoorHistoryTodayDateValue()
   const selectedCalendarDate = parseDateInputValue(selectedDate)
   const displayedSelectedDate = selectedCalendarDate
     ? format(selectedCalendarDate, 'MMM. d, yyyy')
@@ -132,14 +152,6 @@ function DoorHistoryPageContent() {
       : accessFilter === 'denied'
         ? 'No denied access events found for this date.'
         : 'No door events found for this date.'
-
-  useEffect(() => {
-    setCurrentPage(0)
-  }, [accessFilter, selectedDate, showUnknownEntries])
-
-  useEffect(() => {
-    setCurrentPage((page) => Math.max(0, Math.min(page, totalPages - 1)))
-  }, [totalPages])
 
   const updateSearchParams = useCallback(
     (updates: Record<string, string>) => {
@@ -154,14 +166,60 @@ function DoorHistoryPageContent() {
       }
 
       const query = params.toString()
-      router.replace(query ? `?${query}` : '/door-history', { scroll: false })
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
     },
-    [router, searchParams],
+    [pathname, router, searchParams],
   )
 
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString())
+
+    if (selectedDate !== todayDateValue) {
+      params.set('date', selectedDate)
+    } else {
+      params.delete('date')
+    }
+
+    if (accessFilter !== 'all') {
+      params.set('access', accessFilter)
+    } else {
+      params.delete('access')
+    }
+
+    if (showUnknownEntries) {
+      params.set('unknown', '1')
+    } else {
+      params.delete('unknown')
+    }
+
+    if (currentPage > 0) {
+      params.set('page', String(currentPage + 1))
+    } else {
+      params.delete('page')
+    }
+
+    const normalizedQuery = params.toString()
+
+    if (normalizedQuery !== searchParams.toString()) {
+      const href = normalizedQuery ? `${pathname}?${normalizedQuery}` : pathname
+      router.replace(href, { scroll: false })
+    }
+  }, [
+    accessFilter,
+    currentPage,
+    pathname,
+    router,
+    searchParams,
+    selectedDate,
+    showUnknownEntries,
+    todayDateValue,
+  ])
+
   const handleSelectedDateChange = (value: string) => {
-    setSelectedDate(value)
-    updateSearchParams({ date: value === getDoorHistoryTodayDateValue() ? '' : value })
+    updateSearchParams({
+      date: value === todayDateValue ? '' : value,
+      page: '',
+    })
   }
 
   const handleRefresh = async () => {
@@ -263,8 +321,10 @@ function DoorHistoryPageContent() {
                 <Select
                   value={accessFilter}
                   onValueChange={(value) => {
-                    setAccessFilter(value as AccessFilter)
-                    updateSearchParams({ access: value === 'all' ? '' : value })
+                    updateSearchParams({
+                      access: value === 'all' ? '' : value,
+                      page: '',
+                    })
                   }}
                 >
                   <SelectTrigger id="door-history-access-filter" className="w-full">
@@ -287,8 +347,10 @@ function DoorHistoryPageContent() {
                 id="door-history-show-unknown"
                 checked={showUnknownEntries}
                 onCheckedChange={(checked) => {
-                  setShowUnknownEntries(checked)
-                  updateSearchParams({ unknown: checked ? '1' : '' })
+                  updateSearchParams({
+                    unknown: checked ? '1' : '',
+                    page: '',
+                  })
                 }}
               />
             </div>
@@ -360,7 +422,16 @@ function DoorHistoryPageContent() {
                   <TableRow
                     key={`${event.time}-${event.cardNo}-${event.eventType ?? 'event'}-${index}`}
                     className={event.memberId ? 'cursor-pointer' : undefined}
-                    onClick={event.memberId ? () => router.push(`/members/${event.memberId}`) : undefined}
+                    onClick={
+                      event.memberId
+                        ? () =>
+                            router.push(
+                              `/members/${event.memberId}?returnTo=${encodeURIComponent(
+                                buildReturnTo(pathname, searchParams),
+                              )}`,
+                            )
+                        : undefined
+                    }
                   >
                     <TableCell className="px-4 py-4">{formatDoorHistoryEventTime(event.time)}</TableCell>
                     <TableCell className="px-4 py-4 font-medium">
@@ -394,7 +465,9 @@ function DoorHistoryPageContent() {
                 <PaginationControls
                   currentPage={currentPage}
                   totalPages={totalPages}
-                  onPageChange={setCurrentPage}
+                  onPageChange={(page) =>
+                    updateSearchParams({ page: page > 0 ? String(page + 1) : '' })
+                  }
                 />
               </div>
             </div>

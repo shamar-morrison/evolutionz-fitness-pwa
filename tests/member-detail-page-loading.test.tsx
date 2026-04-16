@@ -9,6 +9,7 @@ const {
   deleteMemberMock,
   invalidateQueriesMock,
   replaceMock,
+  searchParamsValue,
   toastMock,
   useMemberMock,
 } = vi.hoisted(() => ({
@@ -26,6 +27,9 @@ const {
   deleteMemberMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   replaceMock: vi.fn(),
+  searchParamsValue: {
+    value: '',
+  },
   toastMock: vi.fn(),
   useMemberMock: vi.fn(),
 }))
@@ -38,6 +42,7 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'member-1' }),
+  useSearchParams: () => new URLSearchParams(searchParamsValue.value),
 }))
 
 vi.mock('@/hooks/use-progress-router', () => ({
@@ -222,6 +227,7 @@ describe('MemberDetailPage async confirm loading', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    searchParamsValue.value = ''
     authState.profile = {
       id: 'admin-1',
       name: 'Admin User',
@@ -290,5 +296,42 @@ describe('MemberDetailPage async confirm loading', () => {
 
     expect(container.querySelector('[data-confirm-title="Delete member?"]')).toBeNull()
     expect(replaceMock).toHaveBeenCalledWith('/members')
+  })
+
+  it('redirects deletes to a validated returnTo path when provided', async () => {
+    const deferred = createDeferred<{ warning?: string | null }>()
+    deleteMemberMock.mockReturnValue(deferred.promise)
+    searchParamsValue.value = 'returnTo=%2Fdoor-history%3Fpage%3D2'
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    const deleteTrigger = container.querySelector('button[aria-label="Delete member"]')
+
+    if (!(deleteTrigger instanceof HTMLButtonElement)) {
+      throw new Error('Delete member trigger not found.')
+    }
+
+    await act(async () => {
+      deleteTrigger.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const confirmButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Delete Member',
+    )
+
+    if (!(confirmButton instanceof HTMLButtonElement)) {
+      throw new Error('Delete member confirm button not found.')
+    }
+
+    await act(async () => {
+      confirmButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    deferred.resolve({})
+    await flushAsyncWork()
+
+    expect(replaceMock).toHaveBeenCalledWith('/door-history?page=2')
   })
 })

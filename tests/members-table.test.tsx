@@ -7,14 +7,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MembersTable } from '@/components/members-table'
 import type { Member } from '@/types'
 
-const { pushMock } = vi.hoisted(() => ({
+const { pushMock, replaceMock, searchParamsValue } = vi.hoisted(() => ({
   pushMock: vi.fn(),
+  replaceMock: vi.fn(),
+  searchParamsValue: {
+    value: '',
+  },
+}))
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/members',
+  useSearchParams: () => new URLSearchParams(searchParamsValue.value),
 }))
 
 vi.mock('@/hooks/use-progress-router', () => ({
   useProgressRouter: () => ({
     push: pushMock,
-    replace: vi.fn(),
+    replace: (href: string) => {
+      replaceMock(href)
+      searchParamsValue.value = new URL(href, 'http://localhost').search.replace(/^\?/u, '')
+    },
     back: vi.fn(),
     forward: vi.fn(),
   }),
@@ -22,19 +34,52 @@ vi.mock('@/hooks/use-progress-router', () => ({
 
 vi.mock('@/components/ui/select', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
+  const SelectContext = React.createContext<
+    | {
+        value?: string
+        onValueChange?: (value: string) => void
+      }
+    | undefined
+  >(undefined)
 
   return {
-    Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    SelectContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
-    SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
-      <div data-value={value}>{children}</div>
+    Select: ({
+      children,
+      onValueChange,
+      value,
+    }: {
+      children: React.ReactNode
+      onValueChange?: (value: string) => void
+      value?: string
+    }) => (
+      <SelectContext.Provider value={{ value, onValueChange }}>
+        {children}
+      </SelectContext.Provider>
     ),
+    SelectContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+    SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => {
+      const context = React.useContext(SelectContext)
+
+      return (
+        <button
+          type="button"
+          data-select-item-value={value}
+          onClick={() => context?.onValueChange?.(value)}
+        >
+          {children}
+        </button>
+      )
+    },
     SelectTrigger: ({ children, className }: React.ComponentProps<'button'>) => (
       <button type="button" className={className}>
         {children}
       </button>
     ),
-    SelectValue: () => null,
+    SelectValue: () => {
+      const context = React.useContext(SelectContext)
+
+      return <span>{context?.value ?? ''}</span>
+    },
   }
 })
 
@@ -102,6 +147,8 @@ describe('MembersTable', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     pushMock.mockReset()
+    replaceMock.mockReset()
+    searchParamsValue.value = ''
   })
 
   afterEach(async () => {
@@ -116,68 +163,154 @@ describe('MembersTable', () => {
     vi.clearAllMocks()
   })
 
-  it('preserves the incoming order until a sortable header is clicked', async () => {
-    const members = [
-      createMember({
-        id: 'member-bravo',
-        name: 'Bravo',
-        beginTime: '2026-02-14T00:00:00.000Z',
-        endTime: '2026-04-20T23:59:59.000Z',
-      }),
-      createMember({
-        id: 'member-alpha',
-        name: 'Alpha',
-        beginTime: '2026-01-10T00:00:00.000Z',
-        endTime: '2026-03-18T23:59:59.000Z',
-      }),
-      createMember({
-        id: 'member-delta',
-        name: 'Delta',
-        beginTime: '2026-04-05T00:00:00.000Z',
-        endTime: '2026-01-12T23:59:59.000Z',
-      }),
-      createMember({
-        id: 'member-charlie',
-        name: 'Charlie',
-        beginTime: '2026-03-01T00:00:00.000Z',
-        endTime: '2026-02-25T23:59:59.000Z',
-      }),
-    ]
-
+  async function renderTable(members: Member[]) {
     await act(async () => {
       root.render(<MembersTable members={members} />)
     })
+  }
 
-    expect(getBodyRowNames(container)).toEqual(['Bravo', 'Alpha', 'Delta', 'Charlie'])
+  it('initializes page size, page, and sort from URL params', async () => {
+    const members = Array.from({ length: 26 }, (_, index) =>
+      createMember({
+        id: `member-${index + 1}`,
+        name: `Member ${String(index + 1).padStart(2, '0')}`,
+        beginTime: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+      }),
+    )
+    searchParamsValue.value = 'page=2&pageSize=25&sort=beginTime&direction=asc'
+
+    await renderTable(members)
+
+    expect(container.textContent).toContain('Page 2 of 2')
+    expect(container.textContent).toContain('25')
+    expect(getBodyRowNames(container)).toEqual(['Member 26'])
   })
 
-  it('toggles Start Date sorting between ascending and descending and keeps row navigation working', async () => {
+  it('writes updated page params to the URL and appends returnTo when opening a member', async () => {
     const members = [
+      createMember({ id: 'member-juliet', name: 'Juliet', beginTime: '2026-10-01T00:00:00.000Z' }),
+      createMember({ id: 'member-bravo', name: 'Bravo', beginTime: '2026-02-01T00:00:00.000Z' }),
+      createMember({ id: 'member-hotel', name: 'Hotel', beginTime: '2026-08-01T00:00:00.000Z' }),
+      createMember({ id: 'member-alpha', name: 'Alpha', beginTime: '2026-01-01T00:00:00.000Z' }),
+      createMember({ id: 'member-echo', name: 'Echo', beginTime: '2026-05-01T00:00:00.000Z' }),
+      createMember({ id: 'member-delta', name: 'Delta', beginTime: '2026-04-01T00:00:00.000Z' }),
+      createMember({ id: 'member-golf', name: 'Golf', beginTime: '2026-07-01T00:00:00.000Z' }),
+      createMember({ id: 'member-foxtrot', name: 'Foxtrot', beginTime: '2026-06-01T00:00:00.000Z' }),
+      createMember({ id: 'member-charlie', name: 'Charlie', beginTime: '2026-03-01T00:00:00.000Z' }),
+      createMember({ id: 'member-kilo', name: 'Kilo', beginTime: '2026-11-01T00:00:00.000Z' }),
+      createMember({ id: 'member-india', name: 'India', beginTime: '2026-09-01T00:00:00.000Z' }),
+    ]
+    searchParamsValue.value = 'page=2'
+
+    await renderTable(members)
+
+    expect(container.textContent).toContain('Page 2 of 2')
+    expect(getBodyRowNames(container)).toEqual(['India'])
+
+    const nextPageFirstRow = container.querySelector('tbody tr')
+
+    if (!(nextPageFirstRow instanceof HTMLTableRowElement)) {
+      throw new Error('Expected a data row on page 2.')
+    }
+
+    await act(async () => {
+      nextPageFirstRow.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(pushMock).toHaveBeenCalledWith('/members/member-india?returnTo=%2Fmembers%3Fpage%3D2')
+
+    const previousPageButton = container.querySelector('button[aria-label="Go to previous page"]')
+
+    if (!(previousPageButton instanceof HTMLButtonElement)) {
+      throw new Error('Previous page button not found.')
+    }
+
+    await act(async () => {
+      previousPageButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(replaceMock).toHaveBeenLastCalledWith('/members')
+
+    await renderTable(members)
+
+    expect(container.textContent).toContain('Page 1 of 2')
+    expect(getBodyRowNames(container)).toEqual([
+      'Juliet',
+      'Bravo',
+      'Hotel',
+      'Alpha',
+      'Echo',
+      'Delta',
+      'Golf',
+      'Foxtrot',
+      'Charlie',
+      'Kilo',
+    ])
+  })
+
+  it('writes sort params to the URL and resets back to page 1 when the sort changes', async () => {
+    const members = [
+      createMember({
+        id: 'member-juliet',
+        name: 'Juliet',
+        beginTime: '2026-10-01T00:00:00.000Z',
+      }),
       createMember({
         id: 'member-bravo',
         name: 'Bravo',
-        beginTime: '2026-02-14T00:00:00.000Z',
+        beginTime: '2026-02-01T00:00:00.000Z',
+      }),
+      createMember({
+        id: 'member-hotel',
+        name: 'Hotel',
+        beginTime: '2026-08-01T00:00:00.000Z',
       }),
       createMember({
         id: 'member-alpha',
         name: 'Alpha',
-        beginTime: '2026-01-10T00:00:00.000Z',
+        beginTime: '2026-01-01T00:00:00.000Z',
+      }),
+      createMember({
+        id: 'member-echo',
+        name: 'Echo',
+        beginTime: '2026-05-01T00:00:00.000Z',
       }),
       createMember({
         id: 'member-delta',
         name: 'Delta',
-        beginTime: '2026-04-05T00:00:00.000Z',
+        beginTime: '2026-04-01T00:00:00.000Z',
+      }),
+      createMember({
+        id: 'member-golf',
+        name: 'Golf',
+        beginTime: '2026-07-01T00:00:00.000Z',
+      }),
+      createMember({
+        id: 'member-foxtrot',
+        name: 'Foxtrot',
+        beginTime: '2026-06-01T00:00:00.000Z',
       }),
       createMember({
         id: 'member-charlie',
         name: 'Charlie',
         beginTime: '2026-03-01T00:00:00.000Z',
       }),
+      createMember({
+        id: 'member-kilo',
+        name: 'Kilo',
+        beginTime: '2026-11-01T00:00:00.000Z',
+      }),
+      createMember({
+        id: 'member-india',
+        name: 'India',
+        beginTime: '2026-09-01T00:00:00.000Z',
+      }),
     ]
+    searchParamsValue.value = 'page=2'
 
-    await act(async () => {
-      root.render(<MembersTable members={members} />)
-    })
+    await renderTable(members)
+
+    expect(container.textContent).toContain('Page 2 of 2')
 
     const startDateButton = getHeaderButton(container, 'Start Date')
 
@@ -189,7 +322,22 @@ describe('MembersTable', () => {
       startDateButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(getBodyRowNames(container)).toEqual(['Alpha', 'Bravo', 'Charlie', 'Delta'])
+    expect(replaceMock).toHaveBeenLastCalledWith('/members?sort=beginTime&direction=asc')
+
+    await renderTable(members)
+
+    expect(getBodyRowNames(container)).toEqual([
+      'Alpha',
+      'Bravo',
+      'Charlie',
+      'Delta',
+      'Echo',
+      'Foxtrot',
+      'Golf',
+      'Hotel',
+      'India',
+      'Juliet',
+    ])
     expect(getHeaderCell(container, 'Start Date')?.getAttribute('aria-sort')).toBe('ascending')
     expect(getHeaderButton(container, 'Start Date')?.querySelector('svg')).not.toBeNull()
 
@@ -203,82 +351,36 @@ describe('MembersTable', () => {
       firstDataRow.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(pushMock).toHaveBeenCalledWith('/members/member-alpha')
+    expect(pushMock).toHaveBeenCalledWith(
+      '/members/member-alpha?returnTo=%2Fmembers%3Fsort%3DbeginTime%26direction%3Dasc',
+    )
 
     await act(async () => {
       startDateButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(getBodyRowNames(container)).toEqual(['Delta', 'Charlie', 'Bravo', 'Alpha'])
+    expect(replaceMock).toHaveBeenLastCalledWith('/members?sort=beginTime&direction=desc')
+
+    await renderTable(members)
+
+    expect(container.textContent).toContain('Page 1 of 2')
+    expect(getBodyRowNames(container)).toEqual([
+      'Kilo',
+      'Juliet',
+      'India',
+      'Hotel',
+      'Golf',
+      'Foxtrot',
+      'Echo',
+      'Delta',
+      'Charlie',
+      'Bravo',
+    ])
     expect(getHeaderCell(container, 'Start Date')?.getAttribute('aria-sort')).toBe('descending')
     expect(getHeaderButton(container, 'Start Date')?.querySelector('svg')).not.toBeNull()
   })
 
-  it('toggles End Date sorting and moves the active indicator when switching columns', async () => {
-    const members = [
-      createMember({
-        id: 'member-bravo',
-        name: 'Bravo',
-        beginTime: '2026-02-14T00:00:00.000Z',
-        endTime: '2026-04-20T23:59:59.000Z',
-      }),
-      createMember({
-        id: 'member-alpha',
-        name: 'Alpha',
-        beginTime: '2026-01-10T00:00:00.000Z',
-        endTime: '2026-03-18T23:59:59.000Z',
-      }),
-      createMember({
-        id: 'member-delta',
-        name: 'Delta',
-        beginTime: '2026-04-05T00:00:00.000Z',
-        endTime: '2026-01-12T23:59:59.000Z',
-      }),
-      createMember({
-        id: 'member-charlie',
-        name: 'Charlie',
-        beginTime: '2026-03-01T00:00:00.000Z',
-        endTime: '2026-02-25T23:59:59.000Z',
-      }),
-    ]
-
-    await act(async () => {
-      root.render(<MembersTable members={members} />)
-    })
-
-    const startDateButton = getHeaderButton(container, 'Start Date')
-    const endDateButton = getHeaderButton(container, 'End Date')
-
-    if (!(startDateButton instanceof HTMLButtonElement) || !(endDateButton instanceof HTMLButtonElement)) {
-      throw new Error('Expected both date sort buttons to render.')
-    }
-
-    await act(async () => {
-      startDateButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
-
-    expect(getHeaderCell(container, 'Start Date')?.getAttribute('aria-sort')).toBe('ascending')
-    expect(getHeaderButton(container, 'End Date')?.querySelector('svg')).toBeNull()
-
-    await act(async () => {
-      endDateButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
-
-    expect(getBodyRowNames(container)).toEqual(['Delta', 'Charlie', 'Alpha', 'Bravo'])
-    expect(getHeaderCell(container, 'Start Date')?.getAttribute('aria-sort')).toBeNull()
-    expect(getHeaderButton(container, 'Start Date')?.querySelector('svg')).toBeNull()
-    expect(getHeaderCell(container, 'End Date')?.getAttribute('aria-sort')).toBe('ascending')
-    expect(getHeaderButton(container, 'End Date')?.querySelector('svg')).not.toBeNull()
-
-    await act(async () => {
-      endDateButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
-
-    expect(getBodyRowNames(container)).toEqual(['Bravo', 'Alpha', 'Charlie', 'Delta'])
-    expect(getHeaderCell(container, 'End Date')?.getAttribute('aria-sort')).toBe('descending')
-  })
-
-  it('keeps rows with missing or invalid dates at the bottom for both sort directions', async () => {
+  it('keeps rows with missing or invalid dates at the bottom for both sort directions from URL state', async () => {
     const members = [
       createMember({
         id: 'member-valid-late',
@@ -301,10 +403,11 @@ describe('MembersTable', () => {
         beginTime: null,
       }),
     ]
+    searchParamsValue.value = 'sort=beginTime&direction=asc'
 
-    await act(async () => {
-      root.render(<MembersTable members={members} />)
-    })
+    await renderTable(members)
+
+    expect(getBodyRowNames(container)).toEqual(['Valid Early', 'Valid Late', 'Invalid', 'Missing'])
 
     const startDateButton = getHeaderButton(container, 'Start Date')
 
@@ -316,16 +419,12 @@ describe('MembersTable', () => {
       startDateButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(getBodyRowNames(container)).toEqual(['Valid Early', 'Valid Late', 'Invalid', 'Missing'])
-
-    await act(async () => {
-      startDateButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
+    await renderTable(members)
 
     expect(getBodyRowNames(container)).toEqual(['Valid Late', 'Valid Early', 'Invalid', 'Missing'])
   })
 
-  it('sorts before pagination and resets back to page 1 when the sort changes', async () => {
+  it('writes pageSize to the URL and resets back to page 1 when rows per page changes', async () => {
     const members = [
       createMember({ id: 'member-juliet', name: 'Juliet', beginTime: '2026-10-01T00:00:00.000Z' }),
       createMember({ id: 'member-bravo', name: 'Bravo', beginTime: '2026-02-01T00:00:00.000Z' }),
@@ -339,60 +438,28 @@ describe('MembersTable', () => {
       createMember({ id: 'member-kilo', name: 'Kilo', beginTime: '2026-11-01T00:00:00.000Z' }),
       createMember({ id: 'member-india', name: 'India', beginTime: '2026-09-01T00:00:00.000Z' }),
     ]
+    searchParamsValue.value = 'page=2'
 
-    await act(async () => {
-      root.render(<MembersTable members={members} />)
-    })
-
-    expect(container.textContent).toContain('Page 1 of 2')
-    expect(getBodyRowNames(container)).toEqual([
-      'Juliet',
-      'Bravo',
-      'Hotel',
-      'Alpha',
-      'Echo',
-      'Delta',
-      'Golf',
-      'Foxtrot',
-      'Charlie',
-      'Kilo',
-    ])
-
-    const nextPageButton = container.querySelector('button[aria-label="Go to next page"]')
-
-    if (!(nextPageButton instanceof HTMLButtonElement)) {
-      throw new Error('Next page button not found.')
-    }
-
-    await act(async () => {
-      nextPageButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
+    await renderTable(members)
 
     expect(container.textContent).toContain('Page 2 of 2')
     expect(getBodyRowNames(container)).toEqual(['India'])
 
-    const startDateButton = getHeaderButton(container, 'Start Date')
-
-    if (!(startDateButton instanceof HTMLButtonElement)) {
-      throw new Error('Start Date sort button not found.')
-    }
-
     await act(async () => {
-      startDateButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      const rowsPerPageOption = container.querySelector('button[data-select-item-value="25"]')
+
+      if (!(rowsPerPageOption instanceof HTMLButtonElement)) {
+        throw new Error('Rows-per-page option not found.')
+      }
+
+      rowsPerPageOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(container.textContent).toContain('Page 1 of 2')
-    expect(getBodyRowNames(container)).toEqual([
-      'Alpha',
-      'Bravo',
-      'Charlie',
-      'Delta',
-      'Echo',
-      'Foxtrot',
-      'Golf',
-      'Hotel',
-      'India',
-      'Juliet',
-    ])
+    expect(replaceMock).toHaveBeenLastCalledWith('/members?pageSize=25')
+
+    await renderTable(members)
+
+    expect(container.textContent).toContain('Page 1 of 1')
+    expect(container.textContent).toContain('25')
   })
 })

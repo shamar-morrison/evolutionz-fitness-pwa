@@ -208,6 +208,22 @@ describe('MembersPage', () => {
     expect(searchField).not.toBeNull()
   })
 
+  it('initializes the filters from search params while ignoring table-state params', async () => {
+    searchParamsValue.value =
+      'search=Marcus&status=Active&type=General&page=3&pageSize=25&sort=endTime&direction=desc'
+
+    await act(async () => {
+      root.render(<MembersPage />)
+    })
+
+    expect(
+      (container.querySelector('input[placeholder="Search by name or card ID..."]') as HTMLInputElement)
+        .value,
+    ).toBe('Marcus')
+    expect(container.querySelector('#members-status-filter')?.textContent).toContain('Active')
+    expect(container.querySelector('#members-type-filter')?.textContent).toContain('General')
+  })
+
   it('hides sync buttons for front desk staff while keeping Add Member visible', async () => {
     authState.profile = {
       id: 'assistant-1',
