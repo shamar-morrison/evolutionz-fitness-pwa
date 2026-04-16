@@ -21,6 +21,24 @@ export type AvailableAccessCard = {
   cardCode: string | null
 }
 
+export type DoorHistoryEvent = {
+  cardNo: string
+  cardCode: string | null
+  memberName: string | null
+  time: string
+  accessGranted: boolean
+  doorName: string | null
+  eventType: string | null
+}
+
+export type DoorHistoryResponse = {
+  ok: true
+  events: DoorHistoryEvent[]
+  fetchedAt: string | null
+  totalMatches: number
+  cacheDate: string
+}
+
 export type MemberTypeRecord = {
   id: string
   name: string

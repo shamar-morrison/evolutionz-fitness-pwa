@@ -58,6 +58,9 @@ export const routeConfig: Record<string, RouteConfig> = {
   '/schedule': {
     allowedRoles: ['admin'],
   },
+  '/door-history': {
+    allowedRoles: ['admin'],
+  },
   '/reports': {
     allowedRoles: ['admin'],
   },

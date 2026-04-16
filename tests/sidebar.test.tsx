@@ -267,6 +267,7 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('Trainer')
     expect(container.textContent).toContain('Log out')
     expect(container.textContent).not.toContain('Members')
+    expect(container.textContent).not.toContain('Door History')
     expect(container.textContent).not.toContain('Unlock Door')
     expect(container.textContent).not.toContain('Reports')
     expect(container.textContent).not.toContain('Notifications')
@@ -332,6 +333,7 @@ describe('Sidebar', () => {
     expect(container.textContent).not.toContain('My Schedule')
     expect(container.textContent).not.toContain('My Clients')
     expect(container.textContent).not.toContain('My Requests')
+    expect(container.textContent).not.toContain('Door History')
     expect(container.textContent).toContain('Unlock Door')
     expect(container.textContent).not.toContain('Reports')
     expect(container.textContent).not.toContain('Notifications')
@@ -427,6 +429,7 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('Payment Requests')
     expect(container.textContent).toContain('Reschedule Requests')
     expect(container.textContent).toContain('Session Updates')
+    expect(container.textContent).toContain('Door History')
     expect(container.textContent).toContain('Settings')
     expect(container.textContent).toContain('Unlock Door')
     expect(container.textContent).toContain('Log out')
@@ -444,6 +447,7 @@ describe('Sidebar', () => {
     expect(links).toContain('/pending-approvals/payment-requests')
     expect(links).toContain('/pending-approvals/reschedule-requests')
     expect(links).toContain('/pending-approvals/session-updates')
+    expect(links).toContain('/door-history')
 
     const groupLabels = Array.from(container.querySelectorAll('[data-sidebar="group-label"]')).map(
       (label) => label.textContent?.trim(),
