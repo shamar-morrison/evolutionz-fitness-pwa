@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { replaceCurrentUrl } from '@/lib/client-history'
 import { buildMemberDisplayName } from '@/lib/member-name'
 import type { Member } from '@/types'
 
@@ -173,9 +174,9 @@ export function MembersTable({ members }: MembersTableProps) {
       const query = params.toString()
       const href = query ? `${pathname}?${query}` : pathname
 
-      router.replace(href, { scroll: false })
+      replaceCurrentUrl(href)
     },
-    [currentPage, pageSize, pathname, router, searchParamsString, sortColumn, sortDirection],
+    [currentPage, pageSize, pathname, searchParamsString, sortColumn, sortDirection],
   )
 
   useEffect(() => {
@@ -205,9 +206,9 @@ export function MembersTable({ members }: MembersTableProps) {
 
     if (normalizedQuery !== searchParamsString) {
       const href = normalizedQuery ? `${pathname}?${normalizedQuery}` : pathname
-      router.replace(href, { scroll: false })
+      replaceCurrentUrl(href)
     }
-  }, [currentPage, pageSize, pathname, router, searchParamsString, sortColumn, sortDirection])
+  }, [currentPage, pageSize, pathname, searchParamsString, sortColumn, sortDirection])
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn !== column) {

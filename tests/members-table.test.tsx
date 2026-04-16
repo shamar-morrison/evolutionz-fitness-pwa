@@ -7,9 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MembersTable } from '@/components/members-table'
 import type { Member } from '@/types'
 
-const { pushMock, replaceMock, searchParamsValue } = vi.hoisted(() => ({
+const { pushMock, searchParamsValue } = vi.hoisted(() => ({
   pushMock: vi.fn(),
-  replaceMock: vi.fn(),
   searchParamsValue: {
     value: '',
   },
@@ -23,10 +22,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/hooks/use-progress-router', () => ({
   useProgressRouter: () => ({
     push: pushMock,
-    replace: (href: string) => {
-      replaceMock(href)
-      searchParamsValue.value = new URL(href, 'http://localhost').search.replace(/^\?/u, '')
-    },
+    replace: vi.fn(),
     back: vi.fn(),
     forward: vi.fn(),
   }),
@@ -136,6 +132,10 @@ function getHeaderCell(container: HTMLDivElement, label: string) {
   return button?.closest('th') ?? null
 }
 
+function syncSearchParamsFromLocation() {
+  searchParamsValue.value = window.location.search.replace(/^\?/u, '')
+}
+
 describe('MembersTable', () => {
   let container: HTMLDivElement
   let root: Root
@@ -147,8 +147,8 @@ describe('MembersTable', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     pushMock.mockReset()
-    replaceMock.mockReset()
     searchParamsValue.value = ''
+    window.history.replaceState({}, '', '/members')
   })
 
   afterEach(async () => {
@@ -229,7 +229,8 @@ describe('MembersTable', () => {
       previousPageButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(replaceMock).toHaveBeenLastCalledWith('/members')
+    syncSearchParamsFromLocation()
+    expect(window.location.pathname + window.location.search).toBe('/members')
 
     await renderTable(members)
 
@@ -322,7 +323,10 @@ describe('MembersTable', () => {
       startDateButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(replaceMock).toHaveBeenLastCalledWith('/members?sort=beginTime&direction=asc')
+    syncSearchParamsFromLocation()
+    expect(window.location.pathname + window.location.search).toBe(
+      '/members?sort=beginTime&direction=asc',
+    )
 
     await renderTable(members)
 
@@ -359,7 +363,10 @@ describe('MembersTable', () => {
       startDateButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(replaceMock).toHaveBeenLastCalledWith('/members?sort=beginTime&direction=desc')
+    syncSearchParamsFromLocation()
+    expect(window.location.pathname + window.location.search).toBe(
+      '/members?sort=beginTime&direction=desc',
+    )
 
     await renderTable(members)
 
@@ -419,6 +426,7 @@ describe('MembersTable', () => {
       startDateButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
+    syncSearchParamsFromLocation()
     await renderTable(members)
 
     expect(getBodyRowNames(container)).toEqual(['Valid Late', 'Valid Early', 'Invalid', 'Missing'])
@@ -455,7 +463,8 @@ describe('MembersTable', () => {
       rowsPerPageOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(replaceMock).toHaveBeenLastCalledWith('/members?pageSize=25')
+    syncSearchParamsFromLocation()
+    expect(window.location.pathname + window.location.search).toBe('/members?pageSize=25')
 
     await renderTable(members)
 

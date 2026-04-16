@@ -47,6 +47,7 @@ import {
   refreshDoorHistory,
   sortDoorHistoryEvents,
 } from '@/lib/door-history'
+import { replaceCurrentUrl } from '@/lib/client-history'
 import { formatDateInputValue, parseDateInputValue } from '@/lib/member-access-time'
 import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
@@ -171,9 +172,9 @@ function DoorHistoryPageContent() {
       }
 
       const query = params.toString()
-      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+      replaceCurrentUrl(query ? `${pathname}?${query}` : pathname)
     },
-    [pathname, router, searchParamsString],
+    [pathname, searchParamsString],
   )
 
   useEffect(() => {
@@ -207,13 +208,12 @@ function DoorHistoryPageContent() {
 
     if (normalizedQuery !== searchParamsString) {
       const href = normalizedQuery ? `${pathname}?${normalizedQuery}` : pathname
-      router.replace(href, { scroll: false })
+      replaceCurrentUrl(href)
     }
   }, [
     accessFilter,
     currentPage,
     pathname,
-    router,
     searchParamsString,
     selectedDate,
     showUnknownEntries,

@@ -25,6 +25,7 @@ import { toast } from '@/hooks/use-toast'
 import { syncMembersFromDevice } from '@/lib/hik-sync'
 import { syncAvailableAccessCards } from '@/lib/available-cards'
 import { config } from '@/lib/config'
+import { replaceCurrentUrl } from '@/lib/client-history'
 import { queryKeys } from '@/lib/query-keys'
 import { isFrontDeskStaff } from '@/lib/staff'
 import { RefreshCw, Search, UserPlus } from 'lucide-react'
@@ -116,9 +117,9 @@ function MembersPageContent() {
       }
 
       const query = params.toString()
-      router.replace(query ? `?${query}` : '/members', { scroll: false })
+      replaceCurrentUrl(query ? `?${query}` : '/members')
     },
-    [router, searchParams],
+    [searchParams],
   )
 
   useEffect(() => {

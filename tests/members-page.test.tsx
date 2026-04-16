@@ -84,16 +84,28 @@ vi.mock('@/components/ui/input', () => ({
 
 vi.mock('@/components/ui/select', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
-  const SelectContext = React.createContext<string | undefined>(undefined)
+  const SelectContext = React.createContext<
+    | {
+        value?: string
+        onValueChange?: (value: string) => void
+      }
+    | undefined
+  >(undefined)
 
   return {
     Select: ({
       children,
+      onValueChange,
       value,
     }: {
       children: React.ReactNode
+      onValueChange?: (value: string) => void
       value?: string
-    }) => <SelectContext.Provider value={value}>{children}</SelectContext.Provider>,
+    }) => (
+      <SelectContext.Provider value={{ value, onValueChange }}>
+        {children}
+      </SelectContext.Provider>
+    ),
     SelectContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
     SelectItem: ({
       children,
@@ -101,14 +113,26 @@ vi.mock('@/components/ui/select', async () => {
     }: {
       children: React.ReactNode
       value: string
-    }) => <option value={value}>{children}</option>,
+    }) => {
+      const context = React.useContext(SelectContext)
+
+      return (
+        <button
+          type="button"
+          data-select-item-value={value}
+          onClick={() => context?.onValueChange?.(value)}
+        >
+          {children}
+        </button>
+      )
+    },
     SelectTrigger: ({ children, id, className }: React.ComponentProps<'button'>) => (
       <button id={id} type="button" className={className}>
         {children}
       </button>
     ),
     SelectValue: ({ placeholder }: { placeholder?: string }) => {
-      const value = React.useContext(SelectContext)
+      const value = React.useContext(SelectContext)?.value
 
       return <span>{value ?? placeholder}</span>
     },
@@ -150,6 +174,10 @@ vi.mock('@/lib/config', () => ({
 
 import MembersPage from '@/app/(app)/members/page'
 
+function syncSearchParamsFromLocation() {
+  searchParamsValue.value = window.location.search.replace(/^\?/u, '')
+}
+
 describe('MembersPage', () => {
   let container: HTMLDivElement
   let root: Root
@@ -171,6 +199,7 @@ describe('MembersPage', () => {
     configFeatures.showSyncCardsButton = true
     configFeatures.showSyncMembersButton = true
     searchParamsValue.value = ''
+    window.history.replaceState({}, '', '/members')
 
     useMembersMock.mockReturnValue({
       members: [],
@@ -222,6 +251,25 @@ describe('MembersPage', () => {
     ).toBe('Marcus')
     expect(container.querySelector('#members-status-filter')?.textContent).toContain('Active')
     expect(container.querySelector('#members-type-filter')?.textContent).toContain('General')
+  })
+
+  it('updates same-page status filter state in the URL without router navigation', async () => {
+    await act(async () => {
+      root.render(<MembersPage />)
+    })
+
+    const activeOption = container.querySelector('button[data-select-item-value="Active"]')
+
+    if (!(activeOption instanceof HTMLButtonElement)) {
+      throw new Error('Active status option not found.')
+    }
+
+    await act(async () => {
+      activeOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    syncSearchParamsFromLocation()
+    expect(window.location.pathname + window.location.search).toBe('/members?status=Active')
   })
 
   it('hides sync buttons for front desk staff while keeping Add Member visible', async () => {
