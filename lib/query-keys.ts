@@ -104,4 +104,7 @@ export const queryKeys = {
     available: ['cards', 'available'] as const,
     manualCreate: ['cards', 'manual-create'] as const,
   },
+  doorHistory: {
+    byDate: (date: string) => ['doorHistory', date] as const,
+  },
 } as const

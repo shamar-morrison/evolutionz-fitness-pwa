@@ -1,4 +1,5 @@
 import { formatAccessDate, getJamaicaDateInputValue } from '@/lib/member-access-time'
+import { JAMAICA_OFFSET } from '@/lib/jamaica-time'
 
 type MembershipExpiryEmailTemplateValues = {
   memberName: string
@@ -7,7 +8,6 @@ type MembershipExpiryEmailTemplateValues = {
 }
 
 const CARD_CODE_PREFIX_PATTERN = /^[A-Z]+\d+\s+/
-const JAMAICA_OFFSET = '-05:00'
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000
 
 function escapeHtml(value: string) {

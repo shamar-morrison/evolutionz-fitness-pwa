@@ -1,6 +1,6 @@
+import { JAMAICA_OFFSET, JAMAICA_TIME_ZONE } from '@/lib/jamaica-time'
+
 export const MEMBER_EVENTS_PAGE_SIZE = 10
-const JAMAICA_TIME_ZONE = 'America/Jamaica'
-const JAMAICA_OFFSET = '-05:00'
 
 export type MemberEventStatus =
   | 'success'

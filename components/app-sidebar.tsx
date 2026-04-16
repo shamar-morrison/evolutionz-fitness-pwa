@@ -12,6 +12,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   DoorOpen,
+  History,
   GraduationCap,
   LayoutDashboard,
   LogOut,
@@ -102,6 +103,7 @@ const adminNavItems: NavItem[] = [
   { href: '/email', label: 'Send Email', icon: Mail },
   { href: '/classes', label: 'Classes', icon: GraduationCap },
   { href: '/schedule', label: 'Schedule', icon: CalendarDays },
+  { href: '/door-history', label: 'Door History', icon: History },
 ]
 
 const adminReportItems: NavItem[] = [
