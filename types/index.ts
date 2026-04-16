@@ -25,6 +25,7 @@ export type DoorHistoryEvent = {
   cardNo: string
   employeeNo: string | null
   cardCode: string | null
+  memberId: string | null
   memberName: string | null
   time: string
   accessGranted: boolean

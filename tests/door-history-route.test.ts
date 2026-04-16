@@ -37,6 +37,7 @@ type CardRow = {
 }
 
 type MemberRow = {
+  id: string
   card_no: string | null
   employee_no: string | null
   name: string | null
@@ -74,7 +75,7 @@ function createDoorHistoryReadClient({
   cards = [{ card_no: '0102857149', card_code: 'A18' }] satisfies CardRow[],
   cardsError = null,
   membersByCardNo = [
-    { card_no: '0102857149', employee_no: '00000611', name: 'A18 Jordan Miles' },
+    { id: 'member-1', card_no: '0102857149', employee_no: '00000611', name: 'A18 Jordan Miles' },
   ] satisfies MemberRow[],
   memberCardLookupError = null,
   membersByEmployeeNo = [] satisfies MemberRow[],
@@ -147,7 +148,7 @@ function createDoorHistoryReadClient({
         if (table === 'members') {
           return {
             select(columns: string) {
-              expect(columns).toBe('card_no, employee_no, name')
+              expect(columns).toBe('id, card_no, employee_no, name')
 
               return {
                 in(column: string, values: string[]) {
@@ -208,6 +209,7 @@ describe('GET /api/door-history', () => {
           cardNo: '0102857149',
           employeeNo: null,
           cardCode: 'A18',
+          memberId: 'member-1',
           memberName: 'Jordan Miles',
           time: '2026-04-14T09:30:00-05:00',
           accessGranted: true,
@@ -218,6 +220,7 @@ describe('GET /api/door-history', () => {
           cardNo: '0102857149',
           employeeNo: null,
           cardCode: 'A18',
+          memberId: 'member-1',
           memberName: 'Jordan Miles',
           time: '2026-04-14T07:15:00-05:00',
           accessGranted: false,
@@ -288,6 +291,7 @@ describe('GET /api/door-history', () => {
           cardNo: '',
           employeeNo: null,
           cardCode: null,
+          memberId: null,
           memberName: null,
           time: '2026-04-14T09:30:00-05:00',
           accessGranted: true,
@@ -322,7 +326,7 @@ describe('GET /api/door-history', () => {
       },
       cards: [],
       membersByCardNo: [],
-      membersByEmployeeNo: [{ card_no: null, employee_no: '302', name: 'Jordan Miles' }],
+      membersByEmployeeNo: [{ id: 'member-302', card_no: null, employee_no: '302', name: 'Jordan Miles' }],
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
 
@@ -339,6 +343,7 @@ describe('GET /api/door-history', () => {
           cardNo: '',
           employeeNo: '00000302',
           cardCode: null,
+          memberId: 'member-302',
           memberName: 'Jordan Miles',
           time: '2026-04-14T09:30:00-05:00',
           accessGranted: true,
@@ -373,7 +378,7 @@ describe('GET /api/door-history', () => {
       },
       cards: [],
       membersByCardNo: [],
-      membersByEmployeeNo: [{ card_no: null, employee_no: '00000302', name: 'Jordan Miles' }],
+      membersByEmployeeNo: [{ id: 'member-302-padded', card_no: null, employee_no: '00000302', name: 'Jordan Miles' }],
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
 
@@ -390,6 +395,7 @@ describe('GET /api/door-history', () => {
           cardNo: '',
           employeeNo: '302',
           cardCode: null,
+          memberId: 'member-302-padded',
           memberName: 'Jordan Miles',
           time: '2026-04-14T09:30:00-05:00',
           accessGranted: true,
@@ -425,8 +431,8 @@ describe('GET /api/door-history', () => {
       cards: [],
       membersByCardNo: [],
       membersByEmployeeNo: [
-        { card_no: null, employee_no: '302', name: 'Alternate Match' },
-        { card_no: null, employee_no: '00000302', name: 'Exact Match' },
+        { id: 'member-alt', card_no: null, employee_no: '302', name: 'Alternate Match' },
+        { id: 'member-exact', card_no: null, employee_no: '00000302', name: 'Exact Match' },
       ],
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -442,6 +448,7 @@ describe('GET /api/door-history', () => {
           cardNo: '',
           employeeNo: '00000302',
           cardCode: null,
+          memberId: 'member-exact',
           memberName: 'Exact Match',
           time: '2026-04-14T09:30:00-05:00',
           accessGranted: true,

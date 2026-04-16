@@ -23,6 +23,7 @@ type CardRow = {
 }
 
 type MemberRow = {
+  id: string
   card_no: string | null
   employee_no: string | null
   name: string | null
@@ -123,7 +124,7 @@ function enrichDoorHistoryEvents(
       })
       .filter((entry): entry is readonly [string, string | null] => entry !== null),
   )
-  const memberNameByCardNo = new Map(
+  const memberByCardNo = new Map(
     members
       .map((member) => {
         const cardNo = normalizeText(member.card_no)
@@ -132,11 +133,11 @@ function enrichDoorHistoryEvents(
           return null
         }
 
-        return [cardNo, normalizeText(member.name)] as const
+        return [cardNo, { id: member.id, name: normalizeText(member.name) }] as const
       })
-      .filter((entry): entry is readonly [string, string] => entry !== null),
+      .filter((entry): entry is readonly [string, { id: string; name: string }] => entry !== null),
   )
-  const memberNameByEmployeeNo = new Map(
+  const memberByEmployeeNo = new Map(
     members
       .map((member) => {
         const employeeNo = normalizeText(member.employee_no)
@@ -146,22 +147,22 @@ function enrichDoorHistoryEvents(
           return null
         }
 
-        return [employeeNo, memberName] as const
+        return [employeeNo, { id: member.id, name: memberName }] as const
       })
-      .filter((entry): entry is readonly [string, string] => entry !== null),
+      .filter((entry): entry is readonly [string, { id: string; name: string }] => entry !== null),
   )
 
   return sortDoorHistoryEvents(
     events.map((event) => {
       const cardNo = normalizeText(event.cardNo)
       const cardCode = cardCodeByCardNo.get(cardNo) ?? event.cardCode
-      let memberName = cardNo ? memberNameByCardNo.get(cardNo) ?? null : null
+      let member = cardNo ? memberByCardNo.get(cardNo) ?? null : null
 
-      if (!cardNo) {
+      if (!member && !cardNo) {
         for (const employeeNoCandidate of getEmployeeNoLookupCandidates(event.employeeNo)) {
-          memberName = memberNameByEmployeeNo.get(employeeNoCandidate) ?? null
+          member = memberByEmployeeNo.get(employeeNoCandidate) ?? null
 
-          if (memberName) {
+          if (member) {
             break
           }
         }
@@ -170,7 +171,8 @@ function enrichDoorHistoryEvents(
       return {
         ...event,
         cardCode,
-        memberName: memberName ? getCleanMemberName(memberName, cardCode) || memberName : null,
+        memberId: member?.id ?? null,
+        memberName: member ? getCleanMemberName(member.name, cardCode) || member.name : null,
       }
     }),
   )
@@ -233,7 +235,7 @@ export async function GET(request: Request) {
       const [{ data: cardRows, error: cardsError }, { data: memberRows, error: membersError }] =
         await Promise.all([
           supabase.from('cards').select('card_no, card_code').in('card_no', cardNos),
-          supabase.from('members').select('card_no, employee_no, name').in('card_no', cardNos),
+          supabase.from('members').select('id, card_no, employee_no, name').in('card_no', cardNos),
         ])
 
       if (cardsError) {
@@ -251,7 +253,7 @@ export async function GET(request: Request) {
     if (employeeNos.length > 0) {
       const { data: memberRows, error: membersError } = await supabase
         .from('members')
-        .select('card_no, employee_no, name')
+        .select('id, card_no, employee_no, name')
         .in('employee_no', employeeNos)
 
       if (membersError) {

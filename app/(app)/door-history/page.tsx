@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useProgressRouter } from '@/hooks/use-progress-router'
 import { useDoorHistory } from '@/hooks/use-door-history'
 import {
   formatDoorHistoryEventTime,
@@ -68,6 +69,7 @@ function AccessBadge({ accessGranted }: { accessGranted: boolean }) {
 }
 
 function DoorHistoryPageContent() {
+  const router = useProgressRouter()
   const queryClient = useQueryClient()
   const [selectedDate, setSelectedDate] = useState(() => getDoorHistoryTodayDateValue())
   const [accessFilter, setAccessFilter] = useState<AccessFilter>('all')
@@ -315,7 +317,11 @@ function DoorHistoryPageContent() {
                 </TableRow>
               ) : (
                 paginatedEvents.map((event, index) => (
-                  <TableRow key={`${event.time}-${event.cardNo}-${event.eventType ?? 'event'}-${index}`}>
+                  <TableRow
+                    key={`${event.time}-${event.cardNo}-${event.eventType ?? 'event'}-${index}`}
+                    className={event.memberId ? 'cursor-pointer' : undefined}
+                    onClick={event.memberId ? () => router.push(`/members/${event.memberId}`) : undefined}
+                  >
                     <TableCell className="px-4 py-4">{formatDoorHistoryEventTime(event.time)}</TableCell>
                     <TableCell className="px-4 py-4 font-medium">
                       {event.memberName ?? 'Unknown'}

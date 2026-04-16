@@ -8,12 +8,14 @@ import { queryKeys } from '@/lib/query-keys'
 
 const {
   invalidateQueriesMock,
+  pushMock,
   refreshDoorHistoryMock,
   refetchMock,
   toastMock,
   useDoorHistoryMock,
 } = vi.hoisted(() => ({
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
+  pushMock: vi.fn(),
   refreshDoorHistoryMock: vi.fn().mockResolvedValue(undefined),
   refetchMock: vi.fn(),
   toastMock: vi.fn(),
@@ -148,6 +150,10 @@ vi.mock('@/components/ui/switch', () => ({
   ),
 }))
 
+vi.mock('@/hooks/use-progress-router', () => ({
+  useProgressRouter: () => ({ push: pushMock }),
+}))
+
 vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
 }))
@@ -158,6 +164,7 @@ function buildEvent(index: number) {
   return {
     cardNo: `0102857${String(index).padStart(3, '0')}`,
     cardCode: null,
+    memberId: `member-${index}`,
     memberName: `Member ${index}`,
     time: `2026-04-15T00:${String(index).padStart(2, '0')}:00-05:00`,
     accessGranted: index % 2 === 0,
@@ -170,6 +177,7 @@ function buildUnknownEvent(index: number) {
   return {
     cardNo: '',
     cardCode: null,
+    memberId: null,
     memberName: null,
     time: `2026-04-15T02:${String(index).padStart(2, '0')}:00-05:00`,
     accessGranted: false,
