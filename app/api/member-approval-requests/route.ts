@@ -13,6 +13,7 @@ import {
 } from '@/lib/pt-notifications-server'
 import { requireAdminUser, requireAuthenticatedProfile } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { sendPushToProfiles } from '@/lib/web-push'
 import type { MemberGender } from '@/types'
 
 const createMemberApprovalRequestSchema = z
@@ -258,6 +259,15 @@ export async function POST(request: Request) {
             requestedBy,
           },
         })),
+      )
+
+      await sendPushToProfiles(
+        adminRecipients.map((recipient) => recipient.id),
+        {
+          title: 'New Member Request',
+          body: 'A staff member submitted a new member request.',
+          url: '/pending-approvals/member-requests',
+        },
       )
     } catch (notificationError) {
       console.error(

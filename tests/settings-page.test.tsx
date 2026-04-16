@@ -11,9 +11,22 @@ import type {
   MembershipExpiryEmailSettings,
 } from '@/types'
 
-const { currentRoleState, toastMock } = vi.hoisted(() => ({
+const {
+  currentRoleState,
+  pushNotificationsState,
+  requestPermissionMock,
+  toastMock,
+  unsubscribeMock,
+} = vi.hoisted(() => ({
   currentRoleState: { role: 'admin' as 'admin' | 'staff' },
+  pushNotificationsState: {
+    isSupported: false,
+    permission: 'default' as NotificationPermission,
+    isSubscribed: false,
+  },
+  requestPermissionMock: vi.fn(),
   toastMock: vi.fn(),
+  unsubscribeMock: vi.fn(),
 }))
 
 vi.mock('@/components/role-guard', () => ({
@@ -34,6 +47,16 @@ vi.mock('@/components/authenticated-home-redirect', () => ({
 
 vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
+}))
+
+vi.mock('@/hooks/use-push-notifications', () => ({
+  usePushNotifications: () => ({
+    isSupported: pushNotificationsState.isSupported,
+    permission: pushNotificationsState.permission,
+    isSubscribed: pushNotificationsState.isSubscribed,
+    requestPermission: requestPermissionMock,
+    unsubscribe: unsubscribeMock,
+  }),
 }))
 
 vi.mock('@/components/ui/dialog', () => ({
@@ -228,7 +251,12 @@ describe('SettingsPage', () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
     currentRoleState.role = 'admin'
+    pushNotificationsState.isSupported = false
+    pushNotificationsState.permission = 'default'
+    pushNotificationsState.isSubscribed = false
+    requestPermissionMock.mockReset()
     toastMock.mockReset()
+    unsubscribeMock.mockReset()
     classesState = [
       createClass(),
       createClass({
@@ -911,5 +939,67 @@ describe('SettingsPage', () => {
     await clickButtonByAriaLabel(container, 'Remove 7 day offset')
 
     expect(container.textContent).toContain('No reminder offsets configured.')
+  })
+
+  it('shows a destructive toast and clears loading when enabling push notifications fails', async () => {
+    pushNotificationsState.isSupported = true
+    requestPermissionMock.mockRejectedValueOnce(new Error('Enable failed'))
+
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <SettingsPage />
+        </QueryClientProvider>,
+      )
+    })
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain('Enable push notifications')
+    })
+
+    await clickButtonByLabel(container, 'Enable push notifications')
+
+    await waitForAssertion(() => {
+      expect(toastMock).toHaveBeenCalledWith({
+        title: 'Could not enable push notifications',
+        description: 'Enable failed',
+        variant: 'destructive',
+      })
+    })
+
+    expect(requestPermissionMock).toHaveBeenCalledTimes(1)
+    expect(getButtonByLabel(container, 'Enable push notifications').disabled).toBe(false)
+  })
+
+  it('shows a destructive toast and clears loading when disabling push notifications fails', async () => {
+    pushNotificationsState.isSupported = true
+    pushNotificationsState.permission = 'granted'
+    pushNotificationsState.isSubscribed = true
+    unsubscribeMock.mockRejectedValueOnce(new Error('Disable failed'))
+
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <SettingsPage />
+        </QueryClientProvider>,
+      )
+    })
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain('Push notifications enabled on this device.')
+    })
+
+    await clickButtonByLabel(container, 'Disable')
+
+    await waitForAssertion(() => {
+      expect(toastMock).toHaveBeenCalledWith({
+        title: 'Could not disable push notifications',
+        description: 'Disable failed',
+        variant: 'destructive',
+      })
+    })
+
+    expect(unsubscribeMock).toHaveBeenCalledTimes(1)
+    expect(getButtonByLabel(container, 'Disable').disabled).toBe(false)
   })
 })
