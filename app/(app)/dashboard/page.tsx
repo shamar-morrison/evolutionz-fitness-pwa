@@ -1,16 +1,47 @@
 'use client'
 
 import { AuthenticatedHomeRedirect } from '@/components/authenticated-home-redirect'
-import { RoleGuard } from '@/components/role-guard'
-import { useDashboardStats } from '@/hooks/use-dashboard-stats'
+import { DashboardSignupsChartCard } from '@/components/dashboard-signups-chart-card'
 import {
   ExpiringThisWeekCard,
   RecentlyAddedMembersCard,
 } from '@/components/dashboard-member-panels'
-import { StatCard } from '@/components/stat-card'
 import { QuickActions } from '@/components/quick-actions'
-import { Users, UserPlus, UserX, Clock3, CalendarX2 } from 'lucide-react'
+import { RoleGuard } from '@/components/role-guard'
+import { StatCard } from '@/components/stat-card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useDashboardStats } from '@/hooks/use-dashboard-stats'
+import { formatRevenueCurrency } from '@/lib/revenue-reports'
+import { Banknote, CalendarX2, Clock3, UserX, Users } from 'lucide-react'
+
+function formatMonthOverMonthTrend(currentValue: number, previousValue: number) {
+  const delta = currentValue - previousValue
+
+  if (delta === 0) {
+    return {
+      direction: 'neutral' as const,
+      label: '0 (0.0%)',
+    }
+  }
+
+  const direction = delta > 0 ? ('up' as const) : ('down' as const)
+  const signedDelta = `${delta > 0 ? '+' : ''}${delta.toLocaleString()}`
+
+  if (previousValue === 0) {
+    return {
+      direction,
+      label: `${signedDelta} (New)`,
+    }
+  }
+
+  const percentageChange = (delta / previousValue) * 100
+  const signedPercentage = `${percentageChange > 0 ? '+' : ''}${percentageChange.toFixed(1)}%`
+
+  return {
+    direction,
+    label: `${signedDelta} (${signedPercentage})`,
+  }
+}
 
 export default function DashboardPage() {
   return (
@@ -40,13 +71,13 @@ function DashboardPageContent() {
         </p>
       </div>
 
-      {/* Stats Row */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {isStatsLoading ? (
           <>
-            <Skeleton className="h-28" />
-            <Skeleton className="h-28" />
-            <Skeleton className="h-28" />
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
           </>
         ) : (
           <>
@@ -55,51 +86,80 @@ function DashboardPageContent() {
               value={stats.activeMembers}
               icon={Users}
               variant="success"
+              iconClassName="h-4 w-4"
+              trend={formatMonthOverMonthTrend(
+                stats.activeMembers,
+                stats.activeMembersLastMonth,
+              )}
+              trendTooltip="Compared to last month's active member count"
             />
             <StatCard
-              title="Expired Members"
-              value={stats.expiredMembers}
+              title="Total Expired Members"
+              value={stats.totalExpiredMembers}
               icon={UserX}
               variant="destructive"
-            />
-            <StatCard
-              title="Expiring Soon (7 days)"
-              value={stats.expiringSoon}
-              icon={Clock3}
-              variant="warning"
-              href="/dashboard/expiring-members"
-            />
-          </>
-        )}
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        {isStatsLoading ? (
-          <>
-            <Skeleton className="h-28" />
-            <Skeleton className="h-28" />
-          </>
-        ) : (
-          <>
-            <StatCard
-              title="Signed Up This Month"
-              value={stats.signedUpThisMonth}
-              icon={UserPlus}
-              variant="success"
-              href="/reports/members?tab=signups&period=this-month"
+              iconClassName="h-4 w-4"
             />
             <StatCard
               title="Expired This Month"
               value={stats.expiredThisMonth}
               icon={CalendarX2}
               variant="destructive"
+              iconClassName="h-4 w-4"
               href="/reports/members?tab=expired&period=this-month"
+              trend={formatMonthOverMonthTrend(
+                stats.expiredThisMonth,
+                stats.expiredThisMonthLastMonth,
+              )}
+              trendTooltip="Compared to last month's expiry count"
+            />
+            <StatCard
+              title="Expiring Soon (7 days)"
+              value={stats.expiringSoon}
+              icon={Clock3}
+              variant="warning"
+              iconClassName="h-4 w-4"
+              href="/dashboard/expiring-members"
             />
           </>
         )}
       </div>
 
-      {/* Quick Actions */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
+        {isStatsLoading ? (
+          <>
+            <Skeleton className="h-80" />
+            <Skeleton className="h-64" />
+          </>
+        ) : (
+          <>
+            <DashboardSignupsChartCard
+              signupsByMonth={stats.signupsByMonth}
+              currentMonthCount={stats.signedUpThisMonth}
+              href="/reports/members?tab=signups&period=this-month"
+            />
+            <StatCard
+              title="Total Revenue"
+              value={formatRevenueCurrency(stats.totalRevenueThisMonth)}
+              icon={Banknote}
+              variant="success"
+              href="/reports/revenue"
+              trend={formatMonthOverMonthTrend(
+                stats.totalRevenueThisMonth,
+                stats.totalRevenueLastMonth,
+              )}
+              trendTooltip="Compared to last month's total revenue"
+              details={
+                <>
+                  <p>{`Membership fees: JMD ${formatRevenueCurrency(stats.membershipRevenueThisMonth)}`}</p>
+                  <p>{`Card fees: JMD ${formatRevenueCurrency(stats.cardFeeRevenueThisMonth)}`}</p>
+                </>
+              }
+            />
+          </>
+        )}
+      </div>
+
       <div>
         <h2 className="mb-4 text-lg font-semibold">Quick Actions</h2>
         <QuickActions />

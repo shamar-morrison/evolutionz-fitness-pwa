@@ -361,12 +361,24 @@ export type ClassAttendanceListItem = ClassAttendance & {
 }
 
 // Dashboard Types
+export type DashboardSignupsByMonthItem = {
+  month: string
+  count: number
+}
+
 export type DashboardMembershipStats = {
   activeMembers: number
-  expiredMembers: number
+  activeMembersLastMonth: number
+  totalExpiredMembers: number
   expiringSoon: number
   signedUpThisMonth: number
+  signupsByMonth: DashboardSignupsByMonthItem[]
   expiredThisMonth: number
+  expiredThisMonthLastMonth: number
+  membershipRevenueThisMonth: number
+  cardFeeRevenueThisMonth: number
+  totalRevenueThisMonth: number
+  totalRevenueLastMonth: number
 }
 
 export type CheckInStatus = 'success' | 'not_found' | 'expired' | 'suspended'

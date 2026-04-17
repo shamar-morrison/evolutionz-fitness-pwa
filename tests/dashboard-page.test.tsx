@@ -34,17 +34,24 @@ vi.mock('@/components/dashboard-member-panels', () => ({
   RecentlyAddedMembersCard: () => <div>Recently Added Members</div>,
 }))
 
-vi.mock('@/components/stat-card', () => ({
-  StatCard: ({
-    title,
-    value,
+vi.mock('@/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <div data-testid="tooltip-root">{children}</div>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-content">{children}</div>
+  ),
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-trigger">{children}</div>
+  ),
+}))
+
+vi.mock('@/components/dashboard-signups-chart-card', () => ({
+  DashboardSignupsChartCard: ({
+    currentMonthCount,
     href,
   }: {
-    title: string
-    value: number
-    href?: string
-  }) =>
-    href ? <a href={href}>{`${title}:${value}`}</a> : <div>{`${title}:${value}`}</div>,
+    currentMonthCount: number
+    href: string
+  }) => <a href={href}>{`Member Signups (Last 6 Months)|${currentMonthCount} this month`}</a>,
 }))
 
 vi.mock('@/components/quick-actions', () => ({
@@ -67,10 +74,24 @@ describe('DashboardPage', () => {
     useDashboardStatsMock.mockReturnValue({
       data: {
         activeMembers: 12,
-        expiredMembers: 3,
+        activeMembersLastMonth: 10,
+        totalExpiredMembers: 3,
         expiringSoon: 4,
         signedUpThisMonth: 5,
+        signupsByMonth: [
+          { month: '2025-11', count: 0 },
+          { month: '2025-12', count: 1 },
+          { month: '2026-01', count: 2 },
+          { month: '2026-02', count: 3 },
+          { month: '2026-03', count: 4 },
+          { month: '2026-04', count: 5 },
+        ],
         expiredThisMonth: 2,
+        expiredThisMonthLastMonth: 1,
+        membershipRevenueThisMonth: 9750,
+        cardFeeRevenueThisMonth: 250,
+        totalRevenueThisMonth: 10000,
+        totalRevenueLastMonth: 0,
       },
       isLoading: false,
       error: null,
@@ -89,19 +110,33 @@ describe('DashboardPage', () => {
     vi.clearAllMocks()
   })
 
-  it('renders dashboard content for admins', async () => {
+  it('renders the refreshed dashboard content for admins', async () => {
     await act(async () => {
       root.render(<DashboardPage />)
     })
 
     expect(container.textContent).toContain('Dashboard')
-    expect(container.textContent).toContain('Active Members:12')
-    expect(container.textContent).toContain('Signed Up This Month:5')
-    expect(container.textContent).toContain('Expired This Month:2')
+    expect(container.textContent).toContain('Active Members12')
+    expect(container.textContent).toContain('Total Expired Members3')
+    expect(container.textContent).toContain('Expired This Month2')
+    expect(container.textContent).toContain('Expiring Soon (7 days)4')
+    expect(container.textContent).toContain('Member Signups (Last 6 Months)|5 this month')
+    expect(container.textContent).toContain('Total Revenue$10,000')
+    expect(container.textContent).toContain("Compared to last month's active member count")
+    expect(container.textContent).toContain("Compared to last month's expiry count")
+    expect(container.textContent).toContain("Compared to last month's total revenue")
+    expect(container.textContent).toContain('Membership fees: JMD $9,750')
+    expect(container.textContent).toContain('Card fees: JMD $250')
+    expect(container.textContent).toContain('+2 (+20.0%)')
+    expect(container.textContent).toContain('+1 (+100.0%)')
+    expect(container.textContent).toContain('+10,000 (New)')
     expect(container.textContent).toContain('Quick Actions Content')
-    expect(container.querySelector('a[href="/dashboard/expiring-members"]')?.textContent).toBe(
-      'Expiring Soon (7 days):4',
+    expect(container.querySelectorAll('[data-testid="tooltip-root"]')).toHaveLength(3)
+
+    expect(container.querySelector('a[href="/dashboard/expiring-members"]')?.textContent).toContain(
+      'Expiring Soon (7 days)4',
     )
+
     const reportLinks = Array.from(container.querySelectorAll('a')).map((link) => ({
       href: link.getAttribute('href') ?? '',
       text: link.textContent ?? '',
@@ -114,7 +149,8 @@ describe('DashboardPage', () => {
           link.href.includes('tab=signups') &&
           link.href.includes('period=this-month'),
       )?.text,
-    ).toBe('Signed Up This Month:5')
+    ).toContain('Member Signups (Last 6 Months)')
+
     expect(
       reportLinks.find(
         (link) =>
@@ -122,7 +158,14 @@ describe('DashboardPage', () => {
           link.href.includes('tab=expired') &&
           link.href.includes('period=this-month'),
       )?.text,
-    ).toBe('Expired This Month:2')
+    ).toContain('Expired This Month2')
+
+    expect(reportLinks.find((link) => link.href === '/reports/revenue')?.text).toContain(
+      'Total Revenue$10,000',
+    )
+    expect(reportLinks.find((link) => link.href === '/reports/revenue')?.text).toContain(
+      'Membership fees: JMD $9,750',
+    )
   })
 
   it('redirects staff users to their authenticated home', async () => {
