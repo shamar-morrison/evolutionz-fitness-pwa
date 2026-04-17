@@ -20,9 +20,9 @@ import {
 } from '@/lib/member-extension-requests'
 import {
   calculateProjectedMemberEndTime,
-  formatMemberExtensionDate,
   getMemberExtensionDurationDays,
 } from '@/lib/member-extension'
+import { formatAccessDate } from '@/lib/member-access-time'
 import { queryKeys } from '@/lib/query-keys'
 import type { Member } from '@/types'
 import type { MemberDurationValue } from '@/lib/member-access-time'
@@ -108,7 +108,7 @@ export function ExtendMembershipDialog({
       toast({
         title: 'Membership extended',
         description:
-          result.warning ?? `New end date: ${formatMemberExtensionDate(result.newEndTime)}.`,
+          result.warning ?? `New end date: ${formatAccessDate(result.newEndTime, 'long')}.`,
       })
     } catch (error) {
       toast({
@@ -153,7 +153,7 @@ export function ExtendMembershipDialog({
             <p className="text-sm font-medium text-muted-foreground">New end date</p>
             <p className="mt-1 text-base font-semibold">
               {projectedEndTime
-                ? formatMemberExtensionDate(projectedEndTime)
+                ? formatAccessDate(projectedEndTime.toISOString(), 'long')
                 : 'Select a duration above'}
             </p>
           </div>

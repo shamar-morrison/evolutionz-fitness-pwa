@@ -13,6 +13,7 @@ import {
   formatMemberExtensionDuration,
   isMemberExtensionEligible,
 } from '@/lib/member-extension'
+import { formatAccessDate } from '@/lib/member-access-time'
 import { queryKeys } from '@/lib/query-keys'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -153,11 +154,11 @@ export function PendingMemberExtensionRequestsPage() {
 
                     <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
                       <p>Duration: {formatMemberExtensionDuration(request.durationDays)}</p>
-                      <p>Current end date: {formatMemberExtensionDate(request.currentEndTime)}</p>
+                      <p>Current end date: {formatAccessDate(request.currentEndTime, 'long')}</p>
                       <p className="sm:col-span-2">
                         Projected new end date:{' '}
                         {projectedEndTime
-                          ? formatMemberExtensionDate(projectedEndTime)
+                          ? formatAccessDate(projectedEndTime.toISOString(), 'long')
                           : 'Unavailable'}
                       </p>
                     </div>

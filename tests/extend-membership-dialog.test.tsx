@@ -187,15 +187,17 @@ describe('ExtendMembershipDialog', () => {
     vi.clearAllMocks()
   })
 
-  it('shows the Jamaica-local projected end date and submits direct admin extensions', async () => {
+  it('shows the access-window end date and submits direct admin extensions', async () => {
     extendMemberMembershipMock.mockResolvedValue({
-      newEndTime: '2026-05-28T23:59:59',
+      newEndTime: '2026-12-29T04:59:59.000Z',
     })
 
     await act(async () => {
       root.render(
         <ExtendMembershipDialog
-          member={createMember()}
+          member={createMember({
+            endTime: '2026-12-01T04:59:59.000Z',
+          })}
           open
           onOpenChange={onOpenChangeMock}
           requiresApproval={false}
@@ -205,7 +207,7 @@ describe('ExtendMembershipDialog', () => {
 
     await changeDuration('1_month')
 
-    expect(container.textContent).toContain('28 May 2026')
+    expect(container.textContent).toContain('29 December 2026')
 
     await clickButton('Extend Membership')
 
@@ -227,7 +229,7 @@ describe('ExtendMembershipDialog', () => {
     expect(onOpenChangeMock).toHaveBeenCalledWith(false)
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Membership extended',
-      description: 'New end date: 28 May 2026.',
+      description: 'New end date: 29 December 2026.',
     })
   })
 
