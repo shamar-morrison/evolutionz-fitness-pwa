@@ -67,7 +67,7 @@ function DashboardPageContent() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 sm:flex-nowrap">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
@@ -75,7 +75,7 @@ function DashboardPageContent() {
           </p>
         </div>
         {can('members.create') && (
-          <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0">
+          <Button asChild className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto sm:shrink-0">
             <Link data-progress href="/members?action=add">
               <UserPlus className="h-4 w-4" />
               Add Member

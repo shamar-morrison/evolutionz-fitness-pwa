@@ -631,11 +631,11 @@ export function EditMemberModal({
               </p>
             </div>
 
-            {/* Row 2: Gender + Membership Type — 2 cols */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
+            {/* Row 2: Gender + Membership Type + Email + Phone + Join Date */}
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-2 sm:col-span-2">
                 <Label>Gender</Label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-4">
                   {memberGenders.map((gender) => (
                     <Button
                       key={gender}
@@ -694,10 +694,7 @@ export function EditMemberModal({
                   </p>
                 ) : null}
               </div>
-            </div>
 
-            {/* Row 3: Email + Phone + Join Date */}
-            <div className="grid gap-4 sm:grid-cols-3">
               <div className="grid gap-2">
                 <Label htmlFor="edit-email">Email</Label>
                 <Input
