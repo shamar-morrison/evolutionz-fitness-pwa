@@ -5,10 +5,12 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  calendarSelectionState,
   toastMock,
   useMemberExpiredReportMock,
   useMemberSignupsReportMock,
 } = vi.hoisted(() => ({
+  calendarSelectionState: { value: new Date(2026, 3, 1, 12, 0, 0, 0) },
   toastMock: vi.fn(),
   useMemberExpiredReportMock: vi.fn(),
   useMemberSignupsReportMock: vi.fn(),
@@ -21,6 +23,30 @@ vi.mock('@/hooks/use-member-reports', () => ({
 
 vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
+}))
+
+vi.mock('@/components/ui/popover', () => ({
+  Popover: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PopoverContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  PopoverTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+vi.mock('@/components/ui/calendar', () => ({
+  Calendar: ({
+    onSelect,
+    'data-testid': dataTestId,
+  }: {
+    onSelect?: (date: Date) => void
+    'data-testid'?: string
+  }) => (
+    <button
+      type="button"
+      data-testid={dataTestId}
+      onClick={() => onSelect?.(calendarSelectionState.value)}
+    >
+      Mock calendar selection
+    </button>
+  ),
 }))
 
 import { MemberReportsClient } from '@/app/(app)/reports/members/member-reports-client'
@@ -74,18 +100,29 @@ function createExpiredReport(count = 1) {
   }
 }
 
-async function setInputValue(input: HTMLInputElement, value: string) {
-  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')
-  const setValue = descriptor?.set
+function getDateTrigger(container: HTMLDivElement, id: string) {
+  const trigger = container.querySelector(`#${id}`)
 
-  if (!setValue) {
-    throw new Error('Input value setter is unavailable.')
+  if (!(trigger instanceof HTMLButtonElement)) {
+    throw new Error(`${id} trigger not found.`)
   }
 
+  return trigger
+}
+
+async function selectCalendarDate(container: HTMLDivElement, id: string, value: Date) {
+  const trigger = getDateTrigger(container, id)
+  const calendarButton = container.querySelector(`[data-testid="${id}-calendar"]`)
+
+  if (!(calendarButton instanceof HTMLButtonElement)) {
+    throw new Error(`${id} calendar select button not found.`)
+  }
+
+  calendarSelectionState.value = value
+
   await act(async () => {
-    setValue.call(input, value)
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-    input.dispatchEvent(new Event('change', { bubbles: true }))
+    trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    calendarButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
 }
 
@@ -203,15 +240,8 @@ describe('MemberReportsClient', () => {
 
     await clickButton(container, 'Custom Range')
 
-    const startInput = container.querySelector('#member-reports-start-date')
-    const endInput = container.querySelector('#member-reports-end-date')
-
-    if (!(startInput instanceof HTMLInputElement) || !(endInput instanceof HTMLInputElement)) {
-      throw new Error('Expected custom range inputs to be rendered.')
-    }
-
-    await setInputValue(startInput, '2026-04-12')
-    await setInputValue(endInput, '2026-04-10')
+    await selectCalendarDate(container, 'member-reports-start-date', new Date(2026, 3, 12, 12, 0, 0, 0))
+    await selectCalendarDate(container, 'member-reports-end-date', new Date(2026, 3, 10, 12, 0, 0, 0))
     await clickButton(container, 'Apply')
 
     expect(toastMock).toHaveBeenCalledWith(

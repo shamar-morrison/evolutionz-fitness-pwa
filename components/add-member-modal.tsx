@@ -244,6 +244,15 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       return false
     }
 
+    if (!formData.joinedDate) {
+      toast({
+        title: 'Join date required',
+        description: 'Choose the member’s join date before saving.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
     return true
   }
 
@@ -534,6 +543,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           isCardsLoading={isCardsLoading}
           cardsError={cardsError}
           hasNoAvailableCards={hasNoAvailableCards}
+          isJoinDateRequired
           memberTypes={memberTypes}
           memberTypesError={memberTypesError instanceof Error ? memberTypesError.message : null}
           isMemberTypesLoading={isMemberTypesLoading}

@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { StringDatePicker } from '@/components/ui/string-date-picker'
 import { Textarea } from '@/components/ui/textarea'
 import {
   buildBeginTimeValue,
@@ -726,17 +727,17 @@ export function EditMemberModal({
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-join-date">Join Date</Label>
-                <Input
+                <StringDatePicker
                   id="edit-join-date"
-                  type="date"
                   value={formData.joinedDate}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setFormData((currentFormData) => ({
                       ...currentFormData,
-                      joinedDate: event.target.value,
+                      joinedDate: value,
                     }))
                   }
                   placeholder="Optional join date"
+                  allowClear
                 />
               </div>
             </div>

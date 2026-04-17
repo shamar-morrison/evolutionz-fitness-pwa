@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  calendarSelectionState,
   createMemberEditRequestMock,
   invalidateQueriesMock,
   onOpenChangeMock,
@@ -13,6 +14,7 @@ const {
   uploadMemberPhotoMock,
   useMemberTypesMock,
 } = vi.hoisted(() => ({
+  calendarSelectionState: { value: new Date(2026, 3, 7, 12, 0, 0, 0) },
   createMemberEditRequestMock: vi.fn().mockResolvedValue({
     id: 'request-1',
   }),
@@ -93,7 +95,21 @@ vi.mock('@/components/ui/popover', () => ({
 }))
 
 vi.mock('@/components/ui/calendar', () => ({
-  Calendar: () => <div data-testid="calendar" />,
+  Calendar: ({
+    onSelect,
+    'data-testid': dataTestId,
+  }: {
+    onSelect?: (date: Date) => void
+    'data-testid'?: string
+  }) => (
+    <button
+      type="button"
+      data-testid={dataTestId}
+      onClick={() => onSelect?.(calendarSelectionState.value)}
+    >
+      Mock calendar selection
+    </button>
+  ),
 }))
 
 vi.mock('@/components/ui/tooltip', () => ({
@@ -166,6 +182,44 @@ function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: str
   setValue.call(input, value)
   input.dispatchEvent(new Event('input', { bubbles: true }))
   input.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+function getDateTrigger(container: HTMLDivElement, id: string) {
+  const trigger = container.querySelector(`#${id}`)
+
+  if (!(trigger instanceof HTMLButtonElement)) {
+    throw new Error(`${id} trigger not found.`)
+  }
+
+  return trigger
+}
+
+async function selectCalendarDate(container: HTMLDivElement, id: string, value: Date) {
+  const trigger = getDateTrigger(container, id)
+  const calendarButton = container.querySelector(`[data-testid="${id}-calendar"]`)
+
+  if (!(calendarButton instanceof HTMLButtonElement)) {
+    throw new Error(`${id} calendar select button not found.`)
+  }
+
+  calendarSelectionState.value = value
+
+  await act(async () => {
+    trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    calendarButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+async function clearCalendarDate(container: HTMLDivElement, id: string) {
+  const clearButton = container.querySelector(`[data-testid="${id}-clear"]`)
+
+  if (!(clearButton instanceof HTMLButtonElement)) {
+    throw new Error(`${id} clear button not found.`)
+  }
+
+  await act(async () => {
+    clearButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
 }
 
 function createDeferred<T>() {
@@ -341,6 +395,88 @@ describe('EditMemberModal UI', () => {
       phone: null,
       joinedAt: null,
       remark: null,
+      beginTime: '2026-04-02T00:00:00',
+      endTime: '2026-05-01T23:59:59',
+    })
+  })
+
+  it('updates the join date when a new one is selected', async () => {
+    updateMemberMock.mockResolvedValue({
+      member: createMember({ joinedAt: '2026-04-07' }),
+    })
+
+    await act(async () => {
+      root.render(
+        <EditMemberModal
+          member={createMember({ joinedAt: null })}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    await selectCalendarDate(container, 'edit-join-date', new Date(2026, 3, 7, 12, 0, 0, 0))
+
+    const submitButton = container.querySelector('button[type="submit"]')
+
+    if (!(submitButton instanceof HTMLButtonElement)) {
+      throw new Error('Submit button not found.')
+    }
+
+    await act(async () => {
+      submitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await flushAsyncWork()
+
+    expect(updateMemberMock).toHaveBeenCalledWith('member-1', {
+      name: 'Jane Doe',
+      memberTypeId: null,
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '555-0100',
+      joinedAt: '2026-04-07',
+      remark: 'Existing member',
+      beginTime: '2026-04-02T00:00:00',
+      endTime: '2026-05-01T23:59:59',
+    })
+  })
+
+  it('clears an existing join date for direct edits', async () => {
+    updateMemberMock.mockResolvedValue({
+      member: createMember({ joinedAt: null }),
+    })
+
+    await act(async () => {
+      root.render(
+        <EditMemberModal
+          member={createMember({ joinedAt: '2026-04-07' })}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    await clearCalendarDate(container, 'edit-join-date')
+
+    const submitButton = container.querySelector('button[type="submit"]')
+
+    if (!(submitButton instanceof HTMLButtonElement)) {
+      throw new Error('Submit button not found.')
+    }
+
+    await act(async () => {
+      submitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await flushAsyncWork()
+
+    expect(updateMemberMock).toHaveBeenCalledWith('member-1', {
+      name: 'Jane Doe',
+      memberTypeId: null,
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '555-0100',
+      joinedAt: null,
+      remark: 'Existing member',
       beginTime: '2026-04-02T00:00:00',
       endTime: '2026-05-01T23:59:59',
     })

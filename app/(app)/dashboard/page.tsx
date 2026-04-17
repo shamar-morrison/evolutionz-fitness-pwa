@@ -54,6 +54,7 @@ export default function DashboardPage() {
 
 function DashboardPageContent() {
   const { data: stats, isLoading: isStatsLoading, error: statsError } = useDashboardStats()
+  const { can } = usePermissions()
 
   if (statsError) {
     return (
@@ -62,8 +63,6 @@ function DashboardPageContent() {
       </div>
     )
   }
-
-  const { can } = usePermissions()
 
   return (
     <div className="space-y-8">

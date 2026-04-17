@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { StringDatePicker } from '@/components/ui/string-date-picker'
 import { Textarea } from '@/components/ui/textarea'
 import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { formatAvailableAccessCardLabel } from '@/lib/available-cards'
@@ -57,6 +58,7 @@ type MemberBasicFieldsProps = SharedMemberFieldsProps & {
   canAddCard: boolean
   cardsError: string | null
   hasNoAvailableCards: boolean
+  isJoinDateRequired?: boolean
   isCardsLoading: boolean
   memberTypes: MemberTypeRecord[]
   memberTypesError: string | null
@@ -90,7 +92,7 @@ export function createInitialMemberFormState(now: Date = new Date()): MemberForm
     gender: '',
     email: '',
     phone: '',
-    joinedDate: '',
+    joinedDate: formatDateInputValue(now),
     selectedInventoryCardNo: '',
     memberTypeId: '',
     remark: '',
@@ -112,6 +114,7 @@ export function MemberBasicFields({
   formData,
   hasNoAvailableCards,
   idPrefix,
+  isJoinDateRequired = false,
   isCardsLoading,
   isMemberTypesLoading,
   isSubmitting,
@@ -337,21 +340,19 @@ export function MemberBasicFields({
 
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-join-date`}>Join Date</Label>
-        <Input
+        <StringDatePicker
           id={`${idPrefix}-join-date`}
-          type="date"
           value={formData.joinedDate}
-          onChange={(event) =>
+          onChange={(value) =>
             setFormData((currentFormData) => ({
               ...currentFormData,
-              joinedDate: event.target.value,
+              joinedDate: value,
             }))
           }
           disabled={isSubmitting}
+          placeholder={isJoinDateRequired ? 'Select a date' : 'Not set'}
+          allowClear={!isJoinDateRequired}
         />
-        <p className="text-xs text-muted-foreground">
-          Optional. Record the member&apos;s actual gym join date separately from when the record is created.
-        </p>
       </div>
     </div>
   )

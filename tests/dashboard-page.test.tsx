@@ -4,10 +4,29 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { currentRoleState, useDashboardStatsMock } = vi.hoisted(() => ({
+const { currentRoleState, useDashboardStatsMock, usePermissionsMock } = vi.hoisted(() => ({
   currentRoleState: { role: 'admin' as 'admin' | 'staff' },
   useDashboardStatsMock: vi.fn(),
+  usePermissionsMock: vi.fn(),
 }))
+
+const dashboardStatsData = {
+  activeMembers: 12,
+  activeMembersLastMonth: 10,
+  totalExpiredMembers: 3,
+  expiringSoon: 4,
+  signedUpThisMonth: 5,
+  signupsByMonth: [
+    { month: '2025-11', count: 0 },
+    { month: '2025-12', count: 1 },
+    { month: '2026-01', count: 2 },
+    { month: '2026-02', count: 3 },
+    { month: '2026-03', count: 4 },
+    { month: '2026-04', count: 5 },
+  ],
+  expiredThisMonth: 2,
+  expiredThisMonthLastMonth: 1,
+}
 
 vi.mock('@/components/role-guard', () => ({
   RoleGuard: ({
@@ -27,6 +46,10 @@ vi.mock('@/components/authenticated-home-redirect', () => ({
 
 vi.mock('@/hooks/use-dashboard-stats', () => ({
   useDashboardStats: useDashboardStatsMock,
+}))
+
+vi.mock('@/hooks/use-permissions', () => ({
+  usePermissions: usePermissionsMock,
 }))
 
 vi.mock('@/components/dashboard-member-panels', () => ({
@@ -54,10 +77,6 @@ vi.mock('@/components/dashboard-signups-chart-card', () => ({
   }) => <a href={href}>{`Member Signups (Last 6 Months)|${currentMonthCount} this month`}</a>,
 }))
 
-vi.mock('@/components/quick-actions', () => ({
-  QuickActions: () => <div>Quick Actions Content</div>,
-}))
-
 import DashboardPage from '@/app/(app)/dashboard/page'
 
 describe('DashboardPage', () => {
@@ -71,24 +90,11 @@ describe('DashboardPage', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     currentRoleState.role = 'admin'
+    usePermissionsMock.mockReturnValue({
+      can: (permission: string) => permission === 'members.create',
+    })
     useDashboardStatsMock.mockReturnValue({
-      data: {
-        activeMembers: 12,
-        activeMembersLastMonth: 10,
-        totalExpiredMembers: 3,
-        expiringSoon: 4,
-        signedUpThisMonth: 5,
-        signupsByMonth: [
-          { month: '2025-11', count: 0 },
-          { month: '2025-12', count: 1 },
-          { month: '2026-01', count: 2 },
-          { month: '2026-02', count: 3 },
-          { month: '2026-03', count: 4 },
-          { month: '2026-04', count: 5 },
-        ],
-        expiredThisMonth: 2,
-        expiredThisMonthLastMonth: 1,
-      },
+      data: dashboardStatsData,
       isLoading: false,
       error: null,
     })
@@ -121,7 +127,6 @@ describe('DashboardPage', () => {
     expect(container.textContent).toContain("Compared to last month's expiry count")
     expect(container.textContent).toContain('+2 (+20.0%)')
     expect(container.textContent).toContain('+1 (+100.0%)')
-    expect(container.textContent).toContain('Quick Actions Content')
     expect(container.querySelectorAll('[data-testid="tooltip-root"]')).toHaveLength(2)
 
     expect(container.querySelector('a[href="/dashboard/expiring-members"]')?.textContent).toContain(
@@ -160,6 +165,24 @@ describe('DashboardPage', () => {
     })
 
     expect(container.textContent).toContain('redirect:home')
-    expect(container.textContent).not.toContain('Quick Actions Content')
+    expect(container.textContent).not.toContain('Dashboard')
+  })
+
+  it('renders the stats error state after a successful render without breaking hook order', async () => {
+    await act(async () => {
+      root.render(<DashboardPage />)
+    })
+
+    useDashboardStatsMock.mockReturnValue({
+      data: dashboardStatsData,
+      isLoading: false,
+      error: new Error('Failed to load dashboard data'),
+    })
+
+    await act(async () => {
+      root.render(<DashboardPage />)
+    })
+
+    expect(container.textContent).toContain('Failed to load dashboard data')
   })
 })

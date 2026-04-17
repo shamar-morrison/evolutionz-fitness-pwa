@@ -6,9 +6,9 @@ import { RoleGuard } from '@/components/role-guard'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { StringDatePicker } from '@/components/ui/string-date-picker'
 import {
   Table,
   TableBody,
@@ -269,23 +269,21 @@ function ReportsPageContent() {
           <div className="grid gap-4 lg:grid-cols-[minmax(0,220px)_minmax(0,220px)_auto]">
             <div className="space-y-2">
               <Label htmlFor="pt-payments-start-date">Start date</Label>
-              <Input
+              <StringDatePicker
                 id="pt-payments-start-date"
-                type="date"
                 value={draftStartDate}
-                onChange={(event) => setDraftStartDate(event.target.value)}
-                max={draftEndDate || undefined}
+                onChange={setDraftStartDate}
+                maxValue={draftEndDate || undefined}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="pt-payments-end-date">End date</Label>
-              <Input
+              <StringDatePicker
                 id="pt-payments-end-date"
-                type="date"
                 value={draftEndDate}
-                onChange={(event) => setDraftEndDate(event.target.value)}
-                min={draftStartDate || undefined}
+                onChange={setDraftEndDate}
+                minValue={draftStartDate || undefined}
               />
             </div>
 

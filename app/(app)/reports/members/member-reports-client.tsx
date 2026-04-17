@@ -23,10 +23,10 @@ import {
 import { replaceCurrentUrl } from '@/lib/client-history'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PaginationControls } from '@/components/pagination-controls'
 import { Skeleton } from '@/components/ui/skeleton'
+import { StringDatePicker } from '@/components/ui/string-date-picker'
 import { StatusBadge } from '@/components/status-badge'
 import {
   Table,
@@ -677,33 +677,31 @@ export function MemberReportsClient() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="member-reports-start-date">Start date</Label>
-                <Input
+                <StringDatePicker
                   id="member-reports-start-date"
-                  type="date"
                   value={draftRange.startDate}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setDraftRange((currentRange) => ({
                       ...currentRange,
-                      startDate: event.target.value,
+                      startDate: value,
                     }))
                   }
-                  max={draftRange.endDate || undefined}
+                  maxValue={draftRange.endDate || undefined}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="member-reports-end-date">End date</Label>
-                <Input
+                <StringDatePicker
                   id="member-reports-end-date"
-                  type="date"
                   value={draftRange.endDate}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setDraftRange((currentRange) => ({
                       ...currentRange,
-                      endDate: event.target.value,
+                      endDate: value,
                     }))
                   }
-                  min={draftRange.startDate || undefined}
+                  minValue={draftRange.startDate || undefined}
                 />
               </div>
             </div>

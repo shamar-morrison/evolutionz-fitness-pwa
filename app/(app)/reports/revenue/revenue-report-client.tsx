@@ -30,9 +30,9 @@ import {
 import { isDateValue } from '@/lib/pt-scheduling'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { StringDatePicker } from '@/components/ui/string-date-picker'
 import {
   Table,
   TableBody,
@@ -1372,33 +1372,31 @@ export function RevenueReportClient() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="revenue-report-from-date">Start date</Label>
-                <Input
+                <StringDatePicker
                   id="revenue-report-from-date"
-                  type="date"
                   value={draftRange.from}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setDraftRange((currentRange) => ({
                       ...currentRange,
-                      from: event.target.value,
+                      from: value,
                     }))
                   }
-                  max={draftRange.to || undefined}
+                  maxValue={draftRange.to || undefined}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="revenue-report-to-date">End date</Label>
-                <Input
+                <StringDatePicker
                   id="revenue-report-to-date"
-                  type="date"
                   value={draftRange.to}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setDraftRange((currentRange) => ({
                       ...currentRange,
-                      to: event.target.value,
+                      to: value,
                     }))
                   }
-                  min={draftRange.from || undefined}
+                  minValue={draftRange.from || undefined}
                 />
               </div>
             </div>

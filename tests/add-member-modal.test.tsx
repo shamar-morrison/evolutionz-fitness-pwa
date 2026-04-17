@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   addMemberMock,
+  calendarSelectionState,
   compressImageMock,
   createManualAccessCardMock,
   createMemberApprovalRequestMock,
@@ -20,6 +21,7 @@ const {
   usePermissionsMock,
 } = vi.hoisted(() => ({
   addMemberMock: vi.fn(),
+  calendarSelectionState: { value: new Date(2026, 3, 7, 12, 0, 0, 0) },
   compressImageMock: vi.fn(),
   createManualAccessCardMock: vi.fn(),
   createMemberApprovalRequestMock: vi.fn(),
@@ -166,7 +168,21 @@ vi.mock('@/components/ui/popover', () => ({
 }))
 
 vi.mock('@/components/ui/calendar', () => ({
-  Calendar: () => <div data-testid="calendar" />,
+  Calendar: ({
+    onSelect,
+    'data-testid': dataTestId,
+  }: {
+    onSelect?: (date: Date) => void
+    'data-testid'?: string
+  }) => (
+    <button
+      type="button"
+      data-testid={dataTestId}
+      onClick={() => onSelect?.(calendarSelectionState.value)}
+    >
+      Mock calendar selection
+    </button>
+  ),
 }))
 
 vi.mock('@/components/ui/tooltip', () => ({
@@ -505,6 +521,7 @@ describe('AddMemberModal', () => {
         gender: 'Female',
         email: 'jane@example.com',
         phone: '876-555-1111',
+        joined_at: '2026-04-08',
         beginTime: '2026-04-08T09:30:00',
         endTime: '2026-05-05T23:59:59',
         cardNo: '12345',
@@ -564,6 +581,7 @@ describe('AddMemberModal', () => {
       gender: 'Female',
       email: 'jane@example.com',
       phone: '876-555-1111',
+      joinedAt: '2026-04-08',
       beginTime: '2026-04-08T09:30:00',
       endTime: '2026-05-05T23:59:59',
       cardNo: '12345',
@@ -1079,5 +1097,20 @@ describe('AddMemberModal', () => {
       description: 'Enter the member’s phone number before saving.',
       variant: 'destructive',
     })
+  })
+
+  it('defaults the add-member join date to today', async () => {
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    const joinDateTrigger = container.querySelector('#member-join-date')
+
+    if (!(joinDateTrigger instanceof HTMLButtonElement)) {
+      throw new Error('Join date trigger not found.')
+    }
+
+    expect(joinDateTrigger.textContent).toContain('Apr 8, 2026')
   })
 })
