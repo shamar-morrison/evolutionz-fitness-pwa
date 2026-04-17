@@ -296,6 +296,7 @@ describe('POST /api/access/members/[id]/report-card-lost', () => {
         cardStatus: 'suspended_lost',
         cardLostAt: '2026-04-01T05:00:00.000Z',
         type: 'General',
+        joinedAt: null,
         memberTypeId: null,
         status: 'Suspended',
         deviceAccessState: 'ready',

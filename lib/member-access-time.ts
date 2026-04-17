@@ -1,4 +1,4 @@
-import { addDays, subDays } from 'date-fns'
+import { addDays, format, subDays } from 'date-fns'
 import { JAMAICA_OFFSET, JAMAICA_TIME_ZONE } from '@/lib/jamaica-time'
 
 export type MemberDurationValue =
@@ -262,6 +262,25 @@ export function parseDateInputValue(value: string) {
   }
 
   return date
+}
+
+export function formatDateInputDisplay(
+  value: string | null | undefined,
+  emptyLabel = 'Not set',
+) {
+  const normalizedValue = normalizeText(value)
+
+  if (!normalizedValue) {
+    return emptyLabel
+  }
+
+  const parsedDate = parseDateInputValue(normalizedValue)
+
+  if (!parsedDate) {
+    return emptyLabel
+  }
+
+  return format(parsedDate, 'MMM d, yyyy')
 }
 
 export function parseLocalDateTime(value: string) {

@@ -160,6 +160,7 @@ function createRequest(overrides: Partial<MemberApprovalRequest> = {}): MemberAp
     email: overrides.email ?? 'jane@example.com',
     phone: overrides.phone ?? '876-555-1111',
     remark: overrides.remark ?? 'Wants mornings only',
+    joinedAt: overrides.joinedAt ?? null,
     beginTime: overrides.beginTime ?? '2026-04-09T14:00:00.000Z',
     endTime: overrides.endTime ?? '2026-05-09T04:59:59.000Z',
     cardNo: overrides.cardNo ?? '0102857149',

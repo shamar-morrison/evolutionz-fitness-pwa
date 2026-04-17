@@ -75,6 +75,8 @@ function createEditRequestRecord(
     proposed_email: overrides.proposed_email === undefined ? null : overrides.proposed_email,
     proposed_member_type_id:
       overrides.proposed_member_type_id === undefined ? null : overrides.proposed_member_type_id,
+    proposed_join_date:
+      overrides.proposed_join_date === undefined ? null : overrides.proposed_join_date,
     proposed_start_date:
       overrides.proposed_start_date === undefined ? null : overrides.proposed_start_date,
     proposed_start_time:
@@ -94,6 +96,7 @@ function createEditRequestRecord(
       phone: '555-0100',
       email: 'jane@example.com',
       member_type_id: MEMBER_TYPE_ID_GENERAL,
+      joined_at: null,
       begin_time: '2026-04-01T00:00:00Z',
       end_time: '2026-04-30T23:59:59Z',
       memberType: {
@@ -884,6 +887,7 @@ describe('member edit request routes', () => {
         phone: '555-0100',
         email: 'jane@example.com',
         member_type_id: MEMBER_TYPE_ID_GENERAL,
+        joined_at: null,
         begin_time: '2026-04-01T00:00:00Z',
         end_time: '2026-04-28T23:59:59Z',
         memberType: {

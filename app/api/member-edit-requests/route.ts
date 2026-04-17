@@ -32,6 +32,11 @@ const createMemberEditRequestSchema = z
       .email('Email must be valid.')
       .optional(),
     proposed_member_type_id: z.string().trim().uuid('Membership type must be valid.').optional(),
+    proposed_join_date: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Join date must be valid.')
+      .optional(),
     proposed_start_date: z
       .string()
       .trim()
@@ -46,6 +51,14 @@ const createMemberEditRequestSchema = z
   })
   .strict()
   .superRefine((value, context) => {
+    if (value.proposed_join_date && !parseDateInputValue(value.proposed_join_date)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Join date must be valid.',
+        path: ['proposed_join_date'],
+      })
+    }
+
     if (value.proposed_start_date && !parseDateInputValue(value.proposed_start_date)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -68,6 +81,7 @@ const createMemberEditRequestSchema = z
       value.proposed_phone !== undefined ||
       value.proposed_email !== undefined ||
       value.proposed_member_type_id !== undefined ||
+      value.proposed_join_date !== undefined ||
       value.proposed_start_date !== undefined ||
       value.proposed_start_time !== undefined ||
       value.proposed_duration !== undefined
@@ -110,6 +124,7 @@ type MemberEditRequestsRouteClient = {
       proposed_phone?: string
       proposed_email?: string
       proposed_member_type_id?: string
+      proposed_join_date?: string
       proposed_start_date?: string
       proposed_start_time?: string
       proposed_duration?: string
@@ -189,6 +204,7 @@ export async function POST(request: Request) {
         ...(input.proposed_member_type_id
           ? { proposed_member_type_id: input.proposed_member_type_id }
           : {}),
+        ...(input.proposed_join_date ? { proposed_join_date: input.proposed_join_date } : {}),
         ...(input.proposed_start_date
           ? { proposed_start_date: input.proposed_start_date }
           : {}),

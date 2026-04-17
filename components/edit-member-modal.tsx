@@ -71,6 +71,7 @@ type EditMemberFormState = {
   email: string
   phone: string
   memberTypeId: string
+  joinedDate: string
   remark: string
   startDate: string
   startTime: string
@@ -88,6 +89,7 @@ function normalizeEditMemberFormState(formState: EditMemberFormState) {
     email: formState.email.trim(),
     phone: formState.phone.trim(),
     memberTypeId: formState.memberTypeId,
+    joinedDate: formState.joinedDate.trim(),
     remark: formState.remark.trim(),
     startDate: formState.startDate,
     startTime: formState.startTime,
@@ -104,6 +106,7 @@ function normalizeEditMemberRequestState(formState: EditMemberFormState) {
     email: formState.email.trim(),
     phone: formState.phone.trim(),
     memberTypeId: formState.memberTypeId,
+    joinedDate: formState.joinedDate.trim(),
     startDate: formState.startDate.trim(),
     startTime: normalizedStartTime,
     duration: formState.duration,
@@ -233,6 +236,17 @@ export function buildEditMemberRequestPayload(
     payload.proposed_member_type_id = currentState.memberTypeId
   }
 
+  if (currentState.joinedDate !== initialState.joinedDate) {
+    if (!currentState.joinedDate) {
+      return {
+        error: 'Clearing join date is not supported in approval requests.',
+        payload: null,
+      }
+    }
+
+    payload.proposed_join_date = currentState.joinedDate
+  }
+
   if (currentState.startDate !== initialState.startDate) {
     payload.proposed_start_date = currentState.startDate
   }
@@ -265,6 +279,7 @@ function createInitialFormState(member: Member): EditMemberFormState {
     email: member.email ?? '',
     phone: member.phone ?? '',
     memberTypeId: member.memberTypeId ?? '',
+    joinedDate: member.joinedAt ?? '',
     remark: member.remark ?? '',
     startDate: getAccessDateInputValue(member.beginTime) || formatDateInputValue(new Date()),
     startTime: getAccessTimeInputValue(member.beginTime) || '00:00:00',
@@ -520,6 +535,7 @@ export function EditMemberModal({
         gender: formData.gender || null,
         email: formData.email.trim() || null,
         phone: formData.phone.trim() || null,
+        joinedAt: formData.joinedDate.trim() || null,
         remark: formData.remark.trim() || null,
         beginTime: nextBeginTime,
         endTime: nextEndTime,
@@ -680,8 +696,8 @@ export function EditMemberModal({
               </div>
             </div>
 
-            {/* Row 3: Email + Phone — 2 cols */}
-            <div className="grid gap-4 sm:grid-cols-2">
+            {/* Row 3: Email + Phone + Join Date */}
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="grid gap-2">
                 <Label htmlFor="edit-email">Email</Label>
                 <Input
@@ -709,6 +725,21 @@ export function EditMemberModal({
                     }))
                   }
                   placeholder="Optional phone number"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-join-date">Join Date</Label>
+                <Input
+                  id="edit-join-date"
+                  type="date"
+                  value={formData.joinedDate}
+                  onChange={(event) =>
+                    setFormData((currentFormData) => ({
+                      ...currentFormData,
+                      joinedDate: event.target.value,
+                    }))
+                  }
+                  placeholder="Optional join date"
                 />
               </div>
             </div>

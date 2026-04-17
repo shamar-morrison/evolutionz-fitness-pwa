@@ -311,6 +311,7 @@ describe('POST /api/access/members/provision', () => {
         cardStatus: 'assigned',
         cardLostAt: null,
         type: 'General',
+        joinedAt: null,
         memberTypeId: MEMBER_TYPE_ID_GENERAL,
         status: 'Active',
         deviceAccessState: 'ready',

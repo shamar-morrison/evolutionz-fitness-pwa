@@ -335,6 +335,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
         email,
         phone,
         ...(formData.remark.trim() ? { remark: formData.remark.trim() } : {}),
+        ...(formData.joinedDate ? { joined_at: formData.joinedDate } : {}),
         beginTime,
         endTime,
         cardNo,
@@ -420,7 +421,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     setSubmissionStep('creating_member')
 
     try {
-      const createdMember = await addMember({
+      const { member: createdMember, warning } = await addMember({
         name: formData.name.trim(),
         type: selectedMemberType.name,
         memberTypeId: selectedMemberType.id,
@@ -428,6 +429,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
         email,
         phone,
         ...(formData.remark.trim() ? { remark: formData.remark.trim() } : {}),
+        ...(formData.joinedDate ? { joinedAt: formData.joinedDate } : {}),
         beginTime,
         endTime,
         cardNo,
@@ -462,7 +464,9 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       onSuccess?.()
       toast({
         title: 'Member created',
-        description: `${buildMemberDisplayName(createdMember.name, createdMember.cardCode)} was created successfully.`,
+        description:
+          warning ??
+          `${buildMemberDisplayName(createdMember.name, createdMember.cardCode)} was created successfully.`,
       })
     } catch (error) {
       console.error('Failed to create member:', error)

@@ -139,6 +139,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     phone: overrides.phone === undefined ? '555-0100' : overrides.phone,
     remark: overrides.remark === undefined ? 'Existing member' : overrides.remark,
     photoUrl: overrides.photoUrl ?? null,
+    joinedAt: overrides.joinedAt ?? null,
     beginTime: overrides.beginTime ?? '2026-04-02T00:00:00.000Z',
     endTime: overrides.endTime ?? '2026-05-01T23:59:59.000Z',
   }
@@ -338,6 +339,7 @@ describe('EditMemberModal UI', () => {
       gender: null,
       email: null,
       phone: null,
+      joinedAt: null,
       remark: null,
       beginTime: '2026-04-02T00:00:00',
       endTime: '2026-05-01T23:59:59',

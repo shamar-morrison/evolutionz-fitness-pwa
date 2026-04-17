@@ -95,6 +95,8 @@ function createRequest(overrides: Partial<MemberEditRequest> = {}): MemberEditRe
       overrides.currentMemberTypeId === undefined ? 'type-1' : overrides.currentMemberTypeId,
     currentMemberTypeName:
       overrides.currentMemberTypeName === undefined ? 'General' : overrides.currentMemberTypeName,
+    currentJoinDate:
+      overrides.currentJoinDate === undefined ? null : overrides.currentJoinDate,
     currentBeginTime:
       overrides.currentBeginTime === undefined
         ? '2026-04-02T00:00:00.000Z'
@@ -111,6 +113,8 @@ function createRequest(overrides: Partial<MemberEditRequest> = {}): MemberEditRe
       overrides.proposedMemberTypeId === undefined ? null : overrides.proposedMemberTypeId,
     proposedMemberTypeName:
       overrides.proposedMemberTypeName === undefined ? null : overrides.proposedMemberTypeName,
+    proposedJoinDate:
+      overrides.proposedJoinDate === undefined ? null : overrides.proposedJoinDate,
     proposedStartDate:
       overrides.proposedStartDate === undefined ? null : overrides.proposedStartDate,
     proposedStartTime:

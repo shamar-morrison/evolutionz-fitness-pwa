@@ -57,6 +57,7 @@ describe('member actions', () => {
             phone: '876-555-1212',
             remark: 'Prefers morning sessions',
             photoUrl: null,
+            joinedAt: null,
             beginTime: '2026-03-30T00:00:00.000Z',
             endTime: '2026-07-15T23:59:59.000Z',
           },
@@ -68,7 +69,7 @@ describe('member actions', () => {
 
     vi.stubGlobal('fetch', fetchMock)
 
-    const member = await addMember(
+    const result = await addMember(
       {
         name: 'Jane Doe',
         type: 'General',
@@ -87,7 +88,7 @@ describe('member actions', () => {
 
     expect(stepSpy.mock.calls).toEqual([['provisioning_member']])
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/access/members/provision')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/members')
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
       cardNo: '0102857149',
       cardCode: 'A18',
@@ -101,25 +102,28 @@ describe('member actions', () => {
       beginTime: '2026-03-30T00:00:00',
       endTime: '2026-07-15T23:59:59',
     })
-    expect(member).toEqual({
-      id: 'member-1',
-      employeeNo: '20260330141516593046',
-      name: 'Jane Doe',
-      cardNo: '0102857149',
-      cardCode: 'A18',
-      cardStatus: 'assigned',
-      cardLostAt: null,
-      type: 'General',
-      memberTypeId: 'type-1',
-      status: 'Active',
-      deviceAccessState: 'ready',
-      gender: 'Female',
-      email: 'jane@example.com',
-      phone: '876-555-1212',
-      remark: 'Prefers morning sessions',
-      photoUrl: null,
-      beginTime: '2026-03-30T00:00:00.000Z',
-      endTime: '2026-07-15T23:59:59.000Z',
+    expect(result).toEqual({
+      member: {
+        id: 'member-1',
+        employeeNo: '20260330141516593046',
+        name: 'Jane Doe',
+        cardNo: '0102857149',
+        cardCode: 'A18',
+        cardStatus: 'assigned',
+        cardLostAt: null,
+        type: 'General',
+        memberTypeId: 'type-1',
+        status: 'Active',
+        deviceAccessState: 'ready',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Prefers morning sessions',
+        photoUrl: null,
+        joinedAt: null,
+        beginTime: '2026-03-30T00:00:00.000Z',
+        endTime: '2026-07-15T23:59:59.000Z',
+      },
     })
     expect(getSessionMemberOverrides()).toEqual([])
   })
@@ -146,6 +150,7 @@ describe('member actions', () => {
             phone: null,
             remark: null,
             photoUrl: null,
+            joinedAt: null,
             beginTime: '2026-03-30T00:00:00.000Z',
             endTime: '2026-07-15T23:59:59.000Z',
           },
@@ -439,7 +444,7 @@ describe('member actions', () => {
       endTime: '2026-04-29T23:59:59',
     })
 
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/members/member-1/edit')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/members/member-1')
     expect(fetchMock.mock.calls[0][1]?.method).toBe('PATCH')
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
       name: 'Jane Doe',
@@ -882,6 +887,7 @@ describe('member actions', () => {
       phone: null,
       remark: null,
       photoUrl: null,
+      joinedAt: null,
       beginTime: '2026-03-30T00:00:00.000Z',
       endTime: '2026-07-15T23:59:59.000Z',
     }
@@ -932,6 +938,7 @@ describe('member actions', () => {
       phone: null,
       remark: null,
       photoUrl: null,
+      joinedAt: null,
       beginTime: '2026-03-30T00:00:00.000Z',
       endTime: '2026-07-15T23:59:59.000Z',
     }

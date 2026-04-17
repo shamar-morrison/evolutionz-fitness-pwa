@@ -255,6 +255,7 @@ function createRequest(overrides: Partial<MemberApprovalRequest> = {}): MemberAp
     email: overrides.email ?? 'jane@example.com',
     phone: overrides.phone ?? null,
     remark: overrides.remark ?? null,
+    joinedAt: overrides.joinedAt ?? null,
     beginTime: overrides.beginTime ?? '2026-04-08T09:30:00.000Z',
     endTime: overrides.endTime ?? '2026-05-05T23:59:59.000Z',
     cardNo: overrides.cardNo ?? '12345',
@@ -302,6 +303,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     phone: overrides.phone ?? null,
     remark: overrides.remark ?? null,
     photoUrl: overrides.photoUrl ?? null,
+    joinedAt: overrides.joinedAt ?? null,
     beginTime: overrides.beginTime ?? '2026-04-08T09:30:00.000Z',
     endTime: overrides.endTime ?? '2026-05-05T23:59:59.000Z',
   }
@@ -527,7 +529,7 @@ describe('AddMemberModal', () => {
   it('creates a member directly for admins, uploads the member photo, and refreshes member data', async () => {
     const compressedPhoto = new Blob(['compressed-photo'], { type: 'image/jpeg' })
 
-    addMemberMock.mockResolvedValue(createMember())
+    addMemberMock.mockResolvedValue({ member: createMember() })
     compressImageMock.mockResolvedValue(compressedPhoto)
     uploadMemberPhotoMock.mockResolvedValue(createMember({ photoUrl: 'members/member-1.jpg' }))
 

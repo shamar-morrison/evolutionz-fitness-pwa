@@ -28,7 +28,7 @@ import { useAvailableCards } from '@/hooks/use-available-cards'
 import { useMemberApprovalRequests } from '@/hooks/use-member-approval-requests'
 import { toast } from '@/hooks/use-toast'
 import { reviewMemberApprovalRequest } from '@/lib/member-approval-requests'
-import { formatAccessDate } from '@/lib/member-access-time'
+import { formatAccessDate, formatDateInputDisplay } from '@/lib/member-access-time'
 import { formatAvailableAccessCardLabel } from '@/lib/available-cards'
 import { queryKeys } from '@/lib/query-keys'
 import type { MemberApprovalRequest } from '@/types'
@@ -240,6 +240,9 @@ export function PendingMemberRequestsPage() {
                     <p className="text-sm text-muted-foreground">
                       {formatAccessDate(request.beginTime, 'long')} to {formatAccessDate(request.endTime, 'long')}
                     </p>
+                    <p className="text-sm text-muted-foreground">
+                      Join Date: {formatDateInputDisplay(request.joinedAt)}
+                    </p>
                     <p className="text-sm">{request.remark ?? 'No note'}</p>
                   </div>
 
@@ -288,6 +291,10 @@ export function PendingMemberRequestsPage() {
                 <ReadOnlyField
                   label="Submitted card"
                   value={`${selectedRequest.cardCode} / ${selectedRequest.cardNo}`}
+                />
+                <ReadOnlyField
+                  label="Join date"
+                  value={formatDateInputDisplay(selectedRequest.joinedAt)}
                 />
                 <ReadOnlyField label="Start date" value={formatAccessDate(selectedRequest.beginTime, 'long')} />
                 <ReadOnlyField label="End date" value={formatAccessDate(selectedRequest.endTime, 'long')} />

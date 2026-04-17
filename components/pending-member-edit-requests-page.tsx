@@ -13,6 +13,7 @@ import {
   calculateInclusiveEndDate,
   findMatchingMemberDuration,
   formatAccessDate,
+  formatDateInputDisplay,
   getAccessDateInputValue,
   getAccessTimeInputValue,
   getMemberDurationLabel,
@@ -148,6 +149,14 @@ function buildEditChanges(request: MemberEditRequest): EditChange[] {
       label: 'Membership Type',
       from: formatFieldValue(request.currentMemberTypeName, MEMBER_TYPE_EMPTY_LABEL),
       to: formatFieldValue(request.proposedMemberTypeName, MEMBER_TYPE_EMPTY_LABEL),
+    })
+  }
+
+  if (request.proposedJoinDate !== null) {
+    changes.push({
+      label: 'Join Date',
+      from: formatDateInputDisplay(request.currentJoinDate),
+      to: formatDateInputDisplay(request.proposedJoinDate),
     })
   }
 

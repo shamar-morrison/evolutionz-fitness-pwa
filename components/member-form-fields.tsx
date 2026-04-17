@@ -35,6 +35,7 @@ export type MemberFormState = {
   gender: MemberGender | ''
   email: string
   phone: string
+  joinedDate: string
   selectedInventoryCardNo: string
   memberTypeId: string
   remark: string
@@ -89,6 +90,7 @@ export function createInitialMemberFormState(now: Date = new Date()): MemberForm
     gender: '',
     email: '',
     phone: '',
+    joinedDate: '',
     selectedInventoryCardNo: '',
     memberTypeId: '',
     remark: '',
@@ -331,6 +333,25 @@ export function MemberBasicFields({
             required
           />
         </div>
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-join-date`}>Join Date</Label>
+        <Input
+          id={`${idPrefix}-join-date`}
+          type="date"
+          value={formData.joinedDate}
+          onChange={(event) =>
+            setFormData((currentFormData) => ({
+              ...currentFormData,
+              joinedDate: event.target.value,
+            }))
+          }
+          disabled={isSubmitting}
+        />
+        <p className="text-xs text-muted-foreground">
+          Optional. Record the member&apos;s actual gym join date separately from when the record is created.
+        </p>
       </div>
     </div>
   )

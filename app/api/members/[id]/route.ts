@@ -11,6 +11,12 @@ import {
   type AccessControlJobsClient,
   createAndWaitForAccessControlJob,
 } from '@/lib/access-control-jobs'
+import {
+  type DirectMemberEditClient,
+  directMemberEditSchema,
+  executeDirectMemberEdit,
+  isDirectMemberEditPayload,
+} from '@/lib/member-direct-edit'
 import { resolveMembershipLifecycleStatus } from '@/lib/member-status'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { MEMBER_RECORD_SELECT, readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
@@ -182,6 +188,22 @@ export async function PATCH(
 
     const { id } = await params
     const requestBody = await request.json()
+
+    if (isDirectMemberEditPayload(requestBody)) {
+      const input = directMemberEditSchema.parse(requestBody)
+      const result = await executeDirectMemberEdit(
+        id,
+        input,
+        getSupabaseAdminClient() as unknown as DirectMemberEditClient,
+      )
+
+      if (!result.ok) {
+        return createErrorResponse(result.error, result.status)
+      }
+
+      return NextResponse.json(result)
+    }
+
     const input = updateMemberRequestSchema.parse(requestBody)
     const supabase = getSupabaseAdminClient() as unknown as MembersReadClient
     const currentMember = await readMemberWithCardCode(supabase, id)

@@ -88,6 +88,7 @@ function createRequestRecord(
     email: overrides.email ?? 'jane@example.com',
     phone: overrides.phone ?? '876-555-1111',
     remark: overrides.remark ?? 'Wants mornings only',
+    joined_at: overrides.joined_at ?? null,
     begin_time: overrides.begin_time ?? '2026-04-09T14:00:00.000Z',
     end_time: overrides.end_time ?? '2026-05-09T04:59:59.000Z',
     card_no: overrides.card_no ?? '0102857149',
@@ -126,6 +127,7 @@ function createApprovedMember(overrides: Partial<Member> = {}): Member {
     phone: overrides.phone ?? '876-555-1111',
     remark: overrides.remark ?? 'Wants mornings only',
     photoUrl: overrides.photoUrl ?? null,
+    joinedAt: overrides.joinedAt ?? null,
     beginTime: overrides.beginTime ?? '2026-04-09T09:00:00.000Z',
     endTime: overrides.endTime ?? '2026-05-08T23:59:59.000Z',
   }
@@ -457,6 +459,7 @@ describe('member approval request routes', () => {
           reviewedBy: null,
           reviewedAt: null,
           reviewNote: null,
+          joinedAt: null,
           memberId: null,
           createdAt: '2026-04-09T10:00:00.000Z',
           updatedAt: '2026-04-09T10:00:00.000Z',
@@ -519,6 +522,7 @@ describe('member approval request routes', () => {
         end_time: '2026-05-09T23:59:59',
         card_no: '0102857149',
         card_code: 'A18',
+        joined_at: null,
         submitted_by: 'staff-1',
       },
     ])

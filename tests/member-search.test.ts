@@ -19,6 +19,7 @@ const member = {
   phone: null,
   remark: null,
   photoUrl: null,
+  joinedAt: null,
   beginTime: '2026-03-30T00:00:00.000Z',
   endTime: '2026-07-15T23:59:59.000Z',
   balance: 0,
