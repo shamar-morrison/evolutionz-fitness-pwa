@@ -15,10 +15,6 @@ const dashboardStatsSchema = z.object({
   ),
   expiredThisMonth: z.number().int().nonnegative(),
   expiredThisMonthLastMonth: z.number().int().nonnegative(),
-  membershipRevenueThisMonth: z.number().finite().nonnegative(),
-  cardFeeRevenueThisMonth: z.number().finite().nonnegative(),
-  totalRevenueThisMonth: z.number().finite().nonnegative(),
-  totalRevenueLastMonth: z.number().finite().nonnegative(),
 })
 
 type DashboardStatsErrorResponse = {

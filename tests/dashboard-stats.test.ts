@@ -26,10 +26,6 @@ const dashboardStatsPayload = {
   ],
   expiredThisMonth: 16,
   expiredThisMonthLastMonth: 9,
-  membershipRevenueThisMonth: 142500,
-  cardFeeRevenueThisMonth: 7500,
-  totalRevenueThisMonth: 150000,
-  totalRevenueLastMonth: 132000,
 }
 
 describe('dashboard stats helpers', () => {

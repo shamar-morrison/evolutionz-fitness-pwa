@@ -375,10 +375,6 @@ export type DashboardMembershipStats = {
   signupsByMonth: DashboardSignupsByMonthItem[]
   expiredThisMonth: number
   expiredThisMonthLastMonth: number
-  membershipRevenueThisMonth: number
-  cardFeeRevenueThisMonth: number
-  totalRevenueThisMonth: number
-  totalRevenueLastMonth: number
 }
 
 export type CheckInStatus = 'success' | 'not_found' | 'expired' | 'suspended'

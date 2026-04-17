@@ -11,8 +11,7 @@ import { RoleGuard } from '@/components/role-guard'
 import { StatCard } from '@/components/stat-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDashboardStats } from '@/hooks/use-dashboard-stats'
-import { formatRevenueCurrency } from '@/lib/revenue-reports'
-import { Banknote, CalendarX2, Clock3, UserX, Users } from 'lucide-react'
+import { CalendarX2, Clock3, UserX, Users } from 'lucide-react'
 
 function formatMonthOverMonthTrend(currentValue: number, previousValue: number) {
   const delta = currentValue - previousValue
@@ -125,38 +124,15 @@ function DashboardPageContent() {
         )}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
+      <div>
         {isStatsLoading ? (
-          <>
-            <Skeleton className="h-80" />
-            <Skeleton className="h-64" />
-          </>
+          <Skeleton className="h-80" />
         ) : (
-          <>
-            <DashboardSignupsChartCard
-              signupsByMonth={stats.signupsByMonth}
-              currentMonthCount={stats.signedUpThisMonth}
-              href="/reports/members?tab=signups&period=this-month"
-            />
-            <StatCard
-              title="Total Revenue"
-              value={formatRevenueCurrency(stats.totalRevenueThisMonth)}
-              icon={Banknote}
-              variant="success"
-              href="/reports/revenue"
-              trend={formatMonthOverMonthTrend(
-                stats.totalRevenueThisMonth,
-                stats.totalRevenueLastMonth,
-              )}
-              trendTooltip="Compared to last month's total revenue"
-              details={
-                <>
-                  <p>{`Membership fees: JMD ${formatRevenueCurrency(stats.membershipRevenueThisMonth)}`}</p>
-                  <p>{`Card fees: JMD ${formatRevenueCurrency(stats.cardFeeRevenueThisMonth)}`}</p>
-                </>
-              }
-            />
-          </>
+          <DashboardSignupsChartCard
+            signupsByMonth={stats.signupsByMonth}
+            currentMonthCount={stats.signedUpThisMonth}
+            href="/reports/members?tab=signups&period=this-month"
+          />
         )}
       </div>
 

@@ -33,25 +33,6 @@ type ActiveOverlapRow = {
   end_time: string | null
 }
 
-type RevenueRow = {
-  amount_paid: number | string
-  payment_date: string
-  payment_type: 'membership' | 'card_fee'
-}
-
-function normalizeAmount(value: unknown) {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0
-  }
-
-  if (typeof value === 'string') {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-
-  return 0
-}
-
 function normalizeTimestamp(value: string | null | undefined) {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
 
@@ -276,58 +257,6 @@ async function readActiveMembersLastMonth(
   }, 0)
 }
 
-async function readRevenueTotals(
-  supabase: DashboardStatsClient,
-  previousMonth: DashboardMonthWindow,
-  currentMonth: DashboardMonthWindow,
-) {
-  const { data, error } = await supabase
-    .from('member_payments')
-    .select('amount_paid, payment_date, payment_type')
-    .in('payment_type', ['membership', 'card_fee'])
-    .gte('payment_date', previousMonth.startDate)
-    .lte('payment_date', currentMonth.endDate)
-
-  if (error) {
-    throw new Error(`Failed to read dashboard revenue totals: ${error.message}`)
-  }
-
-  let totalRevenueThisMonth = 0
-  let totalRevenueLastMonth = 0
-  let membershipRevenueThisMonth = 0
-  let cardFeeRevenueThisMonth = 0
-
-  for (const row of (data ?? []) as RevenueRow[]) {
-    const month = typeof row.payment_date === 'string' ? row.payment_date.slice(0, 7) : ''
-    const amount = normalizeAmount(row.amount_paid)
-
-    if (month === currentMonth.month) {
-      totalRevenueThisMonth += amount
-
-      if (row.payment_type === 'membership') {
-        membershipRevenueThisMonth += amount
-      }
-
-      if (row.payment_type === 'card_fee') {
-        cardFeeRevenueThisMonth += amount
-      }
-
-      continue
-    }
-
-    if (month === previousMonth.month) {
-      totalRevenueLastMonth += amount
-    }
-  }
-
-  return {
-    membershipRevenueThisMonth,
-    cardFeeRevenueThisMonth,
-    totalRevenueThisMonth,
-    totalRevenueLastMonth,
-  }
-}
-
 export async function GET() {
   try {
     const authResult = await requireAdminUser()
@@ -354,7 +283,6 @@ export async function GET() {
       activeMembersLastMonth,
       signupsByMonth,
       expiryCounts,
-      revenueTotals,
     ] = await Promise.all([
       countMembersByStatus(supabase, 'Active'),
       countMembersByStatus(supabase, 'Expired'),
@@ -362,7 +290,6 @@ export async function GET() {
       readActiveMembersLastMonth(supabase, previousMonth, currentMonth),
       readSignupsByMonth(supabase, monthWindows),
       readExpiryCounts(supabase, previousMonth, currentMonth),
-      readRevenueTotals(supabase, previousMonth, currentMonth),
     ])
 
     return NextResponse.json({
@@ -374,10 +301,6 @@ export async function GET() {
       signupsByMonth,
       expiredThisMonth: expiryCounts.expiredThisMonth,
       expiredThisMonthLastMonth: expiryCounts.expiredThisMonthLastMonth,
-      membershipRevenueThisMonth: revenueTotals.membershipRevenueThisMonth,
-      cardFeeRevenueThisMonth: revenueTotals.cardFeeRevenueThisMonth,
-      totalRevenueThisMonth: revenueTotals.totalRevenueThisMonth,
-      totalRevenueLastMonth: revenueTotals.totalRevenueLastMonth,
     })
   } catch (error) {
     return NextResponse.json(

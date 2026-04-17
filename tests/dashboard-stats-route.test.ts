@@ -26,11 +26,10 @@ type QuerySignature =
   | 'signupsByMonth'
   | 'expiryCounts'
   | 'activeMembersLastMonth'
-  | 'revenueTotals'
 
 type RecordedQuery = {
   signature: QuerySignature
-  table: 'members' | 'member_payments'
+  table: 'members'
   columns: string
   head: boolean
   filters: {
@@ -39,7 +38,6 @@ type RecordedQuery = {
     lte: Array<[string, string]>
     lt: Array<[string, string]>
     not: Array<[string, string, null]>
-    in: Array<[string, string[]]>
   }
 }
 
@@ -62,15 +60,10 @@ function compareValues(left: unknown, right: string, operator: 'gte' | 'lte' | '
 }
 
 function getQuerySignature({
-  table,
   columns,
   head,
   filters,
 }: Omit<RecordedQuery, 'signature'>): QuerySignature {
-  if (table === 'member_payments') {
-    return 'revenueTotals'
-  }
-
   if (head) {
     const statusFilter = filters.eq.find(([column]) => column === 'status')?.[1]
     const hasEndTimeWindow =
@@ -101,11 +94,9 @@ function getQuerySignature({
 
 function createDashboardStatsAdminClient({
   members = [],
-  memberPayments = [],
   errorFor = null,
 }: {
   members?: Array<Record<string, unknown>>
-  memberPayments?: Array<Record<string, unknown>>
   errorFor?: QuerySignature | null
 } = {}) {
   const queries: RecordedQuery[] = []
@@ -113,20 +104,19 @@ function createDashboardStatsAdminClient({
   return {
     queries,
     from(table: string) {
-      if (table !== 'members' && table !== 'member_payments') {
+      if (table !== 'members') {
         throw new Error(`Unexpected table: ${table}`)
       }
 
       return {
         select(columns: string, options?: { count: 'exact'; head: true }) {
-          let data = [...(table === 'members' ? members : memberPayments)]
+          let data = [...members]
           const filters: RecordedQuery['filters'] = {
             eq: [],
             gte: [],
             lte: [],
             lt: [],
             not: [],
-            in: [],
           }
 
           const builder = {
@@ -156,12 +146,6 @@ function createDashboardStatsAdminClient({
               if (operator === 'is' && value === null) {
                 data = data.filter((row) => row[column] !== null && row[column] !== undefined)
               }
-
-              return builder
-            },
-            in(column: string, values: string[]) {
-              filters.in.push([column, values])
-              data = data.filter((row) => values.includes(String(row[column])))
               return builder
             },
             then(
@@ -178,7 +162,6 @@ function createDashboardStatsAdminClient({
                   lte: [...filters.lte],
                   lt: [...filters.lt],
                   not: [...filters.not],
-                  in: filters.in.map(([column, values]) => [column, [...values]]),
                 },
               } satisfies Omit<RecordedQuery, 'signature'>
 
@@ -224,7 +207,7 @@ describe('GET /api/dashboard/stats', () => {
     resetServerAuthMocks()
   })
 
-  it('returns dashboard metrics with Jamaica-aware month bucketing and revenue totals', async () => {
+  it('returns dashboard metrics with Jamaica-aware month bucketing', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-02T10:15:30.000Z'))
 
@@ -273,38 +256,6 @@ describe('GET /api/dashboard/stats', () => {
           joined_at: null,
         },
       ],
-      memberPayments: [
-        {
-          id: 'payment-1',
-          payment_type: 'membership',
-          amount_paid: 10000,
-          payment_date: '2026-03-05',
-        },
-        {
-          id: 'payment-2',
-          payment_type: 'card_fee',
-          amount_paid: '2500',
-          payment_date: '2026-03-15',
-        },
-        {
-          id: 'payment-3',
-          payment_type: 'membership',
-          amount_paid: 12000,
-          payment_date: '2026-04-03',
-        },
-        {
-          id: 'payment-4',
-          payment_type: 'card_fee',
-          amount_paid: 2500,
-          payment_date: '2026-04-10',
-        },
-        {
-          id: 'payment-5',
-          payment_type: 'membership',
-          amount_paid: 5000,
-          payment_date: '2025-12-01',
-        },
-      ],
     })
 
     getSupabaseAdminClientMock.mockReturnValue(supabase)
@@ -328,13 +279,9 @@ describe('GET /api/dashboard/stats', () => {
       ],
       expiredThisMonth: 3,
       expiredThisMonthLastMonth: 1,
-      membershipRevenueThisMonth: 12000,
-      cardFeeRevenueThisMonth: 2500,
-      totalRevenueThisMonth: 14500,
-      totalRevenueLastMonth: 12500,
     })
 
-    expect(supabase.queries).toHaveLength(7)
+    expect(supabase.queries).toHaveLength(6)
 
     const activeQuery = supabase.queries.find((query) => query.signature === 'activeMembers')
     const totalExpiredQuery = supabase.queries.find(
@@ -346,7 +293,6 @@ describe('GET /api/dashboard/stats', () => {
     const activeLastMonthQuery = supabase.queries.find(
       (query) => query.signature === 'activeMembersLastMonth',
     )
-    const revenueQuery = supabase.queries.find((query) => query.signature === 'revenueTotals')
 
     expect(activeQuery?.filters.eq).toEqual([['status', 'Active']])
     expect(totalExpiredQuery?.filters.eq).toEqual([['status', 'Expired']])
@@ -360,11 +306,6 @@ describe('GET /api/dashboard/stats', () => {
     expect(expiryCountsQuery?.filters.lt).toEqual([['end_time', '2026-05-01T00:00:00-05:00']])
     expect(activeLastMonthQuery?.filters.not).toEqual([['begin_time', 'is', null]])
     expect(activeLastMonthQuery?.filters.lt).toEqual([['begin_time', '2026-04-01T00:00:00-05:00']])
-    expect(revenueQuery?.filters.in).toEqual([
-      ['payment_type', ['membership', 'card_fee']],
-    ])
-    expect(revenueQuery?.filters.gte).toEqual([['payment_date', '2026-03-01']])
-    expect(revenueQuery?.filters.lte).toEqual([['payment_date', '2026-04-30']])
   })
 
   it('returns zeroed counts and six empty signup buckets when no rows match', async () => {
@@ -392,10 +333,6 @@ describe('GET /api/dashboard/stats', () => {
       ],
       expiredThisMonth: 0,
       expiredThisMonthLastMonth: 0,
-      membershipRevenueThisMonth: 0,
-      cardFeeRevenueThisMonth: 0,
-      totalRevenueThisMonth: 0,
-      totalRevenueLastMonth: 0,
     })
   })
 

@@ -14,10 +14,6 @@ const EMPTY_DASHBOARD_STATS: DashboardMembershipStats = {
   signupsByMonth: [],
   expiredThisMonth: 0,
   expiredThisMonthLastMonth: 0,
-  membershipRevenueThisMonth: 0,
-  cardFeeRevenueThisMonth: 0,
-  totalRevenueThisMonth: 0,
-  totalRevenueLastMonth: 0,
 }
 
 export function useDashboardStats() {

@@ -88,10 +88,6 @@ describe('DashboardPage', () => {
         ],
         expiredThisMonth: 2,
         expiredThisMonthLastMonth: 1,
-        membershipRevenueThisMonth: 9750,
-        cardFeeRevenueThisMonth: 250,
-        totalRevenueThisMonth: 10000,
-        totalRevenueLastMonth: 0,
       },
       isLoading: false,
       error: null,
@@ -121,17 +117,12 @@ describe('DashboardPage', () => {
     expect(container.textContent).toContain('Expired This Month2')
     expect(container.textContent).toContain('Expiring Soon (7 days)4')
     expect(container.textContent).toContain('Member Signups (Last 6 Months)|5 this month')
-    expect(container.textContent).toContain('Total Revenue$10,000')
     expect(container.textContent).toContain("Compared to last month's active member count")
     expect(container.textContent).toContain("Compared to last month's expiry count")
-    expect(container.textContent).toContain("Compared to last month's total revenue")
-    expect(container.textContent).toContain('Membership fees: JMD $9,750')
-    expect(container.textContent).toContain('Card fees: JMD $250')
     expect(container.textContent).toContain('+2 (+20.0%)')
     expect(container.textContent).toContain('+1 (+100.0%)')
-    expect(container.textContent).toContain('+10,000 (New)')
     expect(container.textContent).toContain('Quick Actions Content')
-    expect(container.querySelectorAll('[data-testid="tooltip-root"]')).toHaveLength(3)
+    expect(container.querySelectorAll('[data-testid="tooltip-root"]')).toHaveLength(2)
 
     expect(container.querySelector('a[href="/dashboard/expiring-members"]')?.textContent).toContain(
       'Expiring Soon (7 days)4',
@@ -159,13 +150,6 @@ describe('DashboardPage', () => {
           link.href.includes('period=this-month'),
       )?.text,
     ).toContain('Expired This Month2')
-
-    expect(reportLinks.find((link) => link.href === '/reports/revenue')?.text).toContain(
-      'Total Revenue$10,000',
-    )
-    expect(reportLinks.find((link) => link.href === '/reports/revenue')?.text).toContain(
-      'Membership fees: JMD $9,750',
-    )
   })
 
   it('redirects staff users to their authenticated home', async () => {
