@@ -49,6 +49,10 @@ function getReviewHref(type: string) {
     return '/pending-approvals/payment-requests'
   }
 
+  if (type === 'member_extension_request') {
+    return '/pending-approvals/extension-requests'
+  }
+
   if (type === 'status_change_request') {
     return '/pending-approvals/session-updates'
   }

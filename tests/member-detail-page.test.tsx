@@ -10,6 +10,7 @@ const {
   currentRoleState,
   deleteMemberMock,
   deleteMemberPhotoMock,
+  extendMembershipDialogState,
   invalidateQueriesMock,
   pushMock,
   reactivateMemberMock,
@@ -37,6 +38,16 @@ const {
   currentRoleState: { role: 'admin' as 'admin' | 'staff' },
   deleteMemberMock: vi.fn(),
   deleteMemberPhotoMock: vi.fn(),
+  extendMembershipDialogState: {
+    lastProps: null as
+      | null
+      | {
+          member: unknown
+          open: boolean
+          onOpenChange: (open: boolean) => void
+          requiresApproval: boolean
+        },
+  },
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   pushMock: vi.fn(),
   reactivateMemberMock: vi.fn(),
@@ -141,6 +152,18 @@ vi.mock('@/components/confirm-dialog', () => ({
 
 vi.mock('@/components/edit-member-modal', () => ({
   EditMemberModal: () => null,
+}))
+
+vi.mock('@/components/extend-membership-dialog', () => ({
+  ExtendMembershipDialog: (props: any) => {
+    extendMembershipDialogState.lastProps = props
+
+    return props.open ? (
+      <div data-testid="extend-membership-dialog">
+        {props.requiresApproval ? 'Submit for Approval' : 'Extend Membership'}
+      </div>
+    ) : null
+  },
 }))
 
 vi.mock('@/components/record-member-payment-dialog', () => ({
@@ -356,6 +379,7 @@ describe('Member detail page tabs', () => {
       role: 'admin',
       titles: ['Owner'],
     }
+    extendMembershipDialogState.lastProps = null
     useMemberMock.mockReturnValue({
       member: createMember(),
       isLoading: false,
@@ -450,9 +474,76 @@ describe('Member detail page tabs', () => {
     })
 
     expect(container.textContent).not.toContain('Edit Member')
+    expect(container.textContent).not.toContain('Extend Membership')
     expect(container.textContent).not.toContain('PT Attendance')
     expect(container.textContent).not.toContain('Payments')
     expect(usePtSessionsMock).not.toHaveBeenCalled()
+  })
+
+  it('renders Extend Membership after Edit Member and before Suspend for admins', async () => {
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    const buttonLabels = Array.from(container.querySelectorAll('button'))
+      .map((button) => button.textContent?.replace(/\s+/gu, ' ').trim() ?? '')
+      .filter(Boolean)
+
+    expect(buttonLabels.indexOf('Edit Member')).toBeGreaterThan(-1)
+    expect(buttonLabels.indexOf('Extend Membership')).toBeGreaterThan(
+      buttonLabels.indexOf('Edit Member'),
+    )
+    expect(buttonLabels.indexOf('Suspend')).toBeGreaterThan(
+      buttonLabels.indexOf('Extend Membership'),
+    )
+  })
+
+  it('shows a disabled extend button and tooltip text when the membership is inactive', async () => {
+    useMemberMock.mockReturnValue({
+      member: createMember({ endTime: '2026-01-01T00:00:00.000Z' }),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    const button = getButton(container, 'Extend Membership')
+
+    expect(button.disabled).toBe(true)
+    expect(container.textContent).toContain('Member has no active membership.')
+  })
+
+  it('opens the extend membership dialog with admin direct action text', async () => {
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    await clickButton(container, 'Extend Membership')
+
+    expect(extendMembershipDialogState.lastProps?.requiresApproval).toBe(false)
+    expect(container.querySelector('[data-testid="extend-membership-dialog"]')).not.toBeNull()
+    expect(container.textContent).toContain('Extend Membership')
+  })
+
+  it('opens the extend membership dialog with approval text for front desk staff', async () => {
+    currentRoleState.role = 'staff'
+    currentProfileState.profile = {
+      id: 'assistant-1',
+      name: 'Avery Assistant',
+      role: 'staff',
+      titles: ['Administrative Assistant'],
+    }
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    await clickButton(container, 'Extend Membership')
+
+    expect(extendMembershipDialogState.lastProps?.requiresApproval).toBe(true)
+    expect(container.textContent).toContain('Submit for Approval')
   })
 
   it('routes the header back button to the shared members list for administrative assistants', async () => {
@@ -680,6 +771,7 @@ describe('Member detail page action dialogs', () => {
       role: 'admin',
       titles: ['Owner'],
     }
+    extendMembershipDialogState.lastProps = null
     usePtSessionsMock.mockReturnValue({
       sessions: [],
       isLoading: false,

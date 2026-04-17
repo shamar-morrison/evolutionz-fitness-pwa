@@ -20,6 +20,7 @@ describe('permissions', () => {
     expect(permissions.has('pt.assign')).toBe(true)
     expect(permissions.has('classes.manage')).toBe(true)
     expect(permissions.has('staff.suspend')).toBe(true)
+    expect(permissions.has('members.extendMembership')).toBe(true)
   })
 
   it('never requires approval for admins', () => {
@@ -66,6 +67,7 @@ describe('permissions', () => {
   it('requires administrative assistant approval for member creation, edits, and payments', () => {
     expect(requiresApproval('members.create', 'staff')).toBe(true)
     expect(requiresApproval('members.edit', 'staff')).toBe(true)
+    expect(requiresApproval('members.extendMembership', 'staff')).toBe(true)
     expect(requiresApproval('members.recordPayment', 'staff')).toBe(true)
   })
 
@@ -122,6 +124,7 @@ describe('permissions', () => {
         'members.view',
         'members.create',
         'members.edit',
+        'members.extendMembership',
         'members.recordPayment',
         'door.unlock',
       ]),
@@ -211,6 +214,7 @@ describe('resolvePermissionsForProfile', () => {
           'members.view',
           'members.create',
           'members.edit',
+          'members.extendMembership',
           'members.recordPayment',
           'classes.view',
           'classes.register',
@@ -227,6 +231,7 @@ describe('resolvePermissionsForProfile', () => {
           'pt.markSession',
           'members.view',
           'members.edit',
+          'members.extendMembership',
           'members.recordPayment',
           'classes.view',
           'classes.register',

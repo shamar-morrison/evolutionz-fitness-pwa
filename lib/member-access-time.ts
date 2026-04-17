@@ -221,6 +221,10 @@ export function getMemberDurationLabel(
   return MEMBER_DURATION_LABELS[value]
 }
 
+export function getMemberDurationDays(value: MemberDurationValue) {
+  return MEMBER_DURATION_DAYS[value]
+}
+
 export function getMemberDurationValueFromLabel(
   label: string | null | undefined,
 ): MemberDurationValue | null {
@@ -237,6 +241,22 @@ export function getMemberDurationValueFromLabel(
   }
 
   return null
+}
+
+export function getMemberDurationValueFromDays(days: number) {
+  for (const option of MEMBER_DURATION_OPTIONS) {
+    if (getMemberDurationDays(option.value) === days) {
+      return option.value
+    }
+  }
+
+  return null
+}
+
+export function getMemberDurationLabelFromDays(days: number) {
+  const value = getMemberDurationValueFromDays(days)
+
+  return value ? getMemberDurationLabel(value) : null
 }
 
 export function parseDateInputValue(value: string) {
@@ -324,7 +344,7 @@ export function calculateInclusiveEndDate(
     return null
   }
 
-  const exclusiveEndDate = addDays(startDate, MEMBER_DURATION_DAYS[duration])
+  const exclusiveEndDate = addDays(startDate, getMemberDurationDays(duration))
   const inclusiveEndDate = subDays(exclusiveEndDate, 1)
 
   return formatDateInputValue(inclusiveEndDate)

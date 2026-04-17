@@ -149,6 +149,8 @@ function createStaffAdminClient({
   memberApprovalRequestRows = [],
   memberEditRequestRows = [],
   memberPaymentRequestRows = [],
+  memberExtensionRequestRequestedRows = [],
+  memberExtensionRequestReviewedRows = [],
   insertResult = {
     data: buildProfileRow(),
     error: null,
@@ -197,6 +199,8 @@ function createStaffAdminClient({
   memberApprovalRequestRows?: Array<Record<string, unknown>>
   memberEditRequestRows?: Array<Record<string, unknown>>
   memberPaymentRequestRows?: Array<Record<string, unknown>>
+  memberExtensionRequestRequestedRows?: Array<Record<string, unknown>>
+  memberExtensionRequestReviewedRows?: Array<Record<string, unknown>>
   insertResult?: QueryResult<Record<string, unknown>>
   existingEmailResult?: QueryResult<Record<string, unknown>>
   updateResult?: QueryResult<Record<string, unknown>>
@@ -272,6 +276,11 @@ function createStaffAdminClient({
                               ? memberEditRequestRows
                               : table === 'member_payment_requests'
                                 ? memberPaymentRequestRows
+                                : table === 'member_extension_requests'
+                                  ? [
+                                      ...memberExtensionRequestRequestedRows,
+                                      ...memberExtensionRequestReviewedRows,
+                                    ]
                                 : []
               const filters: Record<string, string> = {}
               const query = {
@@ -1522,6 +1531,8 @@ describe('staff API routes', () => {
           memberApprovalRequestsSubmitted: 0,
           memberEditRequestsReviewed: 0,
           memberPaymentRequestsReviewed: 0,
+          memberExtensionRequestsRequested: 0,
+          memberExtensionRequestsReviewed: 0,
           total: 0,
         },
       },
@@ -1580,6 +1591,8 @@ describe('staff API routes', () => {
           memberApprovalRequestsSubmitted: 0,
           memberEditRequestsReviewed: 0,
           memberPaymentRequestsReviewed: 0,
+          memberExtensionRequestsRequested: 0,
+          memberExtensionRequestsReviewed: 0,
           total: 2,
         },
       },
@@ -1695,6 +1708,8 @@ describe('staff API routes', () => {
           memberApprovalRequestsSubmitted: 0,
           memberEditRequestsReviewed: 0,
           memberPaymentRequestsReviewed: 0,
+          memberExtensionRequestsRequested: 0,
+          memberExtensionRequestsReviewed: 0,
           total: 1,
         },
       },
@@ -1744,6 +1759,8 @@ describe('staff API routes', () => {
           memberApprovalRequestsSubmitted: 1,
           memberEditRequestsReviewed: 0,
           memberPaymentRequestsReviewed: 0,
+          memberExtensionRequestsRequested: 0,
+          memberExtensionRequestsReviewed: 0,
           total: 1,
         },
       },
@@ -1794,6 +1811,8 @@ describe('staff API routes', () => {
           memberApprovalRequestsSubmitted: 0,
           memberEditRequestsReviewed: 0,
           memberPaymentRequestsReviewed: 0,
+          memberExtensionRequestsRequested: 0,
+          memberExtensionRequestsReviewed: 0,
           total: 1,
         },
       },

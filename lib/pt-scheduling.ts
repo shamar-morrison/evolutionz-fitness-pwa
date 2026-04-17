@@ -182,6 +182,7 @@ export type Notification = {
     | 'member_create_request'
     | 'member_edit_request'
     | 'member_payment_request'
+    | 'member_extension_request'
     | 'reschedule_approved'
     | 'reschedule_denied'
     | 'client_assigned'
@@ -460,6 +461,7 @@ const notificationSchema = z.object({
     'member_create_request',
     'member_edit_request',
     'member_payment_request',
+    'member_extension_request',
     'reschedule_approved',
     'reschedule_denied',
     'client_assigned',
