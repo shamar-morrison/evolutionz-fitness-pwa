@@ -1,10 +1,12 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { BarChart3, Download, FileText } from 'lucide-react'
 import { useMemberExpiredReport, useMemberSignupsReport } from '@/hooks/use-member-reports'
 import { toast } from '@/hooks/use-toast'
 import {
+  createEmptyMemberReportRevenueBreakdown,
+  formatMemberReportRevenue,
   formatMemberReportDate,
   formatMemberReportGeneratedTimestamp,
   getMemberReportAppliedPeriodLabel,
@@ -15,6 +17,7 @@ import {
   type MemberExpiredReport,
   type MemberReportDateRange,
   type MemberReportPeriod,
+  type MemberReportRevenueBreakdown,
   type MemberSignupsReport,
 } from '@/lib/member-reports'
 import { replaceCurrentUrl } from '@/lib/client-history'
@@ -44,6 +47,32 @@ const PAGE_SIZE = 50
 
 function getPdfCursorY(doc: { lastAutoTable?: { finalY: number } }, fallback: number) {
   return (doc.lastAutoTable?.finalY ?? fallback) + 20
+}
+
+function getMemberReportPageDetails<T>(rows: T[], currentPage: number) {
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+  const normalizedCurrentPage = Math.max(0, Math.min(currentPage, totalPages - 1))
+  const paginatedRows = rows.slice(
+    normalizedCurrentPage * PAGE_SIZE,
+    (normalizedCurrentPage + 1) * PAGE_SIZE,
+  )
+  const rangeStart = rows.length === 0 ? 0 : normalizedCurrentPage * PAGE_SIZE + 1
+  const rangeEnd = rows.length === 0 ? 0 : rangeStart + paginatedRows.length - 1
+
+  return {
+    totalPages,
+    normalizedCurrentPage,
+    paginatedRows,
+    rangeStart,
+    rangeEnd,
+  }
+}
+
+function buildRevenueBreakdownPdfRows(revenueBreakdown: MemberReportRevenueBreakdown) {
+  return revenueBreakdown.byType.map((item) => [
+    item.isEstimate ? `${item.label} *` : item.label,
+    formatMemberReportRevenue(item.total),
+  ])
 }
 
 function addPdfFooter(doc: any, footerLines: string[]) {
@@ -159,6 +188,7 @@ async function downloadMemberReportPdf(options: {
   filePrefix: string
   period: MemberReportDateRange
   summaryLabel: string
+  revenueBreakdown: MemberReportRevenueBreakdown
   columns: string[]
   rows: string[][]
 }) {
@@ -174,6 +204,8 @@ async function downloadMemberReportPdf(options: {
     unit: 'pt',
     format: 'a4',
   })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
   const leftMargin = 40
   let cursorY = 48
 
@@ -242,6 +274,61 @@ async function downloadMemberReportPdf(options: {
     },
   })
 
+  if (options.rows.length > 0) {
+    cursorY = getPdfCursorY(doc as any, cursorY)
+
+    autoTable(doc, {
+      startY: cursorY,
+      margin: { left: leftMargin, right: leftMargin },
+      theme: 'grid',
+      head: [['Revenue Breakdown', 'Amount (JMD)']],
+      body: buildRevenueBreakdownPdfRows(options.revenueBreakdown),
+      foot: [['Total Revenue', formatMemberReportRevenue(options.revenueBreakdown.total)]],
+      styles: {
+        font: 'helvetica',
+        fontSize: 9,
+        textColor: [0, 0, 0],
+        lineColor: [190, 190, 190],
+        lineWidth: 0.5,
+        cellPadding: 5,
+      },
+      headStyles: {
+        fillColor: [235, 235, 235],
+        textColor: [0, 0, 0],
+        fontStyle: 'bold',
+      },
+      footStyles: {
+        fillColor: [245, 245, 245],
+        textColor: [0, 0, 0],
+        fontStyle: 'bold',
+      },
+      columnStyles: {
+        1: { halign: 'right' },
+      },
+    })
+
+    if (options.revenueBreakdown.hasEstimates) {
+      cursorY = getPdfCursorY(doc as any, cursorY)
+
+      if (cursorY > pageHeight - 60) {
+        doc.addPage()
+        cursorY = 48
+      }
+
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.setTextColor(90, 90, 90)
+      doc.text(
+        "* Estimated figures are based on the member's current membership rate where no payment was recorded in this period.",
+        leftMargin,
+        cursorY,
+        {
+          maxWidth: pageWidth - leftMargin * 2,
+        },
+      )
+    }
+  }
+
   addPdfFooter(doc, [
     `Generated: ${formatMemberReportGeneratedTimestamp()}`,
     'Evolutionz Fitness — Confidential',
@@ -249,6 +336,64 @@ async function downloadMemberReportPdf(options: {
 
   doc.save(
     `${options.filePrefix}-${options.period.startDate}-to-${options.period.endDate}.pdf`,
+  )
+}
+
+function MemberReportRevenueBreakdownSection({
+  revenueBreakdown,
+}: {
+  revenueBreakdown: MemberReportRevenueBreakdown
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-base font-semibold">Revenue Breakdown</h3>
+        <p className="text-sm text-muted-foreground">
+          Revenue generated within the selected period for the members in this filtered list.
+        </p>
+      </div>
+
+      <div className="overflow-x-auto rounded-lg border">
+        <Table>
+          <TableHeader className="bg-muted/40">
+            <TableRow className="hover:bg-muted/40">
+              <TableHead>Category</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {revenueBreakdown.byType.map((item) => (
+              <TableRow key={item.label}>
+                <TableCell className="font-medium">
+                  <span>{item.label}</span>
+                  {item.isEstimate ? (
+                    <span className="ml-2 rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Est.
+                    </span>
+                  ) : null}
+                </TableCell>
+                <TableCell className="text-right font-medium">
+                  {formatMemberReportRevenue(item.total)}
+                </TableCell>
+              </TableRow>
+            ))}
+            <TableRow className="bg-muted/20 font-semibold hover:bg-muted/20">
+              <TableCell>Total Revenue</TableCell>
+              <TableCell className="text-right">
+                {formatMemberReportRevenue(revenueBreakdown.total)}
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+
+      {revenueBreakdown.hasEstimates ? (
+        <p className="text-xs text-muted-foreground">
+          * Estimated figures are based on the member&apos;s current membership rate where no
+          payment was recorded in this period.
+        </p>
+      ) : null}
+    </div>
   )
 }
 
@@ -299,6 +444,61 @@ function MemberReportTable({
   )
 }
 
+function MemberReportResults({
+  summaryLabel,
+  emptyLabel,
+  rows,
+  dateColumnLabel,
+  getDateValue,
+  currentPage,
+  onPageChange,
+  revenueBreakdown,
+}: {
+  summaryLabel: string
+  emptyLabel: string
+  rows: Array<MemberSignupReportItem | MemberExpiredReportItem>
+  dateColumnLabel: string
+  getDateValue: (row: MemberSignupReportItem | MemberExpiredReportItem) => string
+  currentPage: number
+  onPageChange: (page: number) => void
+  revenueBreakdown: MemberReportRevenueBreakdown
+}) {
+  const { totalPages, normalizedCurrentPage, paginatedRows, rangeStart, rangeEnd } =
+    getMemberReportPageDetails(rows, currentPage)
+
+  return (
+    <>
+      <div className="rounded-lg border bg-muted/20 px-4 py-4">
+        <p className="text-sm text-muted-foreground">{summaryLabel}</p>
+      </div>
+
+      <MemberReportTable
+        emptyLabel={emptyLabel}
+        rows={paginatedRows}
+        dateColumnLabel={dateColumnLabel}
+        getDateValue={getDateValue}
+      />
+
+      {rows.length > 0 ? (
+        <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing {rangeStart}-{rangeEnd} of {rows.length}
+            </p>
+            <PaginationControls
+              currentPage={normalizedCurrentPage}
+              totalPages={totalPages}
+              onPageChange={onPageChange}
+            />
+          </div>
+
+          <MemberReportRevenueBreakdownSection revenueBreakdown={revenueBreakdown} />
+        </>
+      ) : null}
+    </>
+  )
+}
+
 export function MemberReportsClient() {
   const initialState = getNormalizedInitialState()
   const [activeTab, setActiveTab] = useState<MemberReportTab>(initialState.activeTab)
@@ -314,26 +514,18 @@ export function MemberReportsClient() {
   const expiredQuery = useMemberExpiredReport(appliedRange.startDate, appliedRange.endDate, {
     enabled: activeTab === 'expired',
   })
+  const signupsRows = signupsQuery.report?.members ?? []
+  const expiredRows = expiredQuery.report?.members ?? []
+  const activeRows: Array<MemberSignupReportItem | MemberExpiredReportItem> =
+    activeTab === 'signups' ? signupsRows : expiredRows
 
   const activeReport = activeTab === 'signups' ? signupsQuery.report : expiredQuery.report
   const isLoading = activeTab === 'signups' ? signupsQuery.isLoading : expiredQuery.isLoading
   const isFetching = activeTab === 'signups' ? signupsQuery.isFetching : expiredQuery.isFetching
   const error = activeTab === 'signups' ? signupsQuery.error : expiredQuery.error
-  const activeRows = activeReport?.members ?? []
   const appliedPeriodLabel = getMemberReportAppliedPeriodLabel(appliedPeriod, appliedRange)
-  const totalPages = Math.max(1, Math.ceil(activeRows.length / PAGE_SIZE))
-  const normalizedCurrentPage = Math.max(0, Math.min(currentPage, totalPages - 1))
-  const paginatedRows = useMemo(
-    () =>
-      activeRows.slice(
-        normalizedCurrentPage * PAGE_SIZE,
-        (normalizedCurrentPage + 1) * PAGE_SIZE,
-      ),
-    [activeRows, normalizedCurrentPage],
-  )
-  const rangeStart = activeRows.length === 0 ? 0 : normalizedCurrentPage * PAGE_SIZE + 1
-  const rangeEnd = activeRows.length === 0 ? 0 : rangeStart + paginatedRows.length - 1
   const hasLoadedReport = activeReport !== null
+  const { normalizedCurrentPage } = getMemberReportPageDetails(activeRows, currentPage)
 
   const setUrlState = (nextState: {
     activeTab?: MemberReportTab
@@ -401,7 +593,9 @@ export function MemberReportsClient() {
   }
 
   const handleDownloadPdf = async () => {
-    if (!hasLoadedReport) {
+    const report = activeReport
+
+    if (!report) {
       return
     }
 
@@ -412,6 +606,7 @@ export function MemberReportsClient() {
           filePrefix: 'member-signups',
           period: appliedRange,
           summaryLabel: `${activeRows.length} members signed up in ${appliedPeriodLabel}`,
+          revenueBreakdown: report.revenueBreakdown,
           columns: ['Member Name', 'Membership Type', 'Join Date', 'Status'],
           rows: (activeRows as MemberSignupReportItem[]).map((member) => [
             member.name,
@@ -428,6 +623,7 @@ export function MemberReportsClient() {
         filePrefix: 'member-expired',
         period: appliedRange,
         summaryLabel: `${activeRows.length} memberships expired in ${appliedPeriodLabel}`,
+        revenueBreakdown: report.revenueBreakdown,
         columns: ['Member Name', 'Membership Type', 'Expiry Date', 'Status'],
         rows: (activeRows as MemberExpiredReportItem[]).map((member) => [
           member.name,
@@ -572,17 +768,18 @@ export function MemberReportsClient() {
                 </div>
               ) : (
                 <>
-                  <div className="rounded-lg border bg-muted/20 px-4 py-4">
-                    <p className="text-sm text-muted-foreground">
-                      {activeRows.length} members signed up in {appliedPeriodLabel}
-                    </p>
-                  </div>
-
-                  <MemberReportTable
+                  <MemberReportResults
+                    summaryLabel={`${signupsRows.length} members signed up in ${appliedPeriodLabel}`}
                     emptyLabel="No members signed up in the selected period."
-                    rows={paginatedRows as MemberSignupReportItem[]}
+                    rows={signupsRows as MemberSignupReportItem[]}
                     dateColumnLabel="Join Date"
                     getDateValue={(row) => (row as MemberSignupReportItem).joinedAt}
+                    currentPage={currentPage}
+                    onPageChange={handlePageChange}
+                    revenueBreakdown={
+                      signupsQuery.report?.revenueBreakdown ??
+                      createEmptyMemberReportRevenueBreakdown()
+                    }
                   />
                 </>
               )}
@@ -608,17 +805,18 @@ export function MemberReportsClient() {
                 </div>
               ) : (
                 <>
-                  <div className="rounded-lg border bg-muted/20 px-4 py-4">
-                    <p className="text-sm text-muted-foreground">
-                      {activeRows.length} memberships expired in {appliedPeriodLabel}
-                    </p>
-                  </div>
-
-                  <MemberReportTable
+                  <MemberReportResults
+                    summaryLabel={`${expiredRows.length} memberships expired in ${appliedPeriodLabel}`}
                     emptyLabel="No memberships expired in the selected period."
-                    rows={paginatedRows as MemberExpiredReportItem[]}
+                    rows={expiredRows as MemberExpiredReportItem[]}
                     dateColumnLabel="Expiry Date"
                     getDateValue={(row) => (row as MemberExpiredReportItem).expiryDate}
+                    currentPage={currentPage}
+                    onPageChange={handlePageChange}
+                    revenueBreakdown={
+                      expiredQuery.report?.revenueBreakdown ??
+                      createEmptyMemberReportRevenueBreakdown()
+                    }
                   />
                 </>
               )}
@@ -626,19 +824,6 @@ export function MemberReportsClient() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {!isLoading && !error && activeRows.length > 0 ? (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
-            Showing {rangeStart}-{rangeEnd} of {activeRows.length}
-          </p>
-          <PaginationControls
-            currentPage={normalizedCurrentPage}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-          />
-        </div>
-      ) : null}
     </div>
   )
 }

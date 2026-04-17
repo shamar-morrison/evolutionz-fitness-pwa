@@ -25,6 +25,23 @@ vi.mock('@/hooks/use-toast', () => ({
 
 import { MemberReportsClient } from '@/app/(app)/reports/members/member-reports-client'
 
+function createRevenueBreakdown(overrides: Partial<{
+  byType: Array<{ label: string; total: number; isEstimate: boolean }>
+  total: number
+  hasEstimates: boolean
+}> = {}) {
+  return {
+    byType: [
+      { label: 'General', total: 12000, isEstimate: false },
+      { label: 'Card Fees', total: 3500, isEstimate: false },
+      { label: 'Estimated (no payment recorded)', total: 7500, isEstimate: true },
+    ],
+    total: 23000,
+    hasEstimates: true,
+    ...overrides,
+  }
+}
+
 function createSignupReport(count = 2) {
   return {
     members: Array.from({ length: count }, (_, index) => ({
@@ -34,6 +51,7 @@ function createSignupReport(count = 2) {
       status: 'Active' as const,
       joinedAt: `2026-04-${String(index + 1).padStart(2, '0')}`,
     })),
+    revenueBreakdown: createRevenueBreakdown(),
   }
 }
 
@@ -46,6 +64,13 @@ function createExpiredReport(count = 1) {
       status: 'Expired' as const,
       expiryDate: `2026-04-${String(index + 10).padStart(2, '0')}`,
     })),
+    revenueBreakdown: createRevenueBreakdown({
+      byType: [
+        { label: 'Civil Servant', total: 15000, isEstimate: false },
+        { label: 'Estimated (no payment recorded)', total: 7500, isEstimate: true },
+      ],
+      total: 22500,
+    }),
   }
 }
 
@@ -146,6 +171,10 @@ describe('MemberReportsClient', () => {
     )
     expect(container.textContent).toContain('2 members signed up in This Month')
     expect(container.textContent).toContain('Download PDF')
+    expect(container.textContent).toContain('Revenue Breakdown')
+    expect(container.textContent).toContain('Estimated (no payment recorded)')
+    expect(container.textContent).toContain('Total Revenue')
+    expect(container.textContent).toContain('Est.')
   })
 
   it('opens the matching expired tab and filter from deep links', async () => {
@@ -165,6 +194,8 @@ describe('MemberReportsClient', () => {
     )
     expect(container.textContent).toContain('1 memberships expired in This Month')
     expect(container.textContent).toContain('Download PDF')
+    expect(container.textContent).toContain('Revenue Breakdown')
+    expect(container.textContent).toContain('Civil Servant')
   })
 
   it('validates reversed custom ranges before applying filters', async () => {
@@ -196,6 +227,42 @@ describe('MemberReportsClient', () => {
     )
   })
 
+  it('hides the revenue breakdown when the filtered report has no members', async () => {
+    useMemberSignupsReportMock.mockImplementation((_startDate, _endDate, options) => ({
+      report: {
+        members: [],
+        revenueBreakdown: createRevenueBreakdown({
+          byType: [],
+          total: 0,
+          hasEstimates: false,
+        }),
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: vi.fn(),
+      enabled: options?.enabled,
+    }))
+
+    await renderClient()
+
+    expect(container.textContent).toContain('No members signed up in the selected period.')
+    expect(container.textContent).not.toContain('Revenue Breakdown')
+    expect(container.textContent).not.toContain('Total Revenue')
+  })
+
+  it('renders the expired tab revenue breakdown after switching tabs', async () => {
+    await renderClient()
+
+    await clickButton(container, 'Expired')
+
+    expect(container.textContent).toContain('1 memberships expired in This Month')
+    expect(container.textContent).toContain('Revenue Breakdown')
+    expect(container.textContent).toContain('Civil Servant')
+    expect(container.textContent).toContain('Estimated (no payment recorded)')
+    expect(container.textContent).toContain('Est.')
+  })
+
   it('paginates 50 rows per page and syncs the page number into the URL', async () => {
     useMemberSignupsReportMock.mockImplementation((_startDate, _endDate, options) => ({
       report: createSignupReport(51),
@@ -209,6 +276,8 @@ describe('MemberReportsClient', () => {
     await renderClient()
 
     expect(container.textContent).toContain('Showing 1-50 of 51')
+    expect(container.textContent).toContain('Revenue Breakdown')
+    expect(container.textContent).toContain('23,000')
 
     const nextPageButton = container.querySelector('button[aria-label="Go to next page"]')
 
@@ -222,5 +291,7 @@ describe('MemberReportsClient', () => {
 
     expect(container.textContent).toContain('Showing 51-51 of 51')
     expect(window.location.search).toBe('?tab=signups&period=this-month&page=2')
+    expect(container.textContent).toContain('Revenue Breakdown')
+    expect(container.textContent).toContain('23,000')
   })
 })

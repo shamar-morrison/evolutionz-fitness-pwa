@@ -5,6 +5,7 @@ import {
   parseDateInputValue,
 } from '@/lib/member-access-time'
 import { getThisMonthRange, getThisWeekRange, getThisYearRange } from '@/lib/date-utils'
+import { formatJmdCurrency } from '@/lib/pt-scheduling'
 
 const errorResponseSchema = z.object({
   ok: z.literal(false).optional(),
@@ -27,12 +28,26 @@ const memberExpiredReportRowSchema = z.object({
   expiryDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
 })
 
+const memberReportRevenueBreakdownItemSchema = z.object({
+  label: z.string().trim().min(1),
+  total: z.number().finite(),
+  isEstimate: z.boolean(),
+})
+
+const memberReportRevenueBreakdownSchema = z.object({
+  byType: z.array(memberReportRevenueBreakdownItemSchema).default([]),
+  total: z.number().finite(),
+  hasEstimates: z.boolean(),
+})
+
 const memberSignupsReportSchema = z.object({
   members: z.array(memberSignupReportRowSchema).default([]),
+  revenueBreakdown: memberReportRevenueBreakdownSchema,
 })
 
 const memberExpiredReportSchema = z.object({
   members: z.array(memberExpiredReportRowSchema).default([]),
+  revenueBreakdown: memberReportRevenueBreakdownSchema,
 })
 
 export type MemberReportPeriod = 'this-week' | 'this-month' | 'this-year' | 'custom'
@@ -42,6 +57,7 @@ export type MemberReportDateRange = {
   endDate: string
 }
 
+export type MemberReportRevenueBreakdown = z.infer<typeof memberReportRevenueBreakdownSchema>
 export type MemberSignupsReport = z.infer<typeof memberSignupsReportSchema>
 export type MemberExpiredReport = z.infer<typeof memberExpiredReportSchema>
 
@@ -123,6 +139,18 @@ export function formatMemberReportGeneratedTimestamp(date = new Date()) {
     minute: '2-digit',
     hour12: true,
   }).format(date)
+}
+
+export function createEmptyMemberReportRevenueBreakdown(): MemberReportRevenueBreakdown {
+  return {
+    byType: [],
+    total: 0,
+    hasEstimates: false,
+  }
+}
+
+export function formatMemberReportRevenue(value: number) {
+  return formatJmdCurrency(value)
 }
 
 export function getMemberReportAppliedPeriodLabel(
