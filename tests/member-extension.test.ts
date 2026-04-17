@@ -42,15 +42,26 @@ describe('member extension helpers', () => {
     expect(
       isMemberExtensionEligible(
         '2026-04-30T23:59:59.000Z',
+        'Active',
         new Date('2026-04-29T12:00:00.000Z'),
       ),
     ).toBe(true)
     expect(
       isMemberExtensionEligible(
         '2026-04-30T23:59:59.000Z',
+        'Active',
         new Date('2026-05-01T12:00:00.000Z'),
       ),
     ).toBe(false)
-    expect(isMemberExtensionEligible(null, new Date('2026-04-29T12:00:00.000Z'))).toBe(false)
+    expect(
+      isMemberExtensionEligible(
+        '2026-04-30T23:59:59.000Z',
+        'Suspended',
+        new Date('2026-04-29T12:00:00.000Z'),
+      ),
+    ).toBe(false)
+    expect(
+      isMemberExtensionEligible(null, 'Active', new Date('2026-04-29T12:00:00.000Z')),
+    ).toBe(false)
   })
 })

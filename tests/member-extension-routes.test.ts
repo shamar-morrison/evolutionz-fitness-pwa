@@ -16,6 +16,7 @@ const {
   readMemberWithCardCodeMock,
   readStaffProfileMock,
   sendPushToProfilesMock,
+  syncPreparedMemberExtensionAccessWindowMock,
 } = vi.hoisted(() => ({
   applyPreparedMemberExtensionMock: vi.fn(),
   archiveResolvedRequestNotificationsMock: vi.fn().mockResolvedValue(undefined),
@@ -27,6 +28,7 @@ const {
   readMemberWithCardCodeMock: vi.fn(),
   readStaffProfileMock: vi.fn(),
   sendPushToProfilesMock: vi.fn().mockResolvedValue(undefined),
+  syncPreparedMemberExtensionAccessWindowMock: vi.fn(),
 }))
 
 vi.mock('@/lib/member-extension-server', () => ({
@@ -34,6 +36,9 @@ vi.mock('@/lib/member-extension-server', () => ({
   prepareMemberExtension: prepareMemberExtensionMock,
   MEMBER_EXTENSION_SYNC_WARNING:
     'Membership extended but device sync failed. Please try again.',
+  MEMBER_EXTENSION_NO_BEGIN_TIME_WARNING:
+    'Membership extended but access window is not configured for device sync.',
+  syncPreparedMemberExtensionAccessWindow: syncPreparedMemberExtensionAccessWindowMock,
 }))
 
 vi.mock('@/lib/members', async () => {
@@ -129,6 +134,7 @@ function createExtensionRequestRecord(
         ? {
             id: 'member-1',
             name: 'Jane Doe',
+            status: 'Active',
             end_time: '2026-06-30T23:59:59.000Z',
           }
         : overrides.member,
@@ -222,15 +228,36 @@ function createRequestInsertClient({
 
 function createReviewClient({
   existingRequestRow = createExtensionRequestRecord(),
-  updateMatches = true,
+  rejectUpdateMatches = true,
+  approvalRpcResult = 'extension-request-1',
+  approvalRpcError = null,
+  approvedRequestRow,
 }: {
   existingRequestRow?: MemberExtensionRequestRecord | null
-  updateMatches?: boolean
+  rejectUpdateMatches?: boolean
+  approvalRpcResult?: string | null
+  approvalRpcError?: { message: string } | null
+  approvedRequestRow?: MemberExtensionRequestRecord | null
 } = {}) {
   const requestUpdates: Array<Record<string, unknown>> = []
+  const rpcCalls: Array<{
+    fn: string
+    args: Record<string, unknown>
+  }> = []
+  let readCount = 0
+
+  const nextApprovedRequestRow =
+    approvedRequestRow ??
+    (existingRequestRow
+      ? {
+          ...existingRequestRow,
+          status: 'approved',
+        }
+      : null)
 
   return {
     requestUpdates,
+    rpcCalls,
     client: {
       from(table: string) {
         expect(table).toBe('member_extension_requests')
@@ -242,12 +269,17 @@ function createReviewClient({
             return {
               eq(column: string, value: string) {
                 expect(column).toBe('id')
-                expect(value).toBe('extension-request-1')
 
                 return {
                   maybeSingle() {
+                    const data =
+                      readCount === 0 || value !== approvalRpcResult
+                        ? existingRequestRow
+                        : nextApprovedRequestRow
+                    readCount += 1
+
                     return Promise.resolve({
-                      data: existingRequestRow,
+                      data,
                       error: null,
                     })
                   },
@@ -274,7 +306,7 @@ function createReviewClient({
 
                         return Promise.resolve({
                           data:
-                            updateMatches && existingRequestRow
+                            rejectUpdateMatches && existingRequestRow
                               ? [{ ...existingRequestRow, ...values }]
                               : [],
                           error: null,
@@ -287,6 +319,14 @@ function createReviewClient({
             }
           },
         }
+      },
+      rpc(fn: string, args: Record<string, unknown>) {
+        rpcCalls.push({ fn, args })
+
+        return Promise.resolve({
+          data: approvalRpcResult,
+          error: approvalRpcError,
+        })
       },
     },
   }
@@ -308,6 +348,7 @@ describe('member extension routes', () => {
     readStaffProfileMock.mockReset()
     sendPushToProfilesMock.mockReset()
     sendPushToProfilesMock.mockResolvedValue(undefined)
+    syncPreparedMemberExtensionAccessWindowMock.mockReset()
     resetServerAuthMocks()
   })
 
@@ -326,8 +367,8 @@ describe('member extension routes', () => {
     await expect(response.json()).resolves.toEqual({
       ok: true,
       requests: [
-        expect.objectContaining({ id: 'extension-request-1' }),
-        expect.objectContaining({ id: 'extension-request-2' }),
+        expect.objectContaining({ id: 'extension-request-1', currentStatus: 'Active' }),
+        expect.objectContaining({ id: 'extension-request-2', currentStatus: 'Active' }),
       ],
     })
   })
@@ -409,19 +450,30 @@ describe('member extension routes', () => {
   })
 
   it('creates a pending member extension request for authorized staff and notifies admins', async () => {
-    const { client, requestInserts } = createRequestInsertClient()
+    const { client, requestInserts } = createRequestInsertClient({
+      insertedRequestRow: createExtensionRequestRecord({
+        member_id: 'member-canonical',
+        member: {
+          id: 'member-canonical',
+          name: 'Jane Doe',
+          status: 'Active',
+          end_time: '2026-06-30T23:59:59.000Z',
+        },
+      }),
+    })
     createClientMock.mockResolvedValue({})
     getSupabaseAdminClientMock.mockReturnValue(client)
     readStaffProfileMock.mockResolvedValue(createProfile())
     readMemberWithCardCodeMock.mockResolvedValue({
-      id: 'member-1',
+      id: 'member-canonical',
+      status: 'Active',
       endTime: '2026-06-30T23:59:59.000Z',
     })
     readAdminNotificationRecipientsMock.mockResolvedValue([{ id: 'admin-1' }])
     mockAuthenticatedUser({ id: 'staff-1' })
 
     const response = await postMemberExtensionRequest(
-      new Request('http://localhost/api/members/member-1/extension-requests', {
+      new Request('http://localhost/api/members/card-123/extension-requests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -431,13 +483,13 @@ describe('member extension routes', () => {
         }),
       }),
       {
-        params: Promise.resolve({ id: 'member-1' }),
+        params: Promise.resolve({ id: 'card-123' }),
       },
     )
 
     expect(requestInserts).toEqual([
       {
-        member_id: 'member-1',
+        member_id: 'member-canonical',
         requested_by: 'staff-1',
         duration_days: 84,
         status: 'pending',
@@ -451,7 +503,7 @@ describe('member extension routes', () => {
         body: 'New membership extension request from Jordan Staff for Jane Doe.',
         metadata: {
           requestId: 'extension-request-1',
-          memberId: 'member-1',
+          memberId: 'member-canonical',
           memberName: 'Jane Doe',
           requestedBy: 'Jordan Staff',
           durationDays: 84,
@@ -539,6 +591,7 @@ describe('member extension routes', () => {
     readStaffProfileMock.mockResolvedValue(createProfile())
     readMemberWithCardCodeMock.mockResolvedValue({
       id: 'member-1',
+      status: 'Active',
       endTime: '2026-01-01T00:00:00.000Z',
     })
     mockAuthenticatedUser({ id: 'staff-1' })
@@ -562,6 +615,42 @@ describe('member extension routes', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: MEMBER_EXTENSION_INACTIVE_ERROR,
+    })
+  })
+
+  it('rejects approval requests from admins without the extend-membership permission', async () => {
+    const { client, rpcCalls, requestUpdates } = createReviewClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await patchMemberExtensionRequest(
+      new Request('http://localhost/api/members/extension-requests/extension-request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'approve',
+        }),
+      }),
+      {
+        params: Promise.resolve({ requestId: 'extension-request-1' }),
+      },
+    )
+
+    expect(requestUpdates).toEqual([])
+    expect(rpcCalls).toEqual([])
+    expect(syncPreparedMemberExtensionAccessWindowMock).not.toHaveBeenCalled()
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
     })
   })
 
@@ -611,7 +700,7 @@ describe('member extension routes', () => {
   })
 
   it('approves a pending member extension request and returns sync warnings', async () => {
-    const { client, requestUpdates } = createReviewClient()
+    const { client, requestUpdates, rpcCalls } = createReviewClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
     prepareMemberExtensionMock.mockResolvedValue({
       ok: true,
@@ -620,7 +709,7 @@ describe('member extension routes', () => {
         newEndTime: '2026-09-22T23:59:59',
       },
     })
-    applyPreparedMemberExtensionMock.mockResolvedValue({
+    syncPreparedMemberExtensionAccessWindowMock.mockResolvedValue({
       ok: true,
       newEndTime: '2026-09-22T23:59:59',
       warning: 'Membership extended but device sync failed. Please try again.',
@@ -649,14 +738,19 @@ describe('member extension routes', () => {
     )
 
     expect(prepareMemberExtensionMock).toHaveBeenCalledWith('member-1', 84, client)
-    expect(requestUpdates).toEqual([
+    expect(requestUpdates).toEqual([])
+    expect(rpcCalls).toEqual([
       {
-        status: 'approved',
-        reviewed_by: 'admin-1',
-        review_timestamp: expect.any(String),
+        fn: 'approve_member_extension_request',
+        args: {
+          p_request_id: 'extension-request-1',
+          p_reviewer_id: 'admin-1',
+          p_review_timestamp: expect.any(String),
+          p_new_end_time: '2026-09-22T23:59:59',
+        },
       },
     ])
-    expect(applyPreparedMemberExtensionMock).toHaveBeenCalledWith(
+    expect(syncPreparedMemberExtensionAccessWindowMock).toHaveBeenCalledWith(
       {
         member: { id: 'member-1' },
         newEndTime: '2026-09-22T23:59:59',
@@ -677,7 +771,7 @@ describe('member extension routes', () => {
   })
 
   it('returns the inactive-member error while approving a request before any update occurs', async () => {
-    const { client, requestUpdates } = createReviewClient()
+    const { client, requestUpdates, rpcCalls } = createReviewClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
     prepareMemberExtensionMock.mockResolvedValue({
       ok: false,
@@ -708,7 +802,8 @@ describe('member extension routes', () => {
     )
 
     expect(requestUpdates).toEqual([])
-    expect(applyPreparedMemberExtensionMock).not.toHaveBeenCalled()
+    expect(rpcCalls).toEqual([])
+    expect(syncPreparedMemberExtensionAccessWindowMock).not.toHaveBeenCalled()
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toEqual({
       ok: false,
@@ -717,8 +812,10 @@ describe('member extension routes', () => {
   })
 
   it('returns 400 when an approval race finds the request already reviewed', async () => {
-    const { client } = createReviewClient({
-      updateMatches: false,
+    const { client, rpcCalls } = createReviewClient({
+      approvalRpcError: {
+        message: 'This request has already been reviewed.',
+      },
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
     prepareMemberExtensionMock.mockResolvedValue({
@@ -751,7 +848,18 @@ describe('member extension routes', () => {
       },
     )
 
-    expect(applyPreparedMemberExtensionMock).not.toHaveBeenCalled()
+    expect(rpcCalls).toEqual([
+      {
+        fn: 'approve_member_extension_request',
+        args: {
+          p_request_id: 'extension-request-1',
+          p_reviewer_id: 'admin-1',
+          p_review_timestamp: expect.any(String),
+          p_new_end_time: '2026-09-22T23:59:59',
+        },
+      },
+    ])
+    expect(syncPreparedMemberExtensionAccessWindowMock).not.toHaveBeenCalled()
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toEqual({
       ok: false,

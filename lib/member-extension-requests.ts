@@ -6,6 +6,7 @@ const memberExtensionRequestSchema = z.object({
   memberId: z.string().trim().min(1),
   memberName: z.string().trim().min(1),
   currentEndTime: z.string().trim().nullable(),
+  currentStatus: z.enum(['Active', 'Expired', 'Suspended']).nullable(),
   durationDays: z.number().int().positive(),
   status: z.enum(['pending', 'approved', 'rejected']),
   requestedBy: z.string().trim().min(1),

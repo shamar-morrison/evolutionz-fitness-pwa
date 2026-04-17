@@ -213,6 +213,7 @@ export type MemberExtensionRequest = {
   memberId: string
   memberName: string
   currentEndTime: string | null
+  currentStatus: MemberStatus | null
   durationDays: number
   status: MemberExtensionRequestStatus
   requestedBy: string

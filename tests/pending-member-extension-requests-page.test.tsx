@@ -77,6 +77,12 @@ vi.mock('@/components/ui/skeleton', () => ({
 import { PendingMemberExtensionRequestsPage } from '@/components/pending-member-extension-requests-page'
 import type { MemberExtensionRequest } from '@/types'
 
+const FIXED_NOW = new Date('2026-04-11T12:00:00.000Z')
+
+function getRelativeIsoString(daysFromNow: number) {
+  return new Date(Date.now() + daysFromNow * 24 * 60 * 60 * 1000).toISOString()
+}
+
 function createRequest(
   overrides: Partial<MemberExtensionRequest> = {},
 ): MemberExtensionRequest {
@@ -84,7 +90,8 @@ function createRequest(
     id: overrides.id ?? 'request-1',
     memberId: overrides.memberId ?? 'member-1',
     memberName: overrides.memberName ?? 'Jane Doe',
-    currentEndTime: overrides.currentEndTime ?? '2026-06-30T23:59:59.000Z',
+    currentEndTime: overrides.currentEndTime ?? getRelativeIsoString(60),
+    currentStatus: overrides.currentStatus ?? 'Active',
     durationDays: overrides.durationDays ?? 84,
     status: overrides.status ?? 'pending',
     requestedBy: overrides.requestedBy ?? 'staff-1',
@@ -92,7 +99,7 @@ function createRequest(
     reviewedBy: overrides.reviewedBy ?? null,
     reviewedByName: overrides.reviewedByName ?? null,
     reviewedAt: overrides.reviewedAt ?? null,
-    createdAt: overrides.createdAt ?? '2026-04-11T10:00:00.000Z',
+    createdAt: overrides.createdAt ?? getRelativeIsoString(-1),
   }
 }
 
@@ -117,6 +124,8 @@ describe('PendingMemberExtensionRequestsPage', () => {
   let root: Root
 
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
     container = document.createElement('div')
@@ -138,6 +147,7 @@ describe('PendingMemberExtensionRequestsPage', () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       false
     vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
   it('shows loading skeletons while requests are loading', async () => {
@@ -202,7 +212,7 @@ describe('PendingMemberExtensionRequestsPage', () => {
 
   it('disables approval and shows a warning when the member has no active membership', async () => {
     useMemberExtensionRequestsMock.mockReturnValue({
-      requests: [createRequest({ currentEndTime: '2026-01-01T00:00:00.000Z' })],
+      requests: [createRequest({ currentEndTime: getRelativeIsoString(-30) })],
       isLoading: false,
       error: null,
     })
@@ -222,5 +232,33 @@ describe('PendingMemberExtensionRequestsPage', () => {
     }
 
     expect(approveButton.disabled).toBe(true)
+  })
+
+  it('disables approval when the member is suspended even with a future end date', async () => {
+    useMemberExtensionRequestsMock.mockReturnValue({
+      requests: [
+        createRequest({
+          currentStatus: 'Suspended',
+          currentEndTime: getRelativeIsoString(30),
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<PendingMemberExtensionRequestsPage />)
+    })
+
+    const approveButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Approve',
+    )
+
+    if (!(approveButton instanceof HTMLButtonElement)) {
+      throw new Error('Approve button not found.')
+    }
+
+    expect(approveButton.disabled).toBe(true)
+    expect(container.textContent).toContain('Member has no active membership. Approval unavailable.')
   })
 })

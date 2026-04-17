@@ -107,14 +107,14 @@ export async function POST(
       return createErrorResponse('Member not found.', 404)
     }
 
-    if (!isMemberExtensionEligible(currentMember.endTime)) {
+    if (!isMemberExtensionEligible(currentMember.endTime, currentMember.status)) {
       return createErrorResponse(MEMBER_EXTENSION_INACTIVE_ERROR, 400)
     }
 
     const { data, error } = await supabase
       .from('member_extension_requests')
       .insert({
-        member_id: id,
+        member_id: currentMember.id,
         requested_by: authResult.user.id,
         duration_days: input.duration_days,
         status: 'pending',

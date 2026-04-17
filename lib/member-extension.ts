@@ -5,6 +5,7 @@ import {
   type MemberDurationValue,
 } from '@/lib/member-access-time'
 import { resolveMembershipLifecycleStatus } from '@/lib/member-status'
+import type { MemberStatus } from '@/types'
 
 export const MEMBER_EXTENSION_INACTIVE_ERROR = 'Member has no active membership.'
 
@@ -62,8 +63,13 @@ export function formatMemberExtensionDuration(days: number) {
 
 export function isMemberExtensionEligible(
   endTime: string | null | undefined,
+  status: MemberStatus,
   now: Date = new Date(),
 ) {
+  if (status === 'Suspended') {
+    return false
+  }
+
   if (!endTime) {
     return false
   }

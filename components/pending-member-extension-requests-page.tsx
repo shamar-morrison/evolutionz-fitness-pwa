@@ -135,7 +135,9 @@ export function PendingMemberExtensionRequestsPage() {
               request.currentEndTime,
               request.durationDays,
             )
-            const canApprove = isMemberExtensionEligible(request.currentEndTime)
+            const canApprove =
+              request.currentStatus !== null &&
+              isMemberExtensionEligible(request.currentEndTime, request.currentStatus)
 
             return (
               <Card key={request.id}>

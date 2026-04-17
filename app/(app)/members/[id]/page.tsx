@@ -368,7 +368,10 @@ export default function MemberDetailPage() {
     cardNo: member.cardNo,
     cardStatus: member.cardStatus,
   })
-  const isMembershipExtensionAvailable = isMemberExtensionEligible(member.endTime)
+  const isMembershipExtensionAvailable = isMemberExtensionEligible(
+    member.endTime,
+    member.status,
+  )
 
   return (
     <div className="space-y-6">

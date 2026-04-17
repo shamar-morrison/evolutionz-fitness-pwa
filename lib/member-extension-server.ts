@@ -21,6 +21,8 @@ import type { Member, MemberRecord } from '@/types'
 
 export const MEMBER_EXTENSION_SYNC_WARNING =
   'Membership extended but device sync failed. Please try again.'
+export const MEMBER_EXTENSION_NO_BEGIN_TIME_WARNING =
+  'Membership extended but access window is not configured for device sync.'
 
 const MEMBER_EXTENSION_SYNC_TIMEOUT_ERROR =
   'Membership extension request timed out after 10 seconds.'
@@ -98,7 +100,10 @@ export async function prepareMemberExtension(
     }
   }
 
-  if (!isMemberExtensionEligible(member.endTime)) {
+  if (
+    member.status === 'Suspended' ||
+    !isMemberExtensionEligible(member.endTime, member.status)
+  ) {
     return {
       ok: false,
       error: MEMBER_EXTENSION_INACTIVE_ERROR,
@@ -125,34 +130,17 @@ export async function prepareMemberExtension(
   }
 }
 
-export async function applyPreparedMemberExtension(
+export async function syncPreparedMemberExtensionAccessWindow(
   { member, newEndTime }: PreparedMemberExtension,
-  client: MemberExtensionServerClient,
+  client: AccessControlJobsClient,
 ): Promise<AppliedMemberExtensionResult> {
-  const { error } = await client
-    .from('members')
-    .update({
-      end_time: newEndTime,
-      status: resolveMemberStatusForAccessWindowUpdate({
-        currentStatus: member.status,
-        endTime: newEndTime,
-      }),
-    })
-    .eq('id', member.id)
-    .select(MEMBER_RECORD_SELECT)
-    .maybeSingle()
-
-  if (error) {
-    throw new Error(`Failed to extend member ${member.id}: ${error.message}`)
-  }
-
   const beginTime = getAccessDateTimeValue(member.beginTime)
 
   if (!beginTime) {
     return {
       ok: true,
       newEndTime,
-      warning: MEMBER_EXTENSION_SYNC_WARNING,
+      warning: MEMBER_EXTENSION_NO_BEGIN_TIME_WARNING,
     }
   }
 
@@ -197,4 +185,28 @@ export async function applyPreparedMemberExtension(
     ok: true,
     newEndTime,
   }
+}
+
+export async function applyPreparedMemberExtension(
+  { member, newEndTime }: PreparedMemberExtension,
+  client: MemberExtensionServerClient,
+): Promise<AppliedMemberExtensionResult> {
+  const { error } = await client
+    .from('members')
+    .update({
+      end_time: newEndTime,
+      status: resolveMemberStatusForAccessWindowUpdate({
+        currentStatus: member.status,
+        endTime: newEndTime,
+      }),
+    })
+    .eq('id', member.id)
+    .select(MEMBER_RECORD_SELECT)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to extend member ${member.id}: ${error.message}`)
+  }
+
+  return syncPreparedMemberExtensionAccessWindow({ member, newEndTime }, client)
 }
