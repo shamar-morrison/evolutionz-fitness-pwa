@@ -422,6 +422,7 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('Reports')
     expect(container.textContent).toContain('PT Trainer Payments')
     expect(container.textContent).toContain('Group Class Payments')
+    expect(container.textContent).toContain('Member Reports')
     expect(container.textContent).toContain('Revenue Reports')
     expect(container.textContent).toContain('Notifications')
     expect(container.textContent).toContain('Member Requests')
@@ -441,6 +442,7 @@ describe('Sidebar', () => {
     expect(links).toContain('/email')
     expect(links).toContain('/reports/pt-payments')
     expect(links).toContain('/reports/class-payments')
+    expect(links).toContain('/reports/members')
     expect(links).toContain('/reports/revenue')
     expect(links).toContain('/pending-approvals/member-requests')
     expect(links).toContain('/pending-approvals/edit-requests')
@@ -458,6 +460,8 @@ describe('Sidebar', () => {
     expect(groupLabels).toContain('Notifications')
     expect(links.indexOf('/staff')).toBeLessThan(links.indexOf('/email'))
     expect(links.indexOf('/email')).toBeLessThan(links.indexOf('/classes'))
+    expect(links.indexOf('/reports/class-payments')).toBeLessThan(links.indexOf('/reports/members'))
+    expect(links.indexOf('/reports/members')).toBeLessThan(links.indexOf('/reports/revenue'))
     expect(links.indexOf('/schedule')).toBeLessThan(links.indexOf('/door-history'))
 
     const badges = Array.from(container.querySelectorAll('[data-sidebar="menu-badge"]')).map(

@@ -43,6 +43,7 @@ describe('route config helpers', () => {
     expect(isRouteAllowed('/dashboard', 'staff', ['Trainer'])).toBe(false)
     expect(isRouteAllowed('/reports/pt-payments', 'staff', ['Trainer'])).toBe(false)
     expect(isRouteAllowed('/reports/class-payments', 'staff', ['Trainer'])).toBe(false)
+    expect(isRouteAllowed('/reports/members', 'staff', ['Trainer'])).toBe(false)
     expect(isRouteAllowed('/reports/revenue', 'staff', ['Trainer'])).toBe(false)
   })
 
@@ -66,6 +67,7 @@ describe('route config helpers', () => {
     expect(isRouteAllowed('/reports/class-payments', 'staff', ['Administrative Assistant'])).toBe(
       false,
     )
+    expect(isRouteAllowed('/reports/members', 'staff', ['Administrative Assistant'])).toBe(false)
     expect(isRouteAllowed('/reports/revenue', 'staff', ['Administrative Assistant'])).toBe(false)
     expect(isRouteAllowed('/trainer/schedule', 'staff', ['Administrative Assistant'])).toBe(
       false,
@@ -159,6 +161,7 @@ describe('route config helpers', () => {
     expect(routeConfig['/reports']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports/pt-payments']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports/class-payments']?.allowedRoles).toEqual(['admin'])
+    expect(routeConfig['/reports/members']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports/revenue']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/door-history']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/email']?.allowedRoles).toEqual(['admin'])

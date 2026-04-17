@@ -70,6 +70,9 @@ export const routeConfig: Record<string, RouteConfig> = {
   '/reports/class-payments': {
     allowedRoles: ['admin'],
   },
+  '/reports/members': {
+    allowedRoles: ['admin'],
+  },
   '/reports/revenue': {
     allowedRoles: ['admin'],
   },

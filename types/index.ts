@@ -365,6 +365,8 @@ export type DashboardMembershipStats = {
   activeMembers: number
   expiredMembers: number
   expiringSoon: number
+  signedUpThisMonth: number
+  expiredThisMonth: number
 }
 
 export type CheckInStatus = 'success' | 'not_found' | 'expired' | 'suspended'

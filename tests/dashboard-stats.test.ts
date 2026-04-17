@@ -22,11 +22,15 @@ describe('dashboard stats helpers', () => {
         activeMembers: 247,
         expiredMembers: 38,
         expiringSoon: 12,
+        signedUpThisMonth: 19,
+        expiredThisMonth: 16,
       }),
     ).toEqual({
       activeMembers: 247,
       expiredMembers: 38,
       expiringSoon: 12,
+      signedUpThisMonth: 19,
+      expiredThisMonth: 16,
     })
   })
 
@@ -37,6 +41,8 @@ describe('dashboard stats helpers', () => {
           activeMembers: 247,
           expiredMembers: 38,
           expiringSoon: 12,
+          signedUpThisMonth: 19,
+          expiredThisMonth: 16,
         },
         200,
       ),
@@ -48,6 +54,8 @@ describe('dashboard stats helpers', () => {
       activeMembers: 247,
       expiredMembers: 38,
       expiringSoon: 12,
+      signedUpThisMonth: 19,
+      expiredThisMonth: 16,
     })
     expect(fetchMock).toHaveBeenCalledWith('/api/dashboard/stats', {
       method: 'GET',

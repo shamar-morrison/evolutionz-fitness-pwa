@@ -13,21 +13,27 @@ vi.mock('@/lib/server-auth', async () => {
   const mod = await import('@/tests/support/server-auth')
 
   return {
-    requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
     requireAdminUser: mod.requireAdminUserMock,
   }
 })
 
 import { GET } from '@/app/api/dashboard/stats/route'
 
-type QuerySignature = 'active' | 'expired' | 'expiringSoon'
+type QuerySignature =
+  | 'active'
+  | 'expired'
+  | 'expiringSoon'
+  | 'signedUpThisMonth'
+  | 'expiredThisMonth'
 
 type RecordedQuery = {
   signature: QuerySignature
   filters: {
     eq: Array<[string, string]>
     gte: Array<[string, string]>
+    lte: Array<[string, string]>
     lt: Array<[string, string]>
+    not: Array<[string, string, null]>
   }
 }
 
@@ -55,7 +61,9 @@ function createDashboardStatsAdminClient({
           const filters: RecordedQuery['filters'] = {
             eq: [],
             gte: [],
+            lte: [],
             lt: [],
+            not: [],
           }
 
           const builder = {
@@ -67,8 +75,16 @@ function createDashboardStatsAdminClient({
               filters.gte.push([column, value])
               return builder
             },
+            lte(column: string, value: string) {
+              filters.lte.push([column, value])
+              return builder
+            },
             lt(column: string, value: string) {
               filters.lt.push([column, value])
+              return builder
+            },
+            not(column: string, operator: string, value: null) {
+              filters.not.push([column, operator, value])
               return builder
             },
             then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
@@ -78,7 +94,9 @@ function createDashboardStatsAdminClient({
                 filters: {
                   eq: [...filters.eq],
                   gte: [...filters.gte],
+                  lte: [...filters.lte],
                   lt: [...filters.lt],
+                  not: [...filters.not],
                 },
               })
 
@@ -106,9 +124,16 @@ function createDashboardStatsAdminClient({
 
 function getQuerySignature(filters: RecordedQuery['filters']): QuerySignature {
   const statusFilter = filters.eq.find(([column]) => column === 'status')?.[1]
+  const hasJoinedAtRange =
+    filters.gte.some(([column]) => column === 'joined_at') &&
+    filters.lte.some(([column]) => column === 'joined_at')
   const hasExpiringWindow =
     filters.gte.some(([column]) => column === 'end_time') &&
     filters.lt.some(([column]) => column === 'end_time')
+
+  if (hasJoinedAtRange) {
+    return 'signedUpThisMonth'
+  }
 
   if (statusFilter === 'Expired') {
     return 'expired'
@@ -116,6 +141,10 @@ function getQuerySignature(filters: RecordedQuery['filters']): QuerySignature {
 
   if (statusFilter === 'Active' && hasExpiringWindow) {
     return 'expiringSoon'
+  }
+
+  if (hasExpiringWindow) {
+    return 'expiredThisMonth'
   }
 
   return 'active'
@@ -138,6 +167,8 @@ describe('GET /api/dashboard/stats', () => {
         active: 247,
         expired: 38,
         expiringSoon: 12,
+        signedUpThisMonth: 19,
+        expiredThisMonth: 16,
       },
     })
 
@@ -150,19 +181,32 @@ describe('GET /api/dashboard/stats', () => {
       activeMembers: 247,
       expiredMembers: 38,
       expiringSoon: 12,
+      signedUpThisMonth: 19,
+      expiredThisMonth: 16,
     })
 
-    expect(supabase.queries).toHaveLength(3)
+    expect(supabase.queries).toHaveLength(5)
 
     const activeQuery = supabase.queries.find((query) => query.signature === 'active')
     const expiredQuery = supabase.queries.find((query) => query.signature === 'expired')
     const expiringSoonQuery = supabase.queries.find((query) => query.signature === 'expiringSoon')
+    const signedUpThisMonthQuery = supabase.queries.find(
+      (query) => query.signature === 'signedUpThisMonth',
+    )
+    const expiredThisMonthQuery = supabase.queries.find(
+      (query) => query.signature === 'expiredThisMonth',
+    )
 
     expect(activeQuery?.filters.eq).toEqual([['status', 'Active']])
     expect(expiredQuery?.filters.eq).toEqual([['status', 'Expired']])
     expect(expiringSoonQuery?.filters.eq).toEqual([['status', 'Active']])
     expect(expiringSoonQuery?.filters.gte).toEqual([['end_time', '2026-04-02T00:00:00-05:00']])
     expect(expiringSoonQuery?.filters.lt).toEqual([['end_time', '2026-04-10T00:00:00-05:00']])
+    expect(signedUpThisMonthQuery?.filters.not).toEqual([['joined_at', 'is', null]])
+    expect(signedUpThisMonthQuery?.filters.gte).toEqual([['joined_at', '2026-04-01']])
+    expect(signedUpThisMonthQuery?.filters.lte).toEqual([['joined_at', '2026-04-30']])
+    expect(expiredThisMonthQuery?.filters.gte).toEqual([['end_time', '2026-04-01T00:00:00-05:00']])
+    expect(expiredThisMonthQuery?.filters.lt).toEqual([['end_time', '2026-05-01T00:00:00-05:00']])
   })
 
   it('coerces null Supabase counts to zero', async () => {
@@ -177,6 +221,8 @@ describe('GET /api/dashboard/stats', () => {
       activeMembers: 0,
       expiredMembers: 0,
       expiringSoon: 0,
+      signedUpThisMonth: 0,
+      expiredThisMonth: 0,
     })
   })
 

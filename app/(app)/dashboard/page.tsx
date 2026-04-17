@@ -9,7 +9,7 @@ import {
 } from '@/components/dashboard-member-panels'
 import { StatCard } from '@/components/stat-card'
 import { QuickActions } from '@/components/quick-actions'
-import { Users, UserX, Clock3 } from 'lucide-react'
+import { Users, UserPlus, UserX, Clock3, CalendarX2 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function DashboardPage() {
@@ -68,6 +68,32 @@ function DashboardPageContent() {
               icon={Clock3}
               variant="warning"
               href="/dashboard/expiring-members"
+            />
+          </>
+        )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {isStatsLoading ? (
+          <>
+            <Skeleton className="h-28" />
+            <Skeleton className="h-28" />
+          </>
+        ) : (
+          <>
+            <StatCard
+              title="Signed Up This Month"
+              value={stats.signedUpThisMonth}
+              icon={UserPlus}
+              variant="success"
+              href="/reports/members?tab=signups&period=this-month"
+            />
+            <StatCard
+              title="Expired This Month"
+              value={stats.expiredThisMonth}
+              icon={CalendarX2}
+              variant="destructive"
+              href="/reports/members?tab=expired&period=this-month"
             />
           </>
         )}

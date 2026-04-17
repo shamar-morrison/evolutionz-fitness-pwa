@@ -5,6 +5,8 @@ const dashboardStatsSchema = z.object({
   activeMembers: z.number().int().nonnegative(),
   expiredMembers: z.number().int().nonnegative(),
   expiringSoon: z.number().int().nonnegative(),
+  signedUpThisMonth: z.number().int().nonnegative(),
+  expiredThisMonth: z.number().int().nonnegative(),
 })
 
 type DashboardStatsErrorResponse = {

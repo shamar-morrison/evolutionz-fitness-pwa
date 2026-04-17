@@ -95,6 +95,10 @@ export const queryKeys = {
       ['reports', 'membership-revenue', from, to] as const,
     cardFeeRevenue: (from: string, to: string) =>
       ['reports', 'card-fee-revenue', from, to] as const,
+    memberSignups: (startDate: string, endDate: string) =>
+      ['reports', 'member-signups', startDate, endDate] as const,
+    memberExpired: (startDate: string, endDate: string) =>
+      ['reports', 'member-expired', startDate, endDate] as const,
     ptRevenue: (from: string, to: string) =>
       ['reports', 'pt-revenue', from, to] as const,
     overallRevenue: (from: string, to: string) =>

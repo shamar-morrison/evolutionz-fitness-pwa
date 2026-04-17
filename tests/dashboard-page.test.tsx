@@ -69,6 +69,8 @@ describe('DashboardPage', () => {
         activeMembers: 12,
         expiredMembers: 3,
         expiringSoon: 4,
+        signedUpThisMonth: 5,
+        expiredThisMonth: 2,
       },
       isLoading: false,
       error: null,
@@ -94,10 +96,33 @@ describe('DashboardPage', () => {
 
     expect(container.textContent).toContain('Dashboard')
     expect(container.textContent).toContain('Active Members:12')
+    expect(container.textContent).toContain('Signed Up This Month:5')
+    expect(container.textContent).toContain('Expired This Month:2')
     expect(container.textContent).toContain('Quick Actions Content')
     expect(container.querySelector('a[href="/dashboard/expiring-members"]')?.textContent).toBe(
       'Expiring Soon (7 days):4',
     )
+    const reportLinks = Array.from(container.querySelectorAll('a')).map((link) => ({
+      href: link.getAttribute('href') ?? '',
+      text: link.textContent ?? '',
+    }))
+
+    expect(
+      reportLinks.find(
+        (link) =>
+          link.href.includes('/reports/members') &&
+          link.href.includes('tab=signups') &&
+          link.href.includes('period=this-month'),
+      )?.text,
+    ).toBe('Signed Up This Month:5')
+    expect(
+      reportLinks.find(
+        (link) =>
+          link.href.includes('/reports/members') &&
+          link.href.includes('tab=expired') &&
+          link.href.includes('period=this-month'),
+      )?.text,
+    ).toBe('Expired This Month:2')
   })
 
   it('redirects staff users to their authenticated home', async () => {
