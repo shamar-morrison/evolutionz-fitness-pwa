@@ -6,12 +6,14 @@ import {
   ExpiringThisWeekCard,
   RecentlyAddedMembersCard,
 } from '@/components/dashboard-member-panels'
-import { QuickActions } from '@/components/quick-actions'
 import { RoleGuard } from '@/components/role-guard'
 import { StatCard } from '@/components/stat-card'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDashboardStats } from '@/hooks/use-dashboard-stats'
-import { CalendarX2, Clock3, UserX, Users } from 'lucide-react'
+import { usePermissions } from '@/hooks/use-permissions'
+import { CalendarX2, Clock3, UserPlus, UserX, Users } from 'lucide-react'
+import Link from 'next/link'
 
 function formatMonthOverMonthTrend(currentValue: number, previousValue: number) {
   const delta = currentValue - previousValue
@@ -61,13 +63,25 @@ function DashboardPageContent() {
     )
   }
 
+  const { can } = usePermissions()
+
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Welcome back! Here&apos;s what&apos;s happening at Evolutionz Fitness.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Welcome back! Here&apos;s what&apos;s happening at Evolutionz Fitness.
+          </p>
+        </div>
+        {can('members.create') && (
+          <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0">
+            <Link data-progress href="/members?action=add">
+              <UserPlus className="h-4 w-4" />
+              Add Member
+            </Link>
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -134,11 +148,6 @@ function DashboardPageContent() {
             href="/reports/members?tab=signups&period=this-month"
           />
         )}
-      </div>
-
-      <div>
-        <h2 className="mb-4 text-lg font-semibold">Quick Actions</h2>
-        <QuickActions />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
