@@ -13,6 +13,7 @@ function createFormState() {
     email: 'jane@example.com',
     phone: '555-0100',
     memberTypeId: 'type-1',
+    joinedDate: '',
     remark: 'Existing member',
     startDate: '2026-04-02',
     startTime: '00:00:00',

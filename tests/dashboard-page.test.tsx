@@ -4,10 +4,29 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { currentRoleState, useDashboardStatsMock } = vi.hoisted(() => ({
+const { currentRoleState, useDashboardStatsMock, usePermissionsMock } = vi.hoisted(() => ({
   currentRoleState: { role: 'admin' as 'admin' | 'staff' },
   useDashboardStatsMock: vi.fn(),
+  usePermissionsMock: vi.fn(),
 }))
+
+const dashboardStatsData = {
+  activeMembers: 12,
+  activeMembersLastMonth: 10,
+  totalExpiredMembers: 3,
+  expiringSoon: 4,
+  signedUpThisMonth: 5,
+  signupsByMonth: [
+    { month: '2025-11', count: 0 },
+    { month: '2025-12', count: 1 },
+    { month: '2026-01', count: 2 },
+    { month: '2026-02', count: 3 },
+    { month: '2026-03', count: 4 },
+    { month: '2026-04', count: 5 },
+  ],
+  expiredThisMonth: 2,
+  expiredThisMonthLastMonth: 1,
+}
 
 vi.mock('@/components/role-guard', () => ({
   RoleGuard: ({
@@ -29,26 +48,33 @@ vi.mock('@/hooks/use-dashboard-stats', () => ({
   useDashboardStats: useDashboardStatsMock,
 }))
 
+vi.mock('@/hooks/use-permissions', () => ({
+  usePermissions: usePermissionsMock,
+}))
+
 vi.mock('@/components/dashboard-member-panels', () => ({
   ExpiringThisWeekCard: () => <div>Expiring This Week</div>,
   RecentlyAddedMembersCard: () => <div>Recently Added Members</div>,
 }))
 
-vi.mock('@/components/stat-card', () => ({
-  StatCard: ({
-    title,
-    value,
-    href,
-  }: {
-    title: string
-    value: number
-    href?: string
-  }) =>
-    href ? <a href={href}>{`${title}:${value}`}</a> : <div>{`${title}:${value}`}</div>,
+vi.mock('@/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <div data-testid="tooltip-root">{children}</div>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-content">{children}</div>
+  ),
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="tooltip-trigger">{children}</div>
+  ),
 }))
 
-vi.mock('@/components/quick-actions', () => ({
-  QuickActions: () => <div>Quick Actions Content</div>,
+vi.mock('@/components/dashboard-signups-chart-card', () => ({
+  DashboardSignupsChartCard: ({
+    currentMonthCount,
+    href,
+  }: {
+    currentMonthCount: number
+    href: string
+  }) => <a href={href}>{`Member Signups (Last 6 Months)|${currentMonthCount} this month`}</a>,
 }))
 
 import DashboardPage from '@/app/(app)/dashboard/page'
@@ -64,12 +90,11 @@ describe('DashboardPage', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     currentRoleState.role = 'admin'
+    usePermissionsMock.mockReturnValue({
+      can: (permission: string) => permission === 'members.create',
+    })
     useDashboardStatsMock.mockReturnValue({
-      data: {
-        activeMembers: 12,
-        expiredMembers: 3,
-        expiringSoon: 4,
-      },
+      data: dashboardStatsData,
       isLoading: false,
       error: null,
     })
@@ -87,17 +112,49 @@ describe('DashboardPage', () => {
     vi.clearAllMocks()
   })
 
-  it('renders dashboard content for admins', async () => {
+  it('renders the refreshed dashboard content for admins', async () => {
     await act(async () => {
       root.render(<DashboardPage />)
     })
 
     expect(container.textContent).toContain('Dashboard')
-    expect(container.textContent).toContain('Active Members:12')
-    expect(container.textContent).toContain('Quick Actions Content')
-    expect(container.querySelector('a[href="/dashboard/expiring-members"]')?.textContent).toBe(
-      'Expiring Soon (7 days):4',
+    expect(container.textContent).toContain('Active Members12')
+    expect(container.textContent).toContain('Total Expired Members3')
+    expect(container.textContent).toContain('Expired This Month2')
+    expect(container.textContent).toContain('Expiring Soon (7 days)4')
+    expect(container.textContent).toContain('Member Signups (Last 6 Months)|5 this month')
+    expect(container.textContent).toContain("Compared to last month's active member count")
+    expect(container.textContent).toContain("Compared to last month's expiry count")
+    expect(container.textContent).toContain('+2 (+20.0%)')
+    expect(container.textContent).toContain('+1 (+100.0%)')
+    expect(container.querySelectorAll('[data-testid="tooltip-root"]')).toHaveLength(2)
+
+    expect(container.querySelector('a[href="/dashboard/expiring-members"]')?.textContent).toContain(
+      'Expiring Soon (7 days)4',
     )
+
+    const reportLinks = Array.from(container.querySelectorAll('a')).map((link) => ({
+      href: link.getAttribute('href') ?? '',
+      text: link.textContent ?? '',
+    }))
+
+    expect(
+      reportLinks.find(
+        (link) =>
+          link.href.includes('/reports/members') &&
+          link.href.includes('tab=signups') &&
+          link.href.includes('period=this-month'),
+      )?.text,
+    ).toContain('Member Signups (Last 6 Months)')
+
+    expect(
+      reportLinks.find(
+        (link) =>
+          link.href.includes('/reports/members') &&
+          link.href.includes('tab=expired') &&
+          link.href.includes('period=this-month'),
+      )?.text,
+    ).toContain('Expired This Month2')
   })
 
   it('redirects staff users to their authenticated home', async () => {
@@ -108,6 +165,24 @@ describe('DashboardPage', () => {
     })
 
     expect(container.textContent).toContain('redirect:home')
-    expect(container.textContent).not.toContain('Quick Actions Content')
+    expect(container.textContent).not.toContain('Dashboard')
+  })
+
+  it('renders the stats error state after a successful render without breaking hook order', async () => {
+    await act(async () => {
+      root.render(<DashboardPage />)
+    })
+
+    useDashboardStatsMock.mockReturnValue({
+      data: dashboardStatsData,
+      isLoading: false,
+      error: new Error('Failed to load dashboard data'),
+    })
+
+    await act(async () => {
+      root.render(<DashboardPage />)
+    })
+
+    expect(container.textContent).toContain('Failed to load dashboard data')
   })
 })

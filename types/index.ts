@@ -131,6 +131,7 @@ export type MemberApprovalRequest = {
   email: string | null
   phone: string | null
   remark: string | null
+  joinedAt: string | null
   beginTime: string
   endTime: string
   cardNo: string
@@ -159,6 +160,7 @@ export type MemberEditRequest = {
   currentEmail: string | null
   currentMemberTypeId: string | null
   currentMemberTypeName: string | null
+  currentJoinDate: string | null
   currentBeginTime: string | null
   currentEndTime: string | null
   proposedName: string | null
@@ -167,6 +169,7 @@ export type MemberEditRequest = {
   proposedEmail: string | null
   proposedMemberTypeId: string | null
   proposedMemberTypeName: string | null
+  proposedJoinDate: string | null
   proposedStartDate: string | null
   proposedStartTime: string | null
   proposedDuration: string | null
@@ -222,6 +225,7 @@ export type Member = {
   phone: string | null
   remark: string | null
   photoUrl: string | null
+  joinedAt: string | null
   beginTime: string | null // ISO date string
   endTime: string | null // ISO date string
 }
@@ -239,6 +243,7 @@ export type MemberRecord = {
   phone: string | null
   remark: string | null
   photo_url: string | null
+  joined_at: string | null
   begin_time: string | null
   end_time: string | null
   updated_at: string
@@ -356,10 +361,20 @@ export type ClassAttendanceListItem = ClassAttendance & {
 }
 
 // Dashboard Types
+export type DashboardSignupsByMonthItem = {
+  month: string
+  count: number
+}
+
 export type DashboardMembershipStats = {
   activeMembers: number
-  expiredMembers: number
+  activeMembersLastMonth: number
+  totalExpiredMembers: number
   expiringSoon: number
+  signedUpThisMonth: number
+  signupsByMonth: DashboardSignupsByMonthItem[]
+  expiredThisMonth: number
+  expiredThisMonthLastMonth: number
 }
 
 export type CheckInStatus = 'success' | 'not_found' | 'expired' | 'suspended'

@@ -8,6 +8,7 @@ const memberApprovalRequestSchema = z.object({
   email: z.string().trim().nullable(),
   phone: z.string().trim().nullable(),
   remark: z.string().trim().nullable(),
+  joinedAt: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().default(null),
   beginTime: z.string().trim().min(1),
   endTime: z.string().trim().min(1),
   cardNo: z.string().trim().min(1),
@@ -66,6 +67,7 @@ export type CreateMemberApprovalRequestInput = {
   email: string
   phone: string
   remark?: string | null
+  joined_at?: string | null
   beginTime: string
   endTime: string
   cardNo: string

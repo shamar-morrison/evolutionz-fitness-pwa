@@ -1,10 +1,11 @@
 import { z } from 'zod'
 import { getAssignedCardNo } from '@/lib/member-card'
+import { parseDateInputValue } from '@/lib/member-access-time'
 import { getCleanMemberName } from '@/lib/member-name'
 import type { Card, CardRecord, Member, MemberRecord } from '@/types'
 
 export const MEMBER_RECORD_SELECT =
-  'id, employee_no, name, card_no, type, member_type_id, status, gender, email, phone, remark, photo_url, begin_time, end_time, updated_at'
+  'id, employee_no, name, card_no, type, member_type_id, status, gender, email, phone, remark, photo_url, joined_at, begin_time, end_time, updated_at'
 
 type CardLookupEntry = Pick<Card, 'cardCode' | 'status' | 'lostAt'>
 
@@ -26,6 +27,7 @@ const memberSchema = z.object({
   phone: z.string().trim().min(1).nullable(),
   remark: z.string().trim().min(1).nullable(),
   photoUrl: z.string().trim().min(1).nullable(),
+  joinedAt: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().default(null),
   beginTime: z.string().trim().min(1).nullable(),
   endTime: z.string().trim().min(1).nullable(),
 })
@@ -85,6 +87,16 @@ function normalizeTimestamp(value: string | null | undefined) {
   }
 
   return timestamp.toISOString()
+}
+
+function normalizeDate(value: string | null | undefined) {
+  const normalizedValue = normalizeText(value)
+
+  if (!normalizedValue) {
+    return null
+  }
+
+  return parseDateInputValue(normalizedValue) ? normalizedValue : null
 }
 
 export function mapMemberRecordToMember(record: MemberRecord): Member {
@@ -154,6 +166,7 @@ export function mapMemberRecordToMemberWithCardCode(
     phone: normalizeNullableText(record.phone),
     remark: normalizeNullableText(record.remark),
     photoUrl: normalizeNullableText(record.photo_url),
+    joinedAt: normalizeDate(record.joined_at),
     beginTime: normalizeTimestamp(record.begin_time),
     endTime: normalizeTimestamp(record.end_time),
   }

@@ -56,6 +56,7 @@ type MemberEditRequestMemberUpdateValues = {
   phone?: string | null
   email?: string | null
   member_type_id?: string | null
+  joined_at?: string | null
   begin_time?: string
   end_time?: string
   status?: MemberStatus
@@ -330,6 +331,10 @@ export async function PATCH(
           currentMember.type,
         ),
       )
+    }
+
+    if (existingRequest.proposed_join_date !== null) {
+      memberUpdateValues.joined_at = existingRequest.proposed_join_date
     }
 
     if (shouldUpdateAccessWindow && nextBeginTime && nextEndTime) {

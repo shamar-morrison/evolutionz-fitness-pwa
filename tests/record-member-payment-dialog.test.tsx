@@ -256,6 +256,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     phone: overrides.phone ?? '876-555-1111',
     remark: overrides.remark ?? null,
     photoUrl: overrides.photoUrl ?? null,
+    joinedAt: overrides.joinedAt ?? null,
     beginTime: overrides.beginTime ?? '2026-04-09T00:00:00.000Z',
     endTime: overrides.endTime ?? '2026-05-08T23:59:59.000Z',
   }

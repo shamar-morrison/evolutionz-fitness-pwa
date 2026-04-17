@@ -7,8 +7,13 @@ import type { DashboardMembershipStats } from '@/types'
 
 const EMPTY_DASHBOARD_STATS: DashboardMembershipStats = {
   activeMembers: 0,
-  expiredMembers: 0,
+  activeMembersLastMonth: 0,
+  totalExpiredMembers: 0,
   expiringSoon: 0,
+  signedUpThisMonth: 0,
+  signupsByMonth: [],
+  expiredThisMonth: 0,
+  expiredThisMonthLastMonth: 0,
 }
 
 export function useDashboardStats() {

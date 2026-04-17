@@ -319,6 +319,7 @@ export function buildSlotBackedMemberPreview(
     phone,
     remark,
     photoUrl,
+    joinedAt: null,
     beginTime,
     endTime,
   }
@@ -360,6 +361,7 @@ export function buildMemberPreview(
     phone: phone ?? null,
     remark: remark ?? null,
     photoUrl: null,
+    joinedAt: null,
     beginTime,
     endTime,
   }

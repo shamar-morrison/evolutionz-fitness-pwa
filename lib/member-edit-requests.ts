@@ -11,6 +11,13 @@ const memberEditRequestSchema = z.object({
   currentEmail: z.string().trim().nullable(),
   currentMemberTypeId: z.string().trim().nullable(),
   currentMemberTypeName: z.string().trim().nullable(),
+  currentJoinDate: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional()
+    .default(null),
   currentBeginTime: z.string().trim().nullable(),
   currentEndTime: z.string().trim().nullable(),
   proposedName: z.string().trim().nullable(),
@@ -19,6 +26,13 @@ const memberEditRequestSchema = z.object({
   proposedEmail: z.string().trim().nullable(),
   proposedMemberTypeId: z.string().trim().nullable(),
   proposedMemberTypeName: z.string().trim().nullable(),
+  proposedJoinDate: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional()
+    .default(null),
   proposedStartDate: z.string().trim().nullable(),
   proposedStartTime: z.string().trim().nullable(),
   proposedDuration: z.string().trim().nullable(),
@@ -67,6 +81,7 @@ export type CreateMemberEditRequestInput = {
   proposed_phone?: string
   proposed_email?: string
   proposed_member_type_id?: string
+  proposed_join_date?: string
   proposed_start_date?: string
   proposed_start_time?: string
   proposed_duration?: string

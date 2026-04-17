@@ -4,7 +4,8 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { toastMock, usePtPaymentsReportMock } = vi.hoisted(() => ({
+const { calendarSelectionState, toastMock, usePtPaymentsReportMock } = vi.hoisted(() => ({
+  calendarSelectionState: { value: new Date(2026, 3, 1, 12, 0, 0, 0) },
   toastMock: vi.fn(),
   usePtPaymentsReportMock: vi.fn(),
 }))
@@ -33,20 +34,55 @@ vi.mock('@/components/role-guard', () => ({
   RoleGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
+vi.mock('@/components/ui/popover', () => ({
+  Popover: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PopoverContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  PopoverTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+vi.mock('@/components/ui/calendar', () => ({
+  Calendar: ({
+    onSelect,
+    'data-testid': dataTestId,
+  }: {
+    onSelect?: (date: Date) => void
+    'data-testid'?: string
+  }) => (
+    <button
+      type="button"
+      data-testid={dataTestId}
+      onClick={() => onSelect?.(calendarSelectionState.value)}
+    >
+      Mock calendar selection
+    </button>
+  ),
+}))
+
 import PtPaymentsPage from '@/app/(app)/reports/pt-payments/page'
 
-async function setInputValue(input: HTMLInputElement, value: string) {
-  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')
-  const setValue = descriptor?.set
+function getDateTrigger(container: HTMLDivElement, id: string) {
+  const trigger = container.querySelector(`#${id}`)
 
-  if (!setValue) {
-    throw new Error('Input value setter is unavailable.')
+  if (!(trigger instanceof HTMLButtonElement)) {
+    throw new Error(`${id} trigger not found.`)
   }
 
+  return trigger
+}
+
+async function selectCalendarDate(container: HTMLDivElement, id: string, value: Date) {
+  const trigger = getDateTrigger(container, id)
+  const calendarButton = container.querySelector(`[data-testid="${id}-calendar"]`)
+
+  if (!(calendarButton instanceof HTMLButtonElement)) {
+    throw new Error(`${id} calendar select button not found.`)
+  }
+
+  calendarSelectionState.value = value
+
   await act(async () => {
-    setValue.call(input, value)
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-    input.dispatchEvent(new Event('change', { bubbles: true }))
+    trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    calendarButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
 }
 
@@ -108,13 +144,13 @@ describe('PtPaymentsPage', () => {
       root.render(<PtPaymentsPage />)
     })
 
-    const startDateInput = container.querySelector('#pt-payments-start-date')
-    const endDateInput = container.querySelector('#pt-payments-end-date')
+    const startDateTrigger = container.querySelector('#pt-payments-start-date')
+    const endDateTrigger = container.querySelector('#pt-payments-end-date')
 
-    expect(startDateInput).toBeInstanceOf(HTMLInputElement)
-    expect((startDateInput as HTMLInputElement).value).toBe('2026-04-01')
-    expect(endDateInput).toBeInstanceOf(HTMLInputElement)
-    expect((endDateInput as HTMLInputElement).value).toBe('2026-04-30')
+    expect(startDateTrigger).toBeInstanceOf(HTMLButtonElement)
+    expect(startDateTrigger?.textContent).toContain('Apr 1, 2026')
+    expect(endDateTrigger).toBeInstanceOf(HTMLButtonElement)
+    expect(endDateTrigger?.textContent).toContain('Apr 30, 2026')
     expect(container.textContent).not.toContain('Download PDF')
     expect(usePtPaymentsReportMock).toHaveBeenNthCalledWith(1, '', '')
 
@@ -208,14 +244,8 @@ describe('PtPaymentsPage', () => {
       root.render(<PtPaymentsPage />)
     })
 
-    const startDateInput = container.querySelector('#pt-payments-start-date')
-    const endDateInput = container.querySelector('#pt-payments-end-date')
-
-    expect(startDateInput).toBeInstanceOf(HTMLInputElement)
-    expect(endDateInput).toBeInstanceOf(HTMLInputElement)
-
-    await setInputValue(startDateInput as HTMLInputElement, '2026-03-01')
-    await setInputValue(endDateInput as HTMLInputElement, '2026-03-31')
+    await selectCalendarDate(container, 'pt-payments-start-date', new Date(2026, 2, 1, 12, 0, 0, 0))
+    await selectCalendarDate(container, 'pt-payments-end-date', new Date(2026, 2, 31, 12, 0, 0, 0))
 
     expect(usePtPaymentsReportMock).toHaveBeenLastCalledWith('', '')
 

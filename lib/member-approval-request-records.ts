@@ -1,3 +1,4 @@
+import { parseDateInputValue } from '@/lib/member-access-time'
 import type { MemberApprovalRequest, MemberApprovalRequestStatus, MemberGender } from '@/types'
 
 export const MEMBER_APPROVAL_REQUEST_SELECT = [
@@ -7,6 +8,7 @@ export const MEMBER_APPROVAL_REQUEST_SELECT = [
   'email',
   'phone',
   'remark',
+  'joined_at',
   'begin_time',
   'end_time',
   'card_no',
@@ -33,6 +35,7 @@ export type MemberApprovalRequestRecord = {
   email: string | null
   phone: string | null
   remark: string | null
+  joined_at: string | null
   begin_time: string
   end_time: string
   card_no: string
@@ -120,6 +123,16 @@ function normalizeTimestamp(value: string | null | undefined) {
   return timestamp.toISOString()
 }
 
+function normalizeDate(value: string | null | undefined) {
+  const normalizedValue = normalizeText(value)
+
+  if (!normalizedValue) {
+    return null
+  }
+
+  return parseDateInputValue(normalizedValue) ? normalizedValue : null
+}
+
 export function mapMemberApprovalRequestRecord(
   record: MemberApprovalRequestRecord,
 ): MemberApprovalRequest {
@@ -130,6 +143,7 @@ export function mapMemberApprovalRequestRecord(
     email: normalizeNullableText(record.email),
     phone: normalizeNullableText(record.phone),
     remark: normalizeNullableText(record.remark),
+    joinedAt: normalizeDate(record.joined_at),
     beginTime: normalizeTimestamp(record.begin_time) ?? record.begin_time,
     endTime: normalizeTimestamp(record.end_time) ?? record.end_time,
     cardNo: normalizeText(record.card_no),

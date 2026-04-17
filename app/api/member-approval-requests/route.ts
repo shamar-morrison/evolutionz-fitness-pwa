@@ -5,7 +5,11 @@ import {
   mapMemberApprovalRequestRecord,
   type MemberApprovalRequestRecord,
 } from '@/lib/member-approval-request-records'
-import { formatDateInputValue, parseLocalDateTime } from '@/lib/member-access-time'
+import {
+  formatDateInputValue,
+  parseDateInputValue,
+  parseLocalDateTime,
+} from '@/lib/member-access-time'
 import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
 import {
   insertNotifications,
@@ -24,6 +28,12 @@ const createMemberApprovalRequestSchema = z
     email: z.string().trim().min(1, 'Email is required.').email('Email must be valid.'),
     phone: z.string().trim().min(1, 'Phone is required.'),
     remark: z.string().trim().min(1).nullable().optional(),
+    joined_at: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Join date must be valid.')
+      .refine((value) => Boolean(parseDateInputValue(value)), 'Join date must be valid.')
+      .optional(),
     beginTime: z
       .string()
       .trim()
@@ -67,6 +77,7 @@ type MemberApprovalRequestRouteClient = MemberTypesReadClient & {
         email: string | null
         phone: string | null
         remark: string | null
+        joined_at: string | null
         begin_time: string
         end_time: string
         card_no: string
@@ -227,6 +238,7 @@ export async function POST(request: Request) {
         email: normalizeOptionalText(input.email),
         phone: normalizeOptionalText(input.phone),
         remark: normalizeOptionalText(input.remark),
+        joined_at: input.joined_at ?? null,
         begin_time: input.beginTime,
         end_time: input.endTime,
         card_no: input.cardNo.trim(),

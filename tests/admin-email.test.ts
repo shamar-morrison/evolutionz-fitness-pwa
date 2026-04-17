@@ -28,6 +28,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     phone: overrides.phone ?? null,
     remark: overrides.remark ?? null,
     photoUrl: overrides.photoUrl ?? null,
+    joinedAt: overrides.joinedAt ?? null,
     beginTime: overrides.beginTime ?? null,
     endTime: overrides.endTime ?? null,
   }

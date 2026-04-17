@@ -5,11 +5,13 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  calendarSelectionState,
   currentRoleState,
   refetchMock,
   toastMock,
   useClassPaymentsReportMock,
 } = vi.hoisted(() => ({
+  calendarSelectionState: { value: new Date(2026, 3, 1, 12, 0, 0, 0) },
   currentRoleState: { role: 'admin' as 'admin' | 'staff' },
   refetchMock: vi.fn().mockResolvedValue(undefined),
   toastMock: vi.fn(),
@@ -50,6 +52,30 @@ vi.mock('@/components/role-guard', () => ({
 
 vi.mock('@/components/authenticated-home-redirect', () => ({
   AuthenticatedHomeRedirect: () => <div>redirect:home</div>,
+}))
+
+vi.mock('@/components/ui/popover', () => ({
+  Popover: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PopoverContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  PopoverTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+vi.mock('@/components/ui/calendar', () => ({
+  Calendar: ({
+    onSelect,
+    'data-testid': dataTestId,
+  }: {
+    onSelect?: (date: Date) => void
+    'data-testid'?: string
+  }) => (
+    <button
+      type="button"
+      data-testid={dataTestId}
+      onClick={() => onSelect?.(calendarSelectionState.value)}
+    >
+      Mock calendar selection
+    </button>
+  ),
 }))
 
 vi.mock('@/components/ui/checkbox', () => ({
@@ -127,18 +153,29 @@ vi.mock('@/components/ui/radio-group', async () => {
 
 import ClassPaymentsPage from '@/app/(app)/reports/class-payments/page'
 
-async function setInputValue(input: HTMLInputElement, value: string) {
-  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')
-  const setValue = descriptor?.set
+function getDateTrigger(container: HTMLDivElement, id: string) {
+  const trigger = container.querySelector(`#${id}`)
 
-  if (!setValue) {
-    throw new Error('Input value setter is unavailable.')
+  if (!(trigger instanceof HTMLButtonElement)) {
+    throw new Error(`${id} trigger not found.`)
   }
 
+  return trigger
+}
+
+async function selectCalendarDate(container: HTMLDivElement, id: string, value: Date) {
+  const trigger = getDateTrigger(container, id)
+  const calendarButton = container.querySelector(`[data-testid="${id}-calendar"]`)
+
+  if (!(calendarButton instanceof HTMLButtonElement)) {
+    throw new Error(`${id} calendar select button not found.`)
+  }
+
+  calendarSelectionState.value = value
+
   await act(async () => {
-    setValue.call(input, value)
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-    input.dispatchEvent(new Event('change', { bubbles: true }))
+    trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    calendarButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
 }
 
@@ -214,19 +251,19 @@ describe('ClassPaymentsPage', () => {
       root.render(<ClassPaymentsPage />)
     })
 
-    const startDateInput = container.querySelector('#class-payments-start-date')
-    const endDateInput = container.querySelector('#class-payments-end-date')
+    const startDateTrigger = container.querySelector('#class-payments-start-date')
+    const endDateTrigger = container.querySelector('#class-payments-end-date')
     const includePendingRadio = container.querySelector('#class-payments-status-include-pending')
     const includeZeroCheckbox = container.querySelector('#class-payments-include-zero')
 
-    expect(startDateInput).toBeInstanceOf(HTMLInputElement)
-    expect((startDateInput as HTMLInputElement).value).toBe('2026-03-12')
-    expect(endDateInput).toBeInstanceOf(HTMLInputElement)
-    expect((endDateInput as HTMLInputElement).value).toBe('2026-04-08')
+    expect(startDateTrigger).toBeInstanceOf(HTMLButtonElement)
+    expect(startDateTrigger?.textContent).toContain('Mar 12, 2026')
+    expect(endDateTrigger).toBeInstanceOf(HTMLButtonElement)
+    expect(endDateTrigger?.textContent).toContain('Apr 8, 2026')
     expect(useClassPaymentsReportMock).toHaveBeenNthCalledWith(1, '', '', 'approved', false)
 
-    await setInputValue(startDateInput as HTMLInputElement, '2026-03-20')
-    await setInputValue(endDateInput as HTMLInputElement, '2026-04-10')
+    await selectCalendarDate(container, 'class-payments-start-date', new Date(2026, 2, 20, 12, 0, 0, 0))
+    await selectCalendarDate(container, 'class-payments-end-date', new Date(2026, 3, 10, 12, 0, 0, 0))
 
     if (!(includePendingRadio instanceof HTMLInputElement)) {
       throw new Error('Include Pending radio not found.')
@@ -259,14 +296,14 @@ describe('ClassPaymentsPage', () => {
       root.render(<ClassPaymentsPage />)
     })
 
-    const startDateInput = container.querySelector('#class-payments-start-date')
-    const endDateInput = container.querySelector('#class-payments-end-date')
+    const startDateTrigger = container.querySelector('#class-payments-start-date')
+    const endDateTrigger = container.querySelector('#class-payments-end-date')
 
-    expect(startDateInput).toBeInstanceOf(HTMLInputElement)
-    expect(endDateInput).toBeInstanceOf(HTMLInputElement)
+    expect(startDateTrigger).toBeInstanceOf(HTMLButtonElement)
+    expect(endDateTrigger).toBeInstanceOf(HTMLButtonElement)
 
-    await setInputValue(startDateInput as HTMLInputElement, '2026-04-12')
-    await setInputValue(endDateInput as HTMLInputElement, '2026-04-10')
+    await selectCalendarDate(container, 'class-payments-start-date', new Date(2026, 3, 12, 12, 0, 0, 0))
+    await selectCalendarDate(container, 'class-payments-end-date', new Date(2026, 3, 10, 12, 0, 0, 0))
     await clickButton(container, 'Generate Report')
 
     expect(toastMock).toHaveBeenCalledWith(

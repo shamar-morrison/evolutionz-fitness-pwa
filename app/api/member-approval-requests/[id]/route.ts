@@ -20,6 +20,8 @@ import type { MemberType } from '@/types'
 
 const APPROVE_MEMBER_REQUEST_WARNING =
   'Member was approved and provisioned successfully, but the request record could not be fully updated. Please verify the member details manually.'
+const APPROVE_MEMBER_JOIN_DATE_WARNING =
+  'Member was approved and provisioned successfully, but the member join date could not be fully updated. Please verify the member details manually.'
 
 const denyMemberApprovalRequestSchema = z
   .object({
@@ -107,7 +109,8 @@ type MemberApprovalRequestReviewClient = MemberTypesReadClient &
   }
   from(table: 'members'): {
     update(values: {
-      photo_url: string
+      photo_url?: string
+      joined_at?: string | null
     }): {
       eq(column: 'id', value: string): {
         select(columns: 'id'): {
@@ -183,6 +186,29 @@ async function moveRequestPhotoToMember(
   }
 
   return movedPath
+}
+
+async function updateApprovedMemberJoinDate(
+  supabase: MemberApprovalRequestReviewClient,
+  memberId: string,
+  joinedAt: string | null,
+) {
+  if (!joinedAt) {
+    return null
+  }
+
+  const { error } = await supabase
+    .from('members')
+    .update({ joined_at: joinedAt })
+    .eq('id', memberId)
+    .select('id')
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to update the approved member join date: ${error.message}`)
+  }
+
+  return joinedAt
 }
 
 export async function PATCH(
@@ -341,6 +367,7 @@ export async function PATCH(
     }
 
     let approvedPhotoPath: string | null = null
+    let approvalWarning: string | undefined
 
     if (existingRequest.photo_url) {
       try {
@@ -352,6 +379,17 @@ export async function PATCH(
       } catch (photoError) {
         console.error('Failed to move the staged request photo to the approved member:', photoError)
       }
+    }
+
+    try {
+      await updateApprovedMemberJoinDate(
+        supabase,
+        provisionResult.member.id,
+        existingRequest.joined_at,
+      )
+    } catch (joinDateError) {
+      console.error('Failed to update the approved member join date:', joinDateError)
+      approvalWarning = APPROVE_MEMBER_JOIN_DATE_WARNING
     }
 
     const { data: approvedRequest, error: approvedRequestError } = await supabase
@@ -395,6 +433,7 @@ export async function PATCH(
     return NextResponse.json({
       ok: true,
       request: mapMemberApprovalRequestRecord(approvedRequest),
+      ...(approvalWarning ? { warning: approvalWarning } : {}),
     })
   } catch (error) {
     if (error instanceof SyntaxError) {

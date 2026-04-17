@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { StringDatePicker } from '@/components/ui/string-date-picker'
 import { Textarea } from '@/components/ui/textarea'
 import {
   buildBeginTimeValue,
@@ -71,6 +72,7 @@ type EditMemberFormState = {
   email: string
   phone: string
   memberTypeId: string
+  joinedDate: string
   remark: string
   startDate: string
   startTime: string
@@ -88,6 +90,7 @@ function normalizeEditMemberFormState(formState: EditMemberFormState) {
     email: formState.email.trim(),
     phone: formState.phone.trim(),
     memberTypeId: formState.memberTypeId,
+    joinedDate: formState.joinedDate.trim(),
     remark: formState.remark.trim(),
     startDate: formState.startDate,
     startTime: formState.startTime,
@@ -104,6 +107,7 @@ function normalizeEditMemberRequestState(formState: EditMemberFormState) {
     email: formState.email.trim(),
     phone: formState.phone.trim(),
     memberTypeId: formState.memberTypeId,
+    joinedDate: formState.joinedDate.trim(),
     startDate: formState.startDate.trim(),
     startTime: normalizedStartTime,
     duration: formState.duration,
@@ -233,6 +237,17 @@ export function buildEditMemberRequestPayload(
     payload.proposed_member_type_id = currentState.memberTypeId
   }
 
+  if (currentState.joinedDate !== initialState.joinedDate) {
+    if (!currentState.joinedDate) {
+      return {
+        error: 'Clearing join date is not supported in approval requests.',
+        payload: null,
+      }
+    }
+
+    payload.proposed_join_date = currentState.joinedDate
+  }
+
   if (currentState.startDate !== initialState.startDate) {
     payload.proposed_start_date = currentState.startDate
   }
@@ -265,6 +280,7 @@ function createInitialFormState(member: Member): EditMemberFormState {
     email: member.email ?? '',
     phone: member.phone ?? '',
     memberTypeId: member.memberTypeId ?? '',
+    joinedDate: member.joinedAt ?? '',
     remark: member.remark ?? '',
     startDate: getAccessDateInputValue(member.beginTime) || formatDateInputValue(new Date()),
     startTime: getAccessTimeInputValue(member.beginTime) || '00:00:00',
@@ -520,6 +536,7 @@ export function EditMemberModal({
         gender: formData.gender || null,
         email: formData.email.trim() || null,
         phone: formData.phone.trim() || null,
+        joinedAt: formData.joinedDate.trim() || null,
         remark: formData.remark.trim() || null,
         beginTime: nextBeginTime,
         endTime: nextEndTime,
@@ -615,11 +632,11 @@ export function EditMemberModal({
               </p>
             </div>
 
-            {/* Row 2: Gender + Membership Type — 2 cols */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="grid gap-2">
+            {/* Row 2: Gender + Membership Type + Email + Phone + Join Date */}
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-2 sm:col-span-2">
                 <Label>Gender</Label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-4">
                   {memberGenders.map((gender) => (
                     <Button
                       key={gender}
@@ -678,10 +695,7 @@ export function EditMemberModal({
                   </p>
                 ) : null}
               </div>
-            </div>
 
-            {/* Row 3: Email + Phone — 2 cols */}
-            <div className="grid gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
                 <Label htmlFor="edit-email">Email</Label>
                 <Input
@@ -709,6 +723,21 @@ export function EditMemberModal({
                     }))
                   }
                   placeholder="Optional phone number"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-join-date">Join Date</Label>
+                <StringDatePicker
+                  id="edit-join-date"
+                  value={formData.joinedDate}
+                  onChange={(value) =>
+                    setFormData((currentFormData) => ({
+                      ...currentFormData,
+                      joinedDate: value,
+                    }))
+                  }
+                  placeholder="Optional join date"
+                  allowClear
                 />
               </div>
             </div>

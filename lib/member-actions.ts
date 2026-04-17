@@ -18,6 +18,7 @@ export type AddMemberData = {
   email: string
   phone: string
   remark?: string
+  joinedAt?: string | null
   beginTime: string
   endTime: string
   cardNo: string
@@ -39,6 +40,7 @@ type AccessControlJobErrorResponse = {
 type ProvisionMemberSuccessResponse = {
   ok: true
   member: Member
+  warning?: string
 }
 
 type MemberMutationSuccessResponse = {
@@ -59,6 +61,11 @@ export type AssignMemberCardData = {
 }
 
 export type MemberProvisioningStep = 'provisioning_member'
+
+export type AddMemberResult = {
+  member: Member
+  warning?: string
+}
 
 export class MemberProvisioningError extends Error {
   step: MemberProvisioningStep
@@ -86,6 +93,7 @@ type AddMemberOptions = {
 
 type SlotJobPath = '/api/access/slots/assign' | '/api/access/slots/reset'
 type MemberMutationPath =
+  | '/api/members'
   | `/api/access/members/${string}/assign-card`
   | `/api/access/members/${string}/suspend`
   | `/api/access/members/${string}/unassign-card`
@@ -237,7 +245,10 @@ export async function assignMemberCard(
   return response.member
 }
 
-export async function addMember(data: AddMemberData, options: AddMemberOptions = {}): Promise<Member> {
+export async function addMember(
+  data: AddMemberData,
+  options: AddMemberOptions = {},
+): Promise<AddMemberResult> {
   const normalizedCardNo = normalizeCardNo(data.cardNo)
   options.onStepChange?.('provisioning_member')
 
@@ -250,45 +261,17 @@ export async function addMember(data: AddMemberData, options: AddMemberOptions =
       email: data.email.trim(),
       phone: data.phone.trim(),
       ...(data.remark ? { remark: data.remark } : {}),
+      ...(data.joinedAt ? { joined_at: data.joinedAt } : {}),
       beginTime: data.beginTime,
       endTime: data.endTime,
       cardNo: normalizedCardNo,
       cardCode: data.cardCode,
     }
-
-    const response = await fetch('/api/access/members/provision', {
+    return await requestMemberMutation('/api/members', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
+      body: requestBody,
+      errorMessage: 'Failed to provision the selected card.',
     })
-
-    let responseBody: ProvisionMemberSuccessResponse | AccessControlJobErrorResponse | null = null
-
-    try {
-      responseBody = (await response.json()) as
-        | ProvisionMemberSuccessResponse
-        | AccessControlJobErrorResponse
-    } catch {
-      responseBody = null
-    }
-
-    if (!response.ok || !responseBody || responseBody.ok === false) {
-      throw new Error(
-        responseBody && responseBody.ok === false
-          ? responseBody.error
-          : 'Failed to provision the selected card.',
-      )
-    }
-
-    const member = normalizeMember({ member: responseBody.member })
-
-    if (!member) {
-      throw new Error('Failed to read the provisioned member response.')
-    }
-
-    return member
   } catch (error) {
     throw new MemberProvisioningError({
       step: 'provisioning_member',
@@ -335,6 +318,7 @@ export type UpdateMemberData = {
   email?: string | null
   phone?: string | null
   remark?: string | null
+  joinedAt?: string | null
   beginTime: string
   endTime: string
 }
@@ -362,7 +346,11 @@ export async function updateMember(
     body.member_type_id = data.memberTypeId ?? null
   }
 
-  return requestMemberMutation(`/api/members/${encodeURIComponent(id)}/edit`, {
+  if (Object.prototype.hasOwnProperty.call(data, 'joinedAt')) {
+    body.joined_at = data.joinedAt ?? null
+  }
+
+  return requestMemberMutation(`/api/members/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body,
     errorMessage: 'Failed to update member.',

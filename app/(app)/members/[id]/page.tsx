@@ -6,7 +6,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
 import { AssignCardModal } from '@/components/assign-card-modal'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { formatAccessDate } from '@/lib/member-access-time'
+import { formatAccessDate, formatDateInputDisplay } from '@/lib/member-access-time'
 import { useMember } from '@/hooks/use-members'
 import { MemberAvatar } from '@/components/member-avatar'
 import { MemberPaymentHistory } from '@/components/member-payment-history'
@@ -604,6 +604,10 @@ export default function MemberDetailPage() {
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Phone</p>
                     <p className="font-medium">{member.phone ?? 'Not set'}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Join Date</p>
+                    <p className="font-medium">{formatDateInputDisplay(member.joinedAt)}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Remark</p>

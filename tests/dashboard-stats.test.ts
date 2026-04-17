@@ -10,6 +10,24 @@ function createJsonResponse(body: unknown, status: number) {
   })
 }
 
+const dashboardStatsPayload = {
+  activeMembers: 247,
+  activeMembersLastMonth: 231,
+  totalExpiredMembers: 38,
+  expiringSoon: 12,
+  signedUpThisMonth: 19,
+  signupsByMonth: [
+    { month: '2025-11', count: 0 },
+    { month: '2025-12', count: 2 },
+    { month: '2026-01', count: 4 },
+    { month: '2026-02', count: 6 },
+    { month: '2026-03', count: 8 },
+    { month: '2026-04', count: 19 },
+  ],
+  expiredThisMonth: 16,
+  expiredThisMonthLastMonth: 9,
+}
+
 describe('dashboard stats helpers', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -17,38 +35,17 @@ describe('dashboard stats helpers', () => {
   })
 
   it('normalizes dashboard stats responses', () => {
-    expect(
-      normalizeDashboardStats({
-        activeMembers: 247,
-        expiredMembers: 38,
-        expiringSoon: 12,
-      }),
-    ).toEqual({
-      activeMembers: 247,
-      expiredMembers: 38,
-      expiringSoon: 12,
-    })
+    expect(normalizeDashboardStats(dashboardStatsPayload)).toEqual(dashboardStatsPayload)
   })
 
   it('fetches dashboard stats from the dashboard route', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      createJsonResponse(
-        {
-          activeMembers: 247,
-          expiredMembers: 38,
-          expiringSoon: 12,
-        },
-        200,
-      ),
-    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(createJsonResponse(dashboardStatsPayload, 200))
 
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(fetchDashboardStats()).resolves.toEqual({
-      activeMembers: 247,
-      expiredMembers: 38,
-      expiringSoon: 12,
-    })
+    await expect(fetchDashboardStats()).resolves.toEqual(dashboardStatsPayload)
     expect(fetchMock).toHaveBeenCalledWith('/api/dashboard/stats', {
       method: 'GET',
       cache: 'no-store',

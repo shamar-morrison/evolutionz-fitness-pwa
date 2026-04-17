@@ -64,6 +64,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     phone: overrides.phone ?? null,
     remark: overrides.remark ?? null,
     photoUrl: overrides.photoUrl ?? null,
+    joinedAt: overrides.joinedAt ?? null,
     beginTime: overrides.beginTime ?? '2026-03-01T00:00:00.000Z',
     endTime: overrides.endTime ?? '2026-04-05T23:59:59.000Z',
   }

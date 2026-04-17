@@ -3,8 +3,18 @@ import type { DashboardMembershipStats } from '@/types'
 
 const dashboardStatsSchema = z.object({
   activeMembers: z.number().int().nonnegative(),
-  expiredMembers: z.number().int().nonnegative(),
+  activeMembersLastMonth: z.number().int().nonnegative(),
+  totalExpiredMembers: z.number().int().nonnegative(),
   expiringSoon: z.number().int().nonnegative(),
+  signedUpThisMonth: z.number().int().nonnegative(),
+  signupsByMonth: z.array(
+    z.object({
+      month: z.string().regex(/^\d{4}-\d{2}$/u),
+      count: z.number().int().nonnegative(),
+    }),
+  ),
+  expiredThisMonth: z.number().int().nonnegative(),
+  expiredThisMonthLastMonth: z.number().int().nonnegative(),
 })
 
 type DashboardStatsErrorResponse = {

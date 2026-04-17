@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { StringDatePicker } from '@/components/ui/string-date-picker'
 import { Textarea } from '@/components/ui/textarea'
 import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { formatAvailableAccessCardLabel } from '@/lib/available-cards'
@@ -35,6 +36,7 @@ export type MemberFormState = {
   gender: MemberGender | ''
   email: string
   phone: string
+  joinedDate: string
   selectedInventoryCardNo: string
   memberTypeId: string
   remark: string
@@ -56,6 +58,7 @@ type MemberBasicFieldsProps = SharedMemberFieldsProps & {
   canAddCard: boolean
   cardsError: string | null
   hasNoAvailableCards: boolean
+  isJoinDateRequired?: boolean
   isCardsLoading: boolean
   memberTypes: MemberTypeRecord[]
   memberTypesError: string | null
@@ -89,6 +92,7 @@ export function createInitialMemberFormState(now: Date = new Date()): MemberForm
     gender: '',
     email: '',
     phone: '',
+    joinedDate: formatDateInputValue(now),
     selectedInventoryCardNo: '',
     memberTypeId: '',
     remark: '',
@@ -110,6 +114,7 @@ export function MemberBasicFields({
   formData,
   hasNoAvailableCards,
   idPrefix,
+  isJoinDateRequired = false,
   isCardsLoading,
   isMemberTypesLoading,
   isSubmitting,
@@ -331,6 +336,23 @@ export function MemberBasicFields({
             required
           />
         </div>
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-join-date`}>Join Date</Label>
+        <StringDatePicker
+          id={`${idPrefix}-join-date`}
+          value={formData.joinedDate}
+          onChange={(value) =>
+            setFormData((currentFormData) => ({
+              ...currentFormData,
+              joinedDate: value,
+            }))
+          }
+          disabled={isSubmitting}
+          placeholder={isJoinDateRequired ? 'Select a date' : 'Not set'}
+          allowClear={!isJoinDateRequired}
+        />
       </div>
     </div>
   )

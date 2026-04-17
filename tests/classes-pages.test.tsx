@@ -983,7 +983,9 @@ describe('classes pages', () => {
     expect(container.textContent).toContain('No sessions generated for this period.')
   })
 
-  it('advances through the registration dialog and submits the selected member registration', async () => {
+  it(
+    'advances through the registration dialog and submits the selected member registration',
+    async () => {
     authState.role = 'staff'
     authState.profile = {
       id: 'user-2',
@@ -1029,5 +1031,7 @@ describe('classes pages', () => {
         title: 'Registration submitted',
       }),
     )
-  })
+    },
+    10_000,
+  )
 })

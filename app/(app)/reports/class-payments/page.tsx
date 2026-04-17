@@ -8,10 +8,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Skeleton } from '@/components/ui/skeleton'
+import { StringDatePicker } from '@/components/ui/string-date-picker'
 import {
   Table,
   TableBody,
@@ -325,23 +325,21 @@ function ClassPaymentsReportPageContent() {
           <div className="grid gap-4 xl:grid-cols-[minmax(0,180px)_minmax(0,180px)_auto_auto]">
             <div className="space-y-2">
               <Label htmlFor="class-payments-start-date">Start date</Label>
-              <Input
+              <StringDatePicker
                 id="class-payments-start-date"
-                type="date"
                 value={draftStartDate}
-                onChange={(event) => setDraftStartDate(event.target.value)}
-                max={draftEndDate || undefined}
+                onChange={setDraftStartDate}
+                maxValue={draftEndDate || undefined}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="class-payments-end-date">End date</Label>
-              <Input
+              <StringDatePicker
                 id="class-payments-end-date"
-                type="date"
                 value={draftEndDate}
-                onChange={(event) => setDraftEndDate(event.target.value)}
-                min={draftStartDate || undefined}
+                onChange={setDraftEndDate}
+                minValue={draftStartDate || undefined}
               />
             </div>
 
