@@ -46,14 +46,17 @@ const createMemberPauseRequestResponseSchema = z.object({
 
 const reviewMemberPauseRequestResponseSchema = z.object({
   success: z.literal(true),
+  warning: z.string().trim().optional(),
 })
 
 const pauseMemberMembershipResponseSchema = z.object({
   pause_id: z.string().trim().min(1),
+  warning: z.string().trim().optional(),
 })
 
 const resumeMemberPauseResponseSchema = z.object({
   new_end_time: z.string().trim().min(1),
+  warning: z.string().trim().optional(),
 })
 
 type ErrorResponse = {
@@ -75,16 +78,19 @@ type CreateMemberPauseRequestSuccessResponse = {
 type ReviewMemberPauseRequestSuccessResponse = {
   ok: true
   success: true
+  warning?: string
 }
 
 type PauseMemberMembershipSuccessResponse = {
   ok: true
   pause_id: string
+  warning?: string
 }
 
 type ResumeMemberPauseSuccessResponse = {
   ok: true
   new_end_time: string
+  warning?: string
 }
 
 export type CreateMemberPauseRequestInput = {
@@ -193,7 +199,7 @@ export async function createMemberPauseResumeRequest(
 export async function reviewMemberPauseRequest(
   requestId: string,
   input: ReviewMemberPauseRequestInput,
-): Promise<{ success: true }> {
+): Promise<{ success: true; warning?: string }> {
   const response = await fetch(`/api/members/pause-requests/${encodeURIComponent(requestId)}`, {
     method: 'PATCH',
     headers: {
@@ -222,7 +228,7 @@ export async function reviewMemberPauseRequest(
 export async function reviewMemberPauseResumeRequest(
   requestId: string,
   input: ReviewMemberPauseRequestInput,
-): Promise<{ success: true }> {
+): Promise<{ success: true; warning?: string }> {
   const response = await fetch(
     `/api/members/pause-resume-requests/${encodeURIComponent(requestId)}`,
     {
@@ -256,7 +262,7 @@ export async function reviewMemberPauseResumeRequest(
 export async function pauseMemberMembership(
   memberId: string,
   input: CreateMemberPauseRequestInput,
-): Promise<{ pauseId: string }> {
+): Promise<{ pauseId: string; warning?: string }> {
   const response = await fetch(`/api/members/${encodeURIComponent(memberId)}/pause`, {
     method: 'POST',
     headers: {
@@ -283,12 +289,13 @@ export async function pauseMemberMembership(
 
   return {
     pauseId: parsed.pause_id,
+    warning: parsed.warning,
   }
 }
 
 export async function resumePausedMemberMembership(
   pauseId: string,
-): Promise<{ newEndTime: string }> {
+): Promise<{ newEndTime: string; warning?: string }> {
   const response = await fetch(`/api/members/pauses/${encodeURIComponent(pauseId)}/resume`, {
     method: 'POST',
   })
@@ -311,5 +318,6 @@ export async function resumePausedMemberMembership(
 
   return {
     newEndTime: parsed.new_end_time,
+    warning: parsed.warning,
   }
 }

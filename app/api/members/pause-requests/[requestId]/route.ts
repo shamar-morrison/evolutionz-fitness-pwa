@@ -5,7 +5,7 @@ import {
   type MemberPauseRequestRecord,
 } from '@/lib/member-pause-request-records'
 import {
-  getMemberPauseEligibilityError,
+  getMemberPauseCardSyncWarning,
   getMemberPauseReviewTimestamp,
   getMemberPauseRpcErrorStatus,
   maybeQueuePauseRevokeCard,
@@ -16,6 +16,7 @@ import { isSupportedMemberPauseDurationDays } from '@/lib/member-pause'
 import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { readMemberWithCardCode } from '@/lib/members'
 
 const reviewMemberPauseRequestSchema = z
   .object({
@@ -48,12 +49,11 @@ type MemberPauseRequestReviewClient = MemberPauseServerClient & {
     }
   }
   rpc(
-    fn: 'apply_member_pause',
+    fn: 'approve_member_pause_request',
     args: {
-      p_member_id: string
-      p_duration_days: number
-      p_applied_by: string
-      p_now: string
+      p_request_id: string
+      p_reviewer_id: string
+      p_review_timestamp: string
     },
   ): PromiseLike<{
     data: string | null
@@ -157,18 +157,14 @@ export async function PATCH(
       })
     }
 
-    const eligibility = await getMemberPauseEligibilityError(supabase, existingRequest.member_id)
-
-    if (eligibility.error) {
-      return createErrorResponse(eligibility.error, eligibility.status)
-    }
-
-    const { error: approvalError } = await supabase.rpc('apply_member_pause', {
-      p_member_id: existingRequest.member_id,
-      p_duration_days: existingRequest.duration_days,
-      p_applied_by: authResult.profile.id,
-      p_now: reviewTimestamp,
-    })
+    const { data: approvedRequestIdResult, error: approvalError } = await supabase.rpc(
+      'approve_member_pause_request',
+      {
+        p_request_id: requestId,
+        p_reviewer_id: authResult.profile.id,
+        p_review_timestamp: reviewTimestamp,
+      },
+    )
 
     if (approvalError) {
       const status = getMemberPauseRpcErrorStatus(approvalError.message)
@@ -182,38 +178,34 @@ export async function PATCH(
       )
     }
 
-    const revokeJob = await maybeQueuePauseRevokeCard(eligibility.member, supabase)
+    const approvedRequestId = approvedRequestIdResult ?? existingRequest.id
+    let warning: string | undefined
 
-    if (revokeJob && revokeJob.status !== 'done') {
-      return createErrorResponse(revokeJob.error, revokeJob.httpStatus)
-    }
+    try {
+      const member = await readMemberWithCardCode(supabase, existingRequest.member_id)
+      const revokeJob = await maybeQueuePauseRevokeCard(member, supabase)
 
-    const { data: approvedRequests, error: approveUpdateError } = await supabase
-      .from('member_pause_requests')
-      .update({
-        status: 'approved',
-        reviewed_by: authResult.profile.id,
-        review_timestamp: reviewTimestamp,
-      })
-      .eq('status', 'pending')
-      .eq('id', requestId)
-      .select(MEMBER_PAUSE_REQUEST_SELECT)
-
-    if (approveUpdateError) {
-      throw new Error(
-        `Failed to mark member pause request ${requestId} approved: ${approveUpdateError.message}`,
+      if (revokeJob && revokeJob.status !== 'done') {
+        console.error(
+          'Failed to sync revoke card job after approving member pause request:',
+          revokeJob,
+        )
+        warning = getMemberPauseCardSyncWarning('pause', revokeJob.error)
+      }
+    } catch (revokeError) {
+      console.error(
+        'Failed to sync revoke card job after approving member pause request:',
+        revokeError,
       )
-    }
-
-    const approvedRequest = approvedRequests?.[0] ?? null
-
-    if (!approvedRequest) {
-      return createErrorResponse('This request has already been reviewed.', 400)
+      warning = getMemberPauseCardSyncWarning(
+        'pause',
+        revokeError instanceof Error ? revokeError.message : 'Unknown card sync error.',
+      )
     }
 
     try {
       await archiveResolvedRequestNotifications(supabase, {
-        requestId: approvedRequest.id,
+        requestId: approvedRequestId,
         type: 'member_pause_request',
         archivedAt: reviewTimestamp,
       })
@@ -224,6 +216,7 @@ export async function PATCH(
     return NextResponse.json({
       ok: true,
       success: true,
+      ...(warning ? { warning } : {}),
     })
   } catch (error) {
     if (error instanceof SyntaxError) {

@@ -124,7 +124,7 @@ export function PauseMembershipDialog({
         return
       }
 
-      await pauseMemberMembership(member.id, {
+      const result = await pauseMemberMembership(member.id, {
         duration_days: durationDays,
       })
       await Promise.all([
@@ -136,9 +136,11 @@ export function PauseMembershipDialog({
       onOpenChange(false)
       toast({
         title: 'Membership paused',
-        description: plannedResumeDate
-          ? `Membership will resume on ${formatDateInputDisplay(plannedResumeDate)}.`
-          : 'Membership pause applied.',
+        description:
+          result.warning ??
+          (plannedResumeDate
+            ? `Membership will resume on ${formatDateInputDisplay(plannedResumeDate)}.`
+            : 'Membership pause applied.'),
       })
     } catch (error) {
       toast({

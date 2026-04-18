@@ -72,10 +72,11 @@ export function PendingMemberPauseRequestsPage() {
     setHiddenPauseRequestIds((current) => (current.includes(requestId) ? current : [...current, requestId]))
 
     try {
-      await reviewMemberPauseRequest(requestId, { action })
+      const result = await reviewMemberPauseRequest(requestId, { action })
       await invalidateQueries(memberId)
       toast({
         title: action === 'approve' ? 'Pause request approved' : 'Pause request rejected',
+        ...(result.warning ? { description: result.warning } : {}),
       })
     } catch (reviewError) {
       setHiddenPauseRequestIds((current) => current.filter((id) => id !== requestId))
@@ -107,10 +108,11 @@ export function PendingMemberPauseRequestsPage() {
     )
 
     try {
-      await reviewMemberPauseResumeRequest(requestId, { action })
+      const result = await reviewMemberPauseResumeRequest(requestId, { action })
       await invalidateQueries(memberId)
       toast({
         title: action === 'approve' ? 'Early resume approved' : 'Early resume rejected',
+        ...(result.warning ? { description: result.warning } : {}),
       })
     } catch (reviewError) {
       setHiddenResumeRequestIds((current) => current.filter((id) => id !== requestId))

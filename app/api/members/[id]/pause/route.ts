@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
+  getMemberPauseCardSyncWarning,
   getMemberPauseEligibilityError,
   getMemberPauseReviewTimestamp,
   getMemberPauseRpcErrorStatus,
@@ -95,15 +96,27 @@ export async function POST(
       throw new Error(`Failed to apply member pause: ${error.message}`)
     }
 
-    const revokeJob = await maybeQueuePauseRevokeCard(eligibility.member, supabase)
+    let warning: string | undefined
 
-    if (revokeJob && revokeJob.status !== 'done') {
-      return createErrorResponse(revokeJob.error, revokeJob.httpStatus)
+    try {
+      const revokeJob = await maybeQueuePauseRevokeCard(eligibility.member, supabase)
+
+      if (revokeJob && revokeJob.status !== 'done') {
+        console.error('Failed to sync revoke card job after applying member pause:', revokeJob)
+        warning = getMemberPauseCardSyncWarning('pause', revokeJob.error)
+      }
+    } catch (revokeError) {
+      console.error('Failed to sync revoke card job after applying member pause:', revokeError)
+      warning = getMemberPauseCardSyncWarning(
+        'pause',
+        revokeError instanceof Error ? revokeError.message : 'Unknown card sync error.',
+      )
     }
 
     return NextResponse.json({
       ok: true,
       pause_id: pauseId,
+      ...(warning ? { warning } : {}),
     })
   } catch (error) {
     if (error instanceof SyntaxError) {

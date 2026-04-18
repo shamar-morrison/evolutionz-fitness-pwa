@@ -5,6 +5,7 @@ import {
   type MemberPauseResumeRequestRecord,
 } from '@/lib/member-pause-request-records'
 import {
+  getMemberPauseCardSyncWarning,
   getMemberPauseReviewTimestamp,
   getMemberPauseRpcErrorStatus,
   getMemberPauseTodayDate,
@@ -48,11 +49,12 @@ type MemberPauseResumeRequestReviewClient = MemberPauseServerClient & {
     }
   }
   rpc(
-    fn: 'resume_member_pause',
+    fn: 'approve_member_pause_resume_request',
     args: {
-      p_pause_id: string
+      p_request_id: string
+      p_reviewer_id: string
+      p_review_timestamp: string
       p_actual_resume_date: string
-      p_now: string
     },
   ): PromiseLike<{
     data: string | null
@@ -153,11 +155,15 @@ export async function PATCH(
     }
 
     const actualResumeDate = getMemberPauseTodayDate()
-    const { error: approvalError } = await supabase.rpc('resume_member_pause', {
-      p_pause_id: existingRequest.pause_id,
-      p_actual_resume_date: actualResumeDate,
-      p_now: reviewTimestamp,
-    })
+    const { data: approvedRequestIdResult, error: approvalError } = await supabase.rpc(
+      'approve_member_pause_resume_request',
+      {
+        p_request_id: requestId,
+        p_reviewer_id: authResult.profile.id,
+        p_review_timestamp: reviewTimestamp,
+        p_actual_resume_date: actualResumeDate,
+      },
+    )
 
     if (approvalError) {
       const status = getMemberPauseRpcErrorStatus(approvalError.message)
@@ -171,41 +177,30 @@ export async function PATCH(
       )
     }
 
-    const member = existingRequest.pause?.member_id
-      ? await readMemberWithCardCode(supabase, existingRequest.pause.member_id)
-      : null
-    const addCardJob = await maybeQueuePauseAddCard(member, supabase)
+    const approvedRequestId = approvedRequestIdResult ?? existingRequest.id
+    let warning: string | undefined
 
-    if (addCardJob && addCardJob.status !== 'done') {
-      return createErrorResponse(addCardJob.error, addCardJob.httpStatus)
-    }
+    try {
+      const member = existingRequest.pause?.member_id
+        ? await readMemberWithCardCode(supabase, existingRequest.pause.member_id)
+        : null
+      const addCardJob = await maybeQueuePauseAddCard(member, supabase)
 
-    const { data: approvedRequests, error: approveUpdateError } = await supabase
-      .from('member_pause_resume_requests')
-      .update({
-        status: 'approved',
-        reviewed_by: authResult.profile.id,
-        review_timestamp: reviewTimestamp,
-      })
-      .eq('status', 'pending')
-      .eq('id', requestId)
-      .select(MEMBER_PAUSE_RESUME_REQUEST_SELECT)
-
-    if (approveUpdateError) {
-      throw new Error(
-        `Failed to mark early resume request ${requestId} approved: ${approveUpdateError.message}`,
+      if (addCardJob && addCardJob.status !== 'done') {
+        console.error('Failed to sync add card job after approving early resume request:', addCardJob)
+        warning = getMemberPauseCardSyncWarning('resume', addCardJob.error)
+      }
+    } catch (addCardError) {
+      console.error('Failed to sync add card job after approving early resume request:', addCardError)
+      warning = getMemberPauseCardSyncWarning(
+        'resume',
+        addCardError instanceof Error ? addCardError.message : 'Unknown card sync error.',
       )
-    }
-
-    const approvedRequest = approvedRequests?.[0] ?? null
-
-    if (!approvedRequest) {
-      return createErrorResponse('This request has already been reviewed.', 400)
     }
 
     try {
       await archiveResolvedRequestNotifications(supabase, {
-        requestId: approvedRequest.id,
+        requestId: approvedRequestId,
         type: 'member_pause_request',
         archivedAt: reviewTimestamp,
       })
@@ -216,6 +211,7 @@ export async function PATCH(
     return NextResponse.json({
       ok: true,
       success: true,
+      ...(warning ? { warning } : {}),
     })
   } catch (error) {
     if (error instanceof SyntaxError) {

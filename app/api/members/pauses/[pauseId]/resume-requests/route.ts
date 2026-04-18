@@ -24,7 +24,13 @@ const SUSPENDED_ACCOUNT_ERROR =
 
 type QueryResult<T> = PromiseLike<{
   data: T | null
-  error: { message: string } | null
+  error:
+    | {
+        message: string
+        code?: string | null
+        details?: string | null
+      }
+    | null
 }>
 
 type MemberPauseResumeRequestInsertClient = MemberPauseServerClient & {
@@ -50,6 +56,13 @@ function createErrorResponse(error: string, status: number) {
       error,
     },
     { status },
+  )
+}
+
+function isPendingEarlyResumeConflict(error: { code?: string | null; details?: string | null }) {
+  return (
+    error.code === '23505' ||
+    error.details?.includes('member_pause_resume_requests_pending_pause_idx') === true
   )
 }
 
@@ -110,6 +123,10 @@ export async function POST(
       .single()
 
     if (error) {
+      if (isPendingEarlyResumeConflict(error)) {
+        return createErrorResponse(MEMBER_PAUSE_EARLY_RESUME_PENDING_ERROR, 400)
+      }
+
       throw new Error(`Failed to create early resume request: ${error.message}`)
     }
 

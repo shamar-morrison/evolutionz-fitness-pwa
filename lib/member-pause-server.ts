@@ -34,13 +34,25 @@ export function createErrorResponseBody(error: string) {
 }
 
 export function getMemberPauseRpcErrorStatus(message: string) {
-  if (message === 'Member not found.' || message === 'Member pause not found.') {
+  if (
+    message === 'Member not found.' ||
+    message === 'Member pause not found.' ||
+    message === 'Member pause request not found.' ||
+    message === 'Early resume request not found.'
+  ) {
     return 404
   }
 
   if (
     message === MEMBER_PAUSE_INACTIVE_ERROR ||
     message === MEMBER_PAUSE_ACTIVE_ERROR ||
+    message === 'Pause duration is required.' ||
+    message === 'Current timestamp is required.' ||
+    message === 'Resume date is required.' ||
+    message === 'Resume date cannot be in the future.' ||
+    message === 'Duration must be between 7 and 364 days.' ||
+    message === 'Duration must match a supported membership option.' ||
+    message === 'This request has already been reviewed.' ||
     message === 'This pause is no longer active.' ||
     message === 'Resume date cannot be before the pause start date.'
   ) {
@@ -52,6 +64,12 @@ export function getMemberPauseRpcErrorStatus(message: string) {
 
 export function getMemberPauseRequestNotificationTitle(requestKind: 'pause' | 'early_resume') {
   return requestKind === 'pause' ? 'Membership Pause Request' : 'Early Resume Request'
+}
+
+export function getMemberPauseCardSyncWarning(action: 'pause' | 'resume', error: string) {
+  return action === 'pause'
+    ? `Membership paused, but card sync failed: ${error}`
+    : `Membership resumed, but card sync failed: ${error}`
 }
 
 export async function getMemberPauseEligibilityError(
@@ -69,20 +87,20 @@ export async function getMemberPauseEligibilityError(
     } as const
   }
 
-  if (!isMemberPauseEligible(member.endTime, member.status, now)) {
-    return {
-      member,
-      error: MEMBER_PAUSE_INACTIVE_ERROR,
-      status: 400,
-    } as const
-  }
-
   const activePause = await readActiveMemberPause(client, memberId)
 
   if (activePause || member.status === 'Paused') {
     return {
       member,
       error: MEMBER_PAUSE_ACTIVE_ERROR,
+      status: 400,
+    } as const
+  }
+
+  if (!isMemberPauseEligible(member.endTime, member.status, now)) {
+    return {
+      member,
+      error: MEMBER_PAUSE_INACTIVE_ERROR,
       status: 400,
     } as const
   }

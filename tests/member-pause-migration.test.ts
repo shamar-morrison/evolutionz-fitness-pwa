@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { basename, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const pausedStatusMigrationPath = resolve(
@@ -40,6 +40,31 @@ const resumePauseMigrationPath = resolve(
 const autoResumeMigrationPath = resolve(
   process.cwd(),
   'supabase/migrations/20260425_auto_resume_paused_memberships.sql',
+)
+
+const hardenPauseRpcsMigrationPath = resolve(
+  process.cwd(),
+  'supabase/migrations/20260426_harden_member_pause_rpcs.sql',
+)
+
+const approvePauseRequestMigrationPath = resolve(
+  process.cwd(),
+  'supabase/migrations/20260427_approve_member_pause_request.sql',
+)
+
+const approvePauseResumeRequestMigrationPath = resolve(
+  process.cwd(),
+  'supabase/migrations/20260428_approve_member_pause_resume_request.sql',
+)
+
+const hardenAutoResumeMigrationPath = resolve(
+  process.cwd(),
+  'supabase/migrations/20260429_harden_auto_resume_paused_memberships.sql',
+)
+
+const pendingPauseRequestIndexMigrationPath = resolve(
+  process.cwd(),
+  'supabase/migrations/20260430_add_member_pause_request_pending_unique_idx.sql',
 )
 
 function normalizeSql(sql: string) {
@@ -102,5 +127,73 @@ describe('member pause migrations', () => {
     expect(sql).toContain("insert into public.access_control_jobs (type, payload) values ( 'add_card',")
     expect(sql).toContain("raise log 'auto-resumed paused membership for member %, new_end_time=%'")
     expect(sql).toContain("select cron.schedule( 'auto-resume-paused-memberships', '0 5 * * *', $$select public.auto_resume_expired_pauses(current_date);$$ );")
+  })
+
+  it('adds hardening and approval migrations in the correct order', () => {
+    const orderedMigrationNames = [
+      basename(hardenPauseRpcsMigrationPath),
+      basename(approvePauseRequestMigrationPath),
+      basename(approvePauseResumeRequestMigrationPath),
+      basename(hardenAutoResumeMigrationPath),
+      basename(pendingPauseRequestIndexMigrationPath),
+    ]
+
+    expect([...orderedMigrationNames].sort()).toEqual(orderedMigrationNames)
+  })
+
+  it('hardens the pause rpc functions before the approval rpcs are introduced', () => {
+    const sql = readFileSync(hardenPauseRpcsMigrationPath, 'utf8')
+
+    expect(sql).toContain('create or replace function public.apply_member_pause(')
+    expect(sql).toContain("raise exception 'Pause duration is required.';")
+    expect(sql).toContain("raise exception 'Current timestamp is required.';")
+    expect(sql).toContain('create or replace function public.resume_member_pause(')
+    expect(sql).toContain("raise exception 'Resume date is required.';")
+    expect(sql).toContain("raise exception 'Resume date cannot be in the future.';")
+    expect(sql).toContain('if p_actual_resume_date > p_now::date then')
+  })
+
+  it('adds atomic approval rpc functions for pause and early resume requests', () => {
+    const approvePauseSql = readFileSync(approvePauseRequestMigrationPath, 'utf8')
+    const approveResumeSql = readFileSync(approvePauseResumeRequestMigrationPath, 'utf8')
+
+    expect(approvePauseSql).toContain('create or replace function public.approve_member_pause_request(')
+    expect(approvePauseSql).toContain("raise exception 'Member pause request not found.';")
+    expect(approvePauseSql).toContain("raise exception 'This request has already been reviewed.';")
+    expect(approvePauseSql).toContain("raise exception 'Duration must match a supported membership option.';")
+    expect(approvePauseSql).toContain('perform public.apply_member_pause(')
+    expect(approvePauseSql).toContain('update public.member_pause_requests')
+    expect(approvePauseSql).toContain("set status = 'approved',")
+    expect(approvePauseSql).toContain('return v_request.id;')
+
+    expect(approveResumeSql).toContain(
+      'create or replace function public.approve_member_pause_resume_request(',
+    )
+    expect(approveResumeSql).toContain("raise exception 'Early resume request not found.';")
+    expect(approveResumeSql).toContain("raise exception 'This request has already been reviewed.';")
+    expect(approveResumeSql).toContain('perform public.resume_member_pause(')
+    expect(approveResumeSql).toContain('update public.member_pause_resume_requests')
+    expect(approveResumeSql).toContain("set status = 'approved',")
+    expect(approveResumeSql).toContain('return v_request.id;')
+  })
+
+  it('adds per-row auto-resume exception handling and a pending pause request unique index', () => {
+    const autoResumeSql = readFileSync(hardenAutoResumeMigrationPath, 'utf8')
+    const pendingIndexSql = readFileSync(pendingPauseRequestIndexMigrationPath, 'utf8')
+
+    expect(autoResumeSql).toContain('exception')
+    expect(autoResumeSql).toContain('when others then')
+    expect(autoResumeSql).toContain('get stacked diagnostics')
+    expect(autoResumeSql).toContain(
+      "raise log 'Failed to auto-resume pause %, member %: sqlstate=%, message=%, detail=%, hint=%'",
+    )
+    expect(autoResumeSql).toContain('continue;')
+
+    expect(pendingIndexSql).toContain('row_number() over')
+    expect(pendingIndexSql).toContain("set status = 'rejected',")
+    expect(pendingIndexSql).toContain('reviewed_by = null,')
+    expect(pendingIndexSql).toContain('review_timestamp = now()')
+    expect(pendingIndexSql).toContain('create unique index member_pause_requests_pending_member_idx')
+    expect(pendingIndexSql).toContain("where status = 'pending';")
   })
 })

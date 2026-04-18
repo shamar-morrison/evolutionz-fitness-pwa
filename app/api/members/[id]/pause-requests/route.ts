@@ -6,6 +6,7 @@ import {
   type MemberPauseServerClient,
 } from '@/lib/member-pause-server'
 import {
+  MEMBER_PAUSE_REQUEST_PENDING_ERROR,
   isSupportedMemberPauseDurationDays,
   calculatePlannedPauseResumeDate,
 } from '@/lib/member-pause'
@@ -31,7 +32,13 @@ const SUSPENDED_ACCOUNT_ERROR =
 
 type QueryResult<T> = PromiseLike<{
   data: T | null
-  error: { message: string } | null
+  error:
+    | {
+        message: string
+        code?: string | null
+        details?: string | null
+      }
+    | null
 }>
 
 type MemberPauseRequestInsertClient = MemberPauseServerClient & {
@@ -57,6 +64,13 @@ function createErrorResponse(error: string, status: number) {
       error,
     },
     { status },
+  )
+}
+
+function isPendingPauseRequestConflict(error: { code?: string | null; details?: string | null }) {
+  return (
+    error.code === '23505' ||
+    error.details?.includes('member_pause_requests_pending_member_idx') === true
   )
 }
 
@@ -118,6 +132,10 @@ export async function POST(
       .single()
 
     if (error) {
+      if (isPendingPauseRequestConflict(error)) {
+        return createErrorResponse(MEMBER_PAUSE_REQUEST_PENDING_ERROR, 400)
+      }
+
       throw new Error(`Failed to create member pause request: ${error.message}`)
     }
 

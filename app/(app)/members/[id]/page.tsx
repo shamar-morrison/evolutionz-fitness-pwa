@@ -346,7 +346,8 @@ export default function MemberDetailPage() {
       await invalidateMemberQueries()
       toast({
         title: 'Pause ended',
-        description: `New end date: ${formatAccessDate(result.newEndTime, 'long')}.`,
+        description:
+          result.warning ?? `New end date: ${formatAccessDate(result.newEndTime, 'long')}.`,
       })
     } catch (error) {
       toast({

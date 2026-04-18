@@ -12,6 +12,8 @@ import type { MemberStatus } from '@/types'
 
 export const MEMBER_PAUSE_INACTIVE_ERROR = 'Member has no active membership.'
 export const MEMBER_PAUSE_ACTIVE_ERROR = 'Member already has an active pause.'
+export const MEMBER_PAUSE_REQUEST_PENDING_ERROR =
+  'A membership pause request is already pending for this member.'
 export const MEMBER_PAUSE_EARLY_RESUME_PENDING_ERROR =
   'An early resume request is already pending for this pause.'
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import {
+  getMemberPauseCardSyncWarning,
   getMemberPauseReviewTimestamp,
   getMemberPauseRpcErrorStatus,
   getMemberPauseTodayDate,
@@ -81,16 +82,28 @@ export async function POST(
       throw new Error(`Failed to resume member pause: ${error.message}`)
     }
 
-    const member = await readMemberWithCardCode(supabase, activePause.member_id)
-    const addCardJob = await maybeQueuePauseAddCard(member, supabase)
+    let warning: string | undefined
 
-    if (addCardJob && addCardJob.status !== 'done') {
-      return createErrorResponse(addCardJob.error, addCardJob.httpStatus)
+    try {
+      const member = await readMemberWithCardCode(supabase, activePause.member_id)
+      const addCardJob = await maybeQueuePauseAddCard(member, supabase)
+
+      if (addCardJob && addCardJob.status !== 'done') {
+        console.error('Failed to sync add card job after resuming member pause:', addCardJob)
+        warning = getMemberPauseCardSyncWarning('resume', addCardJob.error)
+      }
+    } catch (addCardError) {
+      console.error('Failed to sync add card job after resuming member pause:', addCardError)
+      warning = getMemberPauseCardSyncWarning(
+        'resume',
+        addCardError instanceof Error ? addCardError.message : 'Unknown card sync error.',
+      )
     }
 
     return NextResponse.json({
       ok: true,
       new_end_time: newEndTime,
+      ...(warning ? { warning } : {}),
     })
   } catch (error) {
     return createErrorResponse(
