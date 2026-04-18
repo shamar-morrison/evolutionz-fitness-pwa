@@ -8,6 +8,7 @@ import { Calendar as CalendarIcon, Pencil } from 'lucide-react'
 import { Pattern } from '@/components/ui/file-upload'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
+import { MemberDurationSelect } from '@/components/member-duration-select'
 import { FieldInfoTooltip } from '@/components/ui/field-info-tooltip'
 import {
   Dialog,
@@ -40,7 +41,6 @@ import {
   getAccessDateInputValue,
   getAccessTimeInputValue,
   getMemberDurationLabel,
-  MEMBER_DURATION_OPTIONS,
   normalizeTimeInputValue,
   parseDateInputValue,
   type MemberDurationValue,
@@ -800,27 +800,17 @@ export function EditMemberModal({
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-duration">Duration</Label>
-                <Select
+                <MemberDurationSelect
+                  id="edit-duration"
                   value={formData.duration}
-                  onValueChange={(value: MemberDurationValue) =>
+                  onValueChange={(value) =>
                     setFormData((currentFormData) => ({
                       ...currentFormData,
                       duration: value,
                     }))
                   }
                   disabled={isSubmitting}
-                >
-                  <SelectTrigger id="edit-duration">
-                    <SelectValue placeholder="Select duration" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MEMBER_DURATION_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
             </div>
 

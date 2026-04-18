@@ -47,6 +47,8 @@ export async function readStaffRemovalState(
     memberApprovalRequestsSubmitted,
     memberEditRequestsReviewed,
     memberPaymentRequestsReviewed,
+    memberExtensionRequestsRequested,
+    memberExtensionRequestsReviewed,
   ] = await Promise.all([
     readIdRows(supabase, 'trainer_clients', [['trainer_id', profileId]]),
     readIdRows(supabase, 'trainer_clients', [
@@ -62,6 +64,8 @@ export async function readStaffRemovalState(
     readIdRows(supabase, 'member_approval_requests', [['submitted_by', profileId]]),
     readIdRows(supabase, 'member_edit_requests', [['reviewed_by', profileId]]),
     readIdRows(supabase, 'member_payment_requests', [['reviewed_by', profileId]]),
+    readIdRows(supabase, 'member_extension_requests', [['requested_by', profileId]]),
+    readIdRows(supabase, 'member_extension_requests', [['reviewed_by', profileId]]),
   ])
 
   const history: StaffRemovalHistory = {
@@ -75,6 +79,8 @@ export async function readStaffRemovalState(
     memberApprovalRequestsSubmitted: memberApprovalRequestsSubmitted.length,
     memberEditRequestsReviewed: memberEditRequestsReviewed.length,
     memberPaymentRequestsReviewed: memberPaymentRequestsReviewed.length,
+    memberExtensionRequestsRequested: memberExtensionRequestsRequested.length,
+    memberExtensionRequestsReviewed: memberExtensionRequestsReviewed.length,
     total:
       trainerAssignments.length +
       ptSessions.length +
@@ -85,7 +91,9 @@ export async function readStaffRemovalState(
       sessionUpdateRequestsReviewed.length +
       memberApprovalRequestsSubmitted.length +
       memberEditRequestsReviewed.length +
-      memberPaymentRequestsReviewed.length,
+      memberPaymentRequestsReviewed.length +
+      memberExtensionRequestsRequested.length +
+      memberExtensionRequestsReviewed.length,
   }
 
   return {

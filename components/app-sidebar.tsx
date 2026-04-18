@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useMemberEditRequests } from '@/hooks/use-member-edit-requests'
+import { useMemberExtensionRequests } from '@/hooks/use-member-extension-requests'
 import { useMemberApprovalRequests } from '@/hooks/use-member-approval-requests'
 import { useMemberPaymentRequests } from '@/hooks/use-member-payment-requests'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -130,6 +131,11 @@ const adminApprovalItems: NavItem[] = [
     icon: BanknoteIcon,
   },
   {
+    href: '/pending-approvals/extension-requests',
+    label: 'Extension Requests',
+    icon: CalendarDays,
+  },
+  {
     href: '/pending-approvals/reschedule-requests',
     label: 'Reschedule Requests',
     icon: CalendarDays,
@@ -190,6 +196,9 @@ export function AppSidebar() {
     enabled: can('reports.view'),
   })
   const pendingMemberEditRequests = useMemberEditRequests({
+    enabled: can('reports.view'),
+  })
+  const pendingMemberExtensionRequests = useMemberExtensionRequests({
     enabled: can('reports.view'),
   })
   const pendingMemberPaymentRequests = useMemberPaymentRequests({
@@ -387,6 +396,8 @@ export function AppSidebar() {
                       ? pendingMemberEditRequests.requests.length
                       : item.href === '/pending-approvals/payment-requests'
                       ? pendingMemberPaymentRequests.requests.length
+                      : item.href === '/pending-approvals/extension-requests'
+                      ? pendingMemberExtensionRequests.requests.length
                       : item.href === '/pending-approvals/reschedule-requests'
                       ? pendingRescheduleRequests.requests.length
                       : pendingSessionUpdateRequests.requests.length

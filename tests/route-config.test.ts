@@ -100,6 +100,9 @@ describe('route config helpers', () => {
     expect(isRouteAllowed('/pending-approvals/payment-requests', 'admin', ['Owner'])).toBe(
       true,
     )
+    expect(isRouteAllowed('/pending-approvals/extension-requests', 'admin', ['Owner'])).toBe(
+      true,
+    )
     expect(isRouteAllowed('/pending-approvals/session-updates', 'staff', ['Trainer'])).toBe(
       false,
     )
@@ -108,6 +111,13 @@ describe('route config helpers', () => {
     ).toBe(false)
     expect(
       isRouteAllowed('/pending-approvals/payment-requests', 'staff', ['Administrative Assistant']),
+    ).toBe(false)
+    expect(
+      isRouteAllowed(
+        '/pending-approvals/extension-requests',
+        'staff',
+        ['Administrative Assistant'],
+      ),
     ).toBe(false)
     expect(isRouteAllowed('/pending-approvals/member-requests', 'staff', ['Trainer'])).toBe(
       false,

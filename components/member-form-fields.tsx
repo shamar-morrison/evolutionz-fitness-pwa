@@ -9,6 +9,7 @@ import { Calendar } from '@/components/ui/calendar'
 import { FieldInfoTooltip } from '@/components/ui/field-info-tooltip'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { MemberDurationSelect } from '@/components/member-duration-select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
@@ -24,7 +25,6 @@ import { formatAvailableAccessCardLabel } from '@/lib/available-cards'
 import {
   formatAccessDate,
   formatDateInputValue,
-  MEMBER_DURATION_OPTIONS,
   parseDateInputValue,
   type MemberDurationValue,
 } from '@/lib/member-access-time'
@@ -433,27 +433,17 @@ export function MemberAccessFields({
 
         <div className="grid gap-2">
           <Label htmlFor={`${idPrefix}-duration`}>Duration</Label>
-          <Select
+          <MemberDurationSelect
+            id={`${idPrefix}-duration`}
             value={formData.duration}
-            onValueChange={(value: MemberDurationValue) =>
+            onValueChange={(value) =>
               setFormData((currentFormData) => ({
                 ...currentFormData,
                 duration: value,
               }))
             }
             disabled={isSubmitting}
-          >
-            <SelectTrigger id={`${idPrefix}-duration`}>
-              <SelectValue placeholder="Select duration" />
-            </SelectTrigger>
-            <SelectContent>
-              {MEMBER_DURATION_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
       </div>
 

@@ -220,6 +220,24 @@ describe('useNotifications', () => {
     })
   })
 
+  it('invalidates member extension request queries when a member extension notification arrives', async () => {
+    await renderComponent(root)
+    await emitInsert({
+      new: {
+        type: 'member_extension_request',
+      },
+    })
+
+    expectNotificationListInvalidation()
+    expectUnreadCountInvalidation()
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['memberExtensionRequests'],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['memberExtensionRequests', 'pending'],
+    })
+  })
+
   it.each([
     {
       notificationType: 'member_create_request',
@@ -235,6 +253,11 @@ describe('useNotifications', () => {
       notificationType: 'member_payment_request',
       expectedAllKey: ['memberPaymentRequests'],
       expectedPendingKey: ['memberPaymentRequests', 'pending'],
+    },
+    {
+      notificationType: 'member_extension_request',
+      expectedAllKey: ['memberExtensionRequests'],
+      expectedPendingKey: ['memberExtensionRequests', 'pending'],
     },
     {
       notificationType: 'reschedule_request',

@@ -218,6 +218,8 @@ function createRemoval(overrides: Partial<StaffRemoval> = {}): StaffRemoval {
       memberApprovalRequestsSubmitted: 0,
       memberEditRequestsReviewed: 0,
       memberPaymentRequestsReviewed: 0,
+      memberExtensionRequestsRequested: 0,
+      memberExtensionRequestsReviewed: 0,
       total: 1,
       ...overrides.history,
     },

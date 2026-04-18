@@ -85,6 +85,10 @@ const STAFF_DELETE_FOREIGN_KEY_CONFLICT_MESSAGES: Record<string, string> = {
     'This staff account cannot be deleted because it reviewed member edit requests. Archive the account instead so those review records remain intact.',
   member_payment_requests_reviewed_by_fkey:
     'This staff account cannot be deleted because it reviewed member payment requests. Archive the account instead so those review records remain intact.',
+  member_extension_requests_requested_by_fkey:
+    'This staff account cannot be deleted because it submitted member extension requests. Archive the account instead so those request records remain intact.',
+  member_extension_requests_reviewed_by_fkey:
+    'This staff account cannot be deleted because it reviewed member extension requests. Archive the account instead so those review records remain intact.',
 }
 const STAFF_DELETE_REFERENCE_LABELS: Record<string, string> = {
   trainer_clients: 'trainer assignments',
@@ -95,6 +99,7 @@ const STAFF_DELETE_REFERENCE_LABELS: Record<string, string> = {
   member_approval_requests: 'member approval requests',
   member_edit_requests: 'member edit requests',
   member_payment_requests: 'member payment requests',
+  member_extension_requests: 'member extension requests',
 }
 
 const updateStaffRequestSchema = z
@@ -147,6 +152,10 @@ function createRemovalConflictResponse(removal: StaffRemoval) {
         ? 'This staff account has reviewed member edit requests and should be archived instead of deleted.'
         : removal.history.memberPaymentRequestsReviewed > 0
           ? 'This staff account has reviewed member payment requests and should be archived instead of deleted.'
+          : removal.history.memberExtensionRequestsRequested > 0
+            ? 'This staff account has submitted member extension requests and should be archived instead of deleted.'
+            : removal.history.memberExtensionRequestsReviewed > 0
+              ? 'This staff account has reviewed member extension requests and should be archived instead of deleted.'
           : 'This staff account has retained history records and should be archived instead of deleted.',
     409,
     {

@@ -15,6 +15,7 @@ import { MemberPtSection } from '@/components/member-pt-section'
 import { StatusBadge } from '@/components/status-badge'
 import { CheckInHistory } from '@/components/check-in-history'
 import { EditMemberModal } from '@/components/edit-member-modal'
+import { ExtendMembershipDialog } from '@/components/extend-membership-dialog'
 import { RecordMemberPaymentDialog } from '@/components/record-member-payment-dialog'
 import { RoleGuard } from '@/components/role-guard'
 import { Button } from '@/components/ui/button'
@@ -43,7 +44,19 @@ import { usePermissions } from '@/hooks/use-permissions'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import { isRouteAllowed } from '@/lib/route-config'
 import { isFrontDeskStaff } from '@/lib/staff'
-import { ArrowLeft, Pencil, Ban, RefreshCw, CreditCard, Trash2, User, BanknoteIcon, X } from 'lucide-react'
+import { isMemberExtensionEligible } from '@/lib/member-extension'
+import {
+  ArrowLeft,
+  Pencil,
+  Ban,
+  RefreshCw,
+  CreditCard,
+  Trash2,
+  User,
+  BanknoteIcon,
+  CalendarDays,
+  X,
+} from 'lucide-react'
 
 function resolveReturnToPath(
   value: string | null,
@@ -94,6 +107,7 @@ export default function MemberDetailPage() {
     [appRole, fallbackBackLink, profile?.titles, returnToParam],
   )
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showExtendMembershipModal, setShowExtendMembershipModal] = useState(false)
   const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false)
   const [showAssignCardModal, setShowAssignCardModal] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
@@ -345,6 +359,7 @@ export default function MemberDetailPage() {
   const canEditMember = can('members.edit')
   const canViewAllPtSchedules = can('pt.viewAllSchedules')
   const showEditMemberAction = canEditMember
+  const showExtendMembershipAction = can('members.extendMembership')
   const showDirectMemberPhotoActions = canEditMember && !isFrontDesk
   const showRecordPaymentAction = can('members.recordPayment')
   const showPtAttendance = canViewAllPtSchedules || isFrontDesk
@@ -353,6 +368,10 @@ export default function MemberDetailPage() {
     cardNo: member.cardNo,
     cardStatus: member.cardStatus,
   })
+  const isMembershipExtensionAvailable = isMemberExtensionEligible(
+    member.endTime,
+    member.status,
+  )
 
   return (
     <div className="space-y-6">
@@ -436,6 +455,27 @@ export default function MemberDetailPage() {
                   <Pencil className="h-4 w-4" />
                   Edit Member
                 </Button>
+              ) : null}
+
+              {showExtendMembershipAction ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="block w-full">
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setShowExtendMembershipModal(true)}
+                        disabled={!isMembershipExtensionAvailable || isActionLoading}
+                      >
+                        <CalendarDays className="h-4 w-4" />
+                        Extend Membership
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {!isMembershipExtensionAvailable ? (
+                    <TooltipContent>Member has no active membership.</TooltipContent>
+                  ) : null}
+                </Tooltip>
               ) : null}
 
               <RoleGuard role="admin">
@@ -803,6 +843,13 @@ export default function MemberDetailPage() {
         open={showEditModal}
         onOpenChange={setShowEditModal}
         requiresApproval={requiresApproval('members.edit')}
+      />
+
+      <ExtendMembershipDialog
+        member={member}
+        open={showExtendMembershipModal}
+        onOpenChange={setShowExtendMembershipModal}
+        requiresApproval={requiresApproval('members.extendMembership')}
       />
 
       <RecordMemberPaymentDialog

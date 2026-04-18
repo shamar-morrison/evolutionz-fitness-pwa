@@ -68,6 +68,13 @@ function invalidatePendingApprovalQueries(
     })
   }
 
+  if (notificationType === 'member_extension_request') {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.memberExtensionRequests.all })
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.memberExtensionRequests.pending,
+    })
+  }
+
   if (notificationType === 'status_change_request') {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessionUpdateRequests.all })
     void queryClient.invalidateQueries({

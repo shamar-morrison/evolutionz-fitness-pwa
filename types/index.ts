@@ -82,6 +82,7 @@ export type CardFeeSettings = {
 export type MemberPaymentMethod = 'cash' | 'fygaro' | 'bank_transfer' | 'point_of_sale'
 export type MemberPaymentType = 'membership' | 'card_fee'
 export type MemberApprovalRequestStatus = 'pending' | 'approved' | 'denied'
+export type MemberExtensionRequestStatus = 'pending' | 'approved' | 'rejected'
 
 export type MemberPayment = {
   id: string
@@ -205,6 +206,22 @@ export type MemberPaymentRequest = {
   status: MemberApprovalRequestStatus
   createdAt: string
   updatedAt: string
+}
+
+export type MemberExtensionRequest = {
+  id: string
+  memberId: string
+  memberName: string
+  currentEndTime: string | null
+  currentStatus: MemberStatus | null
+  durationDays: number
+  status: MemberExtensionRequestStatus
+  requestedBy: string
+  requestedByName: string | null
+  reviewedBy: string | null
+  reviewedByName: string | null
+  reviewedAt: string | null
+  createdAt: string
 }
 
 export type Member = {

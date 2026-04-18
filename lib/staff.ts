@@ -49,6 +49,8 @@ export type StaffRemovalHistory = {
   memberApprovalRequestsSubmitted: number
   memberEditRequestsReviewed: number
   memberPaymentRequestsReviewed: number
+  memberExtensionRequestsRequested: number
+  memberExtensionRequestsReviewed: number
   total: number
 }
 export type StaffRemoval = {
@@ -130,6 +132,8 @@ const staffDetailResponseSchema = z.object({
       memberApprovalRequestsSubmitted: z.number().int().nonnegative(),
       memberEditRequestsReviewed: z.number().int().nonnegative(),
       memberPaymentRequestsReviewed: z.number().int().nonnegative(),
+      memberExtensionRequestsRequested: z.number().int().nonnegative(),
+      memberExtensionRequestsReviewed: z.number().int().nonnegative(),
       total: z.number().int().nonnegative(),
     }),
   }),

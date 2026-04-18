@@ -364,6 +364,42 @@ describe('NotificationsPanel', () => {
     expect(pushMock).toHaveBeenCalledWith('/pending-approvals/payment-requests')
   })
 
+  it('routes member extension review notifications to the extension requests page and marks them as read', async () => {
+    useNotificationsMock.mockReturnValue({
+      notifications: [
+        {
+          id: 'notification-1',
+          type: 'member_extension_request',
+          title: 'Membership Extension Request',
+          body: 'New membership extension request from Jordan Staff for Jane Doe.',
+          read: false,
+          createdAt: '2026-04-06T10:00:00.000Z',
+        },
+      ],
+      unreadCount: 1,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<NotificationsPanel />)
+    })
+
+    const reviewButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Review',
+    )
+
+    if (!(reviewButton instanceof HTMLButtonElement)) {
+      throw new Error('Review button not found.')
+    }
+
+    await act(async () => {
+      reviewButton.click()
+    })
+
+    expect(markNotificationAsReadMock).toHaveBeenCalledWith('user-1', 'notification-1')
+    expect(pushMock).toHaveBeenCalledWith('/pending-approvals/extension-requests')
+  })
+
   it('shows an archive control for read request notifications on admin accounts', async () => {
     useNotificationsMock.mockReturnValue({
       notifications: [
@@ -464,6 +500,14 @@ describe('NotificationsPanel', () => {
           read: true,
           createdAt: '2026-04-06T11:00:00.000Z',
         },
+        {
+          id: 'notification-3',
+          type: 'member_extension_request',
+          title: 'Membership Extension Request',
+          body: 'New membership extension request from Jordan Staff for Jane Doe.',
+          read: true,
+          createdAt: '2026-04-06T12:00:00.000Z',
+        },
       ],
       unreadCount: 0,
       error: null,
@@ -477,6 +521,9 @@ describe('NotificationsPanel', () => {
     expect(container.querySelector('button[aria-label="Archive Member Edit Request"]')).not.toBeNull()
     expect(
       container.querySelector('button[aria-label="Archive Member Payment Request"]'),
+    ).not.toBeNull()
+    expect(
+      container.querySelector('button[aria-label="Archive Membership Extension Request"]'),
     ).not.toBeNull()
   })
 
