@@ -68,6 +68,7 @@ describe('permissions', () => {
     expect(requiresApproval('members.create', 'staff')).toBe(true)
     expect(requiresApproval('members.edit', 'staff')).toBe(true)
     expect(requiresApproval('members.extendMembership', 'staff')).toBe(true)
+    expect(requiresApproval('members.pauseMembership', 'staff')).toBe(true)
     expect(requiresApproval('members.recordPayment', 'staff')).toBe(true)
   })
 
@@ -125,6 +126,7 @@ describe('permissions', () => {
         'members.create',
         'members.edit',
         'members.extendMembership',
+        'members.pauseMembership',
         'members.recordPayment',
         'door.unlock',
       ]),

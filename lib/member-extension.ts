@@ -66,7 +66,7 @@ export function isMemberExtensionEligible(
   status: MemberStatus,
   now: Date = new Date(),
 ) {
-  if (status === 'Suspended') {
+  if (status === 'Suspended' || status === 'Paused') {
     return false
   }
 

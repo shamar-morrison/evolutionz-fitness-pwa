@@ -6,14 +6,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   calendarSelectionState,
+  pathnameState,
+  pushMock,
+  replaceMock,
   toastMock,
   useMemberExpiredReportMock,
   useMemberSignupsReportMock,
 } = vi.hoisted(() => ({
   calendarSelectionState: { value: new Date(2026, 3, 1, 12, 0, 0, 0) },
+  pathnameState: { value: '/reports/members' },
+  pushMock: vi.fn(),
+  replaceMock: vi.fn(),
   toastMock: vi.fn(),
   useMemberExpiredReportMock: vi.fn(),
   useMemberSignupsReportMock: vi.fn(),
+}))
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => pathnameState.value,
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}))
+
+vi.mock('@/hooks/use-progress-router', () => ({
+  useProgressRouter: () => ({
+    push: pushMock,
+    replace: replaceMock,
+  }),
 }))
 
 vi.mock('@/hooks/use-member-reports', () => ({
@@ -155,7 +173,10 @@ describe('MemberReportsClient', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     window.history.replaceState({}, '', '/reports/members')
+    pathnameState.value = '/reports/members'
     toastMock.mockReset()
+    pushMock.mockReset()
+    replaceMock.mockReset()
     useMemberSignupsReportMock.mockImplementation((_startDate, _endDate, options) => ({
       report: createSignupReport(),
       isLoading: false,
@@ -216,6 +237,7 @@ describe('MemberReportsClient', () => {
 
   it('opens the matching expired tab and filter from deep links', async () => {
     window.history.replaceState({}, '', '/reports/members?tab=expired&period=this-month')
+    pathnameState.value = '/reports/members'
 
     await renderClient()
 

@@ -4,10 +4,26 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { calendarSelectionState, toastMock, usePtPaymentsReportMock } = vi.hoisted(() => ({
-  calendarSelectionState: { value: new Date(2026, 3, 1, 12, 0, 0, 0) },
-  toastMock: vi.fn(),
-  usePtPaymentsReportMock: vi.fn(),
+const { calendarSelectionState, pathnameState, pushMock, replaceMock, toastMock, usePtPaymentsReportMock } =
+  vi.hoisted(() => ({
+    calendarSelectionState: { value: new Date(2026, 3, 1, 12, 0, 0, 0) },
+    pathnameState: { value: '/reports/pt-payments' },
+    pushMock: vi.fn(),
+    replaceMock: vi.fn(),
+    toastMock: vi.fn(),
+    usePtPaymentsReportMock: vi.fn(),
+  }))
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => pathnameState.value,
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}))
+
+vi.mock('@/hooks/use-progress-router', () => ({
+  useProgressRouter: () => ({
+    push: pushMock,
+    replace: replaceMock,
+  }),
 }))
 
 vi.mock('@/hooks/use-pt-scheduling', () => ({
@@ -120,6 +136,9 @@ describe('PtPaymentsPage', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    pathnameState.value = '/reports/pt-payments'
+    pushMock.mockReset()
+    replaceMock.mockReset()
     toastMock.mockReset()
   })
 

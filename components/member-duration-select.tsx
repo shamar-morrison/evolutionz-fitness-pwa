@@ -18,6 +18,7 @@ type MemberDurationSelectProps = {
   onValueChange: (value: MemberDurationValue) => void
   disabled?: boolean
   placeholder?: string
+  allowedDurations?: readonly MemberDurationValue[]
 }
 
 export function MemberDurationSelect({
@@ -26,7 +27,12 @@ export function MemberDurationSelect({
   onValueChange,
   disabled = false,
   placeholder = 'Select duration',
+  allowedDurations,
 }: MemberDurationSelectProps) {
+  const visibleOptions = allowedDurations
+    ? MEMBER_DURATION_OPTIONS.filter((option) => allowedDurations.includes(option.value))
+    : MEMBER_DURATION_OPTIONS
+
   return (
     <Select
       value={value}
@@ -37,7 +43,7 @@ export function MemberDurationSelect({
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
-        {MEMBER_DURATION_OPTIONS.map((option) => (
+        {visibleOptions.map((option) => (
           <SelectItem key={option.value} value={option.value}>
             {option.label}
           </SelectItem>

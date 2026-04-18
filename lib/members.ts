@@ -20,7 +20,7 @@ const memberSchema = z.object({
   slotPlaceholderName: z.string().trim().min(1).optional(),
   type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
   memberTypeId: z.string().trim().min(1).nullable().default(null),
-  status: z.enum(['Active', 'Expired', 'Suspended']),
+  status: z.enum(['Active', 'Expired', 'Suspended', 'Paused']),
   deviceAccessState: z.enum(['ready', 'released']),
   gender: z.enum(['Male', 'Female']).nullable(),
   email: z.string().trim().min(1).nullable(),
@@ -30,6 +30,22 @@ const memberSchema = z.object({
   joinedAt: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().default(null),
   beginTime: z.string().trim().min(1).nullable(),
   endTime: z.string().trim().min(1).nullable(),
+  activePause: z
+    .object({
+      id: z.string().trim().min(1),
+      pauseStartDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
+      plannedResumeDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
+      originalEndTime: z.string().trim().min(1),
+      status: z.literal('active'),
+      pendingEarlyResumeRequest: z
+        .object({
+          id: z.string().trim().min(1),
+          status: z.enum(['pending', 'approved', 'rejected']),
+        })
+        .nullable(),
+    })
+    .nullable()
+    .optional(),
 })
 
 const membersResponseSchema = z.object({

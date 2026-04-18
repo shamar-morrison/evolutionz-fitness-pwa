@@ -1,6 +1,6 @@
 import type { MemberStatus } from '@/types'
 
-type MembershipLifecycleStatus = Exclude<MemberStatus, 'Suspended'>
+type MembershipLifecycleStatus = Extract<MemberStatus, 'Active' | 'Expired'>
 
 function normalizeMemberStatusDateTime(value: string | null | undefined) {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
@@ -50,8 +50,8 @@ export function resolveMemberStatusForAccessWindowUpdate({
   endTime: string | null | undefined
   now?: Date
 }): MemberStatus {
-  if (currentStatus === 'Suspended') {
-    return 'Suspended'
+  if (currentStatus === 'Suspended' || currentStatus === 'Paused') {
+    return currentStatus
   }
 
   return resolveMembershipLifecycleStatus(endTime, now)

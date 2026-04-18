@@ -11,6 +11,7 @@ const {
   refreshMock,
   useMemberEditRequestsMock,
   useMemberExtensionRequestsMock,
+  useMemberPauseRequestsMock,
   signOutMock,
   useMemberApprovalRequestsMock,
   useMemberPaymentRequestsMock,
@@ -37,6 +38,7 @@ const {
   signOutMock: vi.fn().mockResolvedValue({ error: null }),
   useMemberEditRequestsMock: vi.fn(),
   useMemberExtensionRequestsMock: vi.fn(),
+  useMemberPauseRequestsMock: vi.fn(),
   useMemberApprovalRequestsMock: vi.fn(),
   useMemberPaymentRequestsMock: vi.fn(),
   useRescheduleRequestsMock: vi.fn(),
@@ -93,6 +95,10 @@ vi.mock('@/hooks/use-member-edit-requests', () => ({
 
 vi.mock('@/hooks/use-member-extension-requests', () => ({
   useMemberExtensionRequests: useMemberExtensionRequestsMock,
+}))
+
+vi.mock('@/hooks/use-member-pause-requests', () => ({
+  useMemberPauseRequests: useMemberPauseRequestsMock,
 }))
 
 vi.mock('@/hooks/use-member-payment-requests', () => ({
@@ -218,6 +224,12 @@ describe('Sidebar', () => {
       isLoading: false,
       error: null,
     })
+    useMemberPauseRequestsMock.mockReturnValue({
+      pauseRequests: [],
+      earlyResumeRequests: [],
+      isLoading: false,
+      error: null,
+    })
     useMemberPaymentRequestsMock.mockReturnValue({
       requests: [],
       isLoading: false,
@@ -318,6 +330,9 @@ describe('Sidebar', () => {
     expect(useMemberExtensionRequestsMock).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false }),
     )
+    expect(useMemberPauseRequestsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    )
     expect(useMemberPaymentRequestsMock).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false }),
     )
@@ -385,6 +400,9 @@ describe('Sidebar', () => {
     expect(useMemberExtensionRequestsMock).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false }),
     )
+    expect(useMemberPauseRequestsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    )
     expect(useMemberPaymentRequestsMock).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false }),
     )
@@ -424,6 +442,14 @@ describe('Sidebar', () => {
       isLoading: false,
       error: null,
     })
+    useMemberPauseRequestsMock.mockReturnValue({
+      pauseRequests: new Array(7).fill(null).map((_, index) => ({ id: `pause-request-${index}` })),
+      earlyResumeRequests: new Array(1)
+        .fill(null)
+        .map((_, index) => ({ id: `resume-request-${index}` })),
+      isLoading: false,
+      error: null,
+    })
     useMemberPaymentRequestsMock.mockReturnValue({
       requests: new Array(4).fill(null).map((_, index) => ({ id: `payment-request-${index}` })),
       isLoading: false,
@@ -451,6 +477,7 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('Edit Requests')
     expect(container.textContent).toContain('Payment Requests')
     expect(container.textContent).toContain('Extension Requests')
+    expect(container.textContent).toContain('Pause Requests')
     expect(container.textContent).toContain('Reschedule Requests')
     expect(container.textContent).toContain('Session Updates')
     expect(container.textContent).toContain('Door History')
@@ -471,6 +498,7 @@ describe('Sidebar', () => {
     expect(links).toContain('/pending-approvals/edit-requests')
     expect(links).toContain('/pending-approvals/payment-requests')
     expect(links).toContain('/pending-approvals/extension-requests')
+    expect(links).toContain('/pending-approvals/pause-requests')
     expect(links).toContain('/pending-approvals/reschedule-requests')
     expect(links).toContain('/pending-approvals/session-updates')
     expect(links).toContain('/door-history')
@@ -497,6 +525,7 @@ describe('Sidebar', () => {
     expect(badges).toContain('2')
     expect(badges).toContain('4')
     expect(badges).toContain('6')
+    expect(badges).toContain('8')
     expect(badges).toContain('5')
     expect(useRescheduleRequestsMock).toHaveBeenCalledWith(
       'pending',
@@ -514,6 +543,9 @@ describe('Sidebar', () => {
       expect.objectContaining({ enabled: true }),
     )
     expect(useMemberExtensionRequestsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true }),
+    )
+    expect(useMemberPauseRequestsMock).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: true }),
     )
     expect(useMemberPaymentRequestsMock).toHaveBeenCalledWith(

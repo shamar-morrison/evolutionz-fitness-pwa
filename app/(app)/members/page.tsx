@@ -31,7 +31,7 @@ import { isFrontDeskStaff } from '@/lib/staff'
 import { RefreshCw, Search, UserPlus } from 'lucide-react'
 import type { MemberStatus, MemberType } from '@/types'
 
-const statusOptions: (MemberStatus | 'All')[] = ['All', 'Active', 'Expired', 'Suspended']
+const statusOptions: (MemberStatus | 'All')[] = ['All', 'Active', 'Expired', 'Suspended', 'Paused']
 const typeOptions: (MemberType | 'All')[] = ['All', 'General', 'Civil Servant', 'Student/BPO']
 
 function MembersPageLoading() {
@@ -66,7 +66,7 @@ function MembersPageLoading() {
 }
 
 function isValidStatus(value: string | null): value is MemberStatus {
-  return value === 'Active' || value === 'Expired' || value === 'Suspended'
+  return value === 'Active' || value === 'Expired' || value === 'Suspended' || value === 'Paused'
 }
 
 function isValidType(value: string | null): value is MemberType {

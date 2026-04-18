@@ -30,7 +30,7 @@ const dashboardMemberSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1),
   type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
-  status: z.enum(['Active', 'Expired', 'Suspended']),
+  status: z.enum(['Active', 'Expired', 'Suspended', 'Paused']),
   endTime: z.string().trim().min(1).nullable(),
 })
 

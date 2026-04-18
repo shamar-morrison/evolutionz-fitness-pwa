@@ -75,6 +75,13 @@ function invalidatePendingApprovalQueries(
     })
   }
 
+  if (notificationType === 'member_pause_request') {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.memberPauseRequests.all })
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.memberPauseRequests.pending,
+    })
+  }
+
   if (notificationType === 'status_change_request') {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessionUpdateRequests.all })
     void queryClient.invalidateQueries({

@@ -326,9 +326,11 @@ export async function POST(
       return createErrorResponse('Member not found.', 404)
     }
 
-    if (currentMember.status === 'Suspended') {
+    if (currentMember.status === 'Suspended' || currentMember.status === 'Paused') {
       return createErrorResponse(
-        'Suspended members must be reactivated before a card can be assigned.',
+        currentMember.status === 'Paused'
+          ? 'Paused memberships must be resumed before a card can be assigned.'
+          : 'Suspended members must be reactivated before a card can be assigned.',
         400,
       )
     }

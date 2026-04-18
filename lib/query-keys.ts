@@ -32,6 +32,10 @@ export const queryKeys = {
     all: ['memberExtensionRequests'] as const,
     pending: ['memberExtensionRequests', 'pending'] as const,
   },
+  memberPauseRequests: {
+    all: ['memberPauseRequests'] as const,
+    pending: ['memberPauseRequests', 'pending'] as const,
+  },
   memberPayments: {
     all: ['memberPayments'] as const,
     member: (memberId: string) => ['memberPayments', memberId] as const,

@@ -91,6 +91,9 @@ export const routeConfig: Record<string, RouteConfig> = {
   '/pending-approvals/extension-requests': {
     allowedRoles: ['admin'],
   },
+  '/pending-approvals/pause-requests': {
+    allowedRoles: ['admin'],
+  },
   '/trainer/schedule': {
     allowedRoles: ['admin', 'staff'],
     allowedTitles: ['Trainer'],

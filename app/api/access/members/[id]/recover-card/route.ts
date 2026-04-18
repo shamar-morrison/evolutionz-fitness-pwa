@@ -65,25 +65,27 @@ export async function POST(
       return createErrorResponse('Only suspended lost cards can be recovered.', 400)
     }
 
-    const addCardJob = await createAndWaitForAccessControlJob({
-      jobType: 'add_card',
-      payload: buildAddCardPayload({
-        employeeNo: input.employeeNo,
-        cardNo: input.cardNo,
-      }),
-      messages: {
-        createErrorPrefix: 'Failed to create add card job',
-        missingJobIdMessage: 'Failed to create add card job: missing job id in response',
-        readErrorPrefix: (jobId) => `Failed to read add card job ${jobId}`,
-        missingJobMessage: (jobId) => `Add card job ${jobId} was not found after creation.`,
-        failedJobMessage: 'Add card job failed.',
-        timeoutMessage: RECOVER_CARD_TIMEOUT_ERROR,
-      },
-      supabase,
-    })
+    if (currentMember.status !== 'Paused') {
+      const addCardJob = await createAndWaitForAccessControlJob({
+        jobType: 'add_card',
+        payload: buildAddCardPayload({
+          employeeNo: input.employeeNo,
+          cardNo: input.cardNo,
+        }),
+        messages: {
+          createErrorPrefix: 'Failed to create add card job',
+          missingJobIdMessage: 'Failed to create add card job: missing job id in response',
+          readErrorPrefix: (jobId) => `Failed to read add card job ${jobId}`,
+          missingJobMessage: (jobId) => `Add card job ${jobId} was not found after creation.`,
+          failedJobMessage: 'Add card job failed.',
+          timeoutMessage: RECOVER_CARD_TIMEOUT_ERROR,
+        },
+        supabase,
+      })
 
-    if (addCardJob.status !== 'done') {
-      return createErrorResponse(addCardJob.error, addCardJob.httpStatus)
+      if (addCardJob.status !== 'done') {
+        return createErrorResponse(addCardJob.error, addCardJob.httpStatus)
+      }
     }
 
     const { data: updatedCard, error: cardError } = await supabase
@@ -106,7 +108,10 @@ export async function POST(
       return createErrorResponse('Only suspended lost cards can be recovered.', 400)
     }
 
-    const restoredStatus = resolveMembershipLifecycleStatus(currentMember.endTime)
+    const restoredStatus =
+      currentMember.status === 'Paused'
+        ? 'Paused'
+        : resolveMembershipLifecycleStatus(currentMember.endTime)
 
     const { data: updatedMember, error: memberError } = await supabase
       .from('members')

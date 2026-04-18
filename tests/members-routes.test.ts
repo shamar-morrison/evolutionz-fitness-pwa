@@ -33,6 +33,10 @@ function createMembersAdminClient({
   listError = null,
   detailRow = null,
   detailError = null,
+  activePauseRow = null,
+  activePauseError = null,
+  pendingPauseResumeRows = [],
+  pendingPauseResumeError = null,
   cardRows = [],
   cardsError = null,
   publicUrl = 'https://public.example.com/member-photos/member-2.jpg',
@@ -41,6 +45,10 @@ function createMembersAdminClient({
   listError?: { message: string } | null
   detailRow?: Record<string, unknown> | null
   detailError?: { message: string } | null
+  activePauseRow?: Record<string, unknown> | null
+  activePauseError?: { message: string } | null
+  pendingPauseResumeRows?: Array<Record<string, unknown>>
+  pendingPauseResumeError?: { message: string } | null
   cardRows?: Array<Record<string, unknown>>
   cardsError?: { message: string } | null
   publicUrl?: string
@@ -88,6 +96,53 @@ function createMembersAdminClient({
                 })
               },
             }
+          },
+        }
+      }
+
+      if (table === 'member_pauses') {
+        return {
+          select(columns: string) {
+            expect(columns).toBe(
+              'id, member_id, pause_start_date, planned_resume_date, original_end_time, status',
+            )
+
+            return {
+              eq() {
+                return this
+              },
+              maybeSingle() {
+                return Promise.resolve({
+                  data: activePauseRow,
+                  error: activePauseError,
+                })
+              },
+            }
+          },
+        }
+      }
+
+      if (table === 'member_pause_resume_requests') {
+        return {
+          select(columns: string) {
+            expect(columns).toBe('id, status')
+
+            const query = {
+              eq() {
+                return query
+              },
+              order() {
+                return query
+              },
+              limit() {
+                return Promise.resolve({
+                  data: pendingPauseResumeRows,
+                  error: pendingPauseResumeError,
+                })
+              },
+            }
+
+            return query
           },
         }
       }
@@ -241,6 +296,7 @@ describe('members API routes', () => {
         photoUrl: null,
         beginTime: '2026-03-01T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
+        activePause: null,
       },
     })
   })
@@ -296,6 +352,7 @@ describe('members API routes', () => {
         photoUrl: 'https://public.example.com/member-photos/member-2.jpg',
         beginTime: '2026-03-01T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
+        activePause: null,
       },
     })
   })
@@ -375,6 +432,7 @@ describe('members API routes', () => {
         photoUrl: 'https://public.example.com/member-photos/member-2.jpg',
         beginTime: '2026-03-01T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
+        activePause: null,
       },
     })
   })
