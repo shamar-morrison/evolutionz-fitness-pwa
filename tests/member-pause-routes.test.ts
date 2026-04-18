@@ -627,6 +627,53 @@ describe('member pause routes', () => {
     })
   })
 
+  it('returns a generic 500 and logs the full error when direct resume rpc fails unexpectedly', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const rpcError = { message: 'database connection pool exhausted' }
+    const { client, rpcCalls } = createRpcClient({
+      rpcResult: null,
+      rpcError,
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readActivePauseByIdMock.mockResolvedValue({
+      id: 'pause-1',
+      member_id: 'member-1',
+    })
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await postDirectResume(
+      new Request('http://localhost/api/members/pauses/pause-1/resume', {
+        method: 'POST',
+      }),
+      {
+        params: Promise.resolve({ pauseId: 'pause-1' }),
+      },
+    )
+
+    expect(rpcCalls).toEqual([
+      {
+        fn: 'resume_member_pause',
+        args: {
+          p_pause_id: 'pause-1',
+          p_actual_resume_date: '2026-04-18',
+          p_now: '2026-04-18T12:00:00-05:00',
+        },
+      },
+    ])
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to resume member pause:', rpcError)
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Failed to resume member pause',
+    })
+  })
+
   it('approves a pause request through the atomic rpc and returns a sync warning', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const { client, requestUpdates, rpcCalls } = createPauseRequestReviewClient()

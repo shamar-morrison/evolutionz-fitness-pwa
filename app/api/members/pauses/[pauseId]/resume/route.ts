@@ -79,7 +79,8 @@ export async function POST(
         return createErrorResponse(error.message, status)
       }
 
-      throw new Error(`Failed to resume member pause: ${error.message}`)
+      console.error('Failed to resume member pause:', error)
+      return createErrorResponse('Failed to resume member pause', 500)
     }
 
     let warning: string | undefined
