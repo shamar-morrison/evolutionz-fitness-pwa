@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { StringDatePicker } from '@/components/ui/string-date-picker'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useCardFeeSettings } from '@/hooks/use-card-fee-settings'
@@ -514,18 +515,16 @@ export function RecordMemberPaymentDialog({
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="grid gap-2">
                         <Label htmlFor="record-card-fee-payment-date">Payment Date</Label>
-                        <Input
+                        <StringDatePicker
                           id="record-card-fee-payment-date"
-                          type="date"
                           value={cardFeeFormData.paymentDate}
-                          onChange={(event) =>
+                          onChange={(value) =>
                             setCardFeeFormData((currentFormData) => ({
                               ...currentFormData,
-                              paymentDate: event.target.value,
+                              paymentDate: value,
                             }))
                           }
                           disabled={isSubmitting}
-                          required
                         />
                       </div>
 

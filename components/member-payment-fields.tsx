@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
+import { StringDatePicker } from '@/components/ui/string-date-picker'
 import { Textarea } from '@/components/ui/textarea'
 import {
   formatPaymentAmountInputValue,
@@ -221,18 +222,16 @@ export function MemberPaymentFields({
 
         <div className="grid gap-2">
           <Label htmlFor={`${idPrefix}-payment-date`}>Payment Date</Label>
-          <Input
+          <StringDatePicker
             id={`${idPrefix}-payment-date`}
-            type="date"
             value={formData.paymentDate}
-            onChange={(event) =>
+            onChange={(value) =>
               setFormData((currentFormData) => ({
                 ...currentFormData,
-                paymentDate: event.target.value,
+                paymentDate: value,
               }))
             }
             disabled={disabled}
-            required
           />
         </div>
       </div>

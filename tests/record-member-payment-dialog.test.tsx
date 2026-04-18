@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 
 const {
+  calendarSelectionState,
   createMemberPaymentRequestMock,
+  getDefaultMemberPaymentDateMock,
   invalidateQueriesMock,
   onOpenChangeMock,
   recordMemberPaymentMock,
@@ -14,9 +16,11 @@ const {
   useCardFeeSettingsMock,
   useMemberTypesMock,
 } = vi.hoisted(() => ({
+  calendarSelectionState: { value: new Date(2026, 3, 9, 12, 0, 0, 0) },
   createMemberPaymentRequestMock: vi.fn().mockResolvedValue({
     id: 'payment-request-1',
   }),
+  getDefaultMemberPaymentDateMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   onOpenChangeMock: vi.fn(),
   recordMemberPaymentMock: vi.fn().mockResolvedValue({
@@ -66,6 +70,13 @@ vi.mock('@/lib/member-payments', async () => {
 
   return {
     ...actual,
+    getDefaultMemberPaymentDate: (...args: Parameters<typeof actual.getDefaultMemberPaymentDate>) => {
+      const implementation = getDefaultMemberPaymentDateMock.getMockImplementation()
+
+      return implementation
+        ? implementation(...args)
+        : actual.getDefaultMemberPaymentDate(...args)
+    },
     recordMemberPayment: recordMemberPaymentMock,
   }
 })
@@ -102,6 +113,30 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogFooter: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
   DialogHeader: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
   DialogTitle: ({ children }: React.ComponentProps<'h2'>) => <h2>{children}</h2>,
+}))
+
+vi.mock('@/components/ui/popover', () => ({
+  Popover: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PopoverContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  PopoverTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+vi.mock('@/components/ui/calendar', () => ({
+  Calendar: ({
+    onSelect,
+    'data-testid': dataTestId,
+  }: {
+    onSelect?: (date: Date) => void
+    'data-testid'?: string
+  }) => (
+    <button
+      type="button"
+      data-testid={dataTestId}
+      onClick={() => onSelect?.(calendarSelectionState.value)}
+    >
+      Mock calendar selection
+    </button>
+  ),
 }))
 
 vi.mock('@/components/ui/tooltip', () => ({
@@ -285,6 +320,33 @@ function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: str
   input.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
+function getDateTrigger(container: ParentNode, id: string) {
+  const trigger = container.querySelector(`#${id}`)
+
+  if (!(trigger instanceof HTMLButtonElement)) {
+    throw new Error(`${id} trigger not found.`)
+  }
+
+  return trigger
+}
+
+async function selectCalendarDate(container: ParentNode, id: string, value: Date) {
+  const trigger = getDateTrigger(container, id)
+  const calendarButton = container.querySelector(`[data-testid="${id}-calendar"]`)
+
+  if (!(calendarButton instanceof HTMLButtonElement)) {
+    throw new Error(`${id} calendar select button not found.`)
+  }
+
+  calendarSelectionState.value = value
+
+  await act(async () => {
+    trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    calendarButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await Promise.resolve()
+  })
+}
+
 async function clickButton(container: ParentNode, label: string) {
   const button = Array.from(container.querySelectorAll('button')).find(
     (candidate) => candidate.textContent?.trim() === label,
@@ -325,6 +387,7 @@ describe('RecordMemberPaymentDialog', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-09T12:00:00.000Z'))
+    getDefaultMemberPaymentDateMock.mockReset()
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
     container = document.createElement('div')
@@ -372,14 +435,14 @@ describe('RecordMemberPaymentDialog', () => {
     })
 
     const amountInput = container.querySelector('#record-payment-amount')
-    const paymentDateInput = container.querySelector('#record-payment-payment-date')
+    const paymentDateTrigger = container.querySelector('#record-payment-payment-date')
 
-    if (!(amountInput instanceof HTMLInputElement) || !(paymentDateInput instanceof HTMLInputElement)) {
+    if (!(amountInput instanceof HTMLInputElement) || !(paymentDateTrigger instanceof HTMLButtonElement)) {
       throw new Error('Payment form inputs not found.')
     }
 
     expect(amountInput.value).toBe('12000')
-    expect(paymentDateInput.value).toBe('2026-04-09')
+    expect(paymentDateTrigger.textContent).toContain('Apr 9, 2026')
 
     await clickButton(container, 'Cash')
     await clickButton(container, 'Record Payment')
@@ -402,6 +465,42 @@ describe('RecordMemberPaymentDialog', () => {
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['members', 'all'],
+    })
+  })
+
+  it('submits the selected membership payment date as the same calendar-date string', async () => {
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    await selectCalendarDate(
+      container,
+      'record-payment-payment-date',
+      new Date(2026, 3, 12, 12, 0, 0, 0),
+    )
+
+    expect(getDateTrigger(container, 'record-payment-payment-date').textContent).toContain(
+      'Apr 12, 2026',
+    )
+
+    await clickButton(container, 'Cash')
+    await clickButton(container, 'Record Payment')
+    await flushAsyncWork()
+
+    expect(recordMemberPaymentMock).toHaveBeenCalledWith('member-1', {
+      payment_type: 'membership',
+      member_type_id: 'type-1',
+      payment_method: 'cash',
+      amount_paid: 12000,
+      promotion: null,
+      payment_date: '2026-04-12',
+      notes: null,
     })
   })
 
@@ -429,6 +528,35 @@ describe('RecordMemberPaymentDialog', () => {
     await clickButton(container, 'Civil Servant')
 
     expect(amountInput.value).toBe('11000')
+  })
+
+  it('shows the required-date validation when the membership payment date is empty', async () => {
+    getDefaultMemberPaymentDateMock.mockReturnValue('')
+
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    expect(getDateTrigger(container, 'record-payment-payment-date').textContent).toContain(
+      'Select a date',
+    )
+
+    await clickButton(container, 'Cash')
+    await clickButton(container, 'Record Payment')
+    await flushAsyncWork()
+
+    expect(recordMemberPaymentMock).not.toHaveBeenCalled()
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Payment date required',
+      description: 'Choose the payment date before saving.',
+      variant: 'destructive',
+    })
   })
 
   it('submits a payment request instead of recording directly when approval is required', async () => {
@@ -508,12 +636,14 @@ describe('RecordMemberPaymentDialog', () => {
     await flushAsyncWork()
 
     const amountInput = container.querySelector('#record-card-fee-amount')
+    const paymentDateTrigger = container.querySelector('#record-card-fee-payment-date')
 
-    if (!(amountInput instanceof HTMLInputElement)) {
-      throw new Error('Card fee amount input not found.')
+    if (!(amountInput instanceof HTMLInputElement) || !(paymentDateTrigger instanceof HTMLButtonElement)) {
+      throw new Error('Card fee form inputs not found.')
     }
 
     expect(amountInput.value).toBe('3200')
+    expect(paymentDateTrigger.textContent).toContain('Apr 9, 2026')
     expect(container.textContent).toContain('Configured card fee amount: JMD $3,200')
 
     await clickButton(container, 'Cash')
@@ -524,6 +654,65 @@ describe('RecordMemberPaymentDialog', () => {
       payment_type: 'card_fee',
       payment_method: 'cash',
       payment_date: '2026-04-09',
+      notes: null,
+    })
+  })
+
+  it('submits the selected card fee payment date as the same calendar-date string', async () => {
+    cardFeeSettingsState = {
+      settings: { amountJmd: 3200 },
+      isLoading: false,
+      error: null,
+    }
+
+    recordMemberPaymentMock.mockResolvedValueOnce({
+      id: 'payment-card-fee-2',
+      member_id: 'member-1',
+      member_type_id: null,
+      payment_type: 'card_fee',
+      payment_method: 'cash',
+      amount_paid: 3200,
+      promotion: null,
+      recorded_by: 'admin-1',
+      payment_date: '2026-04-15',
+      notes: null,
+      receipt_number: 'EF-2026-00003',
+      receipt_sent_at: null,
+      membership_begin_time: '2026-04-09T00:00:00.000Z',
+      membership_end_time: '2026-05-08T23:59:59.000Z',
+      created_at: '2026-04-09T12:00:00.000Z',
+    })
+
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    await clickButton(container, 'Card Fee')
+    await flushAsyncWork()
+    await selectCalendarDate(
+      container,
+      'record-card-fee-payment-date',
+      new Date(2026, 3, 15, 12, 0, 0, 0),
+    )
+
+    expect(getDateTrigger(container, 'record-card-fee-payment-date').textContent).toContain(
+      'Apr 15, 2026',
+    )
+
+    await clickButton(container, 'Cash')
+    await clickButton(container, 'Record Payment')
+    await flushAsyncWork()
+
+    expect(recordMemberPaymentMock).toHaveBeenCalledWith('member-1', {
+      payment_type: 'card_fee',
+      payment_method: 'cash',
+      payment_date: '2026-04-15',
       notes: null,
     })
   })
