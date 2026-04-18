@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { usePathname, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
 import { BarChart3, Download, FileText } from 'lucide-react'
+import { useProgressRouter } from '@/hooks/use-progress-router'
 import { RoleGuard } from '@/components/role-guard'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +28,16 @@ import {
   JAMAICA_TIME_ZONE,
   type PtPaymentsReport,
 } from '@/lib/pt-scheduling'
+
+function buildReturnTo(pathname: string | null, searchParams: ReadonlyURLSearchParams | null) {
+  if (!pathname) {
+    return null
+  }
+
+  const query = searchParams?.toString() ?? ''
+
+  return query ? `${pathname}?${query}` : pathname
+}
 
 function formatAttendanceRate(value: number) {
   return `${value}%`
@@ -201,6 +213,9 @@ async function downloadPtPaymentsPdf(
 }
 
 function ReportsPageContent() {
+  const router = useProgressRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const defaultDateRange = getCurrentMonthDateRangeInJamaica()
   const [draftStartDate, setDraftStartDate] = useState(defaultDateRange.startDate)
   const [draftEndDate, setDraftEndDate] = useState(defaultDateRange.endDate)
@@ -400,7 +415,18 @@ function ReportsPageContent() {
                             </TableHeader>
                             <TableBody>
                               {trainer.clients.map((client) => (
-                                <TableRow key={client.memberId}>
+                                <TableRow
+                                  key={client.memberId}
+                                  onClick={() => {
+                                    const returnTo = buildReturnTo(pathname, searchParams)
+                                    const href = returnTo
+                                      ? `/members/${client.memberId}?returnTo=${encodeURIComponent(returnTo)}`
+                                      : `/members/${client.memberId}`
+
+                                    router.push(href)
+                                  }}
+                                  className="cursor-pointer hover:bg-muted/20"
+                                >
                                   <TableCell className="font-medium">{client.memberName}</TableCell>
                                   <TableCell>{formatJmdCurrency(client.ptFee)}</TableCell>
                                   <TableCell>{client.sessionsCompleted}</TableCell>

@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { usePathname, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
 import { BarChart3, Download, FileText } from 'lucide-react'
+import { useProgressRouter } from '@/hooks/use-progress-router'
 import { useMemberExpiredReport, useMemberSignupsReport } from '@/hooks/use-member-reports'
 import { toast } from '@/hooks/use-toast'
 import {
@@ -44,6 +46,16 @@ type MemberSignupReportItem = MemberSignupsReport['members'][number]
 type MemberExpiredReportItem = MemberExpiredReport['members'][number]
 
 const PAGE_SIZE = 50
+
+function buildReturnTo(pathname: string | null, searchParams: ReadonlyURLSearchParams | null) {
+  if (!pathname) {
+    return null
+  }
+
+  const query = searchParams?.toString() ?? ''
+
+  return query ? `${pathname}?${query}` : pathname
+}
 
 function getPdfCursorY(doc: { lastAutoTable?: { finalY: number } }, fallback: number) {
   return (doc.lastAutoTable?.finalY ?? fallback) + 20
@@ -408,6 +420,10 @@ function MemberReportTable({
   dateColumnLabel: string
   getDateValue: (row: MemberSignupReportItem | MemberExpiredReportItem) => string
 }) {
+  const router = useProgressRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
   return (
     <div className="overflow-x-auto rounded-lg border">
       <Table>
@@ -428,7 +444,18 @@ function MemberReportTable({
             </TableRow>
           ) : (
             rows.map((row) => (
-              <TableRow key={row.id}>
+              <TableRow
+                key={row.id}
+                onClick={() => {
+                  const returnTo = buildReturnTo(pathname, searchParams)
+                  const href = returnTo
+                    ? `/members/${row.id}?returnTo=${encodeURIComponent(returnTo)}`
+                    : `/members/${row.id}`
+
+                  router.push(href)
+                }}
+                className="cursor-pointer hover:bg-muted/20"
+              >
                 <TableCell className="font-medium">{row.name}</TableCell>
                 <TableCell>{row.type}</TableCell>
                 <TableCell>{formatMemberReportDate(getDateValue(row))}</TableCell>
