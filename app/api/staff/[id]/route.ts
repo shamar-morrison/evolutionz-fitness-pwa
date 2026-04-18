@@ -89,6 +89,14 @@ const STAFF_DELETE_FOREIGN_KEY_CONFLICT_MESSAGES: Record<string, string> = {
     'This staff account cannot be deleted because it submitted member extension requests. Archive the account instead so those request records remain intact.',
   member_extension_requests_reviewed_by_fkey:
     'This staff account cannot be deleted because it reviewed member extension requests. Archive the account instead so those review records remain intact.',
+  member_pause_requests_requested_by_fkey:
+    'This staff account cannot be deleted because it submitted member pause requests. Archive the account instead so those request records remain intact.',
+  member_pause_requests_reviewed_by_fkey:
+    'This staff account cannot be deleted because it reviewed member pause requests. Archive the account instead so those review records remain intact.',
+  member_pause_resume_requests_requested_by_fkey:
+    'This staff account cannot be deleted because it submitted early resume requests. Archive the account instead so those request records remain intact.',
+  member_pause_resume_requests_reviewed_by_fkey:
+    'This staff account cannot be deleted because it reviewed early resume requests. Archive the account instead so those review records remain intact.',
 }
 const STAFF_DELETE_REFERENCE_LABELS: Record<string, string> = {
   trainer_clients: 'trainer assignments',
@@ -100,6 +108,8 @@ const STAFF_DELETE_REFERENCE_LABELS: Record<string, string> = {
   member_edit_requests: 'member edit requests',
   member_payment_requests: 'member payment requests',
   member_extension_requests: 'member extension requests',
+  member_pause_requests: 'member pause requests',
+  member_pause_resume_requests: 'early resume requests',
 }
 
 const updateStaffRequestSchema = z
@@ -156,6 +166,14 @@ function createRemovalConflictResponse(removal: StaffRemoval) {
             ? 'This staff account has submitted member extension requests and should be archived instead of deleted.'
             : removal.history.memberExtensionRequestsReviewed > 0
               ? 'This staff account has reviewed member extension requests and should be archived instead of deleted.'
+              : removal.history.memberPauseRequestsRequested > 0
+                ? 'This staff account has submitted member pause requests and should be archived instead of deleted.'
+                : removal.history.memberPauseRequestsReviewed > 0
+                  ? 'This staff account has reviewed member pause requests and should be archived instead of deleted.'
+                  : removal.history.memberPauseResumeRequestsRequested > 0
+                    ? 'This staff account has submitted early resume requests and should be archived instead of deleted.'
+                    : removal.history.memberPauseResumeRequestsReviewed > 0
+                      ? 'This staff account has reviewed early resume requests and should be archived instead of deleted.'
           : 'This staff account has retained history records and should be archived instead of deleted.',
     409,
     {

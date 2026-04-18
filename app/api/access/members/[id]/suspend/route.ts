@@ -105,6 +105,10 @@ export async function POST(
       return createErrorResponse('Member not found.', 404)
     }
 
+    if (currentMember.status === 'Paused') {
+      return createErrorResponse('Paused memberships must be resumed before suspension.', 400)
+    }
+
     if (
       hasAssignedCard(input.cardNo) &&
       currentMember.cardNo === input.cardNo &&

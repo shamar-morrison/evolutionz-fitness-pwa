@@ -51,6 +51,10 @@ export type StaffRemovalHistory = {
   memberPaymentRequestsReviewed: number
   memberExtensionRequestsRequested: number
   memberExtensionRequestsReviewed: number
+  memberPauseRequestsRequested: number
+  memberPauseRequestsReviewed: number
+  memberPauseResumeRequestsRequested: number
+  memberPauseResumeRequestsReviewed: number
   total: number
 }
 export type StaffRemoval = {
@@ -134,6 +138,10 @@ const staffDetailResponseSchema = z.object({
       memberPaymentRequestsReviewed: z.number().int().nonnegative(),
       memberExtensionRequestsRequested: z.number().int().nonnegative(),
       memberExtensionRequestsReviewed: z.number().int().nonnegative(),
+      memberPauseRequestsRequested: z.number().int().nonnegative(),
+      memberPauseRequestsReviewed: z.number().int().nonnegative(),
+      memberPauseResumeRequestsRequested: z.number().int().nonnegative(),
+      memberPauseResumeRequestsReviewed: z.number().int().nonnegative(),
       total: z.number().int().nonnegative(),
     }),
   }),

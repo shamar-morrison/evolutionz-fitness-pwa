@@ -1,6 +1,6 @@
 // Member Types
 export type MemberType = 'General' | 'Civil Servant' | 'Student/BPO'
-export type MemberStatus = 'Active' | 'Expired' | 'Suspended'
+export type MemberStatus = 'Active' | 'Expired' | 'Suspended' | 'Paused'
 export type DeviceAccessState = 'ready' | 'released'
 export type MemberGender = 'Male' | 'Female'
 export type StaffGender = 'male' | 'female' | 'other'
@@ -83,6 +83,8 @@ export type MemberPaymentMethod = 'cash' | 'fygaro' | 'bank_transfer' | 'point_o
 export type MemberPaymentType = 'membership' | 'card_fee'
 export type MemberApprovalRequestStatus = 'pending' | 'approved' | 'denied'
 export type MemberExtensionRequestStatus = 'pending' | 'approved' | 'rejected'
+export type MemberPauseRequestStatus = 'pending' | 'approved' | 'rejected'
+export type MemberPauseStatus = 'active' | 'resumed' | 'cancelled'
 
 export type MemberPayment = {
   id: string
@@ -224,6 +226,52 @@ export type MemberExtensionRequest = {
   createdAt: string
 }
 
+export type MemberPauseRequest = {
+  id: string
+  memberId: string
+  memberName: string
+  currentEndTime: string | null
+  currentStatus: MemberStatus | null
+  durationDays: number
+  plannedResumeDate: string
+  status: MemberPauseRequestStatus
+  requestedBy: string
+  requestedByName: string | null
+  reviewedBy: string | null
+  reviewedByName: string | null
+  reviewedAt: string | null
+  createdAt: string
+}
+
+export type MemberPauseResumeRequest = {
+  id: string
+  pauseId: string
+  memberId: string
+  memberName: string
+  pauseStartDate: string
+  plannedResumeDate: string
+  originalEndTime: string
+  status: MemberPauseRequestStatus
+  requestedBy: string
+  requestedByName: string | null
+  reviewedBy: string | null
+  reviewedByName: string | null
+  reviewedAt: string | null
+  createdAt: string
+}
+
+export type MemberActivePause = {
+  id: string
+  pauseStartDate: string
+  plannedResumeDate: string
+  originalEndTime: string
+  status: Extract<MemberPauseStatus, 'active'>
+  pendingEarlyResumeRequest: {
+    id: string
+    status: MemberPauseRequestStatus
+  } | null
+}
+
 export type Member = {
   id: string
   employeeNo: string
@@ -245,6 +293,7 @@ export type Member = {
   joinedAt: string | null
   beginTime: string | null // ISO date string
   endTime: string | null // ISO date string
+  activePause?: MemberActivePause | null
 }
 
 export type MemberRecord = {

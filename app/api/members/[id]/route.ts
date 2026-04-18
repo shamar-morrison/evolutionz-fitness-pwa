@@ -17,6 +17,7 @@ import {
   executeDirectMemberEdit,
   isDirectMemberEditPayload,
 } from '@/lib/member-direct-edit'
+import { readActiveMemberPause } from '@/lib/member-pause-records'
 import { resolveMembershipLifecycleStatus } from '@/lib/member-status'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { MEMBER_RECORD_SELECT, readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
@@ -157,11 +158,17 @@ export async function GET(
       )
     }
 
-    const member = await hydrateMemberPhotoUrl(supabase, memberRecord)
+    const [member, activePause] = await Promise.all([
+      hydrateMemberPhotoUrl(supabase, memberRecord),
+      readActiveMemberPause(supabase, id),
+    ])
 
     return NextResponse.json({
       ok: true,
-      member,
+      member: {
+        ...member,
+        activePause,
+      },
     })
   } catch (error) {
     return NextResponse.json(
@@ -248,7 +255,12 @@ export async function PATCH(
     })
       .update({
         ...(input.refreshStatus
-          ? { status: resolveMembershipLifecycleStatus(currentMember.endTime) }
+          ? {
+              status:
+                currentMember.status === 'Paused'
+                  ? 'Paused'
+                  : resolveMembershipLifecycleStatus(currentMember.endTime),
+            }
           : {}),
         ...memberTypeUpdateValues,
       })

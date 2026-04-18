@@ -3,6 +3,7 @@ export type Permission =
   | 'members.create'
   | 'members.edit'
   | 'members.extendMembership'
+  | 'members.pauseMembership'
   | 'members.delete'
   | 'members.suspend'
   | 'members.recordPayment'
@@ -30,6 +31,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'members.create',
     'members.edit',
     'members.extendMembership',
+    'members.pauseMembership',
     'members.delete',
     'members.suspend',
     'members.recordPayment',
@@ -62,6 +64,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'members.create',
     'members.edit',
     'members.extendMembership',
+    'members.pauseMembership',
     'members.recordPayment',
     'classes.view',
     'classes.register',
@@ -74,6 +77,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'members.create',
     'members.edit',
     'members.extendMembership',
+    'members.pauseMembership',
     'members.recordPayment',
     'classes.view',
     'classes.register',
@@ -88,6 +92,7 @@ const APPROVAL_REQUIRED: Set<Permission> = new Set([
   'members.create',
   'members.edit',
   'members.extendMembership',
+  'members.pauseMembership',
   'members.recordPayment',
   'pt.markSession',
   'pt.requestReschedule',

@@ -24,6 +24,10 @@ const statusConfig: Record<
     label: 'Suspended',
     className: 'bg-gray-500/15 text-gray-600 hover:bg-gray-500/25',
   },
+  Paused: {
+    label: 'Paused',
+    className: 'bg-amber-500/15 text-amber-700 hover:bg-amber-500/25',
+  },
   success: {
     label: 'checked in (success)',
     className: 'bg-green-500/15 text-green-600 hover:bg-green-500/25',

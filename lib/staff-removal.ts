@@ -49,6 +49,10 @@ export async function readStaffRemovalState(
     memberPaymentRequestsReviewed,
     memberExtensionRequestsRequested,
     memberExtensionRequestsReviewed,
+    memberPauseRequestsRequested,
+    memberPauseRequestsReviewed,
+    memberPauseResumeRequestsRequested,
+    memberPauseResumeRequestsReviewed,
   ] = await Promise.all([
     readIdRows(supabase, 'trainer_clients', [['trainer_id', profileId]]),
     readIdRows(supabase, 'trainer_clients', [
@@ -66,6 +70,10 @@ export async function readStaffRemovalState(
     readIdRows(supabase, 'member_payment_requests', [['reviewed_by', profileId]]),
     readIdRows(supabase, 'member_extension_requests', [['requested_by', profileId]]),
     readIdRows(supabase, 'member_extension_requests', [['reviewed_by', profileId]]),
+    readIdRows(supabase, 'member_pause_requests', [['requested_by', profileId]]),
+    readIdRows(supabase, 'member_pause_requests', [['reviewed_by', profileId]]),
+    readIdRows(supabase, 'member_pause_resume_requests', [['requested_by', profileId]]),
+    readIdRows(supabase, 'member_pause_resume_requests', [['reviewed_by', profileId]]),
   ])
 
   const history: StaffRemovalHistory = {
@@ -81,6 +89,10 @@ export async function readStaffRemovalState(
     memberPaymentRequestsReviewed: memberPaymentRequestsReviewed.length,
     memberExtensionRequestsRequested: memberExtensionRequestsRequested.length,
     memberExtensionRequestsReviewed: memberExtensionRequestsReviewed.length,
+    memberPauseRequestsRequested: memberPauseRequestsRequested.length,
+    memberPauseRequestsReviewed: memberPauseRequestsReviewed.length,
+    memberPauseResumeRequestsRequested: memberPauseResumeRequestsRequested.length,
+    memberPauseResumeRequestsReviewed: memberPauseResumeRequestsReviewed.length,
     total:
       trainerAssignments.length +
       ptSessions.length +
@@ -93,7 +105,11 @@ export async function readStaffRemovalState(
       memberEditRequestsReviewed.length +
       memberPaymentRequestsReviewed.length +
       memberExtensionRequestsRequested.length +
-      memberExtensionRequestsReviewed.length,
+      memberExtensionRequestsReviewed.length +
+      memberPauseRequestsRequested.length +
+      memberPauseRequestsReviewed.length +
+      memberPauseResumeRequestsRequested.length +
+      memberPauseResumeRequestsReviewed.length,
   }
 
   return {

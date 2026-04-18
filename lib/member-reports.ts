@@ -16,7 +16,7 @@ const memberSignupReportRowSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1),
   type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
-  status: z.enum(['Active', 'Expired', 'Suspended']),
+  status: z.enum(['Active', 'Expired', 'Suspended', 'Paused']),
   joinedAt: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
 })
 
@@ -24,7 +24,7 @@ const memberExpiredReportRowSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1),
   type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
-  status: z.enum(['Active', 'Expired', 'Suspended']),
+  status: z.enum(['Active', 'Expired', 'Suspended', 'Paused']),
   expiryDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
 })
 

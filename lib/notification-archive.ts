@@ -16,6 +16,7 @@ export const ADMIN_REQUEST_ARCHIVABLE_NOTIFICATION_TYPES = [
   'member_edit_request',
   'member_payment_request',
   'member_extension_request',
+  'member_pause_request',
 ] as const satisfies ReadonlyArray<Notification['type']>
 
 export function getArchivableNotificationTypes(role: UserRole | null) {

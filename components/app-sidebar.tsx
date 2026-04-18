@@ -24,6 +24,7 @@ import {
 import { useAuth } from '@/contexts/auth-context'
 import { useMemberEditRequests } from '@/hooks/use-member-edit-requests'
 import { useMemberExtensionRequests } from '@/hooks/use-member-extension-requests'
+import { useMemberPauseRequests } from '@/hooks/use-member-pause-requests'
 import { useMemberApprovalRequests } from '@/hooks/use-member-approval-requests'
 import { useMemberPaymentRequests } from '@/hooks/use-member-payment-requests'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -136,6 +137,11 @@ const adminApprovalItems: NavItem[] = [
     icon: CalendarDays,
   },
   {
+    href: '/pending-approvals/pause-requests',
+    label: 'Pause Requests',
+    icon: CalendarDays,
+  },
+  {
     href: '/pending-approvals/reschedule-requests',
     label: 'Reschedule Requests',
     icon: CalendarDays,
@@ -199,6 +205,9 @@ export function AppSidebar() {
     enabled: can('reports.view'),
   })
   const pendingMemberExtensionRequests = useMemberExtensionRequests({
+    enabled: can('reports.view'),
+  })
+  const pendingMemberPauseRequests = useMemberPauseRequests({
     enabled: can('reports.view'),
   })
   const pendingMemberPaymentRequests = useMemberPaymentRequests({
@@ -398,6 +407,9 @@ export function AppSidebar() {
                       ? pendingMemberPaymentRequests.requests.length
                       : item.href === '/pending-approvals/extension-requests'
                       ? pendingMemberExtensionRequests.requests.length
+                      : item.href === '/pending-approvals/pause-requests'
+                      ? pendingMemberPauseRequests.pauseRequests.length +
+                        pendingMemberPauseRequests.earlyResumeRequests.length
                       : item.href === '/pending-approvals/reschedule-requests'
                       ? pendingRescheduleRequests.requests.length
                       : pendingSessionUpdateRequests.requests.length

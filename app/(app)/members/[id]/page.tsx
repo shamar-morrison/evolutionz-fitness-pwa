@@ -16,6 +16,7 @@ import { StatusBadge } from '@/components/status-badge'
 import { CheckInHistory } from '@/components/check-in-history'
 import { EditMemberModal } from '@/components/edit-member-modal'
 import { ExtendMembershipDialog } from '@/components/extend-membership-dialog'
+import { PauseMembershipDialog } from '@/components/pause-membership-dialog'
 import { RecordMemberPaymentDialog } from '@/components/record-member-payment-dialog'
 import { RoleGuard } from '@/components/role-guard'
 import { Button } from '@/components/ui/button'
@@ -37,6 +38,11 @@ import {
 import { hasAssignedCard } from '@/lib/member-card'
 import { getMemberCardActionState } from '@/lib/member-card-action-state'
 import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
+import {
+  createMemberPauseResumeRequest,
+  resumePausedMemberMembership,
+} from '@/lib/member-pause-requests'
+import { isMemberPauseEligible } from '@/lib/member-pause'
 import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
 import { useBackLink } from '@/hooks/use-back-link'
@@ -108,6 +114,7 @@ export default function MemberDetailPage() {
   )
   const [showEditModal, setShowEditModal] = useState(false)
   const [showExtendMembershipModal, setShowExtendMembershipModal] = useState(false)
+  const [showPauseMembershipModal, setShowPauseMembershipModal] = useState(false)
   const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false)
   const [showAssignCardModal, setShowAssignCardModal] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
@@ -128,6 +135,7 @@ export default function MemberDetailPage() {
   const invalidateMemberQueries = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(memberId) }),
     ])
@@ -135,6 +143,7 @@ export default function MemberDetailPage() {
   const invalidateMemberAndCardQueries = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(memberId) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
@@ -327,6 +336,59 @@ export default function MemberDetailPage() {
     }
   }
 
+  const handleEndPauseEarly = async () => {
+    if (!member?.activePause) return
+
+    setIsActionLoading(true)
+
+    try {
+      const result = await resumePausedMemberMembership(member.activePause.id)
+      await invalidateMemberQueries()
+      toast({
+        title: 'Pause ended',
+        description: `New end date: ${formatAccessDate(result.newEndTime, 'long')}.`,
+      })
+    } catch (error) {
+      toast({
+        title: 'Resume failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to end this membership pause.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const handleRequestEarlyResume = async () => {
+    if (!member?.activePause) return
+
+    setIsActionLoading(true)
+
+    try {
+      await createMemberPauseResumeRequest(member.activePause.id)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.memberPauseRequests.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.memberPauseRequests.pending }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+      ])
+      toast({
+        title: 'Request submitted',
+        description: 'Early resume request submitted for admin approval.',
+      })
+    } catch (error) {
+      toast({
+        title: 'Request failed',
+        description:
+          error instanceof Error ? error.message : 'Failed to submit the early resume request.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   if (error) {
     return (
       <div className="flex h-[50vh] flex-col items-center justify-center gap-4">
@@ -357,9 +419,11 @@ export default function MemberDetailPage() {
   const memberDisplayName = buildMemberDisplayName(member.name, member.cardCode)
   const memberHasAssignedCard = hasAssignedCard(member.cardNo)
   const canEditMember = can('members.edit')
+  const canPauseMembership = can('members.pauseMembership')
   const canViewAllPtSchedules = can('pt.viewAllSchedules')
   const showEditMemberAction = canEditMember
   const showExtendMembershipAction = can('members.extendMembership')
+  const showPauseMembershipAction = canPauseMembership
   const showDirectMemberPhotoActions = canEditMember && !isFrontDesk
   const showRecordPaymentAction = can('members.recordPayment')
   const showPtAttendance = canViewAllPtSchedules || isFrontDesk
@@ -372,6 +436,17 @@ export default function MemberDetailPage() {
     member.endTime,
     member.status,
   )
+  const isMembershipPauseAvailable = isMemberPauseEligible(
+    member.endTime,
+    member.status,
+  )
+  const pauseMembershipDisabledReason =
+    member.status === 'Paused'
+      ? 'Member already has an active pause.'
+      : !isMembershipPauseAvailable
+        ? 'Member has no active membership.'
+        : null
+  const activePause = member.activePause ?? null
 
   return (
     <div className="space-y-6">
@@ -478,29 +553,59 @@ export default function MemberDetailPage() {
                 </Tooltip>
               ) : null}
 
-              <RoleGuard role="admin">
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() =>
-                    setActiveDialog(member.status === 'Suspended' ? 'reactivate' : 'suspend')
-                  }
-                  disabled={isActionLoading}
-                >
-                  {member.status === 'Suspended' ? (
-                    <>
-                      <RefreshCw className="h-4 w-4" />
-                      Reactivate
-                    </>
-                  ) : (
-                    <>
-                      <Ban className="h-4 w-4" />
-                      Suspend
-                    </>
-                  )}
-                </Button>
+              {showPauseMembershipAction ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="block w-full">
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setShowPauseMembershipModal(true)}
+                        disabled={Boolean(pauseMembershipDisabledReason) || isActionLoading}
+                      >
+                        <CalendarDays className="h-4 w-4" />
+                        Pause Membership
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {pauseMembershipDisabledReason ? (
+                    <TooltipContent>{pauseMembershipDisabledReason}</TooltipContent>
+                  ) : null}
+                </Tooltip>
+              ) : null}
 
-                {!memberHasAssignedCard && member.status !== 'Suspended' ? (
+              <RoleGuard role="admin">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="block w-full">
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() =>
+                          setActiveDialog(member.status === 'Suspended' ? 'reactivate' : 'suspend')
+                        }
+                        disabled={isActionLoading || member.status === 'Paused'}
+                      >
+                        {member.status === 'Suspended' ? (
+                          <>
+                            <RefreshCw className="h-4 w-4" />
+                            Reactivate
+                          </>
+                        ) : (
+                          <>
+                            <Ban className="h-4 w-4" />
+                            Suspend
+                          </>
+                        )}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {member.status === 'Paused' ? (
+                    <TooltipContent>Member has an active pause.</TooltipContent>
+                  ) : null}
+                </Tooltip>
+
+                {!memberHasAssignedCard && member.status !== 'Suspended' && member.status !== 'Paused' ? (
                   <Button
                     variant="outline"
                     className="w-full"
@@ -673,6 +778,45 @@ export default function MemberDetailPage() {
                     <p className="font-medium">{formatAccessDate(member.endTime, 'long')}</p>
                   </div>
                 </div>
+
+                {activePause ? (
+                  <div className="mt-6 rounded-lg border border-amber-300/60 bg-amber-50 px-4 py-4 text-sm text-amber-950">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-2">
+                        <p className="font-semibold">Membership pause is active</p>
+                        <div className="grid gap-1 text-sm">
+                          <p>Pause started: {formatDateInputDisplay(activePause.pauseStartDate)}</p>
+                          <p>Planned resume: {formatDateInputDisplay(activePause.plannedResumeDate)}</p>
+                          <p>Original end date: {formatAccessDate(activePause.originalEndTime, 'long')}</p>
+                          {activePause.pendingEarlyResumeRequest ? (
+                            <p>Early resume request: Pending approval</p>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {role === 'admin' ? (
+                          <Button
+                            type="button"
+                            onClick={() => void handleEndPauseEarly()}
+                            disabled={isActionLoading}
+                          >
+                            End Pause Early
+                          </Button>
+                        ) : showPauseMembershipAction ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => void handleRequestEarlyResume()}
+                            disabled={isActionLoading || Boolean(activePause.pendingEarlyResumeRequest)}
+                          >
+                            Request Early Resume
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
 
                 {member.deviceAccessState === 'released' ? (
                   <div className="mt-6 rounded-lg border border-slate-500/30 bg-slate-500/10 p-4 text-sm text-slate-900">
@@ -850,6 +994,13 @@ export default function MemberDetailPage() {
         open={showExtendMembershipModal}
         onOpenChange={setShowExtendMembershipModal}
         requiresApproval={requiresApproval('members.extendMembership')}
+      />
+
+      <PauseMembershipDialog
+        member={member}
+        open={showPauseMembershipModal}
+        onOpenChange={setShowPauseMembershipModal}
+        requiresApproval={requiresApproval('members.pauseMembership')}
       />
 
       <RecordMemberPaymentDialog

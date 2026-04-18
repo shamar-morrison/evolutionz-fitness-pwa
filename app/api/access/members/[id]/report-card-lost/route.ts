@@ -104,7 +104,7 @@ export async function POST(
     const { data: updatedMember, error: memberError } = await supabase
       .from('members')
       .update({
-        status: 'Suspended',
+        status: currentMember.status === 'Paused' ? 'Paused' : 'Suspended',
       })
       .eq('id', id)
       .eq('employee_no', input.employeeNo)

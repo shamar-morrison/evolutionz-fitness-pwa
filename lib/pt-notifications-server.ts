@@ -20,6 +20,7 @@ type RequestNotificationType = Extract<
   | 'member_edit_request'
   | 'member_payment_request'
   | 'member_extension_request'
+  | 'member_pause_request'
 >
 
 type AdminRecipient = {
