@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { readCardFeeSettings, upsertCardFeeSettings } from '@/lib/card-fee-settings-server'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const updateCardFeeSettingsSchema = z
@@ -22,7 +22,7 @@ function createErrorResponse(error: string, status: number) {
 
 export async function GET() {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedUser()
 
     if ('response' in authResult) {
       return authResult.response

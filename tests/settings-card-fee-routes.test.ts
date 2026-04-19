@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 import {
+  mockAuthenticatedUser,
   mockForbidden,
   mockUnauthorized,
+  requireAdminUserMock,
+  requireAuthenticatedUserMock,
   resetServerAuthMocks,
 } from '@/tests/support/server-auth'
 
@@ -18,6 +21,7 @@ vi.mock('@/lib/server-auth', async () => {
   const mod = await import('@/tests/support/server-auth')
 
   return {
+    requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
     requireAdminUser: mod.requireAdminUserMock,
   }
 })
@@ -121,11 +125,15 @@ describe('card fee settings routes', () => {
     resetServerAuthMocks()
   })
 
-  it('returns the current card fee settings for admins', async () => {
+  it('returns the current card fee settings for authenticated staff', async () => {
     const client = createCardFeeSettingsClient({
       row: createSettingsRow({
         amount_jmd: 3200,
       }),
+    })
+    mockAuthenticatedUser({
+      id: 'front-desk-1',
+      email: 'frontdesk@evolutionzfitness.com',
     })
     getSupabaseAdminClientMock.mockReturnValue(client.client)
 
@@ -138,6 +146,8 @@ describe('card fee settings routes', () => {
         amountJmd: 3200,
       },
     })
+    expect(requireAuthenticatedUserMock).toHaveBeenCalledTimes(1)
+    expect(requireAdminUserMock).not.toHaveBeenCalled()
   })
 
   it('falls back to the default card fee amount when the singleton row is missing', async () => {
@@ -157,7 +167,7 @@ describe('card fee settings routes', () => {
     })
   })
 
-  it('returns 401 when card fee settings are requested without an admin session', async () => {
+  it('returns 401 when card fee settings are requested without a session', async () => {
     mockUnauthorized()
 
     const response = await getCardFeeSettings()
@@ -167,6 +177,8 @@ describe('card fee settings routes', () => {
       error: 'Unauthorized',
     })
     expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+    expect(requireAuthenticatedUserMock).toHaveBeenCalledTimes(1)
+    expect(requireAdminUserMock).not.toHaveBeenCalled()
   })
 
   it('updates the card fee settings for admins', async () => {
