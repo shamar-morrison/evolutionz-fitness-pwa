@@ -29,6 +29,7 @@ export function useMembers(options: UseMembersOptions = {}) {
     queryKey: queryKeys.members.all,
     queryFn: fetchPersistedMembers,
     placeholderData: keepPreviousData,
+    staleTime: 2 * 60 * 1000,
   })
 
   useEffect(() => subscribeToSessionMemberOverrides(setSessionMemberOverrides), [])

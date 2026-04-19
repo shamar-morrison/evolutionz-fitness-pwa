@@ -22,17 +22,9 @@ import {
   Users,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
-import { useMemberEditRequests } from '@/hooks/use-member-edit-requests'
-import { useMemberExtensionRequests } from '@/hooks/use-member-extension-requests'
-import { useMemberPauseRequests } from '@/hooks/use-member-pause-requests'
-import { useMemberApprovalRequests } from '@/hooks/use-member-approval-requests'
-import { useMemberPaymentRequests } from '@/hooks/use-member-payment-requests'
+import { usePendingApprovalCounts } from '@/hooks/use-pending-approval-counts'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useProgressRouter } from '@/hooks/use-progress-router'
-import {
-  useRescheduleRequests,
-  useSessionUpdateRequests,
-} from '@/hooks/use-pt-scheduling'
 import { toast } from '@/hooks/use-toast'
 import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
 import { createClient } from '@/lib/supabase/client'
@@ -192,26 +184,9 @@ export function AppSidebar() {
   const { isMobile, setOpenMobile } = useSidebar()
   const [unlockState, setUnlockState] = useState<'idle' | 'unlocking' | 'unlocked'>('idle')
   const [isSigningOut, setIsSigningOut] = useState(false)
-  const pendingRescheduleRequests = useRescheduleRequests('pending', {
-    enabled: can('reports.view'),
-  })
-  const pendingSessionUpdateRequests = useSessionUpdateRequests('pending', {
-    enabled: can('reports.view'),
-  })
-  const pendingMemberApprovalRequests = useMemberApprovalRequests('pending', {
-    enabled: can('reports.view'),
-  })
-  const pendingMemberEditRequests = useMemberEditRequests({
-    enabled: can('reports.view'),
-  })
-  const pendingMemberExtensionRequests = useMemberExtensionRequests({
-    enabled: can('reports.view'),
-  })
-  const pendingMemberPauseRequests = useMemberPauseRequests({
-    enabled: can('reports.view'),
-  })
-  const pendingMemberPaymentRequests = useMemberPaymentRequests({
-    enabled: can('reports.view'),
+  const isAdmin = role === 'admin'
+  const { counts: pendingApprovalCounts } = usePendingApprovalCounts({
+    enabled: isAdmin,
   })
   const staffTitles = profile?.titles ?? []
   const isFrontDesk = isFrontDeskStaff(staffTitles)
@@ -392,7 +367,7 @@ export function AppSidebar() {
           </SidebarGroup>
         ) : null}
 
-        {can('dashboard.view') ? (
+        {isAdmin ? (
           <SidebarGroup>
             <SidebarGroupLabel>Notifications</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -400,19 +375,19 @@ export function AppSidebar() {
                 {adminApprovalItems.map((item) => {
                   const count =
                     item.href === '/pending-approvals/member-requests'
-                      ? pendingMemberApprovalRequests.requests.length
+                      ? pendingApprovalCounts.member_approval_requests
                       : item.href === '/pending-approvals/edit-requests'
-                      ? pendingMemberEditRequests.requests.length
+                      ? pendingApprovalCounts.member_edit_requests
                       : item.href === '/pending-approvals/payment-requests'
-                      ? pendingMemberPaymentRequests.requests.length
+                      ? pendingApprovalCounts.member_payment_requests
                       : item.href === '/pending-approvals/extension-requests'
-                      ? pendingMemberExtensionRequests.requests.length
+                      ? pendingApprovalCounts.member_extension_requests
                       : item.href === '/pending-approvals/pause-requests'
-                      ? pendingMemberPauseRequests.pauseRequests.length +
-                        pendingMemberPauseRequests.earlyResumeRequests.length
+                      ? pendingApprovalCounts.member_pause_requests +
+                        pendingApprovalCounts.member_pause_resume_requests
                       : item.href === '/pending-approvals/reschedule-requests'
-                      ? pendingRescheduleRequests.requests.length
-                      : pendingSessionUpdateRequests.requests.length
+                      ? pendingApprovalCounts.pt_reschedule_requests
+                      : pendingApprovalCounts.pt_session_update_requests
 
                   return (
                     <SidebarMenuItem key={item.href}>

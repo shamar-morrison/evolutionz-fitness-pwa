@@ -48,7 +48,6 @@ describe('dashboard stats helpers', () => {
     await expect(fetchDashboardStats()).resolves.toEqual(dashboardStatsPayload)
     expect(fetchMock).toHaveBeenCalledWith('/api/dashboard/stats', {
       method: 'GET',
-      cache: 'no-store',
     })
   })
 

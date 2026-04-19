@@ -1,23 +1,13 @@
-import { redirect } from 'next/navigation'
+'use client'
+
 import { RevenueReportClient } from '@/app/(app)/reports/revenue/revenue-report-client'
-import { readStaffProfile } from '@/lib/staff'
-import { createClient } from '@/lib/supabase/server'
+import { AuthenticatedHomeRedirect } from '@/components/authenticated-home-redirect'
+import { RoleGuard } from '@/components/role-guard'
 
-export default async function RevenueReportsPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/login')
-  }
-
-  const profile = await readStaffProfile(supabase as any, user.id)
-
-  if (!profile || profile.role !== 'admin') {
-    redirect('/unauthorized')
-  }
-
-  return <RevenueReportClient />
+export default function RevenueReportsPage() {
+  return (
+    <RoleGuard permission="reports.view" fallback={<AuthenticatedHomeRedirect />}>
+      <RevenueReportClient />
+    </RoleGuard>
+  )
 }

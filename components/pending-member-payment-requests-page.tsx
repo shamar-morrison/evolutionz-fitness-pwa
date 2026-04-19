@@ -86,6 +86,7 @@ export function PendingMemberPaymentRequestsPage() {
         rejectionReason: nextRejectionReason ?? null,
       })
       const invalidations = [
+        queryClient.invalidateQueries({ queryKey: queryKeys.pendingApprovalCounts.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberPaymentRequests.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberPaymentRequests.pending }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberPayments.all }),

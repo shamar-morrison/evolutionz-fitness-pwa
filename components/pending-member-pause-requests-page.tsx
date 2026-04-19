@@ -38,6 +38,7 @@ export function PendingMemberPauseRequestsPage() {
 
   const invalidateQueries = async (memberId: string) => {
     const invalidations = [
+      queryClient.invalidateQueries({ queryKey: queryKeys.pendingApprovalCounts.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.memberPauseRequests.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.memberPauseRequests.pending }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),

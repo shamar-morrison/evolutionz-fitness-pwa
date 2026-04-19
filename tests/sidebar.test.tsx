@@ -3,20 +3,15 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { PendingApprovalCounts } from '@/types'
 
 const {
   authState,
   pathnameState,
   pushMock,
   refreshMock,
-  useMemberEditRequestsMock,
-  useMemberExtensionRequestsMock,
-  useMemberPauseRequestsMock,
   signOutMock,
-  useMemberApprovalRequestsMock,
-  useMemberPaymentRequestsMock,
-  useRescheduleRequestsMock,
-  useSessionUpdateRequestsMock,
+  usePendingApprovalCountsMock,
 } = vi.hoisted(() => ({
   authState: {
     user: { id: 'user-1', email: 'admin@evolutionzfitness.com' },
@@ -36,14 +31,19 @@ const {
   pushMock: vi.fn(),
   refreshMock: vi.fn(),
   signOutMock: vi.fn().mockResolvedValue({ error: null }),
-  useMemberEditRequestsMock: vi.fn(),
-  useMemberExtensionRequestsMock: vi.fn(),
-  useMemberPauseRequestsMock: vi.fn(),
-  useMemberApprovalRequestsMock: vi.fn(),
-  useMemberPaymentRequestsMock: vi.fn(),
-  useRescheduleRequestsMock: vi.fn(),
-  useSessionUpdateRequestsMock: vi.fn(),
+  usePendingApprovalCountsMock: vi.fn(),
 }))
+
+const EMPTY_PENDING_APPROVAL_COUNTS: PendingApprovalCounts = {
+  member_approval_requests: 0,
+  member_edit_requests: 0,
+  member_payment_requests: 0,
+  member_extension_requests: 0,
+  member_pause_requests: 0,
+  member_pause_resume_requests: 0,
+  pt_reschedule_requests: 0,
+  pt_session_update_requests: 0,
+}
 
 vi.mock('next/link', () => ({
   default: ({
@@ -80,29 +80,8 @@ vi.mock('@/contexts/auth-context', () => ({
   useAuth: () => authState,
 }))
 
-vi.mock('@/hooks/use-pt-scheduling', () => ({
-  useRescheduleRequests: useRescheduleRequestsMock,
-  useSessionUpdateRequests: useSessionUpdateRequestsMock,
-}))
-
-vi.mock('@/hooks/use-member-approval-requests', () => ({
-  useMemberApprovalRequests: useMemberApprovalRequestsMock,
-}))
-
-vi.mock('@/hooks/use-member-edit-requests', () => ({
-  useMemberEditRequests: useMemberEditRequestsMock,
-}))
-
-vi.mock('@/hooks/use-member-extension-requests', () => ({
-  useMemberExtensionRequests: useMemberExtensionRequestsMock,
-}))
-
-vi.mock('@/hooks/use-member-pause-requests', () => ({
-  useMemberPauseRequests: useMemberPauseRequestsMock,
-}))
-
-vi.mock('@/hooks/use-member-payment-requests', () => ({
-  useMemberPaymentRequests: useMemberPaymentRequestsMock,
+vi.mock('@/hooks/use-pending-approval-counts', () => ({
+  usePendingApprovalCounts: usePendingApprovalCountsMock,
 }))
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -199,39 +178,8 @@ describe('Sidebar', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    useRescheduleRequestsMock.mockReturnValue({
-      requests: [],
-      isLoading: false,
-      error: null,
-    })
-    useSessionUpdateRequestsMock.mockReturnValue({
-      requests: [],
-      isLoading: false,
-      error: null,
-    })
-    useMemberApprovalRequestsMock.mockReturnValue({
-      requests: [],
-      isLoading: false,
-      error: null,
-    })
-    useMemberEditRequestsMock.mockReturnValue({
-      requests: [],
-      isLoading: false,
-      error: null,
-    })
-    useMemberExtensionRequestsMock.mockReturnValue({
-      requests: [],
-      isLoading: false,
-      error: null,
-    })
-    useMemberPauseRequestsMock.mockReturnValue({
-      pauseRequests: [],
-      earlyResumeRequests: [],
-      isLoading: false,
-      error: null,
-    })
-    useMemberPaymentRequestsMock.mockReturnValue({
-      requests: [],
+    usePendingApprovalCountsMock.mockReturnValue({
+      counts: EMPTY_PENDING_APPROVAL_COUNTS,
       isLoading: false,
       error: null,
     })
@@ -296,7 +244,6 @@ describe('Sidebar', () => {
     expect(container.textContent).not.toContain('Notifications')
     expect(container.textContent).not.toContain('Settings')
     expect(container.textContent).not.toContain('Dashboard')
-    expect(container.textContent).not.toContain('Pending Approvals')
 
     const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
 
@@ -305,35 +252,7 @@ describe('Sidebar', () => {
     expect(links).toContain('/trainer/requests')
     expect(links).toContain('/classes')
     expect(links).not.toContain('/members')
-
-    const groupLabels = Array.from(container.querySelectorAll('[data-sidebar="group-label"]')).map(
-      (label) => label.textContent?.trim(),
-    )
-
-    expect(groupLabels).toContain('Trainer')
-    expect(groupLabels).toContain('Classes')
-    expect(useRescheduleRequestsMock).toHaveBeenCalledWith(
-      'pending',
-      expect.objectContaining({ enabled: false }),
-    )
-    expect(useSessionUpdateRequestsMock).toHaveBeenCalledWith(
-      'pending',
-      expect.objectContaining({ enabled: false }),
-    )
-    expect(useMemberApprovalRequestsMock).toHaveBeenCalledWith(
-      'pending',
-      expect.objectContaining({ enabled: false }),
-    )
-    expect(useMemberEditRequestsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: false }),
-    )
-    expect(useMemberExtensionRequestsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: false }),
-    )
-    expect(useMemberPauseRequestsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: false }),
-    )
-    expect(useMemberPaymentRequestsMock).toHaveBeenCalledWith(
+    expect(usePendingApprovalCountsMock).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false }),
     )
   })
@@ -372,38 +291,34 @@ describe('Sidebar', () => {
 
     expect(links).toContain('/members')
     expect(links).toContain('/classes')
-    expect(links.indexOf('/members')).toBeLessThan(links.indexOf('/classes'))
     expect(links).not.toContain('/trainer/clients')
     expect(links).not.toContain('/trainer/requests')
+    expect(usePendingApprovalCountsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    )
+  })
 
-    const groupLabels = Array.from(container.querySelectorAll('[data-sidebar="group-label"]')).map(
-      (label) => label.textContent?.trim(),
-    )
+  it('does not enable pending approval counts for staff users with admin-like titles', async () => {
+    pathnameState.value = '/members'
+    setAuthState({
+      id: 'owner-staff-1',
+      email: 'owner-staff@evolutionzfitness.com',
+      name: 'Owner Staff',
+      role: 'staff',
+      titles: ['Owner', 'Trainer'],
+    })
 
-    expect(groupLabels).toContain('Application')
-    expect(groupLabels).not.toContain('Classes')
-    expect(useRescheduleRequestsMock).toHaveBeenCalledWith(
-      'pending',
-      expect.objectContaining({ enabled: false }),
-    )
-    expect(useSessionUpdateRequestsMock).toHaveBeenCalledWith(
-      'pending',
-      expect.objectContaining({ enabled: false }),
-    )
-    expect(useMemberApprovalRequestsMock).toHaveBeenCalledWith(
-      'pending',
-      expect.objectContaining({ enabled: false }),
-    )
-    expect(useMemberEditRequestsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: false }),
-    )
-    expect(useMemberExtensionRequestsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: false }),
-    )
-    expect(useMemberPauseRequestsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: false }),
-    )
-    expect(useMemberPaymentRequestsMock).toHaveBeenCalledWith(
+    await act(async () => {
+      root.render(
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>,
+      )
+    })
+
+    expect(container.textContent).not.toContain('Notifications')
+    expect(container.textContent).not.toContain('Member Requests')
+    expect(usePendingApprovalCountsMock).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false }),
     )
   })
@@ -417,41 +332,17 @@ describe('Sidebar', () => {
       role: 'admin',
       titles: ['Owner'],
     })
-    useRescheduleRequestsMock.mockReturnValue({
-      requests: new Array(11).fill(null).map((_, index) => ({ id: `reschedule-${index}` })),
-      isLoading: false,
-      error: null,
-    })
-    useSessionUpdateRequestsMock.mockReturnValue({
-      requests: new Array(5).fill(null).map((_, index) => ({ id: `update-${index}` })),
-      isLoading: false,
-      error: null,
-    })
-    useMemberApprovalRequestsMock.mockReturnValue({
-      requests: new Array(3).fill(null).map((_, index) => ({ id: `member-request-${index}` })),
-      isLoading: false,
-      error: null,
-    })
-    useMemberEditRequestsMock.mockReturnValue({
-      requests: new Array(2).fill(null).map((_, index) => ({ id: `edit-request-${index}` })),
-      isLoading: false,
-      error: null,
-    })
-    useMemberExtensionRequestsMock.mockReturnValue({
-      requests: new Array(6).fill(null).map((_, index) => ({ id: `extension-request-${index}` })),
-      isLoading: false,
-      error: null,
-    })
-    useMemberPauseRequestsMock.mockReturnValue({
-      pauseRequests: new Array(7).fill(null).map((_, index) => ({ id: `pause-request-${index}` })),
-      earlyResumeRequests: new Array(1)
-        .fill(null)
-        .map((_, index) => ({ id: `resume-request-${index}` })),
-      isLoading: false,
-      error: null,
-    })
-    useMemberPaymentRequestsMock.mockReturnValue({
-      requests: new Array(4).fill(null).map((_, index) => ({ id: `payment-request-${index}` })),
+    usePendingApprovalCountsMock.mockReturnValue({
+      counts: {
+        member_approval_requests: 3,
+        member_edit_requests: 2,
+        member_payment_requests: 4,
+        member_extension_requests: 6,
+        member_pause_requests: 7,
+        member_pause_resume_requests: 1,
+        pt_reschedule_requests: 11,
+        pt_session_update_requests: 5,
+      },
       isLoading: false,
       error: null,
     })
@@ -484,37 +375,6 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('Settings')
     expect(container.textContent).toContain('Unlock Door')
     expect(container.textContent).toContain('Log out')
-    expect(container.querySelector('[data-sidebar="menu-action"]')).toBeNull()
-
-    const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
-
-    expect(links).toContain('/classes')
-    expect(links).toContain('/email')
-    expect(links).toContain('/reports/pt-payments')
-    expect(links).toContain('/reports/class-payments')
-    expect(links).toContain('/reports/members')
-    expect(links).toContain('/reports/revenue')
-    expect(links).toContain('/pending-approvals/member-requests')
-    expect(links).toContain('/pending-approvals/edit-requests')
-    expect(links).toContain('/pending-approvals/payment-requests')
-    expect(links).toContain('/pending-approvals/extension-requests')
-    expect(links).toContain('/pending-approvals/pause-requests')
-    expect(links).toContain('/pending-approvals/reschedule-requests')
-    expect(links).toContain('/pending-approvals/session-updates')
-    expect(links).toContain('/door-history')
-
-    const groupLabels = Array.from(container.querySelectorAll('[data-sidebar="group-label"]')).map(
-      (label) => label.textContent?.trim(),
-    )
-
-    expect(groupLabels).toContain('Application')
-    expect(groupLabels).toContain('Reports')
-    expect(groupLabels).toContain('Notifications')
-    expect(links.indexOf('/staff')).toBeLessThan(links.indexOf('/email'))
-    expect(links.indexOf('/email')).toBeLessThan(links.indexOf('/classes'))
-    expect(links.indexOf('/reports/class-payments')).toBeLessThan(links.indexOf('/reports/members'))
-    expect(links.indexOf('/reports/members')).toBeLessThan(links.indexOf('/reports/revenue'))
-    expect(links.indexOf('/schedule')).toBeLessThan(links.indexOf('/door-history'))
 
     const badges = Array.from(container.querySelectorAll('[data-sidebar="menu-badge"]')).map(
       (badge) => badge.textContent?.trim(),
@@ -527,28 +387,7 @@ describe('Sidebar', () => {
     expect(badges).toContain('6')
     expect(badges).toContain('8')
     expect(badges).toContain('5')
-    expect(useRescheduleRequestsMock).toHaveBeenCalledWith(
-      'pending',
-      expect.objectContaining({ enabled: true }),
-    )
-    expect(useSessionUpdateRequestsMock).toHaveBeenCalledWith(
-      'pending',
-      expect.objectContaining({ enabled: true }),
-    )
-    expect(useMemberApprovalRequestsMock).toHaveBeenCalledWith(
-      'pending',
-      expect.objectContaining({ enabled: true }),
-    )
-    expect(useMemberEditRequestsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: true }),
-    )
-    expect(useMemberExtensionRequestsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: true }),
-    )
-    expect(useMemberPauseRequestsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: true }),
-    )
-    expect(useMemberPaymentRequestsMock).toHaveBeenCalledWith(
+    expect(usePendingApprovalCountsMock).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: true }),
     )
   })

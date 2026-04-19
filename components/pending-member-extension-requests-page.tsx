@@ -48,6 +48,7 @@ export function PendingMemberExtensionRequestsPage() {
       })
 
       const invalidations = [
+        queryClient.invalidateQueries({ queryKey: queryKeys.pendingApprovalCounts.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberExtensionRequests.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberExtensionRequests.pending }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),

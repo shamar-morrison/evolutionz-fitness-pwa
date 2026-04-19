@@ -194,6 +194,7 @@ export function PendingMemberEditRequestsPage() {
         rejectionReason: nextRejectionReason ?? null,
       })
       const invalidations = [
+        queryClient.invalidateQueries({ queryKey: queryKeys.pendingApprovalCounts.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberEditRequests.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberEditRequests.pending }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),

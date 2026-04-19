@@ -1,24 +1,37 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isValidElement } from 'react'
+// @vitest-environment jsdom
 
-const { redirectMock, createClientMock, readStaffProfileMock } = vi.hoisted(() => ({
-  redirectMock: vi.fn((path: string) => {
-    throw new Error(`redirect:${path}`)
-  }),
-  createClientMock: vi.fn(),
-  readStaffProfileMock: vi.fn(),
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const { authState, permissionsState } = vi.hoisted(() => ({
+  authState: {
+    user: { id: 'admin-1', email: 'admin@evolutionzfitness.com' },
+    profile: {
+      id: 'admin-1',
+      email: 'admin@evolutionzfitness.com',
+      name: 'Admin User',
+      role: 'admin' as 'admin' | 'staff',
+      titles: ['Owner'],
+    },
+    role: 'admin' as 'admin' | 'staff',
+    loading: false,
+  },
+  permissionsState: {
+    can: vi.fn(() => true),
+  },
 }))
 
-vi.mock('next/navigation', () => ({
-  redirect: redirectMock,
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => authState,
 }))
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: createClientMock,
+vi.mock('@/hooks/use-permissions', () => ({
+  usePermissions: () => permissionsState,
 }))
 
-vi.mock('@/lib/staff', () => ({
-  readStaffProfile: readStaffProfileMock,
+vi.mock('@/components/authenticated-home-redirect', () => ({
+  AuthenticatedHomeRedirect: () => <div>Redirected Home</div>,
 }))
 
 vi.mock('@/app/(app)/reports/revenue/revenue-report-client', () => ({
@@ -27,51 +40,60 @@ vi.mock('@/app/(app)/reports/revenue/revenue-report-client', () => ({
 
 import RevenueReportsPage from '@/app/(app)/reports/revenue/page'
 
-function createSupabaseClient(user: { id: string } | null) {
-  return {
-    auth: {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user },
-      }),
-    },
-  }
-}
-
 describe('RevenueReportsPage', () => {
-  afterEach(() => {
-    createClientMock.mockReset()
-    readStaffProfileMock.mockReset()
-    redirectMock.mockClear()
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    authState.loading = false
+    authState.role = 'admin'
+    permissionsState.can.mockReturnValue(true)
   })
 
-  it('redirects unauthenticated users to /login', async () => {
-    createClientMock.mockResolvedValue(createSupabaseClient(null))
-
-    await expect(RevenueReportsPage()).rejects.toThrow('redirect:/login')
-  })
-
-  it('redirects non-admin users to /unauthorized', async () => {
-    createClientMock.mockResolvedValue(createSupabaseClient({ id: 'staff-1' }))
-    readStaffProfileMock.mockResolvedValue({
-      id: 'staff-1',
-      role: 'staff',
-      titles: ['Trainer'],
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount()
     })
 
-    await expect(RevenueReportsPage()).rejects.toThrow('redirect:/unauthorized')
+    container.remove()
+    document.body.innerHTML = ''
+    vi.clearAllMocks()
   })
 
-  it('renders the revenue report client for admins', async () => {
-    createClientMock.mockResolvedValue(createSupabaseClient({ id: 'admin-1' }))
-    readStaffProfileMock.mockResolvedValue({
-      id: 'admin-1',
-      role: 'admin',
-      titles: ['Owner'],
+  it('renders nothing while auth is still loading', async () => {
+    authState.loading = true
+
+    await act(async () => {
+      root.render(<RevenueReportsPage />)
     })
 
-    const page = await RevenueReportsPage()
+    expect(container.textContent).toBe('')
+  })
 
-    expect(isValidElement(page)).toBe(true)
-    expect(redirectMock).not.toHaveBeenCalled()
+  it('renders the revenue report client when reports access is allowed', async () => {
+    permissionsState.can.mockReturnValue(true)
+
+    await act(async () => {
+      root.render(<RevenueReportsPage />)
+    })
+
+    expect(container.textContent).toContain('Revenue Reports Client')
+    expect(container.textContent).not.toContain('Redirected Home')
+  })
+
+  it('renders the authenticated-home redirect fallback when reports access is denied', async () => {
+    permissionsState.can.mockReturnValue(false)
+
+    await act(async () => {
+      root.render(<RevenueReportsPage />)
+    })
+
+    expect(container.textContent).toContain('Redirected Home')
+    expect(container.textContent).not.toContain('Revenue Reports Client')
   })
 })

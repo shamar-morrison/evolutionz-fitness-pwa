@@ -273,7 +273,6 @@ export async function readMemberWithCardCode(
 export async function fetchMembers(): Promise<Member[]> {
   const response = await fetch('/api/members', {
     method: 'GET',
-    cache: 'no-store',
   })
 
   let responseBody: MembersSuccessResponse | MembersErrorResponse | null = null
@@ -298,7 +297,6 @@ export async function fetchMembers(): Promise<Member[]> {
 export async function fetchMember(id: string): Promise<Member> {
   const response = await fetch(`/api/members/${encodeURIComponent(id)}`, {
     method: 'GET',
-    cache: 'no-store',
   })
 
   let responseBody: MemberSuccessResponse | MemberErrorResponse | null = null

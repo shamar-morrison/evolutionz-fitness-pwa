@@ -173,7 +173,6 @@ export default function MemberDetailPage() {
       setActiveDialog(null)
       void invalidateMemberQueries()
     } catch (error) {
-      console.error('Failed to update member status:', error)
       toast({
         title: member.status === 'Suspended' ? 'Reactivation failed' : 'Suspension failed',
         description:
@@ -195,7 +194,6 @@ export default function MemberDetailPage() {
       setActiveDialog(null)
       void invalidateMemberAndCardQueries()
     } catch (error) {
-      console.error('Failed to unassign member card:', error)
       toast({
         title: 'Card unassign failed',
         description:

@@ -1,24 +1,37 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isValidElement } from 'react'
+// @vitest-environment jsdom
 
-const { createClientMock, readStaffProfileMock, redirectMock } = vi.hoisted(() => ({
-  createClientMock: vi.fn(),
-  readStaffProfileMock: vi.fn(),
-  redirectMock: vi.fn((path: string) => {
-    throw new Error(`redirect:${path}`)
-  }),
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const { authState, permissionsState } = vi.hoisted(() => ({
+  authState: {
+    user: { id: 'admin-1', email: 'admin@evolutionzfitness.com' },
+    profile: {
+      id: 'admin-1',
+      email: 'admin@evolutionzfitness.com',
+      name: 'Admin User',
+      role: 'admin' as 'admin' | 'staff',
+      titles: ['Owner'],
+    },
+    role: 'admin' as 'admin' | 'staff',
+    loading: false,
+  },
+  permissionsState: {
+    can: vi.fn(() => true),
+  },
 }))
 
-vi.mock('next/navigation', () => ({
-  redirect: redirectMock,
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => authState,
 }))
 
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: createClientMock,
+vi.mock('@/hooks/use-permissions', () => ({
+  usePermissions: () => permissionsState,
 }))
 
-vi.mock('@/lib/staff', () => ({
-  readStaffProfile: readStaffProfileMock,
+vi.mock('@/components/authenticated-home-redirect', () => ({
+  AuthenticatedHomeRedirect: () => <div>Redirected Home</div>,
 }))
 
 vi.mock('@/app/(app)/email/email-client', () => ({
@@ -29,69 +42,72 @@ vi.mock('@/app/(app)/email/email-client', () => ({
 
 import EmailPage from '@/app/(app)/email/page'
 
-function createSupabaseClient(user: { id: string } | null) {
-  return {
-    auth: {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user },
-      }),
-    },
-  }
-}
-
 describe('EmailPage', () => {
-  afterEach(() => {
-    createClientMock.mockReset()
-    readStaffProfileMock.mockReset()
-    redirectMock.mockClear()
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    authState.loading = false
+    authState.role = 'admin'
+    permissionsState.can.mockReturnValue(true)
+    delete process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
     delete process.env.RESEND_DAILY_EMAIL_LIMIT
   })
 
-  it('redirects unauthenticated users to /login', async () => {
-    createClientMock.mockResolvedValue(createSupabaseClient(null))
-
-    await expect(EmailPage()).rejects.toThrow('redirect:/login')
-  })
-
-  it('redirects non-admin users to /unauthorized', async () => {
-    createClientMock.mockResolvedValue(createSupabaseClient({ id: 'staff-1' }))
-    readStaffProfileMock.mockResolvedValue({
-      id: 'staff-1',
-      role: 'staff',
-      titles: ['Trainer'],
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount()
     })
 
-    await expect(EmailPage()).rejects.toThrow('redirect:/unauthorized')
+    container.remove()
+    document.body.innerHTML = ''
+    vi.clearAllMocks()
   })
 
-  it('renders the email client for admins and passes the configured daily limit', async () => {
-    process.env.RESEND_DAILY_EMAIL_LIMIT = '125'
-    createClientMock.mockResolvedValue(createSupabaseClient({ id: 'admin-1' }))
-    readStaffProfileMock.mockResolvedValue({
-      id: 'admin-1',
-      role: 'admin',
-      titles: ['Owner'],
+  it('renders nothing while auth is still loading', async () => {
+    authState.loading = true
+
+    await act(async () => {
+      root.render(<EmailPage />)
     })
 
-    const page = await EmailPage()
-
-    expect(isValidElement(page)).toBe(true)
-    expect(page.props.resendDailyLimit).toBe(125)
-    expect(redirectMock).not.toHaveBeenCalled()
+    expect(container.textContent).toBe('')
   })
 
-  it('falls back to the default daily limit when the configured value is invalid', async () => {
-    process.env.RESEND_DAILY_EMAIL_LIMIT = 'invalid'
-    createClientMock.mockResolvedValue(createSupabaseClient({ id: 'admin-1' }))
-    readStaffProfileMock.mockResolvedValue({
-      id: 'admin-1',
-      role: 'admin',
-      titles: ['Owner'],
+  it('renders the email client for admins and passes the configured public daily limit', async () => {
+    process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = '125'
+
+    await act(async () => {
+      root.render(<EmailPage />)
     })
 
-    const page = await EmailPage()
+    expect(container.textContent).toContain('Email Client')
+    expect(container.querySelector('[data-limit]')?.getAttribute('data-limit')).toBe('125')
+  })
 
-    expect(isValidElement(page)).toBe(true)
-    expect(page.props.resendDailyLimit).toBe(100)
+  it('renders the authenticated-home redirect fallback for non-admin users', async () => {
+    authState.role = 'staff'
+
+    await act(async () => {
+      root.render(<EmailPage />)
+    })
+
+    expect(container.textContent).toContain('Redirected Home')
+    expect(container.textContent).not.toContain('Email Client')
+  })
+
+  it('falls back to the default daily limit when the public env value is invalid', async () => {
+    process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = 'invalid'
+
+    await act(async () => {
+      root.render(<EmailPage />)
+    })
+
+    expect(container.querySelector('[data-limit]')?.getAttribute('data-limit')).toBe('100')
   })
 })

@@ -16,11 +16,13 @@ const EMPTY_DASHBOARD_STATS: DashboardMembershipStats = {
   expiredThisMonthLastMonth: 0,
 }
 
+const FIVE_MINUTES_MS = 5 * 60 * 1000
+
 export function useDashboardStats() {
   const dashboardStatsQuery = useQuery<DashboardMembershipStats, Error>({
     queryKey: queryKeys.dashboard.stats,
     queryFn: fetchDashboardStats,
-    staleTime: 60 * 60 * 1000,
+    staleTime: FIVE_MINUTES_MS,
     refetchOnWindowFocus: false,
   })
 
