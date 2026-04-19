@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchStaff, fetchStaffProfile } from '@/lib/staff'
 import { queryKeys } from '@/lib/query-keys'
 
-const STAFF_QUERY_STALE_TIME_MS = 60 * 60 * 5000 // 5 hours
+const STAFF_LIST_STALE_TIME_MS = 5 * 60 * 1000
+const STAFF_PROFILE_STALE_TIME_MS = 60 * 60 * 5000 // 5 hours
 
 export function useStaff(options: { archived?: boolean; enabled?: boolean } = {}) {
   const enabled = options.enabled ?? true
@@ -13,7 +14,8 @@ export function useStaff(options: { archived?: boolean; enabled?: boolean } = {}
     queryKey: options.archived ? queryKeys.staff.archived : queryKeys.staff.all,
     queryFn: () => fetchStaff(options),
     enabled,
-    staleTime: STAFF_QUERY_STALE_TIME_MS,
+    staleTime: STAFF_LIST_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
   })
 
   return {
@@ -29,7 +31,7 @@ export function useStaffProfile(id: string) {
     queryKey: queryKeys.staff.detail(id),
     queryFn: () => fetchStaffProfile(id),
     enabled: Boolean(id),
-    staleTime: STAFF_QUERY_STALE_TIME_MS,
+    staleTime: STAFF_PROFILE_STALE_TIME_MS,
   })
 
   return {

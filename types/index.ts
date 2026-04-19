@@ -443,6 +443,17 @@ export type DashboardMembershipStats = {
   expiredThisMonthLastMonth: number
 }
 
+export type PendingApprovalCounts = {
+  member_approval_requests: number
+  member_edit_requests: number
+  member_payment_requests: number
+  member_extension_requests: number
+  member_pause_requests: number
+  member_pause_resume_requests: number
+  pt_reschedule_requests: number
+  pt_session_update_requests: number
+}
+
 export type CheckInStatus = 'success' | 'not_found' | 'expired' | 'suspended'
 
 export type DashboardMemberListItem = {

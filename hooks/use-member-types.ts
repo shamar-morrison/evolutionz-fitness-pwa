@@ -5,7 +5,7 @@ import { fetchMemberTypes } from '@/lib/member-types'
 import { queryKeys } from '@/lib/query-keys'
 import type { MemberTypeRecord } from '@/types'
 
-const FIVE_MINUTES_MS = 5 * 60 * 1000
+const TEN_MINUTES_MS = 10 * 60 * 1000
 const EMPTY_MEMBER_TYPES: MemberTypeRecord[] = []
 
 export function useMemberTypes(options: { enabled?: boolean } = {}) {
@@ -14,7 +14,8 @@ export function useMemberTypes(options: { enabled?: boolean } = {}) {
     queryKey: queryKeys.memberTypes.all,
     queryFn: fetchMemberTypes,
     enabled,
-    staleTime: FIVE_MINUTES_MS,
+    staleTime: TEN_MINUTES_MS,
+    refetchOnWindowFocus: false,
   })
 
   return {

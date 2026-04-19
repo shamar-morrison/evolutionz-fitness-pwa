@@ -50,7 +50,6 @@ describe('dashboard member helpers', () => {
     await expect(fetchRecentDashboardMembers()).resolves.toEqual([RECENT_MEMBER])
     expect(fetchMock).toHaveBeenCalledWith('/api/dashboard/recent-members', {
       method: 'GET',
-      cache: 'no-store',
     })
   })
 
@@ -69,7 +68,6 @@ describe('dashboard member helpers', () => {
     await expect(fetchExpiringDashboardMembers()).resolves.toEqual([EXPIRING_MEMBER])
     expect(fetchMock).toHaveBeenCalledWith('/api/dashboard/expiring-members', {
       method: 'GET',
-      cache: 'no-store',
     })
   })
 

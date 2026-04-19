@@ -87,6 +87,7 @@ export function PendingMemberRequestsPage() {
 
   const invalidateQueries = async () => {
     const invalidations = [
+      queryClient.invalidateQueries({ queryKey: queryKeys.pendingApprovalCounts.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.pending }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),

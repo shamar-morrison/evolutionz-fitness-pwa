@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   dedupeRecipientsByEmail,
   getResendDailyEmailLimit,
+  getServerResendDailyEmailLimit,
   hasMeaningfulHtmlContent,
   resolveDraftEmailRecipients,
   toEmailRecipient,
@@ -41,14 +42,48 @@ describe('admin email helpers', () => {
     expect(hasMeaningfulHtmlContent('<p>Hello team</p>')).toBe(true)
   })
 
-  it('falls back to the default Resend daily limit when the env value is invalid', () => {
+  it('prefers the public resend daily limit for UI display and falls back to 100 when invalid', () => {
+    const originalPublicLimit = process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
     const originalLimit = process.env.RESEND_DAILY_EMAIL_LIMIT
 
+    process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = '180'
+    process.env.RESEND_DAILY_EMAIL_LIMIT = '250'
+    expect(getResendDailyEmailLimit()).toBe(180)
+
+    process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = 'invalid'
     process.env.RESEND_DAILY_EMAIL_LIMIT = 'invalid'
     expect(getResendDailyEmailLimit()).toBe(100)
 
+    delete process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
     process.env.RESEND_DAILY_EMAIL_LIMIT = '250'
     expect(getResendDailyEmailLimit()).toBe(250)
+
+    if (originalPublicLimit === undefined) {
+      delete process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
+    } else {
+      process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = originalPublicLimit
+    }
+
+    if (originalLimit === undefined) {
+      delete process.env.RESEND_DAILY_EMAIL_LIMIT
+    } else {
+      process.env.RESEND_DAILY_EMAIL_LIMIT = originalLimit
+    }
+  })
+
+  it('keeps the server resend daily limit on the server-only env value', () => {
+    const originalPublicLimit = process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
+    const originalLimit = process.env.RESEND_DAILY_EMAIL_LIMIT
+
+    process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = '180'
+    process.env.RESEND_DAILY_EMAIL_LIMIT = '250'
+    expect(getServerResendDailyEmailLimit()).toBe(250)
+
+    if (originalPublicLimit === undefined) {
+      delete process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
+    } else {
+      process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = originalPublicLimit
+    }
 
     if (originalLimit === undefined) {
       delete process.env.RESEND_DAILY_EMAIL_LIMIT

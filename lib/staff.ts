@@ -435,7 +435,6 @@ export async function fetchStaff(
 
   const response = await fetch(`/api/staff${searchParams.size > 0 ? `?${searchParams}` : ''}`, {
     method: 'GET',
-    cache: 'no-store',
   })
 
   let responseBody: StaffListSuccessResponse | StaffErrorResponse | null = null
@@ -458,7 +457,6 @@ export async function fetchStaff(
 export async function fetchStaffProfile(id: string): Promise<StaffDetail> {
   const response = await fetch(`/api/staff/${encodeURIComponent(id)}`, {
     method: 'GET',
-    cache: 'no-store',
   })
 
   let responseBody: StaffDetailSuccessResponse | StaffErrorResponse | null = null

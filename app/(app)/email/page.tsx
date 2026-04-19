@@ -1,24 +1,14 @@
-import { redirect } from 'next/navigation'
+'use client'
+
 import { EmailClient } from '@/app/(app)/email/email-client'
 import { getResendDailyEmailLimit } from '@/lib/admin-email'
-import { readStaffProfile } from '@/lib/staff'
-import { createClient } from '@/lib/supabase/server'
+import { AuthenticatedHomeRedirect } from '@/components/authenticated-home-redirect'
+import { RoleGuard } from '@/components/role-guard'
 
-export default async function EmailPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/login')
-  }
-
-  const profile = await readStaffProfile(supabase as any, user.id)
-
-  if (!profile || profile.role !== 'admin') {
-    redirect('/unauthorized')
-  }
-
-  return <EmailClient resendDailyLimit={getResendDailyEmailLimit()} />
+export default function EmailPage() {
+  return (
+    <RoleGuard role="admin" fallback={<AuthenticatedHomeRedirect />}>
+      <EmailClient resendDailyLimit={getResendDailyEmailLimit()} />
+    </RoleGuard>
+  )
 }

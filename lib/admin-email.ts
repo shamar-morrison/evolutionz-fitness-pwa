@@ -20,6 +20,16 @@ export const emailRecipientWithIdSchema = emailRecipientSchema.extend({
 export type EmailRecipient = z.infer<typeof emailRecipientSchema>
 export type EmailRecipientWithId = z.infer<typeof emailRecipientWithIdSchema>
 
+function parseDailyEmailLimit(value: string | undefined) {
+  const configuredLimit = parseInt(value ?? '100', 10)
+
+  if (!Number.isFinite(configuredLimit) || configuredLimit <= 0) {
+    return 100
+  }
+
+  return configuredLimit
+}
+
 function normalizeText(value: string | null | undefined) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -30,13 +40,13 @@ function normalizeEmailAddress(value: string | null | undefined) {
 }
 
 export function getResendDailyEmailLimit() {
-  const configuredLimit = parseInt(process.env.RESEND_DAILY_EMAIL_LIMIT ?? '100', 10)
+  return parseDailyEmailLimit(
+    process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT ?? process.env.RESEND_DAILY_EMAIL_LIMIT,
+  )
+}
 
-  if (!Number.isFinite(configuredLimit) || configuredLimit <= 0) {
-    return 100
-  }
-
-  return configuredLimit
+export function getServerResendDailyEmailLimit() {
+  return parseDailyEmailLimit(process.env.RESEND_DAILY_EMAIL_LIMIT)
 }
 
 export function stripHtmlToText(html: string) {

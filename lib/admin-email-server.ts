@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { getResendDailyEmailLimit, stripHtmlToText } from '@/lib/admin-email'
+import { getServerResendDailyEmailLimit, stripHtmlToText } from '@/lib/admin-email'
 import { getRequiredServerEnv } from '@/lib/server-env'
 
 const ADMIN_EMAIL_DELIVERIES_TABLE = 'admin_email_deliveries'
@@ -334,7 +334,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
 
       return Math.min(
         input.requestedCount,
-        Math.max(0, getResendDailyEmailLimit() - usedCount),
+        Math.max(0, getServerResendDailyEmailLimit() - usedCount),
       )
     },
     async countSentDeliveriesForDate(input: { senderProfileId: string; sendDate: string }) {

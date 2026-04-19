@@ -57,7 +57,6 @@ function getResponseErrorMessage(responseBody: unknown, fallback: string) {
 export async function fetchMemberTypes(): Promise<MemberTypeRecord[]> {
   const response = await fetch('/api/settings/member-types', {
     method: 'GET',
-    cache: 'no-store',
   })
 
   let responseBody: MemberTypesSuccessResponse | ErrorResponse | null = null

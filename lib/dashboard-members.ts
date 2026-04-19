@@ -145,7 +145,6 @@ function getDashboardMembersError(responseBody: unknown) {
 async function fetchDashboardMembers(path: string) {
   const response = await fetch(path, {
     method: 'GET',
-    cache: 'no-store',
   })
 
   let responseBody: { members: DashboardMemberListItem[] } | DashboardMembersErrorResponse | null = null

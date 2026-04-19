@@ -47,7 +47,6 @@ function getDashboardStatsError(responseBody: unknown) {
 export async function fetchDashboardStats(): Promise<DashboardMembershipStats> {
   const response = await fetch('/api/dashboard/stats', {
     method: 'GET',
-    cache: 'no-store',
   })
 
   let responseBody: DashboardMembershipStats | DashboardStatsErrorResponse | null = null
