@@ -194,7 +194,6 @@ export default function MemberDetailPage() {
       setActiveDialog(null)
       void invalidateMemberAndCardQueries()
     } catch (error) {
-      console.error('Failed to unassign member card:', error)
       toast({
         title: 'Card unassign failed',
         description:
