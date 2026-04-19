@@ -184,8 +184,9 @@ export function AppSidebar() {
   const { isMobile, setOpenMobile } = useSidebar()
   const [unlockState, setUnlockState] = useState<'idle' | 'unlocking' | 'unlocked'>('idle')
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const isAdmin = role === 'admin'
   const { counts: pendingApprovalCounts } = usePendingApprovalCounts({
-    enabled: can('dashboard.view'),
+    enabled: isAdmin,
   })
   const staffTitles = profile?.titles ?? []
   const isFrontDesk = isFrontDeskStaff(staffTitles)
@@ -366,7 +367,7 @@ export function AppSidebar() {
           </SidebarGroup>
         ) : null}
 
-        {can('dashboard.view') ? (
+        {isAdmin ? (
           <SidebarGroup>
             <SidebarGroupLabel>Notifications</SidebarGroupLabel>
             <SidebarGroupContent>

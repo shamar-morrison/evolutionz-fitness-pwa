@@ -46,28 +46,42 @@ describe('admin email helpers', () => {
     const originalPublicLimit = process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
     const originalLimit = process.env.RESEND_DAILY_EMAIL_LIMIT
 
-    process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = '180'
-    process.env.RESEND_DAILY_EMAIL_LIMIT = '250'
-    expect(getResendDailyEmailLimit()).toBe(180)
+    try {
+      process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = '180'
+      process.env.RESEND_DAILY_EMAIL_LIMIT = '250'
+      expect(getResendDailyEmailLimit()).toBe(180)
 
-    process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = 'invalid'
-    process.env.RESEND_DAILY_EMAIL_LIMIT = 'invalid'
-    expect(getResendDailyEmailLimit()).toBe(100)
+      process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = 'invalid'
+      process.env.RESEND_DAILY_EMAIL_LIMIT = '250'
+      expect(getResendDailyEmailLimit()).toBe(100)
 
-    delete process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
-    process.env.RESEND_DAILY_EMAIL_LIMIT = '250'
-    expect(getResendDailyEmailLimit()).toBe(250)
+      process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = '12px'
+      expect(getResendDailyEmailLimit()).toBe(100)
 
-    if (originalPublicLimit === undefined) {
+      process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = '0'
+      expect(getResendDailyEmailLimit()).toBe(100)
+
+      process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = '-5'
+      expect(getResendDailyEmailLimit()).toBe(100)
+
+      process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = '+5'
+      expect(getResendDailyEmailLimit()).toBe(100)
+
       delete process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
-    } else {
-      process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = originalPublicLimit
-    }
+      process.env.RESEND_DAILY_EMAIL_LIMIT = '250'
+      expect(getResendDailyEmailLimit()).toBe(250)
+    } finally {
+      if (originalPublicLimit === undefined) {
+        delete process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
+      } else {
+        process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = originalPublicLimit
+      }
 
-    if (originalLimit === undefined) {
-      delete process.env.RESEND_DAILY_EMAIL_LIMIT
-    } else {
-      process.env.RESEND_DAILY_EMAIL_LIMIT = originalLimit
+      if (originalLimit === undefined) {
+        delete process.env.RESEND_DAILY_EMAIL_LIMIT
+      } else {
+        process.env.RESEND_DAILY_EMAIL_LIMIT = originalLimit
+      }
     }
   })
 
@@ -75,20 +89,28 @@ describe('admin email helpers', () => {
     const originalPublicLimit = process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
     const originalLimit = process.env.RESEND_DAILY_EMAIL_LIMIT
 
-    process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = '180'
-    process.env.RESEND_DAILY_EMAIL_LIMIT = '250'
-    expect(getServerResendDailyEmailLimit()).toBe(250)
+    try {
+      process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = '180'
+      process.env.RESEND_DAILY_EMAIL_LIMIT = '250'
+      expect(getServerResendDailyEmailLimit()).toBe(250)
 
-    if (originalPublicLimit === undefined) {
-      delete process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
-    } else {
-      process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = originalPublicLimit
-    }
+      process.env.RESEND_DAILY_EMAIL_LIMIT = '12px'
+      expect(getServerResendDailyEmailLimit()).toBe(100)
 
-    if (originalLimit === undefined) {
-      delete process.env.RESEND_DAILY_EMAIL_LIMIT
-    } else {
-      process.env.RESEND_DAILY_EMAIL_LIMIT = originalLimit
+      process.env.RESEND_DAILY_EMAIL_LIMIT = '0'
+      expect(getServerResendDailyEmailLimit()).toBe(100)
+    } finally {
+      if (originalPublicLimit === undefined) {
+        delete process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
+      } else {
+        process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT = originalPublicLimit
+      }
+
+      if (originalLimit === undefined) {
+        delete process.env.RESEND_DAILY_EMAIL_LIMIT
+      } else {
+        process.env.RESEND_DAILY_EMAIL_LIMIT = originalLimit
+      }
     }
   })
 

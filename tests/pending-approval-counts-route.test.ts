@@ -67,6 +67,7 @@ describe('GET /api/pending-approval-counts', () => {
 
     const response = await GET()
 
+    expect(supabase.rpc).toHaveBeenCalledTimes(1)
     expect(supabase.rpc).toHaveBeenCalledWith('get_pending_approval_counts')
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual(pendingApprovalCountsPayload)

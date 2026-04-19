@@ -298,6 +298,31 @@ describe('Sidebar', () => {
     )
   })
 
+  it('does not enable pending approval counts for staff users with admin-like titles', async () => {
+    pathnameState.value = '/members'
+    setAuthState({
+      id: 'owner-staff-1',
+      email: 'owner-staff@evolutionzfitness.com',
+      name: 'Owner Staff',
+      role: 'staff',
+      titles: ['Owner', 'Trainer'],
+    })
+
+    await act(async () => {
+      root.render(
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>,
+      )
+    })
+
+    expect(container.textContent).not.toContain('Notifications')
+    expect(container.textContent).not.toContain('Member Requests')
+    expect(usePendingApprovalCountsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    )
+  })
+
   it('shows the admin navigation and caps the pending approvals badge at 9+', async () => {
     pathnameState.value = '/pending-approvals/session-updates'
     setAuthState({

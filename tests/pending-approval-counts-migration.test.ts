@@ -15,16 +15,22 @@ describe('pending approval counts migration', () => {
   it('defines the counts rpc and references all eight pending approval tables', () => {
     const sql = readFileSync(migrationPath, 'utf8')
     const normalizedSql = normalizeSql(sql)
+    const requestTables = [
+      'member_approval_requests',
+      'member_edit_requests',
+      'member_payment_requests',
+      'member_extension_requests',
+      'member_pause_requests',
+      'member_pause_resume_requests',
+      'pt_reschedule_requests',
+      'pt_session_update_requests',
+    ]
 
     expect(normalizedSql).toContain('create or replace function public.get_pending_approval_counts()')
-    expect(normalizedSql).toContain('from public.member_approval_requests')
-    expect(normalizedSql).toContain('from public.member_edit_requests')
-    expect(normalizedSql).toContain('from public.member_payment_requests')
-    expect(normalizedSql).toContain('from public.member_extension_requests')
-    expect(normalizedSql).toContain('from public.member_pause_requests')
-    expect(normalizedSql).toContain('from public.member_pause_resume_requests')
-    expect(normalizedSql).toContain('from public.pt_reschedule_requests')
-    expect(normalizedSql).toContain('from public.pt_session_update_requests')
+
+    for (const table of requestTables) {
+      expect(sql).toMatch(new RegExp(String.raw`from public\.${table}\b`, 'u'))
+    }
   })
 
   it('filters every count to pending status', () => {

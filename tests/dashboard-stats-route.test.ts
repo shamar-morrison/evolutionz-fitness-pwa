@@ -122,6 +122,7 @@ describe('GET /api/dashboard/stats', () => {
 
     const response = await GET()
 
+    expect(supabase.rpc).toHaveBeenCalledTimes(1)
     expect(supabase.rpc).toHaveBeenCalledWith('get_dashboard_stats', {
       p_now: '2026-04-02T05:15:30-05:00',
       p_timezone_offset: '-05:00',
@@ -131,7 +132,12 @@ describe('GET /api/dashboard/stats', () => {
   })
 
   it('pins the rpc payload to the legacy JS aggregation semantics for dashboard deltas and signup buckets', () => {
-    expect(RPC_DASHBOARD_STATS_PAYLOAD).toMatchObject({
+    expect({
+      expiredThisMonth: RPC_DASHBOARD_STATS_PAYLOAD.expiredThisMonth,
+      expiredThisMonthLastMonth: RPC_DASHBOARD_STATS_PAYLOAD.expiredThisMonthLastMonth,
+      activeMembersLastMonth: RPC_DASHBOARD_STATS_PAYLOAD.activeMembersLastMonth,
+      signupsByMonth: RPC_DASHBOARD_STATS_PAYLOAD.signupsByMonth,
+    }).toStrictEqual({
       expiredThisMonth: EXPECTED_STATS.expiredThisMonth,
       expiredThisMonthLastMonth: EXPECTED_STATS.expiredThisMonthLastMonth,
       activeMembersLastMonth: EXPECTED_STATS.activeMembersLastMonth,

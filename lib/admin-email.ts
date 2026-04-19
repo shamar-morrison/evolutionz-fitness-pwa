@@ -21,7 +21,11 @@ export type EmailRecipient = z.infer<typeof emailRecipientSchema>
 export type EmailRecipientWithId = z.infer<typeof emailRecipientWithIdSchema>
 
 function parseDailyEmailLimit(value: string | undefined) {
-  const configuredLimit = parseInt(value ?? '100', 10)
+  if (!value || !/^\d+$/u.test(value)) {
+    return 100
+  }
+
+  const configuredLimit = Number.parseInt(value, 10)
 
   if (!Number.isFinite(configuredLimit) || configuredLimit <= 0) {
     return 100
