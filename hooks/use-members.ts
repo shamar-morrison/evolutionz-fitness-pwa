@@ -3,6 +3,7 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/auth-context'
+import { isMemberInStatusFilter, type MembersListStatusFilter } from '@/lib/member-list-status-filter'
 import { fetchMember as fetchPersistedMember, fetchMembers as fetchPersistedMembers } from '@/lib/members'
 import { matchesMemberSearch } from '@/lib/member-search'
 import { queryKeys } from '@/lib/query-keys'
@@ -13,11 +14,11 @@ import {
   getSessionMemberOverrides,
   subscribeToSessionMemberOverrides,
 } from '@/lib/member-session-store'
-import type { Member, MemberStatus, MemberType } from '@/types'
+import type { Member, MemberType } from '@/types'
 
 type UseMembersOptions = {
   search?: string
-  status?: MemberStatus | 'All'
+  status?: MembersListStatusFilter
   type?: MemberType | 'All'
 }
 
@@ -72,8 +73,11 @@ export function useMembers(options: UseMembersOptions = {}) {
       result = result.filter((member) => matchesMemberSearch(member, options.search ?? ''))
     }
 
-    if (options.status && options.status !== 'All') {
-      result = result.filter((member) => member.status === options.status)
+    const statusFilter = options.status
+
+    if (statusFilter && statusFilter !== 'All') {
+      const now = new Date()
+      result = result.filter((member) => isMemberInStatusFilter(member, statusFilter, now))
     }
 
     if (options.type && options.type !== 'All') {

@@ -232,6 +232,13 @@ describe('MembersPage', () => {
     expect(typeLabel?.textContent).toBe('Type')
     expect(container.querySelector('#members-status-filter')?.textContent).toContain('All')
     expect(container.querySelector('#members-type-filter')?.textContent).toContain('All')
+    expect(container.querySelector('button[data-select-item-value="Expiring"]')).not.toBeNull()
+
+    const optionValues = Array.from(container.querySelectorAll('button[data-select-item-value]')).map(
+      (button) => button.getAttribute('data-select-item-value'),
+    )
+
+    expect(optionValues.indexOf('Expiring')).toBe(optionValues.indexOf('Paused') + 1)
 
     const searchField = container.querySelector('input[placeholder="Search by name or card ID..."]')
     expect(searchField).not.toBeNull()
@@ -239,7 +246,7 @@ describe('MembersPage', () => {
 
   it('initializes the filters from search params while ignoring table-state params', async () => {
     searchParamsValue.value =
-      'search=Marcus&status=Active&type=General&page=3&pageSize=25&sort=endTime&direction=desc'
+      'search=Marcus&status=Expiring&type=General&page=3&pageSize=25&sort=endTime&direction=desc'
 
     await act(async () => {
       root.render(<MembersPage />)
@@ -249,8 +256,13 @@ describe('MembersPage', () => {
       (container.querySelector('input[placeholder="Search by name or card ID..."]') as HTMLInputElement)
         .value,
     ).toBe('Marcus')
-    expect(container.querySelector('#members-status-filter')?.textContent).toContain('Active')
+    expect(container.querySelector('#members-status-filter')?.textContent).toContain('Expiring')
     expect(container.querySelector('#members-type-filter')?.textContent).toContain('General')
+    expect(useMembersMock).toHaveBeenCalledWith({
+      search: 'Marcus',
+      status: 'Expiring',
+      type: 'General',
+    })
   })
 
   it('updates same-page status filter state in the URL without router navigation', async () => {
@@ -258,21 +270,21 @@ describe('MembersPage', () => {
       root.render(<MembersPage />)
     })
 
-    const activeOption = container.querySelector('button[data-select-item-value="Active"]')
+    const expiringOption = container.querySelector('button[data-select-item-value="Expiring"]')
 
-    if (!(activeOption instanceof HTMLButtonElement)) {
-      throw new Error('Active status option not found.')
+    if (!(expiringOption instanceof HTMLButtonElement)) {
+      throw new Error('Expiring status option not found.')
     }
 
     await act(async () => {
-      activeOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      expiringOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     syncSearchParamsFromLocation()
-    expect(window.location.pathname + window.location.search).toBe('/members?status=Active')
+    expect(window.location.pathname + window.location.search).toBe('/members?status=Expiring')
   })
 
-  it('hides sync buttons for front desk staff while keeping Add Member visible', async () => {
+  it('keeps the shared status filter visible for front desk staff while hiding sync buttons', async () => {
     authState.profile = {
       id: 'assistant-1',
       name: 'Avery Assistant',
@@ -288,6 +300,8 @@ describe('MembersPage', () => {
     expect(container.textContent).toContain('Add Member')
     expect(container.textContent).not.toContain('Sync Cards')
     expect(container.textContent).not.toContain('Sync Members')
+    expect(container.querySelector('#members-status-filter')?.textContent).toContain('All')
+    expect(container.querySelector('button[data-select-item-value="Expiring"]')).not.toBeNull()
   })
 
   it('shows only Sync Cards for admins when member sync is disabled', async () => {

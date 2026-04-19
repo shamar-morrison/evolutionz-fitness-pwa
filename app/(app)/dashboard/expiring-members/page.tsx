@@ -1,6 +1,5 @@
 'use client'
 
-import { useMemo } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { AuthenticatedHomeRedirect } from '@/components/authenticated-home-redirect'
 import { MembersTable } from '@/components/members-table'
@@ -9,16 +8,10 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useMembers } from '@/hooks/use-members'
 import { useProgressRouter } from '@/hooks/use-progress-router'
-import { isWithinJamaicaExpiringWindow } from '@/lib/member-access-time'
 
 function ExpiringMembersPageContent() {
   const router = useProgressRouter()
-  const { members, isLoading, error } = useMembers({ status: 'Active' })
-  const expiringMembers = useMemo(() => {
-    const now = new Date()
-
-    return members.filter((member) => isWithinJamaicaExpiringWindow(member.endTime, now))
-  }, [members])
+  const { members: expiringMembers, isLoading, error } = useMembers({ status: 'Expiring' })
 
   return (
     <div className="space-y-6">

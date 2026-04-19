@@ -3,6 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { isMemberInStatusFilter, type MembersListStatusFilter } from '@/lib/member-list-status-filter'
 import type { Member } from '@/types'
 
 const {
@@ -85,7 +86,7 @@ describe('ExpiringMembersPage', () => {
     currentRoleState.role = 'admin'
     pushMock.mockReset()
     useMembersMock.mockImplementation(
-      (options: { status?: Member['status'] | 'All' } = {}) => {
+      (options: { status?: MembersListStatusFilter } = {}) => {
         const sourceMembers = [
           createMember({
             id: 'member-1',
@@ -115,10 +116,10 @@ describe('ExpiringMembersPage', () => {
             endTime: '2026-04-12T00:00:00.000Z',
           }),
         ]
-        const filteredMembers =
-          options.status && options.status !== 'All'
-            ? sourceMembers.filter((member) => member.status === options.status)
-            : sourceMembers
+        const statusFilter = options.status ?? 'All'
+        const filteredMembers = sourceMembers.filter((member) =>
+          isMemberInStatusFilter(member, statusFilter, new Date()),
+        )
 
         return {
           members: filteredMembers,
@@ -148,7 +149,7 @@ describe('ExpiringMembersPage', () => {
       root.render(<ExpiringMembersPage />)
     })
 
-    expect(useMembersMock).toHaveBeenCalledWith({ status: 'Active' })
+    expect(useMembersMock).toHaveBeenCalledWith({ status: 'Expiring' })
     expect(container.textContent).toContain('Expiring Members')
     expect(container.textContent).toContain('Marcus Brown')
     expect(container.textContent).toContain('Alicia Green')
@@ -186,13 +187,7 @@ describe('ExpiringMembersPage', () => {
 
   it('shows an empty state when no memberships are expiring soon', async () => {
     useMembersMock.mockReturnValue({
-      members: [
-        createMember({
-          id: 'member-8',
-          name: 'Late Renewal',
-          endTime: '2026-04-12T00:00:00.000Z',
-        }),
-      ],
+      members: [],
       isLoading: false,
       error: null,
       refetch: vi.fn(),

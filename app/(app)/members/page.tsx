@@ -26,12 +26,16 @@ import { syncMembersFromDevice } from '@/lib/hik-sync'
 import { syncAvailableAccessCards } from '@/lib/available-cards'
 import { config } from '@/lib/config'
 import { replaceCurrentUrl } from '@/lib/client-history'
+import {
+  isMembersListStatusFilter,
+  MEMBERS_LIST_STATUS_OPTIONS,
+  type MembersListStatusFilter,
+} from '@/lib/member-list-status-filter'
 import { queryKeys } from '@/lib/query-keys'
 import { isFrontDeskStaff } from '@/lib/staff'
 import { RefreshCw, Search, UserPlus } from 'lucide-react'
-import type { MemberStatus, MemberType } from '@/types'
+import type { MemberType } from '@/types'
 
-const statusOptions: (MemberStatus | 'All')[] = ['All', 'Active', 'Expired', 'Suspended', 'Paused']
 const typeOptions: (MemberType | 'All')[] = ['All', 'General', 'Civil Servant', 'Student/BPO']
 
 function MembersPageLoading() {
@@ -65,10 +69,6 @@ function MembersPageLoading() {
   )
 }
 
-function isValidStatus(value: string | null): value is MemberStatus {
-  return value === 'Active' || value === 'Expired' || value === 'Suspended' || value === 'Paused'
-}
-
 function isValidType(value: string | null): value is MemberType {
   return value === 'General' || value === 'Civil Servant' || value === 'Student/BPO'
 }
@@ -78,9 +78,9 @@ function MembersPageContent() {
   const router = useProgressRouter()
   const action = searchParams.get('action')
   const [search, setSearch] = useState(() => searchParams.get('search') ?? '')
-  const [statusFilter, setStatusFilter] = useState<MemberStatus | 'All'>(() => {
+  const [statusFilter, setStatusFilter] = useState<MembersListStatusFilter>(() => {
     const param = searchParams.get('status')
-    return isValidStatus(param) ? param : 'All'
+    return isMembersListStatusFilter(param) ? param : 'All'
   })
   const [typeFilter, setTypeFilter] = useState<MemberType | 'All'>(() => {
     const param = searchParams.get('type')
@@ -251,7 +251,7 @@ function MembersPageContent() {
           </Label>
           <Select
             value={statusFilter}
-            onValueChange={(value: MemberStatus | 'All') => {
+            onValueChange={(value: MembersListStatusFilter) => {
               setStatusFilter(value)
               updateSearchParams({ status: value === 'All' ? '' : value })
             }}
@@ -260,7 +260,7 @@ function MembersPageContent() {
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              {statusOptions.map((status) => (
+              {MEMBERS_LIST_STATUS_OPTIONS.map((status) => (
                 <SelectItem key={status} value={status}>
                   {status}
                 </SelectItem>
