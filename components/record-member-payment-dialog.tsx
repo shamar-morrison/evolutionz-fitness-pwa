@@ -507,7 +507,7 @@ export function RecordMemberPaymentDialog({
 
                 <TabsContent value="card_fee" className="pt-3">
                   <div className="grid gap-4">
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4 items-start sm:grid-cols-2">
                       <div className="grid gap-2">
                         <Label htmlFor="record-card-fee-amount">Amount</Label>
                         <Input
@@ -575,7 +575,7 @@ export function RecordMemberPaymentDialog({
                       </div>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4 items-start sm:grid-cols-2">
                       <div className="grid gap-2">
                         <Label htmlFor="record-card-fee-payment-date">Payment Date</Label>
                         <StringDatePicker
