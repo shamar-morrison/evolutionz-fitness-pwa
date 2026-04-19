@@ -81,7 +81,7 @@ export async function fetchMemberPaymentRequests(): Promise<MemberPaymentRequest
     'Failed to load member payment requests.',
   )
 
-  return responseBody.requests ?? []
+  return responseBody.requests
 }
 
 export async function createMemberPaymentRequest(

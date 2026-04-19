@@ -83,8 +83,8 @@ export async function fetchMemberPauseRequests(): Promise<{
   )
 
   return {
-    pauseRequests: responseBody.pauseRequests ?? [],
-    earlyResumeRequests: responseBody.earlyResumeRequests ?? [],
+    pauseRequests: responseBody.pauseRequests,
+    earlyResumeRequests: responseBody.earlyResumeRequests,
   }
 }
 

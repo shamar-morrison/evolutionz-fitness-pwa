@@ -34,6 +34,32 @@ describe('apiFetch', () => {
     })
   })
 
+  it('uses an empty init object when the init argument is undefined', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        value: 'loaded',
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      apiFetch(
+        '/api/example',
+        undefined,
+        z.object({
+          value: z.string(),
+        }),
+        'Failed to load data.',
+      ),
+    ).resolves.toEqual({
+      value: 'loaded',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/example', {})
+  })
+
   it('falls back to the provided error message when JSON parsing fails', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
@@ -79,6 +105,30 @@ describe('apiFetch', () => {
         'Failed to load data.',
       ),
     ).rejects.toThrow('Server rejected the request.')
+  })
+
+  it('uses the fallback error message when schema parsing fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        value: 123,
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      apiFetch(
+        '/api/example',
+        {
+          method: 'GET',
+        },
+        z.object({
+          value: z.string(),
+        }),
+        'Failed to load data.',
+      ),
+    ).rejects.toThrow('Failed to load data.')
   })
 
   it('uses the fallback error message for non-OK responses without an error payload', async () => {

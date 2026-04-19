@@ -37,7 +37,7 @@ export async function fetchMemberTypes(): Promise<MemberTypeRecord[]> {
     'Failed to load membership types.',
   )
 
-  return responseBody.memberTypes ?? []
+  return responseBody.memberTypes
 }
 
 export async function updateMemberTypeRate(

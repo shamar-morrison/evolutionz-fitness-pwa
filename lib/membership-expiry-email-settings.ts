@@ -106,10 +106,7 @@ export async function fetchMembershipExpiryEmailSettings(): Promise<MembershipEx
     'Failed to load membership expiry email settings.',
   )
 
-  return {
-    ...responseBody.settings,
-    dayOffsets: responseBody.settings.dayOffsets ?? [],
-  }
+  return responseBody.settings
 }
 
 export async function updateMembershipExpiryEmailSettings(
@@ -128,8 +125,5 @@ export async function updateMembershipExpiryEmailSettings(
     'Failed to update membership expiry email settings.',
   )
 
-  return {
-    ...responseBody.settings,
-    dayOffsets: responseBody.settings.dayOffsets ?? [],
-  }
+  return responseBody.settings
 }

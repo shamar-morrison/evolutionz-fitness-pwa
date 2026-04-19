@@ -15,8 +15,8 @@ function getErrorMessage(responseBody: unknown, fallback: string) {
 
 export async function apiFetch<T>(
   input: RequestInfo,
-  init: RequestInit,
-  schema: z.ZodType<T>,
+  init: RequestInit = {},
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   fallbackError: string,
 ): Promise<T> {
   const response = await fetch(input, init)
@@ -33,5 +33,13 @@ export async function apiFetch<T>(
     throw new Error(getErrorMessage(responseBody, fallbackError))
   }
 
-  return schema.parse(responseBody)
+  try {
+    return schema.parse(responseBody)
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new Error(fallbackError)
+    }
+
+    throw error
+  }
 }
