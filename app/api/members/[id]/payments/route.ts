@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { readCardFeeSettings } from '@/lib/card-fee-settings-server'
 import {
   mapMemberPaymentRecord,
   MEMBER_PAYMENT_RECORD_SELECT,
@@ -35,6 +34,13 @@ const cardFeePaymentSchema = z
   .object({
     payment_type: z.literal('card_fee'),
     payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+    amount_paid: z
+      .number()
+      .finite()
+      .refine(
+        (value) => Number.isInteger(value) && value > 0,
+        'Amount must be a whole number greater than 0.',
+      ),
     payment_date: z
       .string()
       .trim()
@@ -327,11 +333,6 @@ export async function POST(
       }
     }
 
-    const cardFeeSettings =
-      input.payment_type === 'card_fee'
-        ? await readCardFeeSettings(supabase)
-        : null
-
     const { data, error } = await supabase
       .from('member_payments')
       .insert({
@@ -343,7 +344,7 @@ export async function POST(
         amount_paid:
           input.payment_type === 'membership'
             ? input.amount_paid
-            : cardFeeSettings?.amountJmd ?? 0,
+            : input.amount_paid,
         promotion:
           input.payment_type === 'membership'
             ? normalizeOptionalText(input.promotion)

@@ -522,14 +522,8 @@ describe('POST /api/members/[id]/payments', () => {
     expect(response.status).toBe(200)
   })
 
-  it('records a card fee payment without syncing the member type', async () => {
+  it('records a card fee payment with the submitted amount and without syncing the member type', async () => {
     const { client, memberUpdates, paymentInserts } = createPaymentsRouteClient({
-      cardFeeSettingsRow: {
-        id: 1,
-        amount_jmd: 3200,
-        created_at: '2026-04-01T00:00:00.000Z',
-        updated_at: '2026-04-09T00:00:00.000Z',
-      },
       insertedPaymentRow: {
         id: 'payment-card-fee-1',
         member_id: 'member-1',
@@ -566,6 +560,7 @@ describe('POST /api/members/[id]/payments', () => {
         body: JSON.stringify({
           payment_type: 'card_fee',
           payment_method: 'cash',
+          amount_paid: 3200,
           payment_date: '2026-04-09',
           notes: 'Replacement card',
         }),
@@ -611,6 +606,37 @@ describe('POST /api/members/[id]/payments', () => {
         membership_end_time: '2026-04-30T23:59:59.000Z',
         created_at: '2026-04-09T12:30:00.000Z',
       },
+    })
+  })
+
+  it('returns 400 when a card fee payment amount is not a positive integer', async () => {
+    const { client, paymentInserts } = createPaymentsRouteClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser()
+
+    const response = await POST(
+      new Request('http://localhost/api/members/member-1/payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          payment_type: 'card_fee',
+          payment_method: 'cash',
+          amount_paid: 3200.5,
+          payment_date: '2026-04-09',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(paymentInserts).toEqual([])
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining('Amount must be a whole number greater than 0.'),
     })
   })
 

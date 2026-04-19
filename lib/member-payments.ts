@@ -88,6 +88,7 @@ export type CreateMembershipPaymentInput = {
 export type CreateCardFeePaymentInput = {
   payment_type: 'card_fee'
   payment_method: MemberPaymentMethod
+  amount_paid: number
   payment_date: string
   notes?: string | null
 }

@@ -58,6 +58,8 @@ type RecordMemberPaymentDialogProps = {
 }
 
 type CardFeeFormState = {
+  amount: string
+  amountDirty: boolean
   paymentMethod: MemberPaymentMethod | ''
   paymentDate: string
   notes: string
@@ -74,6 +76,8 @@ const EMPTY_PAYMENT_METHOD_VALUE = '__none__'
 
 function createInitialCardFeeFormState(now: Date = new Date()): CardFeeFormState {
   return {
+    amount: '',
+    amountDirty: false,
     paymentMethod: '',
     paymentDate: getDefaultMemberPaymentDate(now),
     notes: '',
@@ -115,6 +119,11 @@ export function RecordMemberPaymentDialog({
     cardFeeSettingsError instanceof Error ? cardFeeSettingsError.message : null
   const isCardFeeSettingsUnavailable =
     isCardFeeSettingsLoading || Boolean(cardFeeSettingsErrorMessage) || !cardFeeSettings
+  const parsedCardFeeAmount = Number(cardFeeFormData.amount)
+  const isCardFeeAmountValid =
+    Number.isFinite(parsedCardFeeAmount) &&
+    parsedCardFeeAmount > 0 &&
+    Number.isInteger(parsedCardFeeAmount)
   const hasResolvedMembershipType = membershipFormData.memberTypeId
     ? memberTypes.some((memberType) => memberType.id === membershipFormData.memberTypeId)
     : false
@@ -142,6 +151,39 @@ export function RecordMemberPaymentDialog({
     setSuccessfulPayment(null)
     setReceiptPreviewOpen(false)
   }, [member.id, member.memberTypeId, memberTypes, open])
+
+  useEffect(() => {
+    if (
+      !open ||
+      isCardFeeSettingsLoading ||
+      cardFeeSettingsErrorMessage ||
+      !cardFeeSettings ||
+      cardFeeFormData.amountDirty ||
+      cardFeeFormData.amount
+    ) {
+      return
+    }
+
+    const nextAmount = getCardFeeAmountInputValue(cardFeeSettings.amountJmd)
+
+    setCardFeeFormData((currentFormData) => {
+      if (currentFormData.amountDirty || currentFormData.amount) {
+        return currentFormData
+      }
+
+      return {
+        ...currentFormData,
+        amount: nextAmount,
+      }
+    })
+  }, [
+    cardFeeFormData.amount,
+    cardFeeFormData.amountDirty,
+    cardFeeSettings,
+    cardFeeSettingsErrorMessage,
+    isCardFeeSettingsLoading,
+    open,
+  ])
 
   const invalidateDirectPaymentQueries = async () => {
     await Promise.all([
@@ -277,10 +319,20 @@ export function RecordMemberPaymentDialog({
       return
     }
 
+    if (!isCardFeeAmountValid) {
+      toast({
+        title: 'Invalid card fee amount',
+        description: 'Enter a whole-number amount greater than 0.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     if (requiresApproval) {
       await createMemberPaymentRequest({
         member_id: member.id,
         payment_type: 'card_fee',
+        amount: parsedCardFeeAmount,
         payment_method: cardFeeFormData.paymentMethod,
         payment_date: cardFeeFormData.paymentDate,
         ...(cardFeeFormData.notes.trim() ? { notes: cardFeeFormData.notes.trim() } : {}),
@@ -297,6 +349,7 @@ export function RecordMemberPaymentDialog({
     const payment = await recordMemberPayment(member.id, {
       payment_type: 'card_fee',
       payment_method: cardFeeFormData.paymentMethod,
+      amount_paid: parsedCardFeeAmount,
       payment_date: cardFeeFormData.paymentDate,
       notes: cardFeeFormData.notes.trim() || null,
     })
@@ -459,9 +512,19 @@ export function RecordMemberPaymentDialog({
                         <Label htmlFor="record-card-fee-amount">Amount</Label>
                         <Input
                           id="record-card-fee-amount"
-                          value={getCardFeeAmountInputValue(cardFeeSettings?.amountJmd)}
-                          readOnly
-                          disabled
+                          type="number"
+                          min={1}
+                          step={1}
+                          inputMode="numeric"
+                          value={cardFeeFormData.amount}
+                          onChange={(event) =>
+                            setCardFeeFormData((currentFormData) => ({
+                              ...currentFormData,
+                              amount: event.target.value,
+                              amountDirty: true,
+                            }))
+                          }
+                          disabled={isSubmitting || isCardFeeSettingsUnavailable}
                         />
                         {isCardFeeSettingsLoading ? (
                           <p className="text-xs text-muted-foreground">
@@ -566,7 +629,8 @@ export function RecordMemberPaymentDialog({
                     isSubmitting ||
                     !memberHasEmail ||
                     (activeTab === 'membership' && isMembershipDefaultsLoading) ||
-                    (activeTab === 'card_fee' && isCardFeeSettingsUnavailable)
+                    (activeTab === 'card_fee' &&
+                      (isCardFeeSettingsUnavailable || !isCardFeeAmountValid))
                   }
                 >
                   {requiresApproval ? 'Submit Request' : 'Record Payment'}

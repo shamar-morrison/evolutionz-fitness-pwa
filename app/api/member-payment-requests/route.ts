@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { readCardFeeSettings } from '@/lib/card-fee-settings-server'
 import {
   MEMBER_PAYMENT_REQUEST_SELECT,
   mapMemberPaymentRequestRecord,
@@ -37,6 +36,13 @@ const cardFeePaymentRequestSchema = z
   .object({
     member_id: z.string().trim().uuid('Member is required.'),
     payment_type: z.literal('card_fee'),
+    amount: z
+      .number()
+      .finite()
+      .refine(
+        (value) => Number.isInteger(value) && value > 0,
+        'Amount must be a whole number greater than 0.',
+      ),
     payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
     payment_date: z
       .string()
@@ -193,11 +199,6 @@ export async function POST(request: Request) {
       return createErrorResponse('Membership type is required for this payment request.', 400)
     }
 
-    const cardFeeSettings =
-      input.payment_type === 'card_fee'
-        ? await readCardFeeSettings(supabase)
-        : null
-
     const { data, error } = await supabase
       .from('member_payment_requests')
       .insert({
@@ -207,7 +208,7 @@ export async function POST(request: Request) {
         amount:
           input.payment_type === 'membership'
             ? input.amount
-            : cardFeeSettings?.amountJmd ?? 0,
+            : input.amount,
         payment_type: input.payment_type,
         payment_method: input.payment_method,
         payment_date: input.payment_date,

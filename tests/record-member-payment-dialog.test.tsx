@@ -363,6 +363,18 @@ async function clickButton(container: ParentNode, label: string) {
   })
 }
 
+function getButton(container: ParentNode, label: string) {
+  const button = Array.from(container.querySelectorAll('button')).find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`${label} button not found.`)
+  }
+
+  return button
+}
+
 async function flushAsyncWork() {
   await act(async () => {
     await Promise.resolve()
@@ -598,7 +610,7 @@ describe('RecordMemberPaymentDialog', () => {
     })
   })
 
-  it('records a card fee payment with the fixed amount payload', async () => {
+  it('records a card fee payment with an overridden amount payload', async () => {
     cardFeeSettingsState = {
       settings: { amountJmd: 3200 },
       isLoading: false,
@@ -646,6 +658,12 @@ describe('RecordMemberPaymentDialog', () => {
     expect(paymentDateTrigger.textContent).toContain('Apr 9, 2026')
     expect(container.textContent).toContain('Configured card fee amount: JMD $3,200')
 
+    await act(async () => {
+      setInputValue(amountInput, '3600')
+    })
+
+    expect(amountInput.value).toBe('3600')
+
     await clickButton(container, 'Cash')
     await clickButton(container, 'Record Payment')
     await flushAsyncWork()
@@ -653,6 +671,7 @@ describe('RecordMemberPaymentDialog', () => {
     expect(recordMemberPaymentMock).toHaveBeenCalledWith('member-1', {
       payment_type: 'card_fee',
       payment_method: 'cash',
+      amount_paid: 3600,
       payment_date: '2026-04-09',
       notes: null,
     })
@@ -712,9 +731,148 @@ describe('RecordMemberPaymentDialog', () => {
     expect(recordMemberPaymentMock).toHaveBeenCalledWith('member-1', {
       payment_type: 'card_fee',
       payment_method: 'cash',
+      amount_paid: 3200,
       payment_date: '2026-04-15',
       notes: null,
     })
+  })
+
+  it('submits a card fee payment request with an overridden amount when approval is required', async () => {
+    cardFeeSettingsState = {
+      settings: { amountJmd: 3200 },
+      isLoading: false,
+      error: null,
+    }
+
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+          requiresApproval
+        />,
+      )
+    })
+
+    await clickButton(container, 'Card Fee')
+    await flushAsyncWork()
+
+    const amountInput = container.querySelector('#record-card-fee-amount')
+
+    if (!(amountInput instanceof HTMLInputElement)) {
+      throw new Error('Card fee amount input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(amountInput, '4100')
+    })
+
+    await clickButton(container, 'Cash')
+    await clickButton(container, 'Submit Request')
+    await flushAsyncWork()
+
+    expect(createMemberPaymentRequestMock).toHaveBeenCalledWith({
+      member_id: 'member-1',
+      payment_type: 'card_fee',
+      amount: 4100,
+      payment_method: 'cash',
+      payment_date: '2026-04-09',
+    })
+    expect(recordMemberPaymentMock).not.toHaveBeenCalled()
+  })
+
+  it('disables card fee submission and blocks submit when the amount is blank', async () => {
+    cardFeeSettingsState = {
+      settings: { amountJmd: 3200 },
+      isLoading: false,
+      error: null,
+    }
+
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    await clickButton(container, 'Card Fee')
+    await flushAsyncWork()
+
+    const amountInput = container.querySelector('#record-card-fee-amount')
+
+    if (!(amountInput instanceof HTMLInputElement)) {
+      throw new Error('Card fee amount input not found.')
+    }
+
+    await act(async () => {
+      setInputValue(amountInput, '')
+    })
+
+    await clickButton(container, 'Cash')
+
+    const submitButton = getButton(container, 'Record Payment')
+    expect(submitButton.disabled).toBe(true)
+
+    await act(async () => {
+      submitButton.disabled = false
+      submitButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(recordMemberPaymentMock).not.toHaveBeenCalled()
+    expect(createMemberPaymentRequestMock).not.toHaveBeenCalled()
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Invalid card fee amount',
+      description: 'Enter a whole-number amount greater than 0.',
+      variant: 'destructive',
+    })
+  })
+
+  it('disables card fee submission when the amount is not a positive integer', async () => {
+    cardFeeSettingsState = {
+      settings: { amountJmd: 3200 },
+      isLoading: false,
+      error: null,
+    }
+
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    await clickButton(container, 'Card Fee')
+    await flushAsyncWork()
+
+    const amountInput = container.querySelector('#record-card-fee-amount')
+
+    if (!(amountInput instanceof HTMLInputElement)) {
+      throw new Error('Card fee amount input not found.')
+    }
+
+    const submitButton = getButton(container, 'Record Payment')
+
+    await act(async () => {
+      setInputValue(amountInput, '0')
+    })
+
+    expect(submitButton.disabled).toBe(true)
+
+    await act(async () => {
+      setInputValue(amountInput, '2500.5')
+    })
+
+    expect(submitButton.disabled).toBe(true)
+    expect(recordMemberPaymentMock).not.toHaveBeenCalled()
   })
 
   it('disables card fee submission while the configured amount is loading', async () => {
@@ -739,13 +897,7 @@ describe('RecordMemberPaymentDialog', () => {
 
     expect(container.textContent).toContain('Loading configured card fee amount...')
 
-    const submitButton = Array.from(container.querySelectorAll('button')).find(
-      (candidate) => candidate.textContent?.trim() === 'Record Payment',
-    )
-
-    if (!(submitButton instanceof HTMLButtonElement)) {
-      throw new Error('Record Payment button not found.')
-    }
+    const submitButton = getButton(container, 'Record Payment')
 
     expect(submitButton.disabled).toBe(true)
     expect(recordMemberPaymentMock).not.toHaveBeenCalled()
@@ -773,13 +925,7 @@ describe('RecordMemberPaymentDialog', () => {
 
     expect(container.textContent).toContain('Failed to load card fee settings.')
 
-    const submitButton = Array.from(container.querySelectorAll('button')).find(
-      (candidate) => candidate.textContent?.trim() === 'Record Payment',
-    )
-
-    if (!(submitButton instanceof HTMLButtonElement)) {
-      throw new Error('Record Payment button not found.')
-    }
+    const submitButton = getButton(container, 'Record Payment')
 
     expect(submitButton.disabled).toBe(true)
     expect(recordMemberPaymentMock).not.toHaveBeenCalled()

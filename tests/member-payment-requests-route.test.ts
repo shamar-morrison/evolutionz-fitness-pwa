@@ -545,14 +545,8 @@ describe('member payment request routes', () => {
     expect(response.status).toBe(200)
   })
 
-  it('creates a pending card fee request with the fixed amount and no membership type', async () => {
+  it('creates a pending card fee request with the submitted amount and no membership type', async () => {
     const { client, requestInserts } = createPaymentRequestsClient({
-      cardFeeSettingsRow: {
-        id: 1,
-        amount_jmd: 3200,
-        created_at: '2026-04-01T00:00:00.000Z',
-        updated_at: '2026-04-12T00:00:00.000Z',
-      },
       insertedRequestRow: createPaymentRequestRecord({
         amount: 3200,
         payment_type: 'card_fee',
@@ -575,6 +569,7 @@ describe('member payment request routes', () => {
         body: JSON.stringify({
           member_id: MEMBER_ID,
           payment_type: 'card_fee',
+          amount: 3200,
           payment_method: 'cash',
           payment_date: '2026-04-12',
           notes: 'Replacement card',
@@ -610,6 +605,35 @@ describe('member payment request routes', () => {
         paymentType: 'card_fee',
         memberTypeId: null,
       }),
+    })
+  })
+
+  it('returns 400 when a card fee request amount is not a positive integer', async () => {
+    const { client, requestInserts } = createPaymentRequestsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAuthenticatedUser({ id: 'staff-auth-1' })
+
+    const response = await POST(
+      new Request('http://localhost/api/member-payment-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          member_id: MEMBER_ID,
+          payment_type: 'card_fee',
+          amount: 0,
+          payment_method: 'cash',
+          payment_date: '2026-04-12',
+        }),
+      }),
+    )
+
+    expect(requestInserts).toEqual([])
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining('Amount must be a whole number greater than 0.'),
     })
   })
 
