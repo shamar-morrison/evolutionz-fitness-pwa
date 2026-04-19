@@ -16,13 +16,10 @@ import { archiveResolvedRequestNotifications } from '@/lib/pt-notifications-serv
 import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { reviewActionSchema } from '@/lib/validation-schemas'
 import { readMemberWithCardCode } from '@/lib/members'
 
-const reviewMemberPauseResumeRequestSchema = z
-  .object({
-    action: z.enum(['approve', 'reject']),
-  })
-  .strict()
+const reviewMemberPauseResumeRequestSchema = reviewActionSchema.strict()
 
 type QueryResult<T> = PromiseLike<{
   data: T | null

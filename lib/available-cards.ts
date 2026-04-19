@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { apiFetch } from '@/lib/api-fetch'
 import type { AvailableAccessCard } from '@/types'
 
 const availableAccessCardSchema = z.object({
@@ -17,35 +18,9 @@ const syncAvailableCardsResponseSchema = z.object({
   syncedCards: z.number().int().nonnegative(),
 })
 
-type AvailableCardsSuccessResponse = {
-  ok: true
-  cards: AvailableAccessCard[]
-}
-
-type AvailableCardsErrorResponse = {
-  ok: false
-  error: string
-}
-
-type SyncAvailableCardsSuccessResponse = {
-  ok: true
-  syncedCards: number
-}
-
-type SyncAvailableCardsErrorResponse = {
-  ok: false
-  error: string
-}
-
-type CreateManualAccessCardSuccessResponse = {
-  ok: true
-  card: AvailableAccessCard
-}
-
-type ErrorResponse = {
-  ok?: false
-  error: string
-}
+const createManualAccessCardResponseSchema = z.object({
+  card: availableAccessCardSchema,
+})
 
 function compareCards(left: AvailableAccessCard, right: AvailableAccessCard) {
   return left.cardNo.localeCompare(right.cardNo)
@@ -110,40 +85,16 @@ export function formatAvailableAccessCardLabel(card: AvailableAccessCard) {
   return card.cardCode ? `${card.cardCode} — ${card.cardNo}` : card.cardNo
 }
 
-function getErrorMessage(responseBody: unknown, fallback: string) {
-  if (
-    typeof responseBody === 'object' &&
-    responseBody !== null &&
-    'error' in responseBody &&
-    typeof responseBody.error === 'string'
-  ) {
-    return responseBody.error
-  }
-
-  return fallback
-}
-
 export async function fetchAvailableAccessCards(): Promise<AvailableAccessCard[]> {
-  const response = await fetch('/api/access/cards/available', {
-    method: 'GET',
-    cache: 'no-store',
-  })
-
-  let responseBody: AvailableCardsSuccessResponse | AvailableCardsErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as AvailableCardsSuccessResponse | AvailableCardsErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(
-      responseBody && responseBody.ok === false
-        ? responseBody.error
-        : 'Failed to load available cards.',
-    )
-  }
+  const responseBody = await apiFetch(
+    '/api/access/cards/available',
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+    availableCardsResponseSchema,
+    'Failed to load available cards.',
+  )
 
   return normalizeAvailableAccessCards({ cards: responseBody.cards })
 }
@@ -152,53 +103,35 @@ export async function createManualAccessCard(input: {
   cardNo: string
   cardCode: string
 }): Promise<AvailableAccessCard> {
-  const response = await fetch('/api/cards/manual', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const responseBody = await apiFetch(
+    '/api/cards/manual',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        card_no: input.cardNo.trim(),
+        card_code: input.cardCode.trim(),
+      }),
     },
-    body: JSON.stringify({
-      card_no: input.cardNo.trim(),
-      card_code: input.cardCode.trim(),
-    }),
-  })
+    createManualAccessCardResponseSchema,
+    'Failed to create the access card.',
+  )
 
-  let responseBody: CreateManualAccessCardSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as CreateManualAccessCardSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(getErrorMessage(responseBody, 'Failed to create the access card.'))
-  }
-
-  const successResponse = responseBody as CreateManualAccessCardSuccessResponse
-
-  return normalizeAvailableAccessCards({ cards: [successResponse.card] })[0] ?? successResponse.card
+  return normalizeAvailableAccessCards({ cards: [responseBody.card] })[0] ?? responseBody.card
 }
 
 export async function syncAvailableAccessCards(): Promise<number> {
-  const response = await fetch('/api/access/cards/available', {
-    method: 'POST',
-    cache: 'no-store',
-  })
-
-  let responseBody: SyncAvailableCardsSuccessResponse | SyncAvailableCardsErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as
-      | SyncAvailableCardsSuccessResponse
-      | SyncAvailableCardsErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(getErrorMessage(responseBody, 'Failed to sync available cards.'))
-  }
+  const responseBody = await apiFetch(
+    '/api/access/cards/available',
+    {
+      method: 'POST',
+      cache: 'no-store',
+    },
+    syncAvailableCardsResponseSchema,
+    'Failed to sync available cards.',
+  )
 
   return normalizeSyncedAvailableCardsCount(responseBody)
 }

@@ -10,22 +10,17 @@ import {
   isSupportedMemberPauseDurationDays,
   calculatePlannedPauseResumeDate,
 } from '@/lib/member-pause'
-import {
-  insertNotifications,
-  readAdminNotificationRecipients,
-} from '@/lib/pt-notifications-server'
+import { notifyAdminsOfRequest } from '@/lib/notify-admins-of-request'
 import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { requireAuthenticatedUser } from '@/lib/server-auth'
 import { readStaffProfile } from '@/lib/staff'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import { createClient } from '@/lib/supabase/server'
-import { sendPushToProfiles } from '@/lib/web-push'
+import { durationDaysSchema } from '@/lib/validation-schemas'
 
-const createMemberPauseRequestSchema = z
-  .object({
-    duration_days: z.number().int().positive('Duration is required.'),
-  })
-  .strict()
+const createMemberPauseRequestSchema = z.object({
+  duration_days: durationDaysSchema,
+}).strict()
 
 const SUSPENDED_ACCOUNT_ERROR =
   'Your account has been suspended. Please contact an administrator.'
@@ -146,42 +141,27 @@ export async function POST(
       throw new Error('Failed to create member pause request: missing request id.')
     }
 
-    try {
-      const adminRecipients = await readAdminNotificationRecipients(supabase)
-      const memberName = eligibility.member?.name?.trim() || 'this member'
-      const requestedBy = profile.name?.trim() || 'A staff member'
-      const title = getMemberPauseRequestNotificationTitle('pause')
+    const memberName = eligibility.member?.name?.trim() || 'this member'
+    const requestedBy = profile.name?.trim() || 'A staff member'
+    const title = getMemberPauseRequestNotificationTitle('pause')
 
-      await insertNotifications(
-        supabase,
-        adminRecipients.map((recipient) => ({
-          recipientId: recipient.id,
-          type: 'member_pause_request',
-          title,
-          body: `New membership pause request from ${requestedBy} for ${memberName}.`,
-          metadata: {
-            requestId,
-            requestKind: 'pause',
-            memberId: id,
-            memberName,
-            requestedBy,
-            durationDays: input.duration_days,
-            plannedResumeDate,
-          },
-        })),
-      )
-
-      await sendPushToProfiles(
-        adminRecipients.map((recipient) => recipient.id),
-        {
-          title,
-          body: 'A staff member submitted a membership pause request.',
-          url: '/pending-approvals/pause-requests',
-        },
-      )
-    } catch (notificationError) {
-      console.error('Failed to send member pause request notifications:', notificationError)
-    }
+    await notifyAdminsOfRequest(supabase, {
+      type: 'member_pause_request',
+      title,
+      body: `New membership pause request from ${requestedBy} for ${memberName}.`,
+      url: '/pending-approvals/pause-requests',
+      metadata: {
+        requestId,
+        requestKind: 'pause',
+        memberId: id,
+        memberName,
+        requestedBy,
+        durationDays: input.duration_days,
+        plannedResumeDate,
+      },
+      pushBody: 'A staff member submitted a membership pause request.',
+      logMessage: 'Failed to send member pause request notifications:',
+    })
 
     return NextResponse.json({
       ok: true,

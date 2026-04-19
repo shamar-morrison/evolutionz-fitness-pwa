@@ -10,13 +10,9 @@ import {
   mapMemberEditRequestRecord,
   type MemberEditRequestRecord,
 } from '@/lib/member-edit-request-records'
-import {
-  insertNotifications,
-  readAdminNotificationRecipients,
-} from '@/lib/pt-notifications-server'
+import { notifyAdminsOfRequest } from '@/lib/notify-admins-of-request'
 import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import { sendPushToProfiles } from '@/lib/web-push'
 import type { MemberGender } from '@/types'
 
 const createMemberEditRequestSchema = z
@@ -221,41 +217,24 @@ export async function POST(request: Request) {
     }
 
     const requestRecord = data as MemberEditRequestRecord
-    try {
-      const adminRecipients = await readAdminNotificationRecipients(supabase)
-      const memberName = requestRecord.member?.name?.trim() || 'this member'
-      const requestedBy = requestRecord.requestedByProfile?.name?.trim() || 'A staff member'
+    const memberName = requestRecord.member?.name?.trim() || 'this member'
+    const requestedBy = requestRecord.requestedByProfile?.name?.trim() || 'A staff member'
 
-      await insertNotifications(
-        supabase,
-        adminRecipients.map((recipient) => ({
-          recipientId: recipient.id,
-          type: 'member_edit_request',
-          title: 'Member Edit Request',
-          body: `New member edit request from ${requestedBy}.`,
-          metadata: {
-            requestId: requestRecord.id,
-            memberId: requestRecord.member_id,
-            memberName,
-            requestedBy,
-          },
-        })),
-      )
-
-      await sendPushToProfiles(
-        adminRecipients.map((recipient) => recipient.id),
-        {
-          title: 'Edit Request',
-          body: 'A staff member submitted a member edit request.',
-          url: '/pending-approvals/edit-requests',
-        },
-      )
-    } catch (notificationError) {
-      console.error(
-        'Failed to send member edit request notifications:',
-        notificationError,
-      )
-    }
+    await notifyAdminsOfRequest(supabase, {
+      type: 'member_edit_request',
+      title: 'Member Edit Request',
+      body: `New member edit request from ${requestedBy}.`,
+      url: '/pending-approvals/edit-requests',
+      metadata: {
+        requestId: requestRecord.id,
+        memberId: requestRecord.member_id,
+        memberName,
+        requestedBy,
+      },
+      pushTitle: 'Edit Request',
+      pushBody: 'A staff member submitted a member edit request.',
+      logMessage: 'Failed to send member edit request notifications:',
+    })
 
     return NextResponse.json({
       ok: true,

@@ -27,17 +27,15 @@ import { type MemberTypesReadClient } from '@/lib/member-types-server'
 import { readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { denyReviewActionSchema } from '@/lib/validation-schemas'
 import type { Member, MemberGender, MemberStatus, MemberType } from '@/types'
 
 const UPDATE_MEMBER_WARNING = 'Member updated but device sync failed. Please try again.'
 const UPDATE_MEMBER_TIMEOUT_ERROR = 'Member update request timed out after 10 seconds.'
 
-const reviewMemberEditRequestSchema = z
-  .object({
-    action: z.enum(['approve', 'deny']),
-    rejectionReason: z.string().trim().min(1).nullable().optional(),
-  })
-  .strict()
+const reviewMemberEditRequestSchema = denyReviewActionSchema.extend({
+  rejectionReason: z.string().trim().min(1).nullable().optional(),
+}).strict()
 
 type QueryError = {
   message: string

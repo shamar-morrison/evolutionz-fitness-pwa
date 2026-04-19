@@ -5,13 +5,10 @@ import {
   mapMemberPaymentRequestRecord,
   type MemberPaymentRequestRecord,
 } from '@/lib/member-payment-request-records'
-import {
-  insertNotifications,
-  readAdminNotificationRecipients,
-} from '@/lib/pt-notifications-server'
+import { notifyAdminsOfRequest } from '@/lib/notify-admins-of-request'
 import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import { sendPushToProfiles } from '@/lib/web-push'
+import { paymentMethodSchema } from '@/lib/validation-schemas'
 import type {
   MemberPaymentMethod,
   MemberPaymentType,
@@ -22,7 +19,7 @@ const membershipPaymentRequestSchema = z
     member_id: z.string().trim().uuid('Member is required.'),
     payment_type: z.literal('membership'),
     amount: z.number().finite().positive('Amount must be greater than 0.'),
-    payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+    payment_method: paymentMethodSchema,
     payment_date: z
       .string()
       .trim()
@@ -43,7 +40,7 @@ const cardFeePaymentRequestSchema = z
         (value) => Number.isInteger(value) && value > 0,
         'Amount must be a whole number greater than 0.',
       ),
-    payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+    payment_method: paymentMethodSchema,
     payment_date: z
       .string()
       .trim()
@@ -223,44 +220,27 @@ export async function POST(request: Request) {
     }
 
     const requestRecord = data as MemberPaymentRequestRecord
-    try {
-      const adminRecipients = await readAdminNotificationRecipients(supabase)
-      const memberName = requestRecord.member?.name?.trim() || 'this member'
-      const requestedBy = requestRecord.requestedByProfile?.name?.trim() || 'A staff member'
+    const memberName = requestRecord.member?.name?.trim() || 'this member'
+    const requestedBy = requestRecord.requestedByProfile?.name?.trim() || 'A staff member'
 
-      await insertNotifications(
-        supabase,
-        adminRecipients.map((recipient) => ({
-          recipientId: recipient.id,
-          type: 'member_payment_request',
-          title: 'Member Payment Request',
-          body: `New payment request from ${requestedBy} for ${memberName}.`,
-          metadata: {
-            requestId: requestRecord.id,
-            memberId: requestRecord.member_id,
-            memberName,
-            requestedBy,
-            amount: requestRecord.amount,
-            paymentMethod: requestRecord.payment_method,
-            paymentType: requestRecord.payment_type,
-          },
-        })),
-      )
-
-      await sendPushToProfiles(
-        adminRecipients.map((recipient) => recipient.id),
-        {
-          title: 'Payment Request',
-          body: 'A staff member submitted a payment request.',
-          url: '/pending-approvals/payment-requests',
-        },
-      )
-    } catch (notificationError) {
-      console.error(
-        'Failed to send member payment request notifications:',
-        notificationError,
-      )
-    }
+    await notifyAdminsOfRequest(supabase, {
+      type: 'member_payment_request',
+      title: 'Member Payment Request',
+      body: `New payment request from ${requestedBy} for ${memberName}.`,
+      url: '/pending-approvals/payment-requests',
+      metadata: {
+        requestId: requestRecord.id,
+        memberId: requestRecord.member_id,
+        memberName,
+        requestedBy,
+        amount: requestRecord.amount,
+        paymentMethod: requestRecord.payment_method,
+        paymentType: requestRecord.payment_type,
+      },
+      pushTitle: 'Payment Request',
+      pushBody: 'A staff member submitted a payment request.',
+      logMessage: 'Failed to send member payment request notifications:',
+    })
 
     return NextResponse.json({
       ok: true,

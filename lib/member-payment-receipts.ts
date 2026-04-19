@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { apiFetch } from '@/lib/api-fetch'
 import {
   GYM_ADDRESS,
   GYM_CONTACT,
@@ -10,6 +11,7 @@ import {
   JAMAICA_OFFSET,
   JAMAICA_TIME_ZONE,
 } from '@/lib/pt-scheduling'
+import { paymentMethodSchema } from '@/lib/validation-schemas'
 import type {
   MemberPaymentMethod,
   MemberPaymentType,
@@ -30,7 +32,7 @@ const memberPaymentReceiptSchema = z.object({
   paymentType: z.enum(['membership', 'card_fee']),
   paymentLabel: z.string().trim().min(1),
   amountPaid: z.number().finite(),
-  paymentMethod: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+  paymentMethod: paymentMethodSchema,
   recordedByName: z.string().trim().nullable(),
   notes: z.string().trim().nullable(),
 })
@@ -48,11 +50,6 @@ const sendMemberPaymentReceiptResponseSchema = z.object({
   alreadySent: z.boolean().optional(),
   receiptSentAt: z.string().trim().nullable(),
 })
-
-type ErrorResponse = {
-  ok?: false
-  error: string
-}
 
 export type MemberPaymentReceipt = z.infer<typeof memberPaymentReceiptSchema>
 export type MemberPaymentReceiptPreviewResponse = z.infer<
@@ -73,19 +70,6 @@ function escapeHtml(value: string | null | undefined) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;')
-}
-
-function readJsonError(responseBody: unknown, fallback: string) {
-  if (
-    typeof responseBody === 'object' &&
-    responseBody !== null &&
-    'error' in responseBody &&
-    typeof responseBody.error === 'string'
-  ) {
-    return responseBody.error
-  }
-
-  return fallback
 }
 
 function formatDateInJamaica(value: string) {
@@ -253,53 +237,29 @@ export async function fetchMemberPaymentReceiptPreview(
   memberId: string,
   paymentId: string,
 ): Promise<MemberPaymentReceiptPreviewResponse> {
-  const response = await fetch(
+  return apiFetch(
     `/api/members/${encodeURIComponent(memberId)}/payments/${encodeURIComponent(paymentId)}/receipt`,
     {
       method: 'GET',
       cache: 'no-store',
     },
+    memberPaymentReceiptPreviewResponseSchema,
+    'Failed to load the payment receipt preview.',
   )
-
-  let responseBody: MemberPaymentReceiptPreviewResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MemberPaymentReceiptPreviewResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || ('error' in responseBody && responseBody.error)) {
-    throw new Error(readJsonError(responseBody, 'Failed to load the payment receipt preview.'))
-  }
-
-  return memberPaymentReceiptPreviewResponseSchema.parse(responseBody)
 }
 
 export async function sendMemberPaymentReceipt(
   memberId: string,
   paymentId: string,
 ): Promise<SendMemberPaymentReceiptResponse> {
-  const response = await fetch(
+  return apiFetch(
     `/api/members/${encodeURIComponent(memberId)}/payments/${encodeURIComponent(paymentId)}/receipt`,
     {
       method: 'POST',
     },
+    sendMemberPaymentReceiptResponseSchema,
+    'Failed to send the payment receipt.',
   )
-
-  let responseBody: SendMemberPaymentReceiptResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as SendMemberPaymentReceiptResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || ('error' in responseBody && responseBody.error)) {
-    throw new Error(readJsonError(responseBody, 'Failed to send the payment receipt.'))
-  }
-
-  return sendMemberPaymentReceiptResponseSchema.parse(responseBody)
 }
 
 export function formatReceiptDateValue(value: string) {

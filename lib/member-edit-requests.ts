@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { apiFetch } from '@/lib/api-fetch'
 import type { MemberEditRequest, MemberGender } from '@/types'
 
 const memberEditRequestSchema = z.object({
@@ -16,7 +17,6 @@ const memberEditRequestSchema = z.object({
     .trim()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .nullable()
-    .optional()
     .default(null),
   currentBeginTime: z.string().trim().nullable(),
   currentEndTime: z.string().trim().nullable(),
@@ -31,7 +31,6 @@ const memberEditRequestSchema = z.object({
     .trim()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .nullable()
-    .optional()
     .default(null),
   proposedStartDate: z.string().trim().nullable(),
   proposedStartTime: z.string().trim().nullable(),
@@ -55,24 +54,9 @@ const memberEditRequestResponseSchema = z.object({
   request: memberEditRequestSchema,
 })
 
-type ErrorResponse = {
-  ok?: false
-  error: string
-}
-
-type MemberEditRequestsSuccessResponse = {
-  ok: true
-  requests: MemberEditRequest[]
-}
-
-type MemberEditRequestSuccessResponse = {
-  ok: true
-  request: MemberEditRequest
-}
-
-type ReviewSuccessResponse = {
-  ok: true
-}
+const reviewMemberEditRequestResponseSchema = z.object({
+  ok: z.literal(true),
+})
 
 export type CreateMemberEditRequestInput = {
   member_id: string
@@ -92,87 +76,53 @@ export type ReviewMemberEditRequestInput = {
   rejectionReason?: string | null
 }
 
-function getErrorMessage(responseBody: unknown, fallback: string) {
-  if (
-    typeof responseBody === 'object' &&
-    responseBody !== null &&
-    'error' in responseBody &&
-    typeof responseBody.error === 'string'
-  ) {
-    return responseBody.error
-  }
-
-  return fallback
-}
-
 export async function fetchMemberEditRequests(): Promise<MemberEditRequest[]> {
-  const response = await fetch('/api/member-edit-requests', {
-    method: 'GET',
-    cache: 'no-store',
-  })
+  const responseBody = await apiFetch(
+    '/api/member-edit-requests',
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+    memberEditRequestsResponseSchema,
+    'Failed to load member edit requests.',
+  )
 
-  let responseBody: MemberEditRequestsSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MemberEditRequestsSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(getErrorMessage(responseBody, 'Failed to load member edit requests.'))
-  }
-
-  return memberEditRequestsResponseSchema.parse(responseBody).requests
+  return (responseBody.requests ?? []) as MemberEditRequest[]
 }
 
 export async function createMemberEditRequest(
   input: CreateMemberEditRequestInput,
 ): Promise<MemberEditRequest> {
-  const response = await fetch('/api/member-edit-requests', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const responseBody = await apiFetch(
+    '/api/member-edit-requests',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
     },
-    body: JSON.stringify(input),
-  })
+    memberEditRequestResponseSchema,
+    'Failed to submit the member edit request.',
+  )
 
-  let responseBody: MemberEditRequestSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MemberEditRequestSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(getErrorMessage(responseBody, 'Failed to submit the member edit request.'))
-  }
-
-  return memberEditRequestResponseSchema.parse(responseBody).request
+  return responseBody.request as MemberEditRequest
 }
 
 export async function reviewMemberEditRequest(
   id: string,
   input: ReviewMemberEditRequestInput,
 ): Promise<void> {
-  const response = await fetch(`/api/member-edit-requests/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
+  await apiFetch(
+    `/api/member-edit-requests/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
     },
-    body: JSON.stringify(input),
-  })
-
-  let responseBody: ReviewSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as ReviewSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(getErrorMessage(responseBody, 'Failed to review the member edit request.'))
-  }
+    reviewMemberEditRequestResponseSchema,
+    'Failed to review the member edit request.',
+  )
 }

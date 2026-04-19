@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { apiFetch } from '@/lib/api-fetch'
 import type { MembershipExpiryEmailSettings } from '@/types'
 
 export const MEMBERSHIP_EXPIRY_EMAIL_TEMPLATE_TOKENS = [
@@ -43,16 +44,6 @@ const membershipExpiryEmailSettingsResponseSchema = z.object({
   settings: membershipExpiryEmailSettingsSchema,
 })
 
-type MembershipExpiryEmailSettingsSuccessResponse = {
-  ok: true
-  settings: MembershipExpiryEmailSettings
-}
-
-type ErrorResponse = {
-  ok?: false
-  error: string
-}
-
 export type UpdateMembershipExpiryEmailSettingsInput = {
   enabled: boolean
   dayOffsets: number[]
@@ -68,19 +59,6 @@ export function normalizeMembershipExpiryEmailDayOffsets(dayOffsets: number[]) {
         .filter((value) => value > 0),
     ),
   ).sort((left, right) => left - right)
-}
-
-function getResponseErrorMessage(responseBody: unknown, fallback: string) {
-  if (
-    typeof responseBody === 'object' &&
-    responseBody !== null &&
-    'error' in responseBody &&
-    typeof responseBody.error === 'string'
-  ) {
-    return responseBody.error
-  }
-
-  return fallback
 }
 
 function trimTemplateValue(value: string) {
@@ -110,59 +88,48 @@ export function findUnsupportedMembershipExpiryEmailTemplateTokens(template: str
   return Array.from(
     new Set(
       extractMembershipExpiryEmailTemplateTokens(template).filter(
-        (token) => !supportedTokens.has(token as (typeof MEMBERSHIP_EXPIRY_EMAIL_TEMPLATE_TOKENS)[number]),
+        (token) =>
+          !supportedTokens.has(token as (typeof MEMBERSHIP_EXPIRY_EMAIL_TEMPLATE_TOKENS)[number]),
       ),
     ),
   )
 }
 
 export async function fetchMembershipExpiryEmailSettings(): Promise<MembershipExpiryEmailSettings> {
-  const response = await fetch('/api/settings/membership-expiry-emails', {
-    method: 'GET',
-    cache: 'no-store',
-  })
+  const responseBody = await apiFetch(
+    '/api/settings/membership-expiry-emails',
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+    membershipExpiryEmailSettingsResponseSchema,
+    'Failed to load membership expiry email settings.',
+  )
 
-  let responseBody: MembershipExpiryEmailSettingsSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MembershipExpiryEmailSettingsSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
+  return {
+    ...responseBody.settings,
+    dayOffsets: responseBody.settings.dayOffsets ?? [],
   }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(
-      getResponseErrorMessage(responseBody, 'Failed to load membership expiry email settings.'),
-    )
-  }
-
-  return membershipExpiryEmailSettingsResponseSchema.parse(responseBody).settings
 }
 
 export async function updateMembershipExpiryEmailSettings(
   input: UpdateMembershipExpiryEmailSettingsInput,
 ): Promise<MembershipExpiryEmailSettings> {
-  const response = await fetch('/api/settings/membership-expiry-emails', {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
+  const responseBody = await apiFetch(
+    '/api/settings/membership-expiry-emails',
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(normalizeMembershipExpiryEmailSettingsInput(input)),
     },
-    body: JSON.stringify(normalizeMembershipExpiryEmailSettingsInput(input)),
-  })
+    membershipExpiryEmailSettingsResponseSchema,
+    'Failed to update membership expiry email settings.',
+  )
 
-  let responseBody: MembershipExpiryEmailSettingsSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MembershipExpiryEmailSettingsSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
+  return {
+    ...responseBody.settings,
+    dayOffsets: responseBody.settings.dayOffsets ?? [],
   }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(
-      getResponseErrorMessage(responseBody, 'Failed to update membership expiry email settings.'),
-    )
-  }
-
-  return membershipExpiryEmailSettingsResponseSchema.parse(responseBody).settings
 }
