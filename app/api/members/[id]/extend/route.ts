@@ -7,12 +7,11 @@ import {
 } from '@/lib/member-extension-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { durationDaysSchema } from '@/lib/validation-schemas'
 
-const extendMemberMembershipSchema = z
-  .object({
-    duration_days: z.number().int().positive('Duration is required.'),
-  })
-  .strict()
+const extendMemberMembershipSchema = z.object({
+  duration_days: durationDaysSchema,
+}).strict()
 
 function createErrorResponse(error: string, status: number) {
   return NextResponse.json(

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { apiFetch } from '@/lib/api-fetch'
 import type { MemberExtensionRequest } from '@/types'
 
 const memberExtensionRequestSchema = z.object({
@@ -35,33 +36,6 @@ const extendMemberMembershipResponseSchema = z.object({
   warning: z.string().trim().optional(),
 })
 
-type ErrorResponse = {
-  ok?: false
-  error: string
-}
-
-type MemberExtensionRequestsSuccessResponse = {
-  ok: true
-  requests: MemberExtensionRequest[]
-}
-
-type CreateMemberExtensionRequestSuccessResponse = {
-  ok: true
-  id: string
-}
-
-type ReviewMemberExtensionRequestSuccessResponse = {
-  ok: true
-  success: true
-  warning?: string
-}
-
-type ExtendMemberMembershipSuccessResponse = {
-  ok: true
-  new_end_time: string
-  warning?: string
-}
-
 export type CreateMemberExtensionRequestInput = {
   duration_days: number
 }
@@ -70,45 +44,25 @@ export type ReviewMemberExtensionRequestInput = {
   action: 'approve' | 'reject'
 }
 
-function getErrorMessage(responseBody: unknown, fallback: string) {
-  if (
-    typeof responseBody === 'object' &&
-    responseBody !== null &&
-    'error' in responseBody &&
-    typeof responseBody.error === 'string'
-  ) {
-    return responseBody.error
-  }
-
-  return fallback
-}
-
 export async function fetchMemberExtensionRequests(): Promise<MemberExtensionRequest[]> {
-  const response = await fetch('/api/members/extension-requests', {
-    method: 'GET',
-    cache: 'no-store',
-  })
+  const responseBody = await apiFetch(
+    '/api/members/extension-requests',
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+    memberExtensionRequestsResponseSchema,
+    'Failed to load member extension requests.',
+  )
 
-  let responseBody: MemberExtensionRequestsSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MemberExtensionRequestsSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(getErrorMessage(responseBody, 'Failed to load member extension requests.'))
-  }
-
-  return memberExtensionRequestsResponseSchema.parse(responseBody).requests
+  return responseBody.requests ?? []
 }
 
 export async function createMemberExtensionRequest(
   memberId: string,
   input: CreateMemberExtensionRequestInput,
 ): Promise<{ id: string }> {
-  const response = await fetch(
+  return apiFetch(
     `/api/members/${encodeURIComponent(memberId)}/extension-requests`,
     {
       method: 'POST',
@@ -117,32 +71,16 @@ export async function createMemberExtensionRequest(
       },
       body: JSON.stringify(input),
     },
+    createMemberExtensionRequestResponseSchema,
+    'Failed to submit the member extension request.',
   )
-
-  let responseBody: CreateMemberExtensionRequestSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as
-      | CreateMemberExtensionRequestSuccessResponse
-      | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(
-      getErrorMessage(responseBody, 'Failed to submit the member extension request.'),
-    )
-  }
-
-  return createMemberExtensionRequestResponseSchema.parse(responseBody)
 }
 
 export async function reviewMemberExtensionRequest(
   requestId: string,
   input: ReviewMemberExtensionRequestInput,
 ): Promise<{ success: true; warning?: string }> {
-  const response = await fetch(
+  return apiFetch(
     `/api/members/extension-requests/${encodeURIComponent(requestId)}`,
     {
       method: 'PATCH',
@@ -151,54 +89,27 @@ export async function reviewMemberExtensionRequest(
       },
       body: JSON.stringify(input),
     },
+    reviewMemberExtensionRequestResponseSchema,
+    'Failed to review the member extension request.',
   )
-
-  let responseBody: ReviewMemberExtensionRequestSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as
-      | ReviewMemberExtensionRequestSuccessResponse
-      | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(
-      getErrorMessage(responseBody, 'Failed to review the member extension request.'),
-    )
-  }
-
-  return reviewMemberExtensionRequestResponseSchema.parse(responseBody)
 }
 
 export async function extendMemberMembership(
   memberId: string,
   input: CreateMemberExtensionRequestInput,
 ): Promise<{ newEndTime: string; warning?: string }> {
-  const response = await fetch(`/api/members/${encodeURIComponent(memberId)}/extend`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const parsed = await apiFetch(
+    `/api/members/${encodeURIComponent(memberId)}/extend`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
     },
-    body: JSON.stringify(input),
-  })
-
-  let responseBody: ExtendMemberMembershipSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as
-      | ExtendMemberMembershipSuccessResponse
-      | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(getErrorMessage(responseBody, 'Failed to extend the membership.'))
-  }
-
-  const parsed = extendMemberMembershipResponseSchema.parse(responseBody)
+    extendMemberMembershipResponseSchema,
+    'Failed to extend the membership.',
+  )
 
   return {
     newEndTime: parsed.new_end_time,

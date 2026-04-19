@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { apiFetch } from '@/lib/api-fetch'
 import type { MemberApprovalRequest, MemberApprovalRequestStatus, MemberGender } from '@/types'
 
 const memberApprovalRequestSchema = z.object({
@@ -8,7 +9,7 @@ const memberApprovalRequestSchema = z.object({
   email: z.string().trim().nullable(),
   phone: z.string().trim().nullable(),
   remark: z.string().trim().nullable(),
-  joinedAt: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().default(null),
+  joinedAt: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
   beginTime: z.string().trim().min(1),
   endTime: z.string().trim().min(1),
   cardNo: z.string().trim().min(1),
@@ -40,27 +41,6 @@ const reviewMemberApprovalRequestResponseSchema = z.object({
   warning: z.string().trim().optional(),
 })
 
-type MemberApprovalRequestsSuccessResponse = {
-  ok: true
-  requests: MemberApprovalRequest[]
-}
-
-type MemberApprovalRequestSuccessResponse = {
-  ok: true
-  request: MemberApprovalRequest
-}
-
-type ReviewMemberApprovalRequestSuccessResponse = {
-  ok: true
-  request?: MemberApprovalRequest
-  warning?: string
-}
-
-type ErrorResponse = {
-  ok?: false
-  error: string
-}
-
 export type CreateMemberApprovalRequestInput = {
   name: string
   gender: MemberGender
@@ -86,67 +66,40 @@ export type ReviewMemberApprovalRequestInput =
       review_note?: string | null
     }
 
-function getErrorMessage(responseBody: unknown, fallback: string) {
-  if (
-    typeof responseBody === 'object' &&
-    responseBody !== null &&
-    'error' in responseBody &&
-    typeof responseBody.error === 'string'
-  ) {
-    return responseBody.error
-  }
-
-  return fallback
-}
-
 export async function fetchMemberApprovalRequests(
   status: MemberApprovalRequestStatus = 'pending',
 ): Promise<MemberApprovalRequest[]> {
   const searchParams = new URLSearchParams({ status })
-  const response = await fetch(`/api/member-approval-requests?${searchParams.toString()}`, {
-    method: 'GET',
-    cache: 'no-store',
-  })
+  const responseBody = await apiFetch(
+    `/api/member-approval-requests?${searchParams.toString()}`,
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+    memberApprovalRequestsResponseSchema,
+    'Failed to load member approval requests.',
+  )
 
-  let responseBody: MemberApprovalRequestsSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MemberApprovalRequestsSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(getErrorMessage(responseBody, 'Failed to load member approval requests.'))
-  }
-
-  return memberApprovalRequestsResponseSchema.parse(responseBody).requests
+  return (responseBody.requests ?? []) as MemberApprovalRequest[]
 }
 
 export async function createMemberApprovalRequest(
   input: CreateMemberApprovalRequestInput,
 ): Promise<MemberApprovalRequest> {
-  const response = await fetch('/api/member-approval-requests', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const responseBody = await apiFetch(
+    '/api/member-approval-requests',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
     },
-    body: JSON.stringify(input),
-  })
+    memberApprovalRequestResponseSchema,
+    'Failed to submit the member request.',
+  )
 
-  let responseBody: MemberApprovalRequestSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MemberApprovalRequestSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(getErrorMessage(responseBody, 'Failed to submit the member request.'))
-  }
-
-  return memberApprovalRequestResponseSchema.parse(responseBody).request
+  return responseBody.request as MemberApprovalRequest
 }
 
 export async function reviewMemberApprovalRequest(
@@ -156,29 +109,21 @@ export async function reviewMemberApprovalRequest(
   request?: MemberApprovalRequest
   warning?: string
 }> {
-  const response = await fetch(`/api/member-approval-requests/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
+  return apiFetch(
+    `/api/member-approval-requests/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
     },
-    body: JSON.stringify(input),
-  })
-
-  let responseBody: ReviewMemberApprovalRequestSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as
-      | ReviewMemberApprovalRequestSuccessResponse
-      | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(getErrorMessage(responseBody, 'Failed to review the member request.'))
-  }
-
-  return reviewMemberApprovalRequestResponseSchema.parse(responseBody)
+    reviewMemberApprovalRequestResponseSchema,
+    'Failed to review the member request.',
+  ) as Promise<{
+    request?: MemberApprovalRequest
+    warning?: string
+  }>
 }
 
 export async function uploadMemberApprovalRequestPhoto(
@@ -188,22 +133,15 @@ export async function uploadMemberApprovalRequestPhoto(
   const formData = new FormData()
   formData.append('photo', photo, `${requestId}.jpg`)
 
-  const response = await fetch(`/api/member-approval-requests/${encodeURIComponent(requestId)}/photo`, {
-    method: 'POST',
-    body: formData,
-  })
+  const responseBody = await apiFetch(
+    `/api/member-approval-requests/${encodeURIComponent(requestId)}/photo`,
+    {
+      method: 'POST',
+      body: formData,
+    },
+    memberApprovalRequestResponseSchema,
+    'Failed to upload the request photo.',
+  )
 
-  let responseBody: MemberApprovalRequestSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MemberApprovalRequestSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(getErrorMessage(responseBody, 'Failed to upload the request photo.'))
-  }
-
-  return memberApprovalRequestResponseSchema.parse(responseBody).request
+  return responseBody.request as MemberApprovalRequest
 }

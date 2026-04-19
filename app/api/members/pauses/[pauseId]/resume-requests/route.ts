@@ -8,16 +8,12 @@ import {
   readPendingEarlyResumeRequestForPause,
 } from '@/lib/member-pause-records'
 import { MEMBER_PAUSE_EARLY_RESUME_PENDING_ERROR } from '@/lib/member-pause'
-import {
-  insertNotifications,
-  readAdminNotificationRecipients,
-} from '@/lib/pt-notifications-server'
+import { notifyAdminsOfRequest } from '@/lib/notify-admins-of-request'
 import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { requireAuthenticatedUser } from '@/lib/server-auth'
 import { readStaffProfile } from '@/lib/staff'
 import { createClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import { sendPushToProfiles } from '@/lib/web-push'
 
 const SUSPENDED_ACCOUNT_ERROR =
   'Your account has been suspended. Please contact an administrator.'
@@ -136,41 +132,26 @@ export async function POST(
       throw new Error('Failed to create early resume request: missing request id.')
     }
 
-    try {
-      const adminRecipients = await readAdminNotificationRecipients(supabase)
-      const memberName = activePause.member?.name?.trim() || 'this member'
-      const requestedBy = profile.name?.trim() || 'A staff member'
-      const title = getMemberPauseRequestNotificationTitle('early_resume')
+    const memberName = activePause.member?.name?.trim() || 'this member'
+    const requestedBy = profile.name?.trim() || 'A staff member'
+    const title = getMemberPauseRequestNotificationTitle('early_resume')
 
-      await insertNotifications(
-        supabase,
-        adminRecipients.map((recipient) => ({
-          recipientId: recipient.id,
-          type: 'member_pause_request',
-          title,
-          body: `New early resume request from ${requestedBy} for ${memberName}.`,
-          metadata: {
-            requestId,
-            requestKind: 'early_resume',
-            pauseId,
-            memberId: activePause.member_id,
-            memberName,
-            requestedBy,
-          },
-        })),
-      )
-
-      await sendPushToProfiles(
-        adminRecipients.map((recipient) => recipient.id),
-        {
-          title,
-          body: 'A staff member submitted an early resume request.',
-          url: '/pending-approvals/pause-requests',
-        },
-      )
-    } catch (notificationError) {
-      console.error('Failed to send early resume request notifications:', notificationError)
-    }
+    await notifyAdminsOfRequest(supabase, {
+      type: 'member_pause_request',
+      title,
+      body: `New early resume request from ${requestedBy} for ${memberName}.`,
+      url: '/pending-approvals/pause-requests',
+      metadata: {
+        requestId,
+        requestKind: 'early_resume',
+        pauseId,
+        memberId: activePause.member_id,
+        memberName,
+        requestedBy,
+      },
+      pushBody: 'A staff member submitted an early resume request.',
+      logMessage: 'Failed to send early resume request notifications:',
+    })
 
     return NextResponse.json({
       ok: true,

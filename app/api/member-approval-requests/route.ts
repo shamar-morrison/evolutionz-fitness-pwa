@@ -11,13 +11,9 @@ import {
   parseLocalDateTime,
 } from '@/lib/member-access-time'
 import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
-import {
-  insertNotifications,
-  readAdminNotificationRecipients,
-} from '@/lib/pt-notifications-server'
+import { notifyAdminsOfRequest } from '@/lib/notify-admins-of-request'
 import { requireAdminUser, requireAuthenticatedProfile } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
-import { sendPushToProfiles } from '@/lib/web-push'
 import type { MemberGender } from '@/types'
 
 const createMemberApprovalRequestSchema = z
@@ -253,40 +249,22 @@ export async function POST(request: Request) {
     }
 
     const requestRecord = data as MemberApprovalRequestRecord
-    try {
-      const adminRecipients = await readAdminNotificationRecipients(supabase)
-      const requestedBy = requestRecord.submittedByProfile?.name?.trim() || 'A staff member'
-      const memberName = requestRecord.name?.trim() || 'a new member'
+    const requestedBy = requestRecord.submittedByProfile?.name?.trim() || 'A staff member'
+    const memberName = requestRecord.name?.trim() || 'a new member'
 
-      await insertNotifications(
-        supabase,
-        adminRecipients.map((recipient) => ({
-          recipientId: recipient.id,
-          type: 'member_create_request',
-          title: 'New Member Request',
-          body: `New member request submitted by ${requestedBy} for ${memberName}.`,
-          metadata: {
-            requestId: requestRecord.id,
-            memberName,
-            requestedBy,
-          },
-        })),
-      )
-
-      await sendPushToProfiles(
-        adminRecipients.map((recipient) => recipient.id),
-        {
-          title: 'New Member Request',
-          body: 'A staff member submitted a new member request.',
-          url: '/pending-approvals/member-requests',
-        },
-      )
-    } catch (notificationError) {
-      console.error(
-        'Failed to send member create request notifications:',
-        notificationError,
-      )
-    }
+    await notifyAdminsOfRequest(supabase, {
+      type: 'member_create_request',
+      title: 'New Member Request',
+      body: `New member request submitted by ${requestedBy} for ${memberName}.`,
+      url: '/pending-approvals/member-requests',
+      metadata: {
+        requestId: requestRecord.id,
+        memberName,
+        requestedBy,
+      },
+      pushBody: 'A staff member submitted a new member request.',
+      logMessage: 'Failed to send member create request notifications:',
+    })
 
     return NextResponse.json({
       ok: true,

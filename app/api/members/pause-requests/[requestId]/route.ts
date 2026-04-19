@@ -16,13 +16,10 @@ import { isSupportedMemberPauseDurationDays } from '@/lib/member-pause'
 import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { reviewActionSchema } from '@/lib/validation-schemas'
 import { readMemberWithCardCode } from '@/lib/members'
 
-const reviewMemberPauseRequestSchema = z
-  .object({
-    action: z.enum(['approve', 'reject']),
-  })
-  .strict()
+const reviewMemberPauseRequestSchema = reviewActionSchema.strict()
 
 type QueryResult<T> = PromiseLike<{
   data: T | null

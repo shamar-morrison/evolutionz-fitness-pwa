@@ -9,23 +9,18 @@ import {
   MEMBER_EXTENSION_REQUEST_SELECT,
   type MemberExtensionRequestRecord,
 } from '@/lib/member-extension-request-records'
-import {
-  insertNotifications,
-  readAdminNotificationRecipients,
-} from '@/lib/pt-notifications-server'
+import { notifyAdminsOfRequest } from '@/lib/notify-admins-of-request'
 import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { requireAuthenticatedUser } from '@/lib/server-auth'
 import { readStaffProfile } from '@/lib/staff'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import { createClient } from '@/lib/supabase/server'
+import { durationDaysSchema } from '@/lib/validation-schemas'
 import { readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
-import { sendPushToProfiles } from '@/lib/web-push'
 
-const createMemberExtensionRequestSchema = z
-  .object({
-    duration_days: z.number().int().positive('Duration is required.'),
-  })
-  .strict()
+const createMemberExtensionRequestSchema = z.object({
+  duration_days: durationDaysSchema,
+}).strict()
 
 const SUSPENDED_ACCOUNT_ERROR =
   'Your account has been suspended. Please contact an administrator.'
@@ -128,42 +123,24 @@ export async function POST(
 
     const requestRecord = data as MemberExtensionRequestRecord
 
-    try {
-      const adminRecipients = await readAdminNotificationRecipients(supabase)
-      const memberName = requestRecord.member?.name?.trim() || 'this member'
-      const requestedBy = requestRecord.requestedByProfile?.name?.trim() || 'A staff member'
+    const memberName = requestRecord.member?.name?.trim() || 'this member'
+    const requestedBy = requestRecord.requestedByProfile?.name?.trim() || 'A staff member'
 
-      await insertNotifications(
-        supabase,
-        adminRecipients.map((recipient) => ({
-          recipientId: recipient.id,
-          type: 'member_extension_request',
-          title: 'Membership Extension Request',
-          body: `New membership extension request from ${requestedBy} for ${memberName}.`,
-          metadata: {
-            requestId: requestRecord.id,
-            memberId: requestRecord.member_id,
-            memberName,
-            requestedBy,
-            durationDays: requestRecord.duration_days,
-          },
-        })),
-      )
-
-      await sendPushToProfiles(
-        adminRecipients.map((recipient) => recipient.id),
-        {
-          title: 'Membership Extension Request',
-          body: 'A staff member submitted a membership extension request.',
-          url: '/pending-approvals/extension-requests',
-        },
-      )
-    } catch (notificationError) {
-      console.error(
-        'Failed to send member extension request notifications:',
-        notificationError,
-      )
-    }
+    await notifyAdminsOfRequest(supabase, {
+      type: 'member_extension_request',
+      title: 'Membership Extension Request',
+      body: `New membership extension request from ${requestedBy} for ${memberName}.`,
+      url: '/pending-approvals/extension-requests',
+      metadata: {
+        requestId: requestRecord.id,
+        memberId: requestRecord.member_id,
+        memberName,
+        requestedBy,
+        durationDays: requestRecord.duration_days,
+      },
+      pushBody: 'A staff member submitted a membership extension request.',
+      logMessage: 'Failed to send member extension request notifications:',
+    })
 
     return NextResponse.json({
       ok: true,

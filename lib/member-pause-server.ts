@@ -12,6 +12,7 @@ import {
   MEMBER_PAUSE_INACTIVE_ERROR,
 } from '@/lib/member-pause'
 import { readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
+import { getBaseRpcErrorStatus } from '@/lib/rpc-error-status'
 
 const REVOKE_CARD_TIMEOUT_ERROR = 'Revoke card request timed out after 10 seconds.'
 const ISSUE_CARD_TIMEOUT_ERROR = 'Issue card request timed out after 10 seconds.'
@@ -34,8 +35,13 @@ export function createErrorResponseBody(error: string) {
 }
 
 export function getMemberPauseRpcErrorStatus(message: string) {
+  const baseStatus = getBaseRpcErrorStatus(message)
+
+  if (baseStatus !== null) {
+    return baseStatus
+  }
+
   if (
-    message === 'Member not found.' ||
     message === 'Member pause not found.' ||
     message === 'Member pause request not found.' ||
     message === 'Early resume request not found.'
@@ -44,7 +50,6 @@ export function getMemberPauseRpcErrorStatus(message: string) {
   }
 
   if (
-    message === MEMBER_PAUSE_INACTIVE_ERROR ||
     message === MEMBER_PAUSE_ACTIVE_ERROR ||
     message === 'Pause duration is required.' ||
     message === 'Current timestamp is required.' ||
@@ -52,7 +57,6 @@ export function getMemberPauseRpcErrorStatus(message: string) {
     message === 'Resume date cannot be in the future.' ||
     message === 'Duration must be between 7 and 364 days.' ||
     message === 'Duration must match a supported membership option.' ||
-    message === 'This request has already been reviewed.' ||
     message === 'This pause is no longer active.' ||
     message === 'Resume date cannot be before the pause start date.'
   ) {

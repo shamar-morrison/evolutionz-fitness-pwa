@@ -9,17 +9,14 @@ import {
   type MemberExtensionServerClient,
   syncPreparedMemberExtensionAccessWindow,
 } from '@/lib/member-extension-server'
-import { MEMBER_EXTENSION_INACTIVE_ERROR } from '@/lib/member-extension'
 import { archiveResolvedRequestNotifications } from '@/lib/pt-notifications-server'
+import { getBaseRpcErrorStatus } from '@/lib/rpc-error-status'
 import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { reviewActionSchema } from '@/lib/validation-schemas'
 
-const reviewMemberExtensionRequestSchema = z
-  .object({
-    action: z.enum(['approve', 'reject']),
-  })
-  .strict()
+const reviewMemberExtensionRequestSchema = reviewActionSchema.strict()
 
 type QueryResult<T> = PromiseLike<{
   data: T | null
@@ -71,18 +68,14 @@ function createErrorResponse(error: string, status: number) {
 }
 
 function getApprovalRpcErrorStatus(message: string) {
-  if (
-    message === 'Member extension request not found.' ||
-    message === 'Member not found.'
-  ) {
-    return 404
+  const baseStatus = getBaseRpcErrorStatus(message)
+
+  if (baseStatus !== null) {
+    return baseStatus
   }
 
-  if (
-    message === 'This request has already been reviewed.' ||
-    message === MEMBER_EXTENSION_INACTIVE_ERROR
-  ) {
-    return 400
+  if (message === 'Member extension request not found.') {
+    return 404
   }
 
   return null

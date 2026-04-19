@@ -12,12 +12,11 @@ import { isSupportedMemberPauseDurationDays } from '@/lib/member-pause'
 import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { durationDaysSchema } from '@/lib/validation-schemas'
 
-const pauseMemberMembershipSchema = z
-  .object({
-    duration_days: z.number().int().positive('Duration is required.'),
-  })
-  .strict()
+const pauseMemberMembershipSchema = z.object({
+  duration_days: durationDaysSchema,
+}).strict()
 
 type RpcResult<T> = PromiseLike<{
   data: T | null

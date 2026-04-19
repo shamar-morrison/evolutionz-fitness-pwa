@@ -5,15 +5,14 @@ import {
   type MemberPaymentRequestRecord,
 } from '@/lib/member-payment-request-records'
 import { archiveResolvedRequestNotifications } from '@/lib/pt-notifications-server'
+import { getBaseRpcErrorStatus } from '@/lib/rpc-error-status'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { denyReviewActionSchema } from '@/lib/validation-schemas'
 
-const reviewMemberPaymentRequestSchema = z
-  .object({
-    action: z.enum(['approve', 'deny']),
-    rejectionReason: z.string().trim().min(1).nullable().optional(),
-  })
-  .strict()
+const reviewMemberPaymentRequestSchema = denyReviewActionSchema.extend({
+  rejectionReason: z.string().trim().min(1).nullable().optional(),
+}).strict()
 
 type QueryError = {
   message: string
@@ -92,18 +91,17 @@ function normalizeOptionalText(value: string | null | undefined) {
 }
 
 function getApprovalRpcErrorStatus(message: string) {
-  if (
-    message === 'Member payment request not found.' ||
-    message === 'Member not found.' ||
-    message === 'Membership type not found.'
-  ) {
+  const baseStatus = getBaseRpcErrorStatus(message)
+
+  if (baseStatus !== null) {
+    return baseStatus
+  }
+
+  if (message === 'Member payment request not found.' || message === 'Membership type not found.') {
     return 404
   }
 
-  if (
-    message === 'This request has already been reviewed.' ||
-    message === 'Membership type is required to approve this payment request.'
-  ) {
+  if (message === 'Membership type is required to approve this payment request.') {
     return 400
   }
 

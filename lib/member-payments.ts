@@ -1,5 +1,7 @@
 import { z } from 'zod'
+import { apiFetch } from '@/lib/api-fetch'
 import { getJamaicaDateInputValue } from '@/lib/member-access-time'
+import { paymentMethodSchema } from '@/lib/validation-schemas'
 import type {
   MemberPayment,
   MemberPaymentHistoryResponse,
@@ -25,7 +27,7 @@ const memberPaymentSchema = z.object({
   member_id: z.string().trim().min(1),
   member_type_id: z.string().trim().min(1).nullable(),
   payment_type: z.enum(['membership', 'card_fee']),
-  payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+  payment_method: paymentMethodSchema,
   amount_paid: z.number().finite(),
   promotion: z.string().trim().nullable(),
   recorded_by: z.string().trim().nullable(),
@@ -48,7 +50,7 @@ const memberPaymentHistoryItemSchema = z.object({
   memberTypeId: z.string().trim().min(1).nullable(),
   memberTypeName: z.string().trim().nullable(),
   paymentType: z.enum(['membership', 'card_fee']),
-  paymentMethod: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+  paymentMethod: paymentMethodSchema,
   amountPaid: z.number().finite(),
   promotion: z.string().trim().nullable(),
   recordedBy: z.string().trim().nullable(),
@@ -65,15 +67,9 @@ const memberPaymentHistoryResponseSchema = z.object({
   totalMatches: z.number().int().nonnegative(),
 })
 
-type MemberPaymentSuccessResponse = {
-  ok: true
-  payment: MemberPayment
-}
-
-type ErrorResponse = {
-  ok?: false
-  error: string
-}
+const deleteMemberPaymentResponseSchema = z.object({
+  ok: z.literal(true),
+})
 
 export type CreateMembershipPaymentInput = {
   payment_type: 'membership'
@@ -137,88 +133,48 @@ export async function fetchMemberPayments(
     page: String(page),
     limit: String(limit),
   })
-  const response = await fetch(
+
+  return apiFetch(
     `/api/members/${encodeURIComponent(memberId)}/payments?${searchParams.toString()}`,
     {
       method: 'GET',
       cache: 'no-store',
     },
+    memberPaymentHistoryResponseSchema,
+    'Failed to load member payments.',
   )
-
-  let responseBody: MemberPaymentHistoryResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MemberPaymentHistoryResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || ('error' in responseBody && responseBody.error)) {
-    throw new Error(
-      responseBody && 'error' in responseBody
-        ? responseBody.error
-        : 'Failed to load member payments.',
-    )
-  }
-
-  return memberPaymentHistoryResponseSchema.parse(responseBody)
 }
 
 export async function deleteMemberPayment(
   memberId: string,
   paymentId: string,
 ): Promise<void> {
-  const response = await fetch(
+  await apiFetch(
     `/api/members/${encodeURIComponent(memberId)}/payments/${encodeURIComponent(paymentId)}`,
     {
       method: 'DELETE',
     },
+    deleteMemberPaymentResponseSchema,
+    'Failed to delete the member payment.',
   )
-
-  let responseBody: { ok: true } | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as { ok: true } | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || ('error' in responseBody && responseBody.error)) {
-    throw new Error(
-      responseBody && 'error' in responseBody
-        ? responseBody.error
-        : 'Failed to delete the member payment.',
-    )
-  }
 }
 
 export async function recordMemberPayment(
   memberId: string,
   input: CreateMemberPaymentInput,
 ): Promise<MemberPayment> {
-  const response = await fetch(`/api/members/${encodeURIComponent(memberId)}/payments`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const responseBody = await apiFetch(
+    `/api/members/${encodeURIComponent(memberId)}/payments`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
     },
-    body: JSON.stringify(input),
-  })
+    memberPaymentResponseSchema,
+    'Failed to record the member payment.',
+  )
 
-  let responseBody: MemberPaymentSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MemberPaymentSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(
-      responseBody && 'error' in responseBody
-        ? responseBody.error
-        : 'Failed to record the member payment.',
-    )
-  }
-
-  return memberPaymentResponseSchema.parse(responseBody).payment
+  return responseBody.payment
 }

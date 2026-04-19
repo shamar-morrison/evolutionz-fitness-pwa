@@ -10,6 +10,7 @@ import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { type MemberTypesReadClient } from '@/lib/member-types-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
+import { paymentMethodSchema } from '@/lib/validation-schemas'
 import type {
   MemberPaymentMethod,
   MemberType,
@@ -19,7 +20,7 @@ const membershipPaymentSchema = z
   .object({
     payment_type: z.literal('membership'),
     member_type_id: z.string().trim().uuid('Membership type is required.'),
-    payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+    payment_method: paymentMethodSchema,
     amount_paid: z.number().finite().min(0),
     promotion: z.string().trim().min(1).nullable().optional(),
     payment_date: z
@@ -33,7 +34,7 @@ const membershipPaymentSchema = z
 const cardFeePaymentSchema = z
   .object({
     payment_type: z.literal('card_fee'),
-    payment_method: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+    payment_method: paymentMethodSchema,
     amount_paid: z
       .number()
       .finite()

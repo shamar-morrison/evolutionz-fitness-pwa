@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { apiFetch } from '@/lib/api-fetch'
+import { paymentMethodSchema } from '@/lib/validation-schemas'
 import type { MemberPaymentMethod, MemberPaymentRequest } from '@/types'
 
 const memberPaymentRequestSchema = z.object({
@@ -8,7 +10,7 @@ const memberPaymentRequestSchema = z.object({
   memberEmail: z.string().trim().nullable(),
   amount: z.number().finite(),
   paymentType: z.enum(['membership', 'card_fee']),
-  paymentMethod: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+  paymentMethod: paymentMethodSchema,
   paymentDate: z.string().trim().min(1),
   memberTypeId: z.string().trim().nullable(),
   memberTypeName: z.string().trim().nullable(),
@@ -32,25 +34,9 @@ const memberPaymentRequestResponseSchema = z.object({
   request: memberPaymentRequestSchema,
 })
 
-type ErrorResponse = {
-  ok?: false
-  error: string
-}
-
-type MemberPaymentRequestsSuccessResponse = {
-  ok: true
-  requests: MemberPaymentRequest[]
-}
-
-type MemberPaymentRequestSuccessResponse = {
-  ok: true
-  request: MemberPaymentRequest
-}
-
-type ReviewSuccessResponse = {
-  ok: true
-  paymentId?: string | null
-}
+const reviewMemberPaymentRequestResponseSchema = z.object({
+  paymentId: z.string().trim().min(1).nullable().optional(),
+})
 
 export type CreateMembershipPaymentRequestInput = {
   member_id: string
@@ -84,103 +70,57 @@ export type ReviewMemberPaymentRequestResult = {
   paymentId: string | null
 }
 
-function getErrorMessage(responseBody: unknown, fallback: string) {
-  if (
-    typeof responseBody === 'object' &&
-    responseBody !== null &&
-    'error' in responseBody &&
-    typeof responseBody.error === 'string'
-  ) {
-    return responseBody.error
-  }
-
-  return fallback
-}
-
 export async function fetchMemberPaymentRequests(): Promise<MemberPaymentRequest[]> {
-  const response = await fetch('/api/member-payment-requests', {
-    method: 'GET',
-    cache: 'no-store',
-  })
+  const responseBody = await apiFetch(
+    '/api/member-payment-requests',
+    {
+      method: 'GET',
+      cache: 'no-store',
+    },
+    memberPaymentRequestsResponseSchema,
+    'Failed to load member payment requests.',
+  )
 
-  let responseBody: MemberPaymentRequestsSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MemberPaymentRequestsSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(getErrorMessage(responseBody, 'Failed to load member payment requests.'))
-  }
-
-  return memberPaymentRequestsResponseSchema.parse(responseBody).requests
+  return responseBody.requests
 }
 
 export async function createMemberPaymentRequest(
   input: CreateMemberPaymentRequestInput,
 ): Promise<MemberPaymentRequest> {
-  const response = await fetch('/api/member-payment-requests', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const responseBody = await apiFetch(
+    '/api/member-payment-requests',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
     },
-    body: JSON.stringify(input),
-  })
+    memberPaymentRequestResponseSchema,
+    'Failed to submit the member payment request.',
+  )
 
-  let responseBody: MemberPaymentRequestSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as MemberPaymentRequestSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(
-      getErrorMessage(responseBody, 'Failed to submit the member payment request.'),
-    )
-  }
-
-  return memberPaymentRequestResponseSchema.parse(responseBody).request
+  return responseBody.request
 }
 
 export async function reviewMemberPaymentRequest(
   id: string,
   input: ReviewMemberPaymentRequestInput,
 ): Promise<ReviewMemberPaymentRequestResult> {
-  const response = await fetch(`/api/member-payment-requests/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
+  const responseBody = await apiFetch(
+    `/api/member-payment-requests/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
     },
-    body: JSON.stringify(input),
-  })
-
-  let responseBody: ReviewSuccessResponse | ErrorResponse | null = null
-
-  try {
-    responseBody = (await response.json()) as ReviewSuccessResponse | ErrorResponse
-  } catch {
-    responseBody = null
-  }
-
-  if (!response.ok || !responseBody || responseBody.ok === false) {
-    throw new Error(
-      getErrorMessage(responseBody, 'Failed to review the member payment request.'),
-    )
-  }
-
-  const paymentId =
-    typeof responseBody === 'object' &&
-    responseBody !== null &&
-    'paymentId' in responseBody &&
-    typeof responseBody.paymentId === 'string'
-      ? responseBody.paymentId
-      : null
+    reviewMemberPaymentRequestResponseSchema,
+    'Failed to review the member payment request.',
+  )
 
   return {
-    paymentId,
+    paymentId: responseBody.paymentId ?? null,
   }
 }
