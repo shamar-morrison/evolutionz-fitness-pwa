@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Toggle } from '@/components/ui/toggle'
+import { useEmailQuota } from '@/hooks/use-email-quota'
 import { useMemberTypes } from '@/hooks/use-member-types'
 import { useMembers } from '@/hooks/use-members'
 import { toast } from '@/hooks/use-toast'
@@ -171,6 +172,12 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   const [draftIdempotencyKey, setDraftIdempotencyKey] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const {
+    quota,
+    isLoading: isQuotaLoading,
+    error: quotaError,
+    refetch: refetchQuota,
+  } = useEmailQuota()
   const { members, isLoading: isMembersLoading, error: membersError } = useMembers()
   const { memberTypes, isLoading: isMemberTypesLoading, error: memberTypesError } = useMemberTypes()
   const activeMemberTypes = useMemo(
@@ -229,7 +236,10 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   )
   const isBodyEmpty = !hasMeaningfulHtmlContent(bodyHtml)
   const recipientCount = dedupedLiveRecipients.length
-  const shouldShowLimitWarning = recipientCount > resendDailyLimit
+  const isUsingQuotaForRecipientWarning = quota !== null
+  const recipientWarningLimit = isUsingQuotaForRecipientWarning ? quota.remaining : resendDailyLimit
+  const shouldShowLimitWarning = recipientCount > recipientWarningLimit
+  const shouldShowQuotaWarning = Boolean(quota && quota.remaining <= 20)
   const isSendDisabled =
     isSending || recipientCount === 0 || !subject.trim() || isBodyEmpty || isMembersLoading
 
@@ -436,6 +446,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
       toast({
         ...getSendSuccessToast(sendResponseBody),
       })
+      void refetchQuota()
 
       if (sendResponseBody.skippedDueToQuotaCount === 0) {
         resetForm()
@@ -460,6 +471,51 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
           Compose and send an email to selected Evolutionz Fitness members.
         </p>
       </div>
+
+      <section
+        aria-live="polite"
+        className={cn(
+          'rounded-2xl border px-5 py-4 shadow-sm',
+          shouldShowQuotaWarning
+            ? 'border-amber-500/40 bg-amber-500/10 text-amber-950'
+            : 'border-border bg-card',
+        )}
+      >
+        <p
+          className={cn(
+            'text-xs font-semibold uppercase tracking-[0.2em]',
+            shouldShowQuotaWarning ? 'text-amber-900' : 'text-muted-foreground',
+          )}
+        >
+          Daily Email Quota
+        </p>
+        {isQuotaLoading && !quota ? (
+          <p className="mt-2 text-lg font-semibold text-foreground">
+            Loading today&apos;s email quota...
+          </p>
+        ) : quota ? (
+          <div className="mt-2 space-y-1">
+            <p className="text-2xl font-semibold text-foreground">
+              {quota.remaining} of {quota.limit} remaining
+            </p>
+            <p className={cn('text-sm', shouldShowQuotaWarning ? 'text-amber-900' : 'text-muted-foreground')}>
+              {quota.sent} sent today (Jamaica time)
+            </p>
+            {shouldShowQuotaWarning ? (
+              <p className="text-sm font-medium text-amber-900">
+                Warning: 20 or fewer emails remain today.
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-2 text-lg font-semibold text-foreground">
+            Daily email quota unavailable.
+          </p>
+        )}
+        {quotaError ? (
+          <p className="mt-2 text-sm text-destructive">{quotaError.message}</p>
+        ) : null}
+      </section>
 
       <form
         className="grid grid-cols-1 gap-6 items-start lg:grid-cols-12"
@@ -656,8 +712,17 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
               
               {shouldShowLimitWarning ? (
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
-                  You can send up to {(resendDailyLimit)} emails per day. Only the
-                  first {formatRecipientLabel(resendDailyLimit)} will receive this email.
+                  {isUsingQuotaForRecipientWarning ? (
+                    <>
+                      You have {recipientWarningLimit} emails remaining today. Only the first{' '}
+                      {recipientWarningLimit} recipients will receive this email.
+                    </>
+                  ) : (
+                    <>
+                      You can send up to {resendDailyLimit} emails per day. Only the first{' '}
+                      {formatRecipientLabel(resendDailyLimit)} will receive this email.
+                    </>
+                  )}
                 </div>
               ) : null}
               {membersError ? (

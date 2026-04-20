@@ -8,10 +8,12 @@ import type { Member, MemberTypeRecord } from '@/types'
 
 const {
   toastMock,
+  useEmailQuotaMock,
   useMembersMock,
   useMemberTypesMock,
 } = vi.hoisted(() => ({
   toastMock: vi.fn(),
+  useEmailQuotaMock: vi.fn(),
   useMembersMock: vi.fn(),
   useMemberTypesMock: vi.fn(),
 }))
@@ -170,6 +172,10 @@ vi.mock('@/hooks/use-member-types', () => ({
   useMemberTypes: useMemberTypesMock,
 }))
 
+vi.mock('@/hooks/use-email-quota', () => ({
+  useEmailQuota: useEmailQuotaMock,
+}))
+
 vi.mock('@/hooks/use-members', () => ({
   useMembers: useMembersMock,
 }))
@@ -271,6 +277,16 @@ describe('EmailClient', () => {
       isLoading: false,
       error: null,
     })
+    useEmailQuotaMock.mockReturnValue({
+      quota: {
+        sent: 12,
+        limit: 100,
+        remaining: 88,
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
   })
 
   afterEach(() => {
@@ -282,9 +298,10 @@ describe('EmailClient', () => {
     vi.unstubAllGlobals()
     useMembersMock.mockReset()
     useMemberTypesMock.mockReset()
+    useEmailQuotaMock.mockReset()
   })
 
-  it('shows the configured daily limit in the warning copy', async () => {
+  it('shows the remaining daily quota in the warning copy when quota data is available', async () => {
     useMembersMock.mockReturnValue({
       members: [
         createMember({
@@ -309,6 +326,66 @@ describe('EmailClient', () => {
       isLoading: false,
       error: null,
     })
+    useEmailQuotaMock.mockReturnValue({
+      quota: {
+        sent: 98,
+        limit: 100,
+        remaining: 2,
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(<EmailClient resendDailyLimit={10} />)
+    })
+
+    const activeMembersCheckbox = container.querySelector('#email-active-members')
+    const expiredMembersCheckbox = container.querySelector('#email-expired-members')
+
+    expect(activeMembersCheckbox).toBeInstanceOf(HTMLInputElement)
+    expect(expiredMembersCheckbox).toBeInstanceOf(HTMLInputElement)
+
+    await clickElement(activeMembersCheckbox as HTMLInputElement)
+    await clickElement(expiredMembersCheckbox as HTMLInputElement)
+
+    expect(container.textContent).toContain(
+      'You have 2 emails remaining today. Only the first 2 recipients will receive this email.',
+    )
+  })
+
+  it('falls back to the configured daily limit warning while quota is loading', async () => {
+    useMembersMock.mockReturnValue({
+      members: [
+        createMember({
+          id: 'member-1',
+          name: 'Alpha',
+          email: 'alpha@example.com',
+          status: 'Active',
+        }),
+        createMember({
+          id: 'member-2',
+          name: 'Beta',
+          email: 'beta@example.com',
+          status: 'Active',
+        }),
+        createMember({
+          id: 'member-3',
+          name: 'Gamma',
+          email: 'gamma@example.com',
+          status: 'Expired',
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+    useEmailQuotaMock.mockReturnValue({
+      quota: null,
+      isLoading: true,
+      error: null,
+      refetch: vi.fn(),
+    })
 
     await act(async () => {
       root.render(<EmailClient resendDailyLimit={2} />)
@@ -326,6 +403,36 @@ describe('EmailClient', () => {
     expect(container.textContent).toContain(
       'You can send up to 2 emails per day. Only the first 2 recipients will receive this email.',
     )
+  })
+
+  it('renders the daily quota counter near the top of the page', async () => {
+    await act(async () => {
+      root.render(<EmailClient resendDailyLimit={5} />)
+    })
+
+    expect(container.textContent).toContain('Daily Email Quota')
+    expect(container.textContent).toContain('88 of 100 remaining')
+    expect(container.textContent).toContain('12 sent today (Jamaica time)')
+  })
+
+  it('shows the warning quota state when 20 or fewer emails remain', async () => {
+    useEmailQuotaMock.mockReturnValue({
+      quota: {
+        sent: 80,
+        limit: 100,
+        remaining: 20,
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(<EmailClient resendDailyLimit={5} />)
+    })
+
+    expect(container.textContent).toContain('20 of 100 remaining')
+    expect(container.textContent).toContain('Warning: 20 or fewer emails remain today.')
   })
 
   it('renders the expired members checkbox and updates the live recipient count', async () => {
@@ -496,5 +603,90 @@ describe('EmailClient', () => {
       '/api/email/recipients?activeMembers=true&expiredMembers=true',
     ])
     expect(randomUUIDMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('refetches the quota counter after a successful send', async () => {
+    const refetchQuotaMock = vi.fn()
+
+    useEmailQuotaMock.mockReturnValue({
+      quota: {
+        sent: 12,
+        limit: 100,
+        remaining: 88,
+      },
+      isLoading: false,
+      error: null,
+      refetch: refetchQuotaMock,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url
+
+        if (url.startsWith('/api/email/recipients')) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              recipients: [{ id: 'member-1', name: 'Alpha', email: 'alpha@example.com' }],
+            }),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            },
+          )
+        }
+
+        if (url === '/api/email/send') {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              sentCount: 1,
+              alreadySentCount: 0,
+              skippedDueToQuotaCount: 0,
+            }),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            },
+          )
+        }
+
+        throw new Error(`Unexpected fetch call: ${url}`)
+      }),
+    )
+
+    await act(async () => {
+      root.render(<EmailClient resendDailyLimit={5} />)
+    })
+
+    const activeMembersCheckbox = container.querySelector('#email-active-members')
+    const subjectInput = container.querySelector('#email-subject')
+    const bodyInput = container.querySelector('textarea[aria-label="Email body editor"]')
+    const sendButton = Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.replace(/\s+/gu, ' ').trim() === 'Send Email',
+    )
+
+    expect(activeMembersCheckbox).toBeInstanceOf(HTMLInputElement)
+    expect(subjectInput).toBeInstanceOf(HTMLInputElement)
+    expect(bodyInput).toBeInstanceOf(HTMLTextAreaElement)
+    expect(sendButton).toBeInstanceOf(HTMLButtonElement)
+
+    await clickElement(activeMembersCheckbox as HTMLInputElement)
+    await setInputValue(subjectInput as HTMLInputElement, 'Hello members')
+    await setInputValue(bodyInput as HTMLTextAreaElement, '<p>Hello team</p>')
+    await clickElement(sendButton as HTMLButtonElement)
+    await flushAsyncWork()
+
+    expect(refetchQuotaMock).toHaveBeenCalledTimes(1)
   })
 })

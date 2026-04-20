@@ -1,4 +1,7 @@
 export const queryKeys = {
+  email: {
+    quota: ['email', 'quota'] as const,
+  },
   dashboard: {
     stats: ['dashboard', 'stats'] as const,
     recentMembers: ['dashboard', 'recent-members'] as const,
