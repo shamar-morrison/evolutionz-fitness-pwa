@@ -656,7 +656,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
               
               {shouldShowLimitWarning ? (
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
-                  You can send up to {formatRecipientLabel(resendDailyLimit)} per day. Only the
+                  You can send up to {(resendDailyLimit)} emails per day. Only the
                   first {formatRecipientLabel(resendDailyLimit)} will receive this email.
                 </div>
               ) : null}
