@@ -32,6 +32,7 @@ type AdminEmailDeliveryRow = {
   idempotency_key: string
   recipient_email: string
   payment_id?: string | null
+  class_registration_id?: string | null
   status: 'pending' | 'sent'
   provider_message_id?: string | null
   sent_at?: string | null
@@ -66,6 +67,30 @@ export class AdminEmailQuotaError extends Error {
 
 function normalizeRecipientEmail(value: string) {
   return value.trim().toLowerCase()
+}
+
+function getReceiptTargetColumn(input: {
+  paymentId?: string
+  classRegistrationId?: string
+}) {
+  if (typeof input.paymentId === 'string' && input.paymentId.trim()) {
+    return {
+      column: 'payment_id',
+      value: input.paymentId,
+    } as const
+  }
+
+  if (
+    typeof input.classRegistrationId === 'string' &&
+    input.classRegistrationId.trim()
+  ) {
+    return {
+      column: 'class_registration_id',
+      value: input.classRegistrationId,
+    } as const
+  }
+
+  throw new Error('Receipt delivery target is required.')
 }
 
 export function createAdminEmailProviderIdempotencyKey(input: {
@@ -259,11 +284,15 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
     return (data as AdminEmailDeliveryLookupRow | null) ?? null
   }
 
-  async function readReceiptDeliveryRow(input: { paymentId: string }) {
+  async function readReceiptDeliveryRow(input: {
+    paymentId?: string
+    classRegistrationId?: string
+  }) {
+    const target = getReceiptTargetColumn(input)
     const { data, error } = await supabase
       .from(ADMIN_EMAIL_DELIVERIES_TABLE)
       .select('id,status,created_at,provider_message_id,sent_at')
-      .eq('payment_id', input.paymentId)
+      .eq(target.column, target.value)
       .maybeSingle()
 
     if (error) {
@@ -295,7 +324,8 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
   async function insertPendingReceiptDelivery(input: {
     senderProfileId: string
     sendDate: string
-    paymentId: string
+    paymentId?: string
+    classRegistrationId?: string
     recipientEmail: string
     idempotencyKey: string
   }) {
@@ -306,7 +336,8 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         send_date: input.sendDate,
         idempotency_key: input.idempotencyKey,
         recipient_email: normalizeRecipientEmail(input.recipientEmail),
-        payment_id: input.paymentId,
+        payment_id: input.paymentId ?? null,
+        class_registration_id: input.classRegistrationId ?? null,
         status: 'pending',
       } satisfies AdminEmailDeliveryRow)
       .select('id')
@@ -526,7 +557,10 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         throw new Error(`Failed to release admin email delivery reservation: ${error.message}`)
       }
     },
-    async readReceiptDelivery(input: { paymentId: string }) {
+    async readReceiptDelivery(input: {
+      paymentId?: string
+      classRegistrationId?: string
+    }) {
       const delivery = await readReceiptDeliveryRow(input)
 
       if (!delivery) {
@@ -543,10 +577,12 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
     async reserveReceiptDelivery(input: {
       senderProfileId: string
       sendDate: string
-      paymentId: string
+      paymentId?: string
+      classRegistrationId?: string
       recipientEmail: string
       idempotencyKey: string
     }) {
+      const target = getReceiptTargetColumn(input)
       const { data, error } = await insertPendingReceiptDelivery(input)
 
       if (!error) {
@@ -557,9 +593,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         throw new Error(`Failed to reserve receipt email delivery: ${error.message}`)
       }
 
-      const existingDelivery = await readReceiptDeliveryRow({
-        paymentId: input.paymentId,
-      })
+      const existingDelivery = await readReceiptDeliveryRow(input)
 
       if (!existingDelivery) {
         const retryInsertResult = await insertPendingReceiptDelivery(input)
@@ -574,9 +608,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
           )
         }
 
-        const retryExistingDelivery = await readReceiptDeliveryRow({
-          paymentId: input.paymentId,
-        })
+        const retryExistingDelivery = await readReceiptDeliveryRow(input)
 
         if (!retryExistingDelivery) {
           throw new Error('Failed to reserve receipt email delivery: reservation not found.')
@@ -601,7 +633,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         .from(ADMIN_EMAIL_DELIVERIES_TABLE)
         .delete()
         .eq('id', existingDelivery.id)
-        .eq('payment_id', input.paymentId)
+        .eq(target.column, target.value)
         .eq('status', 'pending')
 
       if (deleteError) {
@@ -620,9 +652,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         )
       }
 
-      const retryExistingDelivery = await readReceiptDeliveryRow({
-        paymentId: input.paymentId,
-      })
+      const retryExistingDelivery = await readReceiptDeliveryRow(input)
 
       if (!retryExistingDelivery) {
         throw new Error('Failed to reserve receipt email delivery: reservation not found.')
@@ -635,10 +665,12 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
       return retryExistingDelivery.status === 'sent' ? 'sent' : 'pending'
     },
     async markReceiptDeliverySent(input: {
-      paymentId: string
+      paymentId?: string
+      classRegistrationId?: string
       providerMessageId: string | null
       sentAt: string
     }) {
+      const target = getReceiptTargetColumn(input)
       const { data, error } = await supabase
         .from(ADMIN_EMAIL_DELIVERIES_TABLE)
         .update({
@@ -646,7 +678,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
           sent_at: input.sentAt,
           status: 'sent',
         })
-        .eq('payment_id', input.paymentId)
+        .eq(target.column, target.value)
         .eq('status', 'pending')
         .select('id')
         .maybeSingle()
@@ -656,9 +688,7 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
       }
 
       if (!data) {
-        const existingDelivery = await readReceiptDeliveryRow({
-          paymentId: input.paymentId,
-        })
+        const existingDelivery = await readReceiptDeliveryRow(input)
 
         if (existingDelivery?.status === 'sent') {
           return
@@ -667,11 +697,15 @@ export function createSupabaseAdminEmailDeliveryStore(supabase: any) {
         throw new Error('Failed to mark receipt email delivery as sent: reservation not found.')
       }
     },
-    async releasePendingReceiptDelivery(input: { paymentId: string }) {
+    async releasePendingReceiptDelivery(input: {
+      paymentId?: string
+      classRegistrationId?: string
+    }) {
+      const target = getReceiptTargetColumn(input)
       const { error } = await supabase
         .from(ADMIN_EMAIL_DELIVERIES_TABLE)
         .delete()
-        .eq('payment_id', input.paymentId)
+        .eq(target.column, target.value)
         .eq('status', 'pending')
 
       if (error) {

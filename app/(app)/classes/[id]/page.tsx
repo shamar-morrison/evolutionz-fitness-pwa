@@ -13,7 +13,9 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { ClassAttendanceDialog } from '@/components/class-attendance-dialog'
+import { ClassRegistrationFeeFields } from '@/components/class-registration-fee-fields'
 import { ClassRegistrationDialog } from '@/components/class-registration-dialog'
+import { ClassRegistrationReceiptPreviewDialog } from '@/components/class-registration-receipt-preview-dialog'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { SearchableSelect } from '@/components/searchable-select'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -71,9 +73,15 @@ import { toast } from '@/hooks/use-toast'
 import { RedirectOnMount } from '@/components/redirect-on-mount'
 import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
 import {
+  createClassRegistrationEditRequest,
+  createClassRegistrationRemovalRequest,
+} from '@/lib/class-registration-requests'
+import {
   assignClassTrainer,
   calculateClassRegistrationAmount,
   createClassScheduleRule,
+  deleteClassRegistration,
+  getDefaultClassRegistrationFeeType,
   type ClassTrainerProfile,
   deleteClassScheduleRule,
   formatClassDate,
@@ -89,7 +97,9 @@ import {
   removeClassTrainer,
   reviewClassRegistration,
   sortClassScheduleRules,
+  updateClassRegistration,
   updateClassPeriodStart,
+  type ClassRegistrationFeeType,
   type ClassRegistrationListItem,
   type ClassScheduleRuleDay,
   type ClassSessionListItem,
@@ -140,12 +150,16 @@ function RegistrationsTable({
   showActions = false,
   onApprove,
   onDeny,
+  onEdit,
+  onRemove,
 }: {
   registrations: ClassRegistrationListItem[]
   showStatus?: boolean
   showActions?: boolean
   onApprove?: (registration: ClassRegistrationListItem) => void
   onDeny?: (registration: ClassRegistrationListItem) => void
+  onEdit?: (registration: ClassRegistrationListItem) => void
+  onRemove?: (registration: ClassRegistrationListItem) => void
 }) {
   if (registrations.length === 0) {
     return (
@@ -186,21 +200,45 @@ function RegistrationsTable({
                 {showActions ? (
                   <TableCell>
                     <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onDeny?.(registration)}
-                      >
-                        Deny
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => onApprove?.(registration)}
-                      >
-                        Approve
-                      </Button>
+                      {onDeny && onApprove ? (
+                        <>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onDeny?.(registration)}
+                          >
+                            Deny
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => onApprove?.(registration)}
+                          >
+                            Approve
+                          </Button>
+                        </>
+                      ) : null}
+                      {onEdit ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onEdit(registration)}
+                        >
+                          Edit
+                        </Button>
+                      ) : null}
+                      {onRemove ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => onRemove(registration)}
+                        >
+                          Remove
+                        </Button>
+                      ) : null}
                     </div>
                   </TableCell>
                 ) : null}
@@ -318,13 +356,26 @@ export default function ClassDetailPage() {
   const [isPeriodPickerOpen, setIsPeriodPickerOpen] = useState(false)
   const [approveRegistrationItem, setApproveRegistrationItem] =
     useState<ClassRegistrationListItem | null>(null)
+  const [approveFeeType, setApproveFeeType] = useState<ClassRegistrationFeeType>('custom')
   const [approveAmount, setApproveAmount] = useState('')
+  const [approvePaymentReceived, setApprovePaymentReceived] = useState(false)
+  const [approveRegistrationNotes, setApproveRegistrationNotes] = useState('')
   const [approveNote, setApproveNote] = useState('')
+  const [editRegistrationItem, setEditRegistrationItem] =
+    useState<ClassRegistrationListItem | null>(null)
+  const [editPeriodStart, setEditPeriodStart] = useState(getDefaultClassDateValue)
+  const [editFeeType, setEditFeeType] = useState<ClassRegistrationFeeType>('custom')
+  const [editAmount, setEditAmount] = useState('')
+  const [editPaymentReceived, setEditPaymentReceived] = useState(false)
+  const [editRegistrationNotes, setEditRegistrationNotes] = useState('')
+  const [removeRegistrationItem, setRemoveRegistrationItem] =
+    useState<ClassRegistrationListItem | null>(null)
+  const [classRegistrationReceiptId, setClassRegistrationReceiptId] = useState<string | null>(null)
   const [denyRegistrationItem, setDenyRegistrationItem] =
     useState<ClassRegistrationListItem | null>(null)
   const [denyReason, setDenyReason] = useState('')
   const [pendingAction, setPendingAction] = useState<
-    null | 'period' | 'approve' | 'deny' | 'schedule-rule' | 'generate'
+    null | 'period' | 'approve' | 'deny' | 'registration-edit' | 'registration-remove' | 'schedule-rule' | 'generate'
   >(null)
   const [trainerAction, setTrainerAction] = useState<null | 'add'>(null)
   const [pendingTrainerRemovalIds, setPendingTrainerRemovalIds] = useState<Set<string>>(
@@ -429,6 +480,8 @@ export default function ClassDetailPage() {
   const isSavingPeriod = pendingAction === 'period'
   const isApproving = pendingAction === 'approve'
   const isDenying = pendingAction === 'deny'
+  const isEditingRegistration = pendingAction === 'registration-edit'
+  const isRemovingRegistration = pendingAction === 'registration-remove'
   const isSavingScheduleRule = pendingAction === 'schedule-rule'
   const isGeneratingSessions = pendingAction === 'generate'
   const isSavingTrainer = trainerAction === 'add'
@@ -497,23 +550,57 @@ export default function ClassDetailPage() {
     })
   }
 
+  const shouldOfferReceiptForRegistration = (registration: ClassRegistrationListItem) =>
+    registration.amount_paid > 0 && Boolean(registration.registrant_email)
+
   const openApproveDialog = (registration: ClassRegistrationListItem) => {
     if (!classItem) {
       return
     }
 
+    const nextFeeType = registration.fee_type ?? getDefaultClassRegistrationFeeType(classItem)
     const suggestedAmount =
-      registration.amount_paid > 0
+      nextFeeType === 'custom' && registration.amount_paid > 0
         ? registration.amount_paid
         : calculateClassRegistrationAmount({
             classItem,
-            month_start: registration.month_start,
-            registrant_type: registration.registrant_type,
+            fee_type: nextFeeType,
+            custom_amount: registration.amount_paid,
           })
 
     setApproveRegistrationItem(registration)
-    setApproveAmount(String(suggestedAmount))
+    setApproveFeeType(nextFeeType)
+    setApproveAmount(nextFeeType === 'custom' ? String(suggestedAmount || '') : '')
+    setApprovePaymentReceived(registration.amount_paid > 0)
+    setApproveRegistrationNotes(registration.notes ?? '')
     setApproveNote(registration.review_note ?? '')
+  }
+
+  const openEditDialog = (registration: ClassRegistrationListItem) => {
+    if (!classItem) {
+      return
+    }
+
+    const nextFeeType = registration.fee_type ?? getDefaultClassRegistrationFeeType(classItem)
+    const suggestedAmount =
+      nextFeeType === 'custom' && registration.amount_paid > 0
+        ? registration.amount_paid
+        : calculateClassRegistrationAmount({
+            classItem,
+            fee_type: nextFeeType,
+            custom_amount: registration.amount_paid,
+          })
+
+    setEditRegistrationItem(registration)
+    setEditPeriodStart(registration.month_start)
+    setEditFeeType(nextFeeType)
+    setEditAmount(nextFeeType === 'custom' ? String(suggestedAmount || '') : '')
+    setEditPaymentReceived(registration.amount_paid > 0)
+    setEditRegistrationNotes(registration.notes ?? '')
+  }
+
+  const openRemoveDialog = (registration: ClassRegistrationListItem) => {
+    setRemoveRegistrationItem(registration)
   }
 
   const handleApprove = async () => {
@@ -522,28 +609,33 @@ export default function ClassDetailPage() {
     }
 
     const parsedAmount = Number(approveAmount)
-
-    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
-      toast({
-        title: 'Amount required',
-        description: 'Enter a valid JMD amount before approving.',
-        variant: 'destructive',
-      })
-      return
-    }
+    const calculatedAmount = calculateClassRegistrationAmount({
+      classItem: classItem!,
+      fee_type: approveFeeType,
+      custom_amount: Number.isFinite(parsedAmount) ? parsedAmount : 0,
+    })
 
     setPendingAction('approve')
 
     try {
-      await reviewClassRegistration(classId, approveRegistrationItem.id, {
+      const registration = await reviewClassRegistration(classId, approveRegistrationItem.id, {
         status: 'approved',
-        amount_paid: parsedAmount,
+        fee_type: approveFeeType,
+        amount_paid: calculatedAmount,
+        payment_received: approvePaymentReceived,
+        notes: approveRegistrationNotes.trim() || null,
         review_note: approveNote.trim() || null,
       })
       await invalidateClassQueries()
       setApproveRegistrationItem(null)
+      setApproveFeeType('custom')
       setApproveAmount('')
+      setApprovePaymentReceived(false)
+      setApproveRegistrationNotes('')
       setApproveNote('')
+      if (shouldOfferReceiptForRegistration(registration)) {
+        setClassRegistrationReceiptId(registration.id)
+      }
       toast({
         title: 'Registration approved',
       })
@@ -554,6 +646,117 @@ export default function ClassDetailPage() {
           approveError instanceof Error
             ? approveError.message
             : 'Failed to approve the class registration.',
+        variant: 'destructive',
+      })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  const handleEditRegistration = async () => {
+    if (!editRegistrationItem || !classItem) {
+      return
+    }
+
+    const parsedAmount = Number(editAmount)
+    const calculatedAmount = calculateClassRegistrationAmount({
+      classItem,
+      fee_type: editFeeType,
+      custom_amount: Number.isFinite(parsedAmount) ? parsedAmount : 0,
+    })
+
+    setPendingAction('registration-edit')
+
+    try {
+      if (profile?.role === 'admin') {
+        const result = await updateClassRegistration(editRegistrationItem.id, {
+          period_start: editPeriodStart,
+          fee_type: editFeeType,
+          amount_paid: calculatedAmount,
+          payment_received: editPaymentReceived,
+          notes: editRegistrationNotes.trim() || null,
+        })
+
+        await invalidateClassQueries()
+        setEditRegistrationItem(null)
+        setEditPeriodStart(getDefaultClassDateValue())
+        setEditFeeType('custom')
+        setEditAmount('')
+        setEditPaymentReceived(false)
+        setEditRegistrationNotes('')
+        if (result.amountChanged && shouldOfferReceiptForRegistration(result.registration)) {
+          setClassRegistrationReceiptId(result.registration.id)
+        }
+        toast({
+          title: 'Registration updated',
+        })
+      } else {
+        await createClassRegistrationEditRequest(editRegistrationItem.id, {
+          period_start: editPeriodStart,
+          fee_type: editFeeType,
+          amount_paid: calculatedAmount,
+          payment_received: editPaymentReceived,
+          notes: editRegistrationNotes.trim() || null,
+        })
+        await queryClient.invalidateQueries({ queryKey: queryKeys.pendingApprovalCounts.all })
+        setEditRegistrationItem(null)
+        setEditPeriodStart(getDefaultClassDateValue())
+        setEditFeeType('custom')
+        setEditAmount('')
+        setEditPaymentReceived(false)
+        setEditRegistrationNotes('')
+        toast({
+          title: 'Edit request submitted',
+        })
+      }
+    } catch (editError) {
+      toast({
+        title: profile?.role === 'admin' ? 'Update failed' : 'Request failed',
+        description:
+          editError instanceof Error
+            ? editError.message
+            : profile?.role === 'admin'
+              ? 'Failed to update the class registration.'
+              : 'Failed to submit the edit request.',
+        variant: 'destructive',
+      })
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  const handleRemoveRegistration = async () => {
+    if (!removeRegistrationItem) {
+      return
+    }
+
+    setPendingAction('registration-remove')
+
+    try {
+      if (profile?.role === 'admin') {
+        await deleteClassRegistration(removeRegistrationItem.id)
+        await invalidateClassQueries()
+        setRemoveRegistrationItem(null)
+        toast({
+          title: 'Registration removed',
+        })
+      } else {
+        await createClassRegistrationRemovalRequest(removeRegistrationItem.id)
+        await queryClient.invalidateQueries({ queryKey: queryKeys.pendingApprovalCounts.all })
+        setRemoveRegistrationItem(null)
+        toast({
+          title: 'Removal request submitted',
+        })
+      }
+    } catch (removeError) {
+      toast({
+        title: profile?.role === 'admin' ? 'Removal failed' : 'Request failed',
+        description:
+          removeError instanceof Error
+            ? removeError.message
+            : profile?.role === 'admin'
+              ? 'Failed to remove the class registration.'
+              : 'Failed to submit the removal request.',
         variant: 'destructive',
       })
     } finally {
@@ -1111,7 +1314,7 @@ export default function ClassDetailPage() {
           </Card>
         )}
 
-        {canManageClasses ? (
+        {canViewClasses ? (
           <Tabs
             value={activeTab}
             onValueChange={(value) => setActiveTab(value as ClassesTab)}
@@ -1119,7 +1322,9 @@ export default function ClassDetailPage() {
           >
             <TabsList>
               <TabsTrigger value="registrations">Registrations</TabsTrigger>
-              <TabsTrigger value="pending">Pending Approvals</TabsTrigger>
+              {canManageClasses ? (
+                <TabsTrigger value="pending">Pending Approvals</TabsTrigger>
+              ) : null}
               <TabsTrigger value="sessions">Sessions</TabsTrigger>
             </TabsList>
 
@@ -1129,28 +1334,35 @@ export default function ClassDetailPage() {
               ) : approvedRegistrationsQuery.error ? (
                 <EmptyCardState label="Failed to load approved registrations." />
               ) : (
-                <RegistrationsTable registrations={approvedRegistrationsQuery.registrations} />
-              )}
-            </TabsContent>
-
-            <TabsContent value="pending">
-              {pendingRegistrationsQuery.isLoading ? (
-                <Skeleton className="h-80 w-full" />
-              ) : pendingRegistrationsQuery.error ? (
-                <EmptyCardState label="Failed to load pending approvals." />
-              ) : (
                 <RegistrationsTable
-                  registrations={pendingRegistrationsQuery.registrations}
-                  showStatus
-                  showActions
-                  onApprove={openApproveDialog}
-                  onDeny={(registration) => {
-                    setDenyRegistrationItem(registration)
-                    setDenyReason('')
-                  }}
+                  registrations={approvedRegistrationsQuery.registrations}
+                  showActions={canRegisterForClasses}
+                  onEdit={canRegisterForClasses ? openEditDialog : undefined}
+                  onRemove={canRegisterForClasses ? openRemoveDialog : undefined}
                 />
               )}
             </TabsContent>
+
+            {canManageClasses ? (
+              <TabsContent value="pending">
+                {pendingRegistrationsQuery.isLoading ? (
+                  <Skeleton className="h-80 w-full" />
+                ) : pendingRegistrationsQuery.error ? (
+                  <EmptyCardState label="Failed to load pending approvals." />
+                ) : (
+                  <RegistrationsTable
+                    registrations={pendingRegistrationsQuery.registrations}
+                    showStatus
+                    showActions
+                    onApprove={openApproveDialog}
+                    onDeny={(registration) => {
+                      setDenyRegistrationItem(registration)
+                      setDenyReason('')
+                    }}
+                  />
+                )}
+              </TabsContent>
+            ) : null}
 
             <TabsContent value="sessions" className="space-y-4">
               {!classItem.current_period_start ? (
@@ -1191,7 +1403,12 @@ export default function ClassDetailPage() {
               ) : approvedRegistrationsQuery.error ? (
                 <EmptyCardState label="Failed to load approved registrations." />
               ) : (
-                <RegistrationsTable registrations={approvedRegistrationsQuery.registrations} />
+                <RegistrationsTable
+                  registrations={approvedRegistrationsQuery.registrations}
+                  showActions={canRegisterForClasses}
+                  onEdit={canRegisterForClasses ? openEditDialog : undefined}
+                  onRemove={canRegisterForClasses ? openRemoveDialog : undefined}
+                />
               )}
             </TabsContent>
 
@@ -1225,8 +1442,23 @@ export default function ClassDetailPage() {
           classItem={classItem}
           open={showRegistrationDialog}
           onOpenChange={setShowRegistrationDialog}
+          onRegistered={(registration) => {
+            if (shouldOfferReceiptForRegistration(registration)) {
+              setClassRegistrationReceiptId(registration.id)
+            }
+          }}
         />
       ) : null}
+
+      <ClassRegistrationReceiptPreviewDialog
+        registrationId={classRegistrationReceiptId}
+        open={Boolean(classRegistrationReceiptId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setClassRegistrationReceiptId(null)
+          }
+        }}
+      />
 
       <ClassAttendanceDialog
         classId={classId}
@@ -1240,6 +1472,115 @@ export default function ClassDetailPage() {
             setSelectedSession(null)
           }
         }}
+      />
+
+      <Dialog
+        open={Boolean(editRegistrationItem)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && isEditingRegistration) {
+            return
+          }
+
+          if (!nextOpen) {
+            setEditRegistrationItem(null)
+            setEditPeriodStart(getDefaultClassDateValue())
+            setEditFeeType('custom')
+            setEditAmount('')
+            setEditPaymentReceived(false)
+            setEditRegistrationNotes('')
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg" isLoading={isEditingRegistration}>
+          <DialogHeader>
+            <DialogTitle>
+              {profile?.role === 'admin' ? 'Edit Registration' : 'Request Registration Edit'}
+            </DialogTitle>
+            <DialogDescription>
+              {profile?.role === 'admin'
+                ? 'Update the registration details below.'
+                : 'Submit the proposed registration changes for admin approval.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {editRegistrationItem ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <div className="space-y-2 text-sm">
+                  <p>
+                    <span className="text-muted-foreground">Name:</span>{' '}
+                    <span className="font-medium">{editRegistrationItem.registrant_name}</span>
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Type:</span>{' '}
+                    <span className="font-medium capitalize">
+                      {editRegistrationItem.registrant_type}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-period-start">Period start</Label>
+                <Input
+                  id="edit-period-start"
+                  type="date"
+                  value={editPeriodStart}
+                  onChange={(event) => setEditPeriodStart(event.target.value)}
+                />
+              </div>
+
+              <ClassRegistrationFeeFields
+                classItem={classItem}
+                feeType={editFeeType}
+                customAmount={editAmount}
+                paymentReceived={editPaymentReceived}
+                notes={editRegistrationNotes}
+                onFeeTypeChange={setEditFeeType}
+                onCustomAmountChange={setEditAmount}
+                onPaymentReceivedChange={setEditPaymentReceived}
+                onNotesChange={setEditRegistrationNotes}
+              />
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditRegistrationItem(null)}
+              disabled={isEditingRegistration}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void handleEditRegistration()} loading={isEditingRegistration}>
+              {profile?.role === 'admin' ? 'Save Changes' : 'Submit Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(removeRegistrationItem)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRemoveRegistrationItem(null)
+          }
+        }}
+        title={profile?.role === 'admin' ? 'Remove registration?' : 'Request registration removal?'}
+        description={
+          removeRegistrationItem
+            ? removeRegistrationItem.amount_paid > 0
+              ? `Removing this registration will reverse the recorded payment of ${formatOptionalJmd(removeRegistrationItem.amount_paid)}. This action cannot be undone.`
+              : 'This registration has no recorded payment. This action cannot be undone.'
+            : 'This action cannot be undone.'
+        }
+        confirmLabel={profile?.role === 'admin' ? 'Remove Registration' : 'Submit Request'}
+        cancelLabel="Cancel"
+        onConfirm={() => void handleRemoveRegistration()}
+        onCancel={() => setRemoveRegistrationItem(null)}
+        variant="destructive"
+        isLoading={isRemovingRegistration}
       />
 
       <Dialog
@@ -1604,7 +1945,10 @@ export default function ClassDetailPage() {
 
           if (!nextOpen) {
             setApproveRegistrationItem(null)
+            setApproveFeeType('custom')
             setApproveAmount('')
+            setApprovePaymentReceived(false)
+            setApproveRegistrationNotes('')
             setApproveNote('')
           }
         }}
@@ -1613,7 +1957,7 @@ export default function ClassDetailPage() {
           <DialogHeader>
             <DialogTitle>Approve Registration</DialogTitle>
             <DialogDescription>
-              Confirm the registration details and adjust the final recorded amount if needed.
+              Confirm the registration details and adjust the fee, payment status, or notes if needed.
             </DialogDescription>
           </DialogHeader>
 
@@ -1646,17 +1990,17 @@ export default function ClassDetailPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="approve-amount">Amount paid (JMD)</Label>
-                <Input
-                  id="approve-amount"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={approveAmount}
-                  onChange={(event) => setApproveAmount(event.target.value)}
-                />
-              </div>
+              <ClassRegistrationFeeFields
+                classItem={classItem!}
+                feeType={approveFeeType}
+                customAmount={approveAmount}
+                paymentReceived={approvePaymentReceived}
+                notes={approveRegistrationNotes}
+                onFeeTypeChange={setApproveFeeType}
+                onCustomAmountChange={setApproveAmount}
+                onPaymentReceivedChange={setApprovePaymentReceived}
+                onNotesChange={setApproveRegistrationNotes}
+              />
 
               <div className="space-y-2">
                 <Label htmlFor="approve-note">Review note</Label>

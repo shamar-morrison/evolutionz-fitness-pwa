@@ -8,6 +8,8 @@ const pendingApprovalCountsSchema = z.object({
   member_extension_requests: z.number().int().nonnegative(),
   member_pause_requests: z.number().int().nonnegative(),
   member_pause_resume_requests: z.number().int().nonnegative(),
+  class_registration_edit_requests: z.number().int().nonnegative(),
+  class_registration_removal_requests: z.number().int().nonnegative(),
   pt_reschedule_requests: z.number().int().nonnegative(),
   pt_session_update_requests: z.number().int().nonnegative(),
 })

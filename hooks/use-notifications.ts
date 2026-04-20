@@ -68,6 +68,16 @@ function invalidatePendingApprovalQueries(
     })
   }
 
+  if (
+    notificationType === 'class_registration_edit_request' ||
+    notificationType === 'class_registration_removal_request'
+  ) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.classRegistrationRequests.all })
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.classRegistrationRequests.pending,
+    })
+  }
+
   if (notificationType === 'member_extension_request') {
     void queryClient.invalidateQueries({ queryKey: queryKeys.memberExtensionRequests.all })
     void queryClient.invalidateQueries({

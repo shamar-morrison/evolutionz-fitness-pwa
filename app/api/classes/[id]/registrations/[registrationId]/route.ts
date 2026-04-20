@@ -1,17 +1,27 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { backfillRegistrationAttendanceForCurrentPeriod } from '@/app/api/classes/_registration-attendance'
+import {
+  getNextPaymentRecordedAt,
+  getStoredRegistrationAmount,
+  normalizeOptionalText,
+  resolveClassRegistrationFeeSelection,
+} from '@/app/api/classes/_registration-utils'
 import { readClassById, readClassRegistrationById } from '@/lib/classes-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
-const amountSchema = z.number().finite().min(0)
+const amountSchema = z.number().finite().int().min(0)
+const feeTypeSchema = z.enum(['monthly', 'per_session', 'custom'])
 
 const reviewClassRegistrationSchema = z.union([
   z
     .object({
       status: z.literal('approved'),
+      fee_type: feeTypeSchema,
       amount_paid: amountSchema,
+      payment_received: z.boolean(),
+      notes: z.string().trim().nullable().optional(),
       review_note: z.string().trim().nullable().optional(),
     })
     .strict(),
@@ -31,11 +41,6 @@ function createErrorResponse(error: string, status: number) {
     },
     { status },
   )
-}
-
-function normalizeOptionalText(value: string | null | undefined) {
-  const normalizedValue = typeof value === 'string' ? value.trim() : ''
-  return normalizedValue || null
 }
 
 export async function PATCH(
@@ -59,7 +64,7 @@ export async function PATCH(
     const supabase = getSupabaseAdminClient() as any
     const { data: existingRegistration, error: existingRegistrationError } = await supabase
       .from('class_registrations')
-      .select('id, class_id, status')
+      .select('id, class_id, status, payment_recorded_at')
       .eq('id', registrationId)
       .eq('class_id', id)
       .maybeSingle()
@@ -83,7 +88,31 @@ export async function PATCH(
     }
 
     if (input.status === 'approved') {
-      nextValues.amount_paid = input.amount_paid
+      const classItem = await readClassById(supabase, id)
+
+      if (!classItem) {
+        return createErrorResponse('Class not found.', 404)
+      }
+
+      const selectedAmount = resolveClassRegistrationFeeSelection({
+        classItem,
+        feeType: input.fee_type,
+        requestedAmount: input.amount_paid,
+      })
+
+      nextValues.fee_type = input.fee_type
+      nextValues.amount_paid = getStoredRegistrationAmount({
+        selectedAmount,
+        paymentReceived: input.payment_received,
+      })
+      nextValues.payment_recorded_at = getNextPaymentRecordedAt({
+        paymentReceived: input.payment_received,
+        previousPaymentRecordedAt:
+          typeof existingRegistration.payment_recorded_at === 'string'
+            ? existingRegistration.payment_recorded_at
+            : null,
+      })
+      nextValues.notes = normalizeOptionalText(input.notes)
     }
 
     const { data: updatedRegistration, error: updateError } = await supabase

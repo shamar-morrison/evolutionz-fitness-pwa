@@ -313,14 +313,19 @@ function buildRegistration(
     guest_profile_id: overrides.guest_profile_id ?? null,
     month_start: overrides.month_start ?? '2026-04-10',
     status: overrides.status ?? 'approved',
+    fee_type: overrides.fee_type ?? 'monthly',
     amount_paid: overrides.amount_paid ?? 15500,
     payment_recorded_at: overrides.payment_recorded_at ?? '2026-04-08T12:00:00.000Z',
+    notes: overrides.notes ?? null,
+    receipt_number: overrides.receipt_number ?? null,
+    receipt_sent_at: overrides.receipt_sent_at ?? null,
     reviewed_by: overrides.reviewed_by ?? 'user-1',
     reviewed_at: overrides.reviewed_at ?? '2026-04-08T12:00:00.000Z',
     review_note: overrides.review_note ?? null,
     created_at: overrides.created_at ?? '2026-04-08T12:00:00.000Z',
     registrant_name: overrides.registrant_name ?? 'Client One',
     registrant_type: overrides.registrant_type ?? 'member',
+    registrant_email: overrides.registrant_email ?? 'client.one@example.com',
   }
 }
 
@@ -628,7 +633,7 @@ describe('classes pages', () => {
     expect(container.textContent).toContain('Mark Attendance')
   })
 
-  it('shows a read-only class detail view for front desk staff', async () => {
+  it('shows registration controls for front desk staff without admin approval tools', async () => {
     authState.role = 'staff'
     authState.profile = {
       id: 'user-2',
@@ -645,6 +650,7 @@ describe('classes pages', () => {
     expect(container.textContent).toContain('Class Information')
     expect(container.textContent).not.toContain('3 times per week')
     expect(container.textContent).toContain('Register')
+    expect(container.textContent).toContain('Registrations')
     expect(container.textContent).toContain('Review the recurring class schedule.')
     expect(container.textContent).toContain('Monday')
     expect(container.textContent).not.toContain('Assign or remove trainer-title staff for this class.')
@@ -653,6 +659,8 @@ describe('classes pages', () => {
     expect(container.textContent).not.toContain('Set Period Start')
     expect(container.textContent).not.toContain('Generate Sessions')
     expect(container.textContent).not.toContain('Pending Approvals')
+    expect(container.textContent).toContain('Edit')
+    expect(container.textContent).toContain('Remove')
     expect(container.textContent).toContain('Sessions')
     expect(container.textContent).toContain('Mark Attendance')
   })
@@ -691,10 +699,13 @@ describe('classes pages', () => {
     expect(container.textContent).toContain('Class Information')
     expect(container.textContent).not.toContain('3 times per week')
     expect(container.textContent).toContain('Register')
+    expect(container.textContent).toContain('Registrations')
     expect(container.textContent).toContain('Review the recurring class schedule.')
     expect(container.textContent).not.toContain('Assign or remove trainer-title staff for this class.')
     expect(container.textContent).not.toContain('Set Period Start')
     expect(container.textContent).not.toContain('Pending Approvals')
+    expect(container.textContent).toContain('Edit')
+    expect(container.textContent).toContain('Remove')
     expect(container.textContent).toContain('Mark Attendance')
   })
 

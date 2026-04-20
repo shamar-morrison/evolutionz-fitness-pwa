@@ -124,6 +124,11 @@ const adminApprovalItems: NavItem[] = [
     icon: BanknoteIcon,
   },
   {
+    href: '/pending-approvals/class-registration-requests',
+    label: 'Class Requests',
+    icon: GraduationCap,
+  },
+  {
     href: '/pending-approvals/extension-requests',
     label: 'Extension Requests',
     icon: CalendarDays,
@@ -380,6 +385,9 @@ export function AppSidebar() {
                       ? pendingApprovalCounts.member_edit_requests
                       : item.href === '/pending-approvals/payment-requests'
                       ? pendingApprovalCounts.member_payment_requests
+                      : item.href === '/pending-approvals/class-registration-requests'
+                      ? pendingApprovalCounts.class_registration_edit_requests +
+                        pendingApprovalCounts.class_registration_removal_requests
                       : item.href === '/pending-approvals/extension-requests'
                       ? pendingApprovalCounts.member_extension_requests
                       : item.href === '/pending-approvals/pause-requests'

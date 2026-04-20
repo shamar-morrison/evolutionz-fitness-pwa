@@ -110,14 +110,19 @@ function buildRegistration(
     guest_profile_id: overrides.guest_profile_id ?? null,
     month_start: overrides.month_start ?? '2026-04-01',
     status: overrides.status ?? 'approved',
+    fee_type: overrides.fee_type ?? 'monthly',
     amount_paid: overrides.amount_paid ?? 15500,
     payment_recorded_at: overrides.payment_recorded_at ?? '2026-04-08T12:00:00.000Z',
+    notes: overrides.notes ?? null,
+    receipt_number: overrides.receipt_number ?? null,
+    receipt_sent_at: overrides.receipt_sent_at ?? null,
     reviewed_by: overrides.reviewed_by ?? 'user-1',
     reviewed_at: overrides.reviewed_at ?? '2026-04-08T12:00:00.000Z',
     review_note: overrides.review_note ?? null,
     created_at: overrides.created_at ?? '2026-04-08T12:00:00.000Z',
     registrant_name: overrides.registrant_name ?? 'Client One',
     registrant_type: overrides.registrant_type ?? 'member',
+    registrant_email: overrides.registrant_email ?? 'client.one@example.com',
   }
 }
 

@@ -157,14 +157,19 @@ function buildRegistration(overrides: Partial<Record<string, unknown>> = {}) {
     guest_profile_id: null,
     month_start: '2026-04-10',
     status: 'approved',
+    fee_type: 'custom',
     amount_paid: 15500,
     payment_recorded_at: '2026-04-08T12:00:00.000Z',
+    notes: null,
+    receipt_number: null,
+    receipt_sent_at: null,
     reviewed_by: 'user-1',
     reviewed_at: '2026-04-08T12:05:00.000Z',
     review_note: null,
     created_at: '2026-04-08T12:00:00.000Z',
     registrant_name: 'Client One',
     registrant_type: 'member',
+    registrant_email: 'client.one@example.com',
     ...overrides,
   }
 }
@@ -388,13 +393,8 @@ function createRegistrationPostClient(options: {
 
               const chain = {
                 eq(column: string, value: string) {
-                  if (column === 'class_id') {
-                    expect(value).toBe('class-1')
-                  }
-
-                  if (column === 'period_start') {
-                    expect(value).toBe('2026-04-01')
-                  }
+                  expect(column).toBe('class_id')
+                  expect(value).toBe('class-1')
 
                   return chain
                 },
@@ -420,6 +420,35 @@ function createRegistrationPostClient(options: {
 
         if (table === 'class_attendance') {
           return {
+            select(columns: string) {
+              expect(columns).toBe('id, session_id')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('session_id')
+                  expect(values).toEqual((options.futureSessions ?? []).map((session) => String(session.id)))
+
+                  return {
+                    eq(column: string, value: string) {
+                      expect(column).toBe('member_id')
+                      expect(value).toBe(memberId)
+
+                      return {
+                        is(column: string, value: null) {
+                          expect(column).toBe('guest_profile_id')
+                          expect(value).toBeNull()
+
+                          return Promise.resolve({
+                            data: [],
+                            error: null,
+                          })
+                        },
+                      }
+                    },
+                  }
+                },
+              }
+            },
             insert(values: Record<string, unknown> | Array<Record<string, unknown>>) {
               attendanceInserts.push(...(Array.isArray(values) ? values : [values]))
 
@@ -433,6 +462,40 @@ function createRegistrationPostClient(options: {
         expect(table).toBe('class_registrations')
 
         return {
+          select(columns: string) {
+            expect(columns).toBe('id, month_start')
+
+            return {
+              eq(column: string, value: string) {
+                expect(column).toBe('class_id')
+                expect(value).toBe('class-1')
+
+                const chain = {
+                  eq(nextColumn: string, nextValue: string) {
+                    if (nextColumn === 'status') {
+                      expect(nextValue).toBe('approved')
+                      return chain
+                    }
+
+                    expect(nextColumn).toBe('member_id')
+                    expect(nextValue).toBe('member-1')
+                    return chain
+                  },
+                  is(nextColumn: string, nextValue: null) {
+                    expect(nextColumn).toBe('guest_profile_id')
+                    expect(nextValue).toBeNull()
+
+                    return Promise.resolve({
+                      data: [{ id: 'registration-1', month_start: '2026-04-10' }],
+                      error: null,
+                    })
+                  },
+                }
+
+                return chain
+              },
+            }
+          },
           insert(values: Record<string, unknown>) {
             registrationValues.push(values)
 
@@ -761,7 +824,7 @@ function createAttendancePatchClient() {
 }
 
 function createRegistrationReviewClient(options: {
-  reviewState?: { id: string; class_id: string; status: string } | null
+  reviewState?: { id: string; class_id: string; status: string; payment_recorded_at?: string | null } | null
   updatedRegistration?: { id: string } | null
   updateError?: { message: string } | null
   futureSessions?: Array<Record<string, unknown>>
@@ -783,13 +846,8 @@ function createRegistrationReviewClient(options: {
 
               const chain = {
                 eq(column: string, value: string) {
-                  if (column === 'class_id') {
-                    expect(value).toBe('class-1')
-                  }
-
-                  if (column === 'period_start') {
-                    expect(value).toBe('2026-04-01')
-                  }
+                  expect(column).toBe('class_id')
+                  expect(value).toBe('class-1')
 
                   return chain
                 },
@@ -815,6 +873,35 @@ function createRegistrationReviewClient(options: {
 
         if (table === 'class_attendance') {
           return {
+            select(columns: string) {
+              expect(columns).toBe('id, session_id')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('session_id')
+                  expect(values).toEqual((options.futureSessions ?? []).map((session) => String(session.id)))
+
+                  return {
+                    eq(column: string, value: string) {
+                      expect(column).toBe('member_id')
+                      expect(value).toBe('member-1')
+
+                      return {
+                        is(column: string, value: null) {
+                          expect(column).toBe('guest_profile_id')
+                          expect(value).toBeNull()
+
+                          return Promise.resolve({
+                            data: [],
+                            error: null,
+                          })
+                        },
+                      }
+                    },
+                  }
+                },
+              }
+            },
             insert(values: Record<string, unknown> | Array<Record<string, unknown>>) {
               attendanceInserts.push(...(Array.isArray(values) ? values : [values]))
 
@@ -829,7 +916,40 @@ function createRegistrationReviewClient(options: {
 
         return {
           select(columns: string) {
-            expect(columns).toBe('id, class_id, status')
+            if (columns === 'id, month_start') {
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('class_id')
+                  expect(value).toBe('class-1')
+
+                  const chain = {
+                    eq(nextColumn: string, nextValue: string) {
+                      if (nextColumn === 'status') {
+                        expect(nextValue).toBe('approved')
+                        return chain
+                      }
+
+                      expect(nextColumn).toBe('member_id')
+                      expect(nextValue).toBe('member-1')
+                      return chain
+                    },
+                    is(nextColumn: string, nextValue: null) {
+                      expect(nextColumn).toBe('guest_profile_id')
+                      expect(nextValue).toBeNull()
+
+                      return Promise.resolve({
+                        data: [{ id: 'registration-1', month_start: '2026-04-10' }],
+                        error: null,
+                      })
+                    },
+                  }
+
+                  return chain
+                },
+              }
+            }
+
+            expect(columns).toBe('id, class_id, status, payment_recorded_at')
 
             return {
               eq(column: string, value: string) {
@@ -848,6 +968,7 @@ function createRegistrationReviewClient(options: {
                             id: 'registration-1',
                             class_id: 'class-1',
                             status: 'pending',
+                            payment_recorded_at: null,
                           },
                         error: null,
                       }),
@@ -1333,6 +1454,7 @@ describe('classes routes', () => {
           registrant_type: 'member',
           member_id: '11111111-1111-1111-1111-111111111111',
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1360,6 +1482,7 @@ describe('classes routes', () => {
           registrant_type: 'member',
           member_id: '11111111-1111-1111-1111-111111111111',
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1390,6 +1513,7 @@ describe('classes routes', () => {
           registrant_type: 'member',
           member_id: '11111111-1111-1111-1111-111111111111',
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1439,10 +1563,11 @@ describe('classes routes', () => {
           guest: {
             name: '  Guest One  ',
             phone: '   ',
-            email: null,
+            email: ' guest.one@example.com ',
             remark: 'Has a prior visit note.',
           },
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1467,9 +1592,9 @@ describe('classes routes', () => {
         value: null,
       },
       {
-        operator: 'is',
+        operator: 'eq',
         column: 'email',
-        value: null,
+        value: 'guest.one@example.com',
       },
     ])
     expect(guestLookupOrders).toEqual([
@@ -1508,6 +1633,7 @@ describe('classes routes', () => {
           registrant_type: 'member',
           member_id: '11111111-1111-1111-1111-111111111111',
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1540,8 +1666,10 @@ describe('classes routes', () => {
           registrant_type: 'guest',
           guest: {
             name: 'Guest One',
+            email: 'guest.one@example.com',
           },
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1580,9 +1708,10 @@ describe('classes routes', () => {
           guest: {
             name: 'Guest One',
             phone: null,
-            email: null,
+            email: 'guest.one@example.com',
           },
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1639,7 +1768,10 @@ describe('classes routes', () => {
         method: 'PATCH',
         body: JSON.stringify({
           status: 'approved',
+          fee_type: 'custom',
           amount_paid: 3200,
+          payment_received: true,
+          notes: 'Paid at the desk.',
           review_note: 'Paid at the desk.',
         }),
       }),
@@ -1652,7 +1784,10 @@ describe('classes routes', () => {
     expect(response.status).toBe(200)
     expect(updateValues[0]).toMatchObject({
       status: 'approved',
+      fee_type: 'custom',
       amount_paid: 3200,
+      payment_recorded_at: expect.any(String),
+      notes: 'Paid at the desk.',
       review_note: 'Paid at the desk.',
       reviewed_by: 'admin-1',
     })
@@ -1665,6 +1800,7 @@ describe('classes routes', () => {
         id: 'admin-1',
       },
     })
+    readClassByIdMock.mockResolvedValue(buildClass())
     const { client } = createRegistrationReviewClient({
       updatedRegistration: null,
     })
@@ -1675,7 +1811,10 @@ describe('classes routes', () => {
         method: 'PATCH',
         body: JSON.stringify({
           status: 'approved',
+          fee_type: 'custom',
           amount_paid: 3200,
+          payment_received: true,
+          notes: 'Paid at the desk.',
           review_note: 'Paid at the desk.',
         }),
       }),
@@ -1691,7 +1830,7 @@ describe('classes routes', () => {
       error: 'This class registration has already been reviewed.',
     })
     expect(readClassRegistrationByIdMock).not.toHaveBeenCalled()
-    expect(readClassByIdMock).not.toHaveBeenCalled()
+    expect(readClassByIdMock).toHaveBeenCalledWith(client, 'class-1')
   })
 
   it('backfills attendance when approving a pending registration', async () => {
@@ -1724,7 +1863,10 @@ describe('classes routes', () => {
         method: 'PATCH',
         body: JSON.stringify({
           status: 'approved',
+          fee_type: 'custom',
           amount_paid: 3200,
+          payment_received: true,
+          notes: 'Paid at the desk.',
           review_note: 'Paid at the desk.',
         }),
       }),
@@ -2228,6 +2370,7 @@ describe('classes routes', () => {
             registrant_type: 'member',
             member_id: '11111111-1111-1111-1111-111111111111',
             month_start: '2026-04-10',
+            fee_type: 'custom',
             amount_paid: 3000,
             payment_received: true,
           }),
@@ -2239,15 +2382,6 @@ describe('classes routes', () => {
       const body = await response.json()
 
       expect(response.status).toBe(200)
-      expect(attendanceInserts).toEqual([
-        {
-          session_id: 'session-1',
-          member_id: 'member-1',
-          guest_profile_id: null,
-          marked_at: null,
-          marked_by: null,
-        },
-      ])
       expect(consoleErrorMock).toHaveBeenCalledWith(
         'Failed to backfill class attendance rows after registration:',
         expect.any(Error),
