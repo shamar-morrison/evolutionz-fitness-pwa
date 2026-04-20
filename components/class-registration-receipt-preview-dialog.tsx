@@ -39,6 +39,10 @@ export function ClassRegistrationReceiptPreviewDialog({
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const canSendCurrentPreview =
+    !isSending &&
+    preview?.canSend === true &&
+    preview?.receipt.registrationId === registrationId
 
   useEffect(() => {
     const activeRegistrationId = registrationId
@@ -223,7 +227,7 @@ export function ClassRegistrationReceiptPreviewDialog({
             type="button"
             onClick={() => void handleSend()}
             loading={isSending}
-            disabled={isSending || !preview?.canSend}
+            disabled={!canSendCurrentPreview}
           >
             <Mail className="h-4 w-4" />
             Send

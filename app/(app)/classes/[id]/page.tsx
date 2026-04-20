@@ -704,7 +704,7 @@ export default function ClassDetailPage() {
     setPendingAction('registration-edit')
 
     try {
-      if (profile?.role === 'admin') {
+      if (canManageClasses) {
         const result = await updateClassRegistration(editRegistrationItem.id, {
           period_start: editPeriodStart,
           fee_type: editFeeType,
@@ -747,11 +747,11 @@ export default function ClassDetailPage() {
       }
     } catch (editError) {
       toast({
-        title: profile?.role === 'admin' ? 'Update failed' : 'Request failed',
+        title: canManageClasses ? 'Update failed' : 'Request failed',
         description:
           editError instanceof Error
             ? editError.message
-            : profile?.role === 'admin'
+            : canManageClasses
               ? 'Failed to update the class registration.'
               : 'Failed to submit the edit request.',
         variant: 'destructive',
@@ -769,7 +769,7 @@ export default function ClassDetailPage() {
     setPendingAction('registration-remove')
 
     try {
-      if (profile?.role === 'admin') {
+      if (canManageClasses) {
         await deleteClassRegistration(removeRegistrationItem.id)
         await invalidateClassQueries()
         setRemoveRegistrationItem(null)
@@ -786,11 +786,11 @@ export default function ClassDetailPage() {
       }
     } catch (removeError) {
       toast({
-        title: profile?.role === 'admin' ? 'Removal failed' : 'Request failed',
+        title: canManageClasses ? 'Removal failed' : 'Request failed',
         description:
           removeError instanceof Error
             ? removeError.message
-            : profile?.role === 'admin'
+            : canManageClasses
               ? 'Failed to remove the class registration.'
               : 'Failed to submit the removal request.',
         variant: 'destructive',
@@ -1527,13 +1527,13 @@ export default function ClassDetailPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-4rem)] overflow-y-auto" isLoading={isEditingRegistration}>
+          <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-4rem)] overflow-y-auto" isLoading={isEditingRegistration}>
           <DialogHeader>
             <DialogTitle>
-              {profile?.role === 'admin' ? 'Edit Registration' : 'Request Registration Edit'}
+              {canManageClasses ? 'Edit Registration' : 'Request Registration Edit'}
             </DialogTitle>
             <DialogDescription>
-              {profile?.role === 'admin'
+              {canManageClasses
                 ? 'Update the registration details below.'
                 : 'Submit the proposed registration changes for admin approval.'}
             </DialogDescription>
@@ -1590,7 +1590,7 @@ export default function ClassDetailPage() {
               Cancel
             </Button>
             <Button type="button" onClick={() => void handleEditRegistration()} loading={isEditingRegistration}>
-              {profile?.role === 'admin' ? 'Save Changes' : 'Submit Request'}
+              {canManageClasses ? 'Save Changes' : 'Submit Request'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1603,7 +1603,7 @@ export default function ClassDetailPage() {
             setRemoveRegistrationItem(null)
           }
         }}
-        title={profile?.role === 'admin' ? 'Remove registration?' : 'Request registration removal?'}
+        title={canManageClasses ? 'Remove registration?' : 'Request registration removal?'}
         description={
           removeRegistrationItem
             ? removeRegistrationItem.amount_paid > 0
@@ -1611,7 +1611,7 @@ export default function ClassDetailPage() {
               : 'This registration has no recorded payment. This action cannot be undone.'
             : 'This action cannot be undone.'
         }
-        confirmLabel={profile?.role === 'admin' ? 'Remove Registration' : 'Submit Request'}
+        confirmLabel={canManageClasses ? 'Remove Registration' : 'Submit Request'}
         cancelLabel="Cancel"
         onConfirm={() => void handleRemoveRegistration()}
         onCancel={() => setRemoveRegistrationItem(null)}

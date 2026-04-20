@@ -1782,6 +1782,41 @@ describe('classes routes', () => {
     expect(body.error).toContain('A registration already exists')
   })
 
+  it('returns 400 for invalid fee selection before creating or looking up a guest profile', async () => {
+    mockAuthenticatedUser()
+    readStaffProfileMock.mockResolvedValue(buildProfile())
+    readClassByIdMock.mockResolvedValue(buildClass())
+    const { client, guestDeletes, guestInserts, guestLookupFilters } = createRegistrationPostClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await postClassRegistration(
+      new Request('http://localhost/api/classes/class-1/registrations', {
+        method: 'POST',
+        body: JSON.stringify({
+          registrant_type: 'guest',
+          guest: {
+            name: 'Guest One',
+            email: 'guest.one@example.com',
+          },
+          month_start: '2026-04-10',
+          fee_type: 'custom',
+          amount_paid: 0,
+          payment_received: true,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toBe('Custom class fee must be a whole-number JMD amount of at least 1.')
+    expect(guestLookupFilters).toEqual([])
+    expect(guestInserts).toEqual([])
+    expect(guestDeletes).toEqual([])
+  })
+
   it('requires a denial reason when denying a registration', async () => {
     mockAdminUser()
 
@@ -1886,6 +1921,44 @@ describe('classes routes', () => {
     })
     expect(readClassRegistrationByIdMock).not.toHaveBeenCalled()
     expect(readClassByIdMock).toHaveBeenCalledWith(client, 'class-1')
+  })
+
+  it('returns 400 when fee selection validation fails during registration approval', async () => {
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+      },
+    })
+    readClassByIdMock.mockResolvedValue(
+      buildClass({
+        monthly_fee: null,
+      }),
+    )
+    const { client, updateValues } = createRegistrationReviewClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await patchClassRegistration(
+      new Request('http://localhost/api/classes/class-1/registrations/registration-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'approved',
+          fee_type: 'monthly',
+          amount_paid: 3200,
+          payment_received: true,
+          notes: 'Paid at the desk.',
+          review_note: 'Paid at the desk.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1', registrationId: 'registration-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toBe('Monthly fee is not configured for this class.')
+    expect(updateValues).toEqual([])
+    expect(readClassRegistrationByIdMock).not.toHaveBeenCalled()
   })
 
   it('backfills current-period attendance when approving a pending registration', async () => {

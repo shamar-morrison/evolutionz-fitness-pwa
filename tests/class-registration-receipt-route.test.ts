@@ -257,6 +257,116 @@ describe('class registration receipt routes', () => {
     expect(sendAdminResendEmailToRecipientMock).not.toHaveBeenCalled()
     expect(deliveryStore.markReceiptDeliverySent).not.toHaveBeenCalled()
     expect(deliveryStore.releasePendingReceiptDelivery).not.toHaveBeenCalled()
+    expect(deliveryStore.reserveDailyQuota).not.toHaveBeenCalled()
     expect(receiptSentAtUpdates).toEqual([])
+  })
+
+  it('reserves delivery before daily quota on a successful send', async () => {
+    const callOrder: string[] = []
+    const { client } = createReceiptRouteClient(createClassRegistrationReceiptRow())
+    const deliveryStore = createDeliveryStore({
+      reserveReceiptDelivery: vi.fn().mockImplementation(async () => {
+        callOrder.push('reserve-delivery')
+        return 'reserved'
+      }),
+      reserveDailyQuota: vi.fn().mockImplementation(async () => {
+        callOrder.push('reserve-quota')
+        return 1
+      }),
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
+    sendAdminResendEmailToRecipientMock.mockImplementation(async () => {
+      callOrder.push('send-email')
+      return 'provider-message-1'
+    })
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await POST(new Request('http://localhost', { method: 'POST' }), {
+      params: Promise.resolve({ registrationId: 'registration-1' }),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(callOrder.slice(0, 3)).toEqual(['reserve-delivery', 'reserve-quota', 'send-email'])
+  })
+
+  it('does not reserve daily quota when the reservation is already marked sent', async () => {
+    const { client, receiptSentAtUpdates } = createReceiptRouteClient(createClassRegistrationReceiptRow())
+    const deliveryStore = createDeliveryStore({
+      reserveReceiptDelivery: vi.fn().mockResolvedValue('sent'),
+      readReceiptDelivery: vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          status: 'sent',
+          createdAt: '2026-04-12T12:00:00.000Z',
+          sentAt: '2026-04-12T13:00:00.000Z',
+          isStale: false,
+        }),
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await POST(new Request('http://localhost', { method: 'POST' }), {
+      params: Promise.resolve({ registrationId: 'registration-1' }),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toEqual({
+      ok: true,
+      alreadySent: true,
+      receiptSentAt: '2026-04-12T13:00:00.000Z',
+    })
+    expect(deliveryStore.reserveDailyQuota).not.toHaveBeenCalled()
+    expect(sendAdminResendEmailToRecipientMock).not.toHaveBeenCalled()
+    expect(receiptSentAtUpdates).toEqual(['2026-04-12T13:00:00.000Z'])
+  })
+
+  it('releases the pending reservation when daily quota reservation fails', async () => {
+    const { client } = createReceiptRouteClient(createClassRegistrationReceiptRow())
+    const deliveryStore = createDeliveryStore({
+      reserveReceiptDelivery: vi.fn().mockResolvedValue('reserved'),
+      reserveDailyQuota: vi.fn().mockResolvedValue(0),
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await POST(new Request('http://localhost', { method: 'POST' }), {
+      params: Promise.resolve({ registrationId: 'registration-1' }),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(429)
+    expect(body).toEqual({
+      ok: false,
+      error: 'Daily email limit reached for today.',
+    })
+    expect(deliveryStore.releasePendingReceiptDelivery).toHaveBeenCalledWith({
+      classRegistrationId: 'registration-1',
+    })
+    expect(sendAdminResendEmailToRecipientMock).not.toHaveBeenCalled()
   })
 })

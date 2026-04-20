@@ -94,11 +94,21 @@ export async function PATCH(
         return createErrorResponse('Class not found.', 404)
       }
 
-      const selectedAmount = resolveClassRegistrationFeeSelection({
-        classItem,
-        feeType: input.fee_type,
-        requestedAmount: input.amount_paid,
-      })
+      let selectedAmount: number
+
+      try {
+        selectedAmount = resolveClassRegistrationFeeSelection({
+          classItem,
+          feeType: input.fee_type,
+          requestedAmount: input.amount_paid,
+        })
+      } catch (error) {
+        if (error instanceof Error) {
+          return createErrorResponse(error.message, 400)
+        }
+
+        throw error
+      }
 
       nextValues.fee_type = input.fee_type
       nextValues.amount_paid = getStoredRegistrationAmount({

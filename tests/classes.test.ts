@@ -109,4 +109,14 @@ describe('classes billing helpers', () => {
       }),
     ).toBeNull()
   })
+
+  it('returns null when the custom amount is zero', () => {
+    expect(
+      calculateClassRegistrationAmount({
+        classItem: buildClass(),
+        fee_type: 'custom',
+        custom_amount: 0,
+      }),
+    ).toBeNull()
+  })
 })

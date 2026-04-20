@@ -533,11 +533,16 @@ export function calculateClassRegistrationAmount({
   const resolvedFeeType = fee_type ?? getDefaultClassRegistrationFeeType(classItem)
 
   if (resolvedFeeType === 'custom') {
-    if (!Number.isFinite(custom_amount) || custom_amount === null || custom_amount === undefined) {
+    if (
+      custom_amount === null ||
+      custom_amount === undefined ||
+      !Number.isFinite(custom_amount) ||
+      custom_amount <= 0
+    ) {
       return null
     }
 
-    return custom_amount >= 0 ? Math.trunc(custom_amount) : null
+    return Math.trunc(custom_amount)
   }
 
   const presetAmount = getClassRegistrationPresetAmount(classItem, resolvedFeeType)

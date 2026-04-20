@@ -202,6 +202,20 @@ export async function POST(
 
     let selectedAmount: number
 
+    try {
+      selectedAmount = resolveClassRegistrationFeeSelection({
+        classItem,
+        feeType: input.fee_type,
+        requestedAmount: input.amount_paid,
+      })
+    } catch (error) {
+      if (error instanceof Error) {
+        return createErrorResponse(error.message, 400)
+      }
+
+      throw error
+    }
+
     let memberId: string | null = null
     let guestProfileId: string | null = null
     let createdGuestProfileId: string | null = null
@@ -253,12 +267,6 @@ export async function POST(
         guestProfileId = createdGuestProfileId
       }
     }
-
-    selectedAmount = resolveClassRegistrationFeeSelection({
-      classItem,
-      feeType: input.fee_type,
-      requestedAmount: input.amount_paid,
-    })
 
     const { data: insertedRegistration, error: insertError } = await supabase
       .from('class_registrations')

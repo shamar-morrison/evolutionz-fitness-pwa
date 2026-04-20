@@ -4,6 +4,7 @@ import { format } from 'date-fns'
 import { Calendar as CalendarIcon } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { z } from 'zod'
 import { DialogStepForm, type DialogStep } from '@/components/dialog-step-form'
 import { ClassRegistrationFeeFields } from '@/components/class-registration-fee-fields'
 import { SearchableSelect, type SearchableSelectOption } from '@/components/searchable-select'
@@ -53,6 +54,7 @@ const EMPTY_GUEST_FORM: GuestFormState = {
   email: '',
   remark: '',
 }
+const guestEmailSchema = z.string().trim().email('Enter a valid email address.')
 
 function getInitialDateValue() {
   return getDefaultClassDateValue()
@@ -108,10 +110,17 @@ export function ClassRegistrationDialog({
   const displayedMonthStart = selectedMonthStartDate
     ? format(selectedMonthStartDate, 'MMM d, yyyy')
     : 'Select a date'
+  const trimmedGuestEmail = guestForm.email.trim()
+  const guestEmailValidation =
+    trimmedGuestEmail.length > 0 ? guestEmailSchema.safeParse(trimmedGuestEmail) : null
+  const guestEmailError =
+    guestEmailValidation && !guestEmailValidation.success
+      ? guestEmailValidation.error.issues[0]?.message ?? 'Enter a valid email address.'
+      : null
   const canContinue =
     registrantType === 'member'
       ? Boolean(selectedMemberId)
-      : Boolean(guestForm.name.trim() && guestForm.email.trim())
+      : Boolean(guestForm.name.trim() && trimmedGuestEmail && !guestEmailError)
   const parsedCustomAmount = Number(customAmount)
   const calculatedAmount = canContinue
     ? calculateClassRegistrationAmount({
@@ -232,12 +241,16 @@ export function ClassRegistrationDialog({
         return
       }
 
+      if (guestEmailError) {
+        return
+      }
+
       payload = {
         registrant_type: 'guest',
         guest: {
           name: guestForm.name.trim(),
           phone: guestForm.phone.trim() || null,
-          email: guestForm.email.trim(),
+          email: trimmedGuestEmail,
           remark: guestForm.remark.trim() || null,
         },
         month_start: monthStart,
@@ -266,7 +279,13 @@ export function ClassRegistrationDialog({
           exact: false,
         }),
       ])
-      onRegistered?.(registration)
+
+      try {
+        onRegistered?.(registration)
+      } catch (callbackError) {
+        console.error('Class registration succeeded but onRegistered failed:', callbackError)
+      }
+
       onOpenChange(false)
       toast({
         title: registrationNeedsApproval ? 'Registration submitted' : 'Registration added',
@@ -366,7 +385,11 @@ export function ClassRegistrationDialog({
                   onChange={(event) => handleGuestFieldChange('email', event.target.value)}
                   placeholder="Required"
                   required
+                  aria-invalid={guestEmailError ? true : undefined}
                 />
+                {guestEmailError ? (
+                  <p className="text-sm text-destructive">{guestEmailError}</p>
+                ) : null}
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="guest-remark">Remark</Label>

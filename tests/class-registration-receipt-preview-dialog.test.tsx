@@ -224,4 +224,36 @@ describe('ClassRegistrationReceiptPreviewDialog', () => {
     })
     expect(onOpenChange).not.toHaveBeenCalled()
   })
+
+  it('keeps Send disabled when the loaded preview belongs to a different registration', async () => {
+    fetchClassRegistrationReceiptPreviewMock.mockResolvedValue(
+      createPreviewResponse({
+        receipt: {
+          ...createPreviewResponse().receipt,
+          registrationId: 'registration-2',
+        },
+      }),
+    )
+
+    await act(async () => {
+      root.render(
+        <ClassRegistrationReceiptPreviewDialog
+          registrationId="registration-1"
+          open
+          onOpenChange={() => {}}
+        />,
+      )
+      await flushPromises()
+    })
+
+    const sendButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Send'),
+    )
+
+    if (!(sendButton instanceof HTMLButtonElement)) {
+      throw new Error('Send button not found.')
+    }
+
+    expect(sendButton.disabled).toBe(true)
+  })
 })

@@ -226,18 +226,6 @@ export async function POST(
     const sendDate = getJamaicaDateInputValue(new Date())
     const shouldReserveQuota = !existingDelivery || existingDelivery.isStale === true
 
-    if (shouldReserveQuota) {
-      const availableQuotaCount = await deliveryStore.reserveDailyQuota({
-        senderProfileId: authResult.profile.id,
-        sendDate,
-        requestedCount: 1,
-      })
-
-      if (availableQuotaCount < 1) {
-        throw new AdminEmailQuotaError('Daily email limit reached for today.')
-      }
-    }
-
     const reservationState = await deliveryStore.reserveReceiptDelivery({
       senderProfileId: authResult.profile.id,
       sendDate,
@@ -281,6 +269,25 @@ export async function POST(
         },
         { status: 409 },
       )
+    }
+
+    if (shouldReserveQuota) {
+      try {
+        const availableQuotaCount = await deliveryStore.reserveDailyQuota({
+          senderProfileId: authResult.profile.id,
+          sendDate,
+          requestedCount: 1,
+        })
+
+        if (availableQuotaCount < 1) {
+          throw new AdminEmailQuotaError('Daily email limit reached for today.')
+        }
+      } catch (error) {
+        await deliveryStore.releasePendingReceiptDelivery({
+          classRegistrationId: registrationId,
+        })
+        throw error
+      }
     }
 
     let providerMessageId: string | null = null

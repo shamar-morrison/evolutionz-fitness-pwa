@@ -248,6 +248,7 @@ export async function clearFutureRegistrationAttendance({
     .from('class_attendance')
     .delete()
     .in('id', attendanceIdsToDelete)
+    .is('marked_at', null)
 
   if (deleteError) {
     throw new Error(`Failed to clear future class attendance rows: ${deleteError.message}`)
