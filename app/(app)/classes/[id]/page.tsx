@@ -1747,7 +1747,7 @@ export default function ClassDetailPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="schedule-rule-day">Day of week</Label>
               <Select
@@ -1755,7 +1755,7 @@ export default function ClassDetailPage() {
                 onValueChange={(value) => setScheduleRuleDay(Number(value) as ClassScheduleRuleDay)}
                 disabled={isSavingScheduleRule}
               >
-                <SelectTrigger id="schedule-rule-day">
+                <SelectTrigger id="schedule-rule-day" className="w-full">
                   <SelectValue placeholder="Select a day" />
                 </SelectTrigger>
                 <SelectContent>
