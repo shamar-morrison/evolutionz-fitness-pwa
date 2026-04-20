@@ -48,6 +48,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { StringDatePicker } from '@/components/ui/string-date-picker'
 import {
   Table,
   TableBody,
@@ -1558,11 +1559,11 @@ export default function ClassDetailPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="edit-period-start">Period start</Label>
-                <Input
+                <StringDatePicker
                   id="edit-period-start"
-                  type="date"
                   value={editPeriodStart}
-                  onChange={(event) => setEditPeriodStart(event.target.value)}
+                  onChange={setEditPeriodStart}
+                  disabled={isEditingRegistration}
                 />
               </div>
 

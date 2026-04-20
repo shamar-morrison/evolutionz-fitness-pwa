@@ -13,6 +13,7 @@ import type {
 const {
   authState,
   assignClassTrainerMock,
+  calendarSelectionState,
   createClassRegistrationMock,
   createClassRegistrationEditRequestMock,
   createClassRegistrationRemovalRequestMock,
@@ -46,6 +47,7 @@ const {
     loading: false,
   },
   assignClassTrainerMock: vi.fn(),
+  calendarSelectionState: { value: new Date(2026, 3, 14, 12, 0, 0, 0) },
   createClassRegistrationMock: vi.fn(),
   createClassRegistrationEditRequestMock: vi.fn(),
   createClassRegistrationRemovalRequestMock: vi.fn(),
@@ -288,7 +290,21 @@ vi.mock('@/components/ui/popover', () => ({
 }))
 
 vi.mock('@/components/ui/calendar', () => ({
-  Calendar: () => null,
+  Calendar: ({
+    onSelect,
+    'data-testid': dataTestId,
+  }: {
+    onSelect?: (date: Date) => void
+    'data-testid'?: string
+  }) => (
+    <button
+      type="button"
+      data-testid={dataTestId}
+      onClick={() => onSelect?.(calendarSelectionState.value)}
+    >
+      Mock calendar selection
+    </button>
+  ),
 }))
 
 vi.mock('@/components/ui/tabs', () => ({
@@ -486,6 +502,16 @@ function getCompactTables(container: HTMLDivElement) {
   return Array.from(container.querySelectorAll('table[data-size="compact"]'))
 }
 
+function getDateTrigger(container: HTMLDivElement, id: string) {
+  const trigger = container.querySelector(`#${id}`)
+
+  if (!(trigger instanceof HTMLButtonElement)) {
+    throw new Error(`${id} trigger not found.`)
+  }
+
+  return trigger
+}
+
 async function clickButton(container: HTMLDivElement, label: string) {
   await act(async () => {
     getButton(container, label).click()
@@ -527,6 +553,22 @@ async function setInputValue(
   })
 }
 
+async function selectCalendarDate(container: HTMLDivElement, id: string, value: Date) {
+  const trigger = getDateTrigger(container, id)
+  const calendarButton = container.querySelector(`[data-testid="${id}-calendar"]`)
+
+  if (!(calendarButton instanceof HTMLButtonElement)) {
+    throw new Error(`${id} calendar select button not found.`)
+  }
+
+  calendarSelectionState.value = value
+
+  await act(async () => {
+    trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    calendarButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
 describe('classes pages', () => {
   let container: HTMLDivElement
   let root: Root
@@ -545,6 +587,7 @@ describe('classes pages', () => {
       unobserve() {}
       disconnect() {}
     }
+    calendarSelectionState.value = new Date(2026, 3, 14, 12, 0, 0, 0)
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -815,6 +858,24 @@ describe('classes pages', () => {
 
     expect(createClassRegistrationRemovalRequestMock).toHaveBeenCalledWith('registration-1')
     expect(deleteClassRegistrationMock).not.toHaveBeenCalled()
+  })
+
+  it('submits an edited registration period start selected from the shared date picker', async () => {
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    await clickButton(container, 'Edit')
+    await selectCalendarDate(container, 'edit-period-start', new Date(2026, 3, 14, 12, 0, 0, 0))
+    await clickButton(container, 'Save Changes')
+
+    expect(updateClassRegistrationMock).toHaveBeenCalledWith('registration-1', {
+      period_start: '2026-04-14',
+      fee_type: 'monthly',
+      amount_paid: 15500,
+      payment_received: true,
+      notes: null,
+    })
   })
 
   it('shows an empty trainer state when no trainers are assigned', async () => {
