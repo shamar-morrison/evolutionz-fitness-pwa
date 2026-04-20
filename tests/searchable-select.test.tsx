@@ -2,7 +2,7 @@
 
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SearchableSelect } from '@/components/searchable-select'
 import {
   Dialog,
@@ -90,6 +90,8 @@ describe('SearchableSelect', () => {
   })
 
   it('mounts the popover content inside the dialog content when opened from a dialog', async () => {
+    const onValueChange = vi.fn()
+
     await act(async () => {
       root.render(
         <Dialog open onOpenChange={() => undefined}>
@@ -100,7 +102,7 @@ describe('SearchableSelect', () => {
             </DialogHeader>
             <SearchableSelect
               value={null}
-              onValueChange={() => undefined}
+              onValueChange={onValueChange}
               options={options}
               placeholder="Select an assignment"
               searchPlaceholder="Search assignments..."
@@ -123,6 +125,16 @@ describe('SearchableSelect', () => {
 
     expect(dialogContent.contains(popoverContent)).toBe(true)
     expect(popoverContent.textContent).toContain('Client One <-> Trainer One')
+
+    const firstOption = popoverContent.querySelector('[cmdk-item]')
+
+    if (!(firstOption instanceof HTMLElement)) {
+      throw new Error('Popover option not found.')
+    }
+
+    await click(firstOption)
+
+    expect(onValueChange).toHaveBeenCalledWith('assignment-1')
   })
 
   it('still renders the popover through the default body portal outside dialogs', async () => {

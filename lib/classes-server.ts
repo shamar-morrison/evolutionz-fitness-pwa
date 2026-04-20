@@ -18,7 +18,7 @@ import type { ClassScheduleRuleDay } from '@/types'
 const CLASS_SELECT =
   'id, name, schedule_description, per_session_fee, monthly_fee, trainer_compensation_pct, current_period_start, created_at'
 const CLASS_REGISTRATION_SELECT =
-  'id, class_id, member_id, guest_profile_id, month_start, status, amount_paid, payment_recorded_at, reviewed_by, reviewed_at, review_note, created_at'
+  'id, class_id, member_id, guest_profile_id, month_start, status, fee_type, amount_paid, payment_recorded_at, notes, receipt_number, receipt_sent_at, reviewed_by, reviewed_at, review_note, created_at'
 const CLASS_SCHEDULE_RULE_SELECT = 'id, class_id, day_of_week, session_time, created_at'
 const CLASS_SESSION_SELECT = 'id, class_id, scheduled_at, period_start, created_at'
 const CLASS_ATTENDANCE_SELECT =
@@ -79,8 +79,12 @@ type ClassRegistrationRow = {
   guest_profile_id: string | null
   month_start: string
   status: ClassRegistrationStatus
+  fee_type: ClassRegistrationListItem['fee_type']
   amount_paid: number | string
   payment_recorded_at: string | null
+  notes: string | null
+  receipt_number: string | null
+  receipt_sent_at: string | null
   reviewed_by: string | null
   reviewed_at: string | null
   review_note: string | null
@@ -90,11 +94,13 @@ type ClassRegistrationRow = {
 type MemberRegistrantRow = {
   id: string
   name: string
+  email: string | null
 }
 
 type GuestRegistrantRow = {
   id: string
   name: string
+  email: string | null
 }
 
 type ClassScheduleRuleRow = {
@@ -285,10 +291,10 @@ async function hydrateClassRegistrations(
 
   const [memberResult, guestResult] = await Promise.all([
     memberIds.length > 0
-      ? supabase.from('members').select('id, name').in('id', memberIds)
+      ? supabase.from('members').select('id, name, email').in('id', memberIds)
       : Promise.resolve({ data: [], error: null }),
     guestIds.length > 0
-      ? supabase.from('guest_profiles').select('id, name').in('id', guestIds)
+      ? supabase.from('guest_profiles').select('id, name, email').in('id', guestIds)
       : Promise.resolve({ data: [], error: null }),
   ])
 
@@ -309,9 +315,9 @@ async function hydrateClassRegistrations(
 
   return rows.map((row) => {
     const isMember = Boolean(row.member_id)
-    const registrantName = isMember
-      ? normalizeText(memberById.get(row.member_id ?? '')?.name) || 'Unknown member'
-      : normalizeText(guestById.get(row.guest_profile_id ?? '')?.name) || 'Unknown guest'
+    const registrant = isMember ? memberById.get(row.member_id ?? '') : guestById.get(row.guest_profile_id ?? '')
+    const registrantName =
+      normalizeText(registrant?.name) || (isMember ? 'Unknown member' : 'Unknown guest')
 
     return {
       id: normalizeText(row.id),
@@ -320,14 +326,19 @@ async function hydrateClassRegistrations(
       guest_profile_id: normalizeNullableText(row.guest_profile_id),
       month_start: normalizeText(row.month_start),
       status: row.status,
+      fee_type: row.fee_type ?? 'custom',
       amount_paid: normalizeNumber(row.amount_paid),
       payment_recorded_at: normalizeNullableText(row.payment_recorded_at),
+      notes: normalizeNullableText(row.notes),
+      receipt_number: normalizeNullableText(row.receipt_number),
+      receipt_sent_at: normalizeNullableText(row.receipt_sent_at),
       reviewed_by: normalizeNullableText(row.reviewed_by),
       reviewed_at: normalizeNullableText(row.reviewed_at),
       review_note: normalizeNullableText(row.review_note),
       created_at: normalizeText(row.created_at),
       registrant_name: registrantName,
       registrant_type: isMember ? 'member' : 'guest',
+      registrant_email: normalizeNullableText(registrant?.email),
     } satisfies ClassRegistrationListItem
   })
 }

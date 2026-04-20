@@ -4,11 +4,12 @@ import { format } from 'date-fns'
 import { Calendar as CalendarIcon } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { z } from 'zod'
 import { DialogStepForm, type DialogStep } from '@/components/dialog-step-form'
+import { ClassRegistrationFeeFields } from '@/components/class-registration-fee-fields'
 import { SearchableSelect, type SearchableSelectOption } from '@/components/searchable-select'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -24,19 +25,20 @@ import { toast } from '@/hooks/use-toast'
 import {
   calculateClassRegistrationAmount,
   createClassRegistration,
-  formatOptionalJmd,
   getDefaultClassDateValue,
-  isFreeMemberRegistration,
+  getDefaultClassRegistrationFeeType,
   type ClassWithTrainers,
   type CreateClassRegistrationInput,
 } from '@/lib/classes'
 import { parseDateInputValue } from '@/lib/member-access-time'
 import { queryKeys } from '@/lib/query-keys'
+import type { ClassRegistrationFeeType } from '@/types'
 
 type ClassRegistrationDialogProps = {
   classItem: ClassWithTrainers
   open: boolean
   onOpenChange: (open: boolean) => void
+  onRegistered?: (registration: Awaited<ReturnType<typeof createClassRegistration>>) => void
 }
 
 type GuestFormState = {
@@ -52,6 +54,7 @@ const EMPTY_GUEST_FORM: GuestFormState = {
   email: '',
   remark: '',
 }
+const guestEmailSchema = z.string().trim().email('Enter a valid email address.')
 
 function getInitialDateValue() {
   return getDefaultClassDateValue()
@@ -61,6 +64,7 @@ export function ClassRegistrationDialog({
   classItem,
   open,
   onOpenChange,
+  onRegistered,
 }: ClassRegistrationDialogProps) {
   const queryClient = useQueryClient()
   const { requiresApproval } = usePermissions()
@@ -72,7 +76,12 @@ export function ClassRegistrationDialog({
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
   const [guestForm, setGuestForm] = useState<GuestFormState>(EMPTY_GUEST_FORM)
   const [monthStart, setMonthStart] = useState(getInitialDateValue)
+  const [feeType, setFeeType] = useState<ClassRegistrationFeeType>(() =>
+    getDefaultClassRegistrationFeeType(classItem),
+  )
+  const [customAmount, setCustomAmount] = useState('')
   const [paymentReceived, setPaymentReceived] = useState(true)
+  const [notes, setNotes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
 
@@ -101,21 +110,28 @@ export function ClassRegistrationDialog({
   const displayedMonthStart = selectedMonthStartDate
     ? format(selectedMonthStartDate, 'MMM d, yyyy')
     : 'Select a date'
+  const trimmedGuestEmail = guestForm.email.trim()
+  const guestEmailValidation =
+    trimmedGuestEmail.length > 0 ? guestEmailSchema.safeParse(trimmedGuestEmail) : null
+  const guestEmailError =
+    guestEmailValidation && !guestEmailValidation.success
+      ? guestEmailValidation.error.issues[0]?.message ?? 'Enter a valid email address.'
+      : null
   const canContinue =
     registrantType === 'member'
       ? Boolean(selectedMemberId)
-      : Boolean(guestForm.name.trim())
-  const isFreeRegistration = canContinue
-    ? isFreeMemberRegistration(classItem, registrantType)
-    : false
+      : Boolean(guestForm.name.trim() && trimmedGuestEmail && !guestEmailError)
+  const parsedCustomAmount = Number(customAmount)
   const calculatedAmount = canContinue
     ? calculateClassRegistrationAmount({
         classItem,
-        month_start: monthStart,
-        registrant_type: registrantType,
+        fee_type: feeType,
+        custom_amount:
+          Number.isFinite(parsedCustomAmount) && Number.isInteger(parsedCustomAmount)
+            ? parsedCustomAmount
+            : null,
       })
-    : 0
-  const effectiveAmountPaid = isFreeRegistration ? 0 : paymentReceived ? calculatedAmount : 0
+    : null
   const registrationNeedsApproval = requiresApproval('classes.register')
 
   useEffect(() => {
@@ -128,10 +144,13 @@ export function ClassRegistrationDialog({
     setSelectedMemberId(null)
     setGuestForm(EMPTY_GUEST_FORM)
     setMonthStart(getInitialDateValue())
+    setFeeType(getDefaultClassRegistrationFeeType(classItem))
+    setCustomAmount('')
     setPaymentReceived(true)
+    setNotes('')
     setIsSubmitting(false)
     setIsDatePickerOpen(false)
-  }, [open])
+  }, [classItem, open])
 
   const handleGuestFieldChange = <TField extends keyof GuestFormState>(
     field: TField,
@@ -158,6 +177,30 @@ export function ClassRegistrationDialog({
       return
     }
 
+    if (
+      feeType === 'custom' &&
+      (customAmount.trim() === '' ||
+        !Number.isFinite(parsedCustomAmount) ||
+        !Number.isInteger(parsedCustomAmount) ||
+        parsedCustomAmount < 1)
+    ) {
+      toast({
+        title: 'Custom fee required',
+        description: 'Enter a whole-number JMD amount greater than 0 before submitting.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (calculatedAmount === null) {
+      toast({
+        title: 'Fee not configured',
+        description: 'The selected fee type is not configured for this class.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     let payload: CreateClassRegistrationInput
 
     if (registrantType === 'member') {
@@ -174,8 +217,10 @@ export function ClassRegistrationDialog({
         registrant_type: 'member',
         member_id: selectedMemberId,
         month_start: monthStart,
-        amount_paid: effectiveAmountPaid,
-        payment_received: isFreeRegistration ? false : paymentReceived,
+        fee_type: feeType,
+        amount_paid: calculatedAmount,
+        payment_received: paymentReceived,
+        notes: notes.trim() || null,
       }
     } else {
       if (!guestForm.name.trim()) {
@@ -187,24 +232,39 @@ export function ClassRegistrationDialog({
         return
       }
 
+      if (!guestForm.email.trim()) {
+        toast({
+          title: 'Guest email required',
+          description: 'Enter the guest email before submitting.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      if (guestEmailError) {
+        return
+      }
+
       payload = {
         registrant_type: 'guest',
         guest: {
           name: guestForm.name.trim(),
           phone: guestForm.phone.trim() || null,
-          email: guestForm.email.trim() || null,
+          email: trimmedGuestEmail,
           remark: guestForm.remark.trim() || null,
         },
         month_start: monthStart,
-        amount_paid: effectiveAmountPaid,
+        fee_type: feeType,
+        amount_paid: calculatedAmount,
         payment_received: paymentReceived,
+        notes: notes.trim() || null,
       }
     }
 
     setIsSubmitting(true)
 
     try {
-      await createClassRegistration(classItem.id, payload)
+      const registration = await createClassRegistration(classItem.id, payload)
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: queryKeys.classes.registrations(classItem.id, ''),
@@ -219,6 +279,13 @@ export function ClassRegistrationDialog({
           exact: false,
         }),
       ])
+
+      try {
+        onRegistered?.(registration)
+      } catch (callbackError) {
+        console.error('Class registration succeeded but onRegistered failed:', callbackError)
+      }
+
       onOpenChange(false)
       toast({
         title: registrationNeedsApproval ? 'Registration submitted' : 'Registration added',
@@ -316,8 +383,13 @@ export function ClassRegistrationDialog({
                   type="email"
                   value={guestForm.email}
                   onChange={(event) => handleGuestFieldChange('email', event.target.value)}
-                  placeholder="Optional"
+                  placeholder="Required"
+                  required
+                  aria-invalid={guestEmailError ? true : undefined}
                 />
+                {guestEmailError ? (
+                  <p className="text-sm text-destructive">{guestEmailError}</p>
+                ) : null}
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="guest-remark">Remark</Label>
@@ -335,7 +407,7 @@ export function ClassRegistrationDialog({
     },
     {
       title: 'Set the Period and Payment',
-      description: 'Confirm the first class date and review the amount to record for this registration.',
+      description: 'Confirm the period start, fee type, payment status, and notes for this registration.',
       content: (
         <div className="space-y-5">
           <div className="rounded-lg border bg-muted/20 p-4">
@@ -379,42 +451,17 @@ export function ClassRegistrationDialog({
             </Popover>
           </div>
 
-          <div className="rounded-lg border bg-muted/20 p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Calculated amount</p>
-                <p className="text-2xl font-semibold">{formatOptionalJmd(calculatedAmount)}</p>
-              </div>
-              {isFreeRegistration ? (
-                <p className="max-w-48 text-right text-sm text-muted-foreground">
-                  Dance Cardio is included for active gym members.
-                </p>
-              ) : null}
-            </div>
-          </div>
-
-          {!isFreeRegistration ? (
-            <label className="flex items-center gap-3 rounded-lg border p-4">
-              <Checkbox
-                checked={paymentReceived}
-                onCheckedChange={(checked) => setPaymentReceived(checked === true)}
-              />
-              <div>
-                <p className="font-medium">Payment received</p>
-                <p className="text-sm text-muted-foreground">
-                  Uncheck this to save the registration with {formatOptionalJmd(0)} paid.
-                </p>
-              </div>
-            </label>
-          ) : null}
-
-          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            {isFreeRegistration
-              ? 'No payment will be recorded for this registration.'
-              : paymentReceived
-                ? `The registration will be saved with ${formatOptionalJmd(effectiveAmountPaid)} paid.`
-                : 'The registration will be saved with 0 JMD paid until payment is collected.'}
-          </div>
+          <ClassRegistrationFeeFields
+            classItem={classItem}
+            feeType={feeType}
+            customAmount={customAmount}
+            paymentReceived={paymentReceived}
+            notes={notes}
+            onFeeTypeChange={setFeeType}
+            onCustomAmountChange={setCustomAmount}
+            onPaymentReceivedChange={setPaymentReceived}
+            onNotesChange={setNotes}
+          />
         </div>
       ),
     },
@@ -422,19 +469,21 @@ export function ClassRegistrationDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[640px]" isLoading={isSubmitting}>
-        <DialogStepForm
-          steps={steps}
-          currentStep={currentStep}
-          isSubmitting={isSubmitting}
-          onCancel={() => onOpenChange(false)}
-          onBack={() => setCurrentStep(1)}
-          onNext={() => setCurrentStep(2)}
-          onSubmit={handleSubmit}
-          nextDisabled={!canContinue}
-          submitLabel={registrationNeedsApproval ? 'Submit for Approval' : 'Register'}
-          submitLoadingLabel={registrationNeedsApproval ? 'Submitting...' : 'Registering...'}
-        />
+      <DialogContent className="sm:max-w-[640px] p-0" isLoading={isSubmitting}>
+        <div className="max-h-[calc(100dvh-2rem)] overflow-y-auto p-6 sm:max-h-[calc(100dvh-4rem)]">
+          <DialogStepForm
+            steps={steps}
+            currentStep={currentStep}
+            isSubmitting={isSubmitting}
+            onCancel={() => onOpenChange(false)}
+            onBack={() => setCurrentStep(1)}
+            onNext={() => setCurrentStep(2)}
+            onSubmit={handleSubmit}
+            nextDisabled={!canContinue}
+            submitLabel={registrationNeedsApproval ? 'Submit for Approval' : 'Register'}
+            submitLoadingLabel={registrationNeedsApproval ? 'Submitting...' : 'Registering...'}
+          />
+        </div>
       </DialogContent>
     </Dialog>
   )

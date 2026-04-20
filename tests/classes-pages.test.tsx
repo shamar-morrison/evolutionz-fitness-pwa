@@ -14,7 +14,10 @@ const {
   authState,
   assignClassTrainerMock,
   createClassRegistrationMock,
+  createClassRegistrationEditRequestMock,
+  createClassRegistrationRemovalRequestMock,
   createClassScheduleRuleMock,
+  deleteClassRegistrationMock,
   deleteClassScheduleRuleMock,
   generateClassSessionsMock,
   invalidateQueriesMock,
@@ -22,6 +25,7 @@ const {
   replaceMock,
   removeClassTrainerMock,
   toastMock,
+  updateClassRegistrationMock,
   useClassScheduleRulesMock,
   useClassSessionsMock,
   useClassDetailMock,
@@ -43,7 +47,10 @@ const {
   },
   assignClassTrainerMock: vi.fn(),
   createClassRegistrationMock: vi.fn(),
+  createClassRegistrationEditRequestMock: vi.fn(),
+  createClassRegistrationRemovalRequestMock: vi.fn(),
   createClassScheduleRuleMock: vi.fn(),
+  deleteClassRegistrationMock: vi.fn(),
   deleteClassScheduleRuleMock: vi.fn(),
   generateClassSessionsMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
@@ -51,6 +58,7 @@ const {
   replaceMock: vi.fn(),
   removeClassTrainerMock: vi.fn(),
   toastMock: vi.fn(),
+  updateClassRegistrationMock: vi.fn(),
   useClassScheduleRulesMock: vi.fn(),
   useClassSessionsMock: vi.fn(),
   useClassDetailMock: vi.fn(),
@@ -121,6 +129,11 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
 }))
 
+vi.mock('@/lib/class-registration-requests', () => ({
+  createClassRegistrationEditRequest: createClassRegistrationEditRequestMock,
+  createClassRegistrationRemovalRequest: createClassRegistrationRemovalRequestMock,
+}))
+
 vi.mock('@/lib/classes', async () => {
   const actual = await vi.importActual<typeof import('@/lib/classes')>('@/lib/classes')
 
@@ -128,10 +141,51 @@ vi.mock('@/lib/classes', async () => {
     ...actual,
     assignClassTrainer: assignClassTrainerMock,
     createClassRegistration: createClassRegistrationMock,
+    deleteClassRegistration: deleteClassRegistrationMock,
     createClassScheduleRule: createClassScheduleRuleMock,
     deleteClassScheduleRule: deleteClassScheduleRuleMock,
     generateClassSessions: generateClassSessionsMock,
     removeClassTrainer: removeClassTrainerMock,
+    updateClassRegistration: updateClassRegistrationMock,
+  }
+})
+
+vi.mock('@/components/ui/radio-group', async () => {
+  const React = await import('react')
+  const RadioGroupContext = React.createContext<{
+    value: string
+    onValueChange?: (value: string) => void
+  }>({
+    value: '',
+  })
+
+  return {
+    RadioGroup: ({
+      children,
+      value,
+      onValueChange,
+      className,
+    }: any) => (
+      <RadioGroupContext.Provider value={{ value: value ?? '', onValueChange }}>
+        <div className={className}>{children}</div>
+      </RadioGroupContext.Provider>
+    ),
+    RadioGroupItem: ({
+      value,
+      id,
+    }: any) => {
+      const context = React.useContext(RadioGroupContext)
+
+      return (
+        <input
+          id={id}
+          type="radio"
+          value={value}
+          checked={context.value === value}
+          onChange={() => context.onValueChange?.(value)}
+        />
+      )
+    },
   }
 })
 
@@ -283,8 +337,14 @@ function buildClass(overrides: Partial<ClassWithTrainers> = {}): ClassWithTraine
     id: overrides.id ?? 'class-1',
     name: overrides.name ?? 'Weight Loss Club',
     schedule_description: overrides.schedule_description ?? '3 times per week',
-    per_session_fee: overrides.per_session_fee ?? null,
-    monthly_fee: overrides.monthly_fee ?? 15500,
+    per_session_fee:
+      Object.prototype.hasOwnProperty.call(overrides, 'per_session_fee')
+        ? (overrides.per_session_fee ?? null)
+        : null,
+    monthly_fee:
+      Object.prototype.hasOwnProperty.call(overrides, 'monthly_fee')
+        ? (overrides.monthly_fee ?? null)
+        : 15500,
     trainer_compensation_pct: overrides.trainer_compensation_pct ?? 30,
     current_period_start:
       Object.prototype.hasOwnProperty.call(overrides, 'current_period_start')
@@ -313,14 +373,19 @@ function buildRegistration(
     guest_profile_id: overrides.guest_profile_id ?? null,
     month_start: overrides.month_start ?? '2026-04-10',
     status: overrides.status ?? 'approved',
+    fee_type: overrides.fee_type ?? 'monthly',
     amount_paid: overrides.amount_paid ?? 15500,
     payment_recorded_at: overrides.payment_recorded_at ?? '2026-04-08T12:00:00.000Z',
+    notes: overrides.notes ?? null,
+    receipt_number: overrides.receipt_number ?? null,
+    receipt_sent_at: overrides.receipt_sent_at ?? null,
     reviewed_by: overrides.reviewed_by ?? 'user-1',
     reviewed_at: overrides.reviewed_at ?? '2026-04-08T12:00:00.000Z',
     review_note: overrides.review_note ?? null,
     created_at: overrides.created_at ?? '2026-04-08T12:00:00.000Z',
     registrant_name: overrides.registrant_name ?? 'Client One',
     registrant_type: overrides.registrant_type ?? 'member',
+    registrant_email: overrides.registrant_email ?? 'client.one@example.com',
   }
 }
 
@@ -557,15 +622,22 @@ describe('classes pages', () => {
       error: null,
     })
     createClassRegistrationMock.mockResolvedValue(buildRegistration({ status: 'approved' }))
+    createClassRegistrationEditRequestMock.mockResolvedValue({ ok: true, requestId: 'request-1' })
+    createClassRegistrationRemovalRequestMock.mockResolvedValue({ ok: true, requestId: 'request-2' })
     assignClassTrainerMock.mockResolvedValue({
       class_id: 'class-1',
       profile_id: 'trainer-2',
       created_at: '2026-04-08T12:00:00.000Z',
     })
     createClassScheduleRuleMock.mockResolvedValue(buildScheduleRule())
+    deleteClassRegistrationMock.mockResolvedValue(undefined)
     deleteClassScheduleRuleMock.mockResolvedValue(undefined)
     generateClassSessionsMock.mockResolvedValue(1)
     removeClassTrainerMock.mockResolvedValue(undefined)
+    updateClassRegistrationMock.mockResolvedValue({
+      registration: buildRegistration(),
+      amountChanged: false,
+    })
   })
 
   afterEach(async () => {
@@ -628,7 +700,7 @@ describe('classes pages', () => {
     expect(container.textContent).toContain('Mark Attendance')
   })
 
-  it('shows a read-only class detail view for front desk staff', async () => {
+  it('shows registration controls for front desk staff without admin approval tools', async () => {
     authState.role = 'staff'
     authState.profile = {
       id: 'user-2',
@@ -645,6 +717,7 @@ describe('classes pages', () => {
     expect(container.textContent).toContain('Class Information')
     expect(container.textContent).not.toContain('3 times per week')
     expect(container.textContent).toContain('Register')
+    expect(container.textContent).toContain('Registrations')
     expect(container.textContent).toContain('Review the recurring class schedule.')
     expect(container.textContent).toContain('Monday')
     expect(container.textContent).not.toContain('Assign or remove trainer-title staff for this class.')
@@ -653,6 +726,8 @@ describe('classes pages', () => {
     expect(container.textContent).not.toContain('Set Period Start')
     expect(container.textContent).not.toContain('Generate Sessions')
     expect(container.textContent).not.toContain('Pending Approvals')
+    expect(container.textContent).toContain('Edit')
+    expect(container.textContent).toContain('Remove')
     expect(container.textContent).toContain('Sessions')
     expect(container.textContent).toContain('Mark Attendance')
   })
@@ -691,11 +766,55 @@ describe('classes pages', () => {
     expect(container.textContent).toContain('Class Information')
     expect(container.textContent).not.toContain('3 times per week')
     expect(container.textContent).toContain('Register')
+    expect(container.textContent).toContain('Registrations')
     expect(container.textContent).toContain('Review the recurring class schedule.')
     expect(container.textContent).not.toContain('Assign or remove trainer-title staff for this class.')
     expect(container.textContent).not.toContain('Set Period Start')
     expect(container.textContent).not.toContain('Pending Approvals')
+    expect(container.textContent).toContain('Edit')
+    expect(container.textContent).toContain('Remove')
     expect(container.textContent).toContain('Mark Attendance')
+  })
+
+  it('uses registration request flows when auth role is admin but classes.manage is unavailable', async () => {
+    authState.role = 'admin'
+    authState.profile = {
+      id: 'user-3',
+      name: 'Front Desk',
+      role: 'admin',
+      titles: ['Administrative Assistant'],
+    }
+
+    await act(async () => {
+      root.render(<ClassDetailPage />)
+    })
+
+    await clickButton(container, 'Edit')
+
+    expect(container.textContent).toContain('Request Registration Edit')
+
+    await clickButton(container, 'Submit Request')
+
+    expect(createClassRegistrationEditRequestMock).toHaveBeenCalledWith(
+      'registration-1',
+      expect.objectContaining({
+        period_start: '2026-04-10',
+        fee_type: 'monthly',
+        amount_paid: 15500,
+        payment_received: true,
+        notes: null,
+      }),
+    )
+    expect(updateClassRegistrationMock).not.toHaveBeenCalled()
+
+    await clickButton(container, 'Remove')
+
+    expect(container.textContent).toContain('Request registration removal?')
+
+    await clickButton(container, 'Submit Request')
+
+    expect(createClassRegistrationRemovalRequestMock).toHaveBeenCalledWith('registration-1')
+    expect(deleteClassRegistrationMock).not.toHaveBeenCalled()
   })
 
   it('shows an empty trainer state when no trainers are assigned', async () => {
@@ -1034,4 +1153,142 @@ describe('classes pages', () => {
     },
     10_000,
   )
+
+  it('blocks class registration submission when the custom fee is blank', async () => {
+    authState.role = 'staff'
+    authState.profile = {
+      id: 'user-2',
+      name: 'Assistant User',
+      role: 'staff',
+      titles: ['Assistant'],
+    }
+
+    await act(async () => {
+      root.render(
+        <ClassRegistrationDialog
+          classItem={buildClass({
+            current_period_start: null,
+            monthly_fee: null,
+            per_session_fee: null,
+          })}
+          open
+          onOpenChange={() => {}}
+        />,
+      )
+    })
+
+    const memberField = getInputByLabel(container, 'Member')
+    await setInputValue(memberField, 'member-1')
+    await clickButton(container, 'Next')
+    await clickButton(container, 'Submit for Approval')
+
+    expect(createClassRegistrationMock).not.toHaveBeenCalled()
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Custom fee required',
+      }),
+    )
+  })
+
+  it('shows an inline error and blocks guest registration when the email format is invalid', async () => {
+    authState.role = 'staff'
+    authState.profile = {
+      id: 'user-2',
+      name: 'Assistant User',
+      role: 'staff',
+      titles: ['Assistant'],
+    }
+
+    await act(async () => {
+      root.render(
+        <ClassRegistrationDialog
+          classItem={buildClass({
+            current_period_start: null,
+          })}
+          open
+          onOpenChange={() => {}}
+        />,
+      )
+    })
+
+    const guestRadio = container.querySelector('#registrant-guest')
+
+    if (!(guestRadio instanceof HTMLInputElement)) {
+      throw new Error('Guest radio not found.')
+    }
+
+    await act(async () => {
+      guestRadio.click()
+    })
+
+    const guestNameField = getInputByLabel(container, 'Guest name')
+    const guestEmailField = getInputByLabel(container, 'Email')
+
+    await setInputValue(guestNameField, 'Guest One')
+    await setInputValue(guestEmailField, 'guest.one@invalid@domain')
+
+    expect(container.textContent).toContain('Enter a valid email address.')
+    expect((guestEmailField as HTMLInputElement).getAttribute('aria-invalid')).toBe('true')
+    expect(getButton(container, 'Next').disabled).toBe(true)
+
+    const form = container.querySelector('form')
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('Registration form not found.')
+    }
+
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+
+    expect(createClassRegistrationMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps successful registration UX when onRegistered throws', async () => {
+    const onOpenChange = vi.fn()
+    const onRegistered = vi.fn(() => {
+      throw new Error('Callback failed.')
+    })
+    const consoleErrorMock = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await act(async () => {
+        root.render(
+          <ClassRegistrationDialog
+            classItem={buildClass({
+              current_period_start: null,
+            })}
+            open
+            onOpenChange={onOpenChange}
+            onRegistered={onRegistered}
+          />,
+        )
+      })
+
+      const memberField = getInputByLabel(container, 'Member')
+      await setInputValue(memberField, 'member-1')
+      await clickButton(container, 'Next')
+      await clickButton(container, 'Register')
+
+      expect(createClassRegistrationMock).toHaveBeenCalled()
+      expect(onRegistered).toHaveBeenCalledTimes(1)
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+      expect(consoleErrorMock).toHaveBeenCalledWith(
+        'Class registration succeeded but onRegistered failed:',
+        expect.any(Error),
+      )
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Registration added',
+        }),
+      )
+      expect(toastMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Registration failed',
+        }),
+      )
+    } finally {
+      consoleErrorMock.mockRestore()
+    }
+  })
 })

@@ -49,6 +49,10 @@ function getReviewHref(type: string) {
     return '/pending-approvals/payment-requests'
   }
 
+  if (type === 'class_registration_edit_request' || type === 'class_registration_removal_request') {
+    return '/pending-approvals/class-registration-requests'
+  }
+
   if (type === 'member_extension_request') {
     return '/pending-approvals/extension-requests'
   }

@@ -15,6 +15,7 @@ import type {
   Class,
   ClassAttendanceListItem,
   ClassRegistration,
+  ClassRegistrationFeeType,
   ClassScheduleRule,
   ClassScheduleRuleDay,
   ClassSessionSummary,
@@ -50,6 +51,7 @@ const optionalDateValueSchema = z
   .nullable()
 const countValueSchema = z.number().int().nonnegative()
 const classScheduleRuleDaySchema = z.number().int().min(0).max(6)
+const classRegistrationFeeTypeSchema = z.enum(['monthly', 'per_session', 'custom'])
 
 const classTrainerProfileSchema = z.object({
   id: z.string().trim().min(1),
@@ -85,14 +87,19 @@ const classRegistrationSchema = z.object({
   guest_profile_id: z.string().trim().min(1).nullable(),
   month_start: z.string().trim().regex(DATE_VALUE_PATTERN),
   status: z.enum(['pending', 'approved', 'denied']),
+  fee_type: classRegistrationFeeTypeSchema.nullable(),
   amount_paid: numericValueSchema,
   payment_recorded_at: z.string().trim().min(1).nullable(),
+  notes: z.string().trim().nullable(),
+  receipt_number: z.string().trim().nullable(),
+  receipt_sent_at: z.string().trim().nullable(),
   reviewed_by: z.string().trim().min(1).nullable(),
   reviewed_at: z.string().trim().min(1).nullable(),
   review_note: z.string().trim().min(1).nullable(),
   created_at: z.string().trim().min(1),
   registrant_name: z.string().trim().min(1),
   registrant_type: z.enum(['member', 'guest']),
+  registrant_email: z.string().trim().nullable(),
 })
 
 const classScheduleRuleSchema = z.object({
@@ -156,6 +163,7 @@ const attendanceResponseSchema = z.object({
 const registrationMutationResponseSchema = z.object({
   ok: z.literal(true),
   registration: classRegistrationSchema,
+  amountChanged: z.boolean().optional().default(false),
 })
 
 const classMutationResponseSchema = z.object({
@@ -222,6 +230,7 @@ export const CLASS_DAY_OF_WEEK_LABELS = [
 
 export type {
   ClassAttendanceListItem,
+  ClassRegistrationFeeType,
   ClassScheduleRule,
   ClassScheduleRuleDay,
   ClassSessionSummary,
@@ -237,7 +246,25 @@ export type ClassRegistrantType = 'member' | 'guest'
 export type ClassRegistrationListItem = ClassRegistration & {
   registrant_name: string
   registrant_type: ClassRegistrantType
+  registrant_email: string | null
 }
+export const CLASS_REGISTRATION_FEE_OPTIONS = [
+  {
+    value: 'monthly',
+    label: 'Monthly',
+  },
+  {
+    value: 'per_session',
+    label: 'Per Session',
+  },
+  {
+    value: 'custom',
+    label: 'Custom Class Fee',
+  },
+] as const satisfies ReadonlyArray<{
+  value: ClassRegistrationFeeType
+  label: string
+}>
 export type ClassSessionListItem = ClassSessionSummary
 export type ClassAttendanceRow = ClassAttendanceListItem
 export type ClassSessionPreviewItem = {
@@ -269,32 +296,47 @@ export type CreateClassRegistrationInput =
       registrant_type: 'member'
       member_id: string
       month_start: string
+      fee_type: ClassRegistrationFeeType
       amount_paid: number
       payment_received: boolean
+      notes?: string | null
     }
   | {
       registrant_type: 'guest'
       guest: {
         name: string
         phone?: string | null
-        email?: string | null
+        email: string
         remark?: string | null
       }
       month_start: string
+      fee_type: ClassRegistrationFeeType
       amount_paid: number
       payment_received: boolean
+      notes?: string | null
     }
 
 export type ReviewClassRegistrationInput =
   | {
       status: 'approved'
+      fee_type: ClassRegistrationFeeType
       amount_paid: number
+      payment_received: boolean
+      notes?: string | null
       review_note?: string | null
     }
   | {
       status: 'denied'
       review_note: string
     }
+
+export type UpdateClassRegistrationInput = {
+  period_start: string
+  fee_type: ClassRegistrationFeeType
+  amount_paid: number
+  payment_received: boolean
+  notes?: string | null
+}
 
 export type CreateClassScheduleRuleInput = {
   day_of_week: ClassScheduleRuleDay
@@ -431,19 +473,17 @@ export function getClassDayOfWeekFromDateValue(value: string) {
   return date.getUTCDay() as ClassScheduleRuleDay
 }
 
-export function isPerSessionClass(classItem: Pick<Class, 'name'>) {
-  return normalizeText(classItem.name).toLowerCase() === 'bootcamp'
-}
-
-export function isDanceCardioClass(classItem: Pick<Class, 'name'>) {
-  return normalizeText(classItem.name).toLowerCase() === 'dance cardio'
-}
-
-export function isFreeMemberRegistration(
-  classItem: Pick<Class, 'name'>,
-  registrantType: ClassRegistrantType,
-) {
-  return registrantType === 'member' && isDanceCardioClass(classItem)
+export function formatClassRegistrationFeeTypeLabel(value: ClassRegistrationFeeType | null) {
+  switch (value) {
+    case 'monthly':
+      return 'Monthly'
+    case 'per_session':
+      return 'Per Session'
+    case 'custom':
+      return 'Custom'
+    default:
+      return 'Unknown'
+  }
 }
 
 export function getClassPeriodEndDateValue(currentPeriodStart: string | null) {
@@ -454,54 +494,59 @@ export function getClassPeriodEndDateValue(currentPeriodStart: string | null) {
   return addDaysToDateValue(currentPeriodStart, 27)
 }
 
+export function getDefaultClassRegistrationFeeType(
+  classItem: Pick<Class, 'monthly_fee' | 'per_session_fee'>,
+): ClassRegistrationFeeType {
+  if (typeof classItem.monthly_fee === 'number' && typeof classItem.per_session_fee === 'number') {
+    return 'monthly'
+  }
+
+  if (typeof classItem.monthly_fee === 'number') {
+    return 'monthly'
+  }
+
+  if (typeof classItem.per_session_fee === 'number') {
+    return 'per_session'
+  }
+
+  return 'custom'
+}
+
+export function getClassRegistrationPresetAmount(
+  classItem: Pick<Class, 'monthly_fee' | 'per_session_fee'>,
+  feeType: Exclude<ClassRegistrationFeeType, 'custom'>,
+) {
+  return feeType === 'monthly' ? classItem.monthly_fee ?? null : classItem.per_session_fee ?? null
+}
+
 export function calculateClassRegistrationAmount({
   classItem,
-  month_start,
-  registrant_type,
+  fee_type,
+  custom_amount,
 }: {
-  classItem: Pick<Class, 'name' | 'monthly_fee' | 'per_session_fee' | 'current_period_start'>
-  month_start: string
-  registrant_type: ClassRegistrantType
+  classItem: Pick<Class, 'monthly_fee' | 'per_session_fee'>
+  fee_type?: ClassRegistrationFeeType | null
+  custom_amount?: number | null
+  month_start?: string
+  registrant_type?: ClassRegistrantType
 }) {
-  if (isFreeMemberRegistration(classItem, registrant_type)) {
-    return 0
+  const resolvedFeeType = fee_type ?? getDefaultClassRegistrationFeeType(classItem)
+
+  if (resolvedFeeType === 'custom') {
+    if (
+      custom_amount === null ||
+      custom_amount === undefined ||
+      !Number.isFinite(custom_amount) ||
+      custom_amount <= 0
+    ) {
+      return null
+    }
+
+    return Math.trunc(custom_amount)
   }
 
-  if (isPerSessionClass(classItem)) {
-    return classItem.per_session_fee ?? 0
-  }
-
-  if (typeof classItem.monthly_fee !== 'number') {
-    return classItem.per_session_fee ?? 0
-  }
-
-  if (!classItem.current_period_start) {
-    return classItem.monthly_fee
-  }
-
-  const daysOffset = getDaysBetweenDateValues(classItem.current_period_start, month_start)
-  const currentPeriodEnd = getClassPeriodEndDateValue(classItem.current_period_start)
-
-  if (
-    daysOffset === null ||
-    daysOffset <= 0 ||
-    !currentPeriodEnd ||
-    getDaysBetweenDateValues(currentPeriodEnd, month_start) === null
-  ) {
-    return classItem.monthly_fee
-  }
-
-  if (daysOffset >= 28) {
-    return classItem.monthly_fee
-  }
-
-  const daysRemaining = 28 - daysOffset
-
-  if (daysRemaining <= 0) {
-    return classItem.monthly_fee
-  }
-
-  return Math.round((classItem.monthly_fee / 28) * daysRemaining)
+  const presetAmount = getClassRegistrationPresetAmount(classItem, resolvedFeeType)
+  return typeof presetAmount === 'number' ? Math.max(0, Math.trunc(presetAmount)) : null
 }
 
 export function formatClassDate(value: string | null) {
@@ -1109,6 +1154,54 @@ export async function reviewClassRegistration(
   }
 
   return parsed.data.registration as ClassRegistrationListItem
+}
+
+export async function updateClassRegistration(
+  registrationId: string,
+  input: UpdateClassRegistrationInput,
+) {
+  const response = await fetch(
+    `/api/classes/registrations/${encodeURIComponent(registrationId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
+    },
+  )
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to update the class registration.'))
+  }
+
+  const parsed = registrationMutationResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to update the class registration.')
+  }
+
+  return {
+    registration: parsed.data.registration as ClassRegistrationListItem,
+    amountChanged: parsed.data.amountChanged,
+  }
+}
+
+export async function deleteClassRegistration(registrationId: string) {
+  const response = await fetch(
+    `/api/classes/registrations/${encodeURIComponent(registrationId)}`,
+    {
+      method: 'DELETE',
+    },
+  )
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to remove the class registration.'))
+  }
+
+  return payload
 }
 
 export async function fetchClassPaymentsReport(

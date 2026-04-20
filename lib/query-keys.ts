@@ -48,6 +48,10 @@ export const queryKeys = {
     all: ['memberPaymentRequests'] as const,
     pending: ['memberPaymentRequests', 'pending'] as const,
   },
+  classRegistrationRequests: {
+    all: ['classRegistrationRequests'] as const,
+    pending: ['classRegistrationRequests', 'pending'] as const,
+  },
   staff: {
     all: ['staff'] as const,
     archived: ['staff', 'archived'] as const,

@@ -41,6 +41,8 @@ const EMPTY_PENDING_APPROVAL_COUNTS: PendingApprovalCounts = {
   member_extension_requests: 0,
   member_pause_requests: 0,
   member_pause_resume_requests: 0,
+  class_registration_edit_requests: 0,
+  class_registration_removal_requests: 0,
   pt_reschedule_requests: 0,
   pt_session_update_requests: 0,
 }
@@ -340,6 +342,8 @@ describe('Sidebar', () => {
         member_extension_requests: 6,
         member_pause_requests: 7,
         member_pause_resume_requests: 1,
+        class_registration_edit_requests: 8,
+        class_registration_removal_requests: 2,
         pt_reschedule_requests: 11,
         pt_session_update_requests: 5,
       },

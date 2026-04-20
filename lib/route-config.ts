@@ -88,6 +88,9 @@ export const routeConfig: Record<string, RouteConfig> = {
   '/pending-approvals/payment-requests': {
     allowedRoles: ['admin'],
   },
+  '/pending-approvals/class-registration-requests': {
+    allowedRoles: ['admin'],
+  },
   '/pending-approvals/extension-requests': {
     allowedRoles: ['admin'],
   },

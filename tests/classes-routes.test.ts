@@ -157,14 +157,19 @@ function buildRegistration(overrides: Partial<Record<string, unknown>> = {}) {
     guest_profile_id: null,
     month_start: '2026-04-10',
     status: 'approved',
+    fee_type: 'custom',
     amount_paid: 15500,
     payment_recorded_at: '2026-04-08T12:00:00.000Z',
+    notes: null,
+    receipt_number: null,
+    receipt_sent_at: null,
     reviewed_by: 'user-1',
     reviewed_at: '2026-04-08T12:05:00.000Z',
     review_note: null,
     created_at: '2026-04-08T12:00:00.000Z',
     registrant_name: 'Client One',
     registrant_type: 'member',
+    registrant_email: 'client.one@example.com',
     ...overrides,
   }
 }
@@ -255,6 +260,7 @@ function createRegistrationPostClient(options: {
   existingGuestProfile?: Record<string, unknown> | null
   existingGuestProfileError?: { message: string } | null
   futureSessions?: Array<Record<string, unknown>>
+  existingAttendance?: Array<Record<string, unknown>>
   futureSessionsError?: { message: string } | null
   attendanceInsertError?: { message: string } | null
 } = {}) {
@@ -273,6 +279,8 @@ function createRegistrationPostClient(options: {
   }> = []
   const guestLookupLimits: number[] = []
   const attendanceInserts: Array<Record<string, unknown>> = []
+  const attendanceDeletes: string[] = []
+  let attendanceDeleteMarkedAtFilterApplied = false
 
   return {
     registrationValues,
@@ -282,6 +290,10 @@ function createRegistrationPostClient(options: {
     guestLookupOrders,
     guestLookupLimits,
     attendanceInserts,
+    attendanceDeletes,
+    get attendanceDeleteMarkedAtFilterApplied() {
+      return attendanceDeleteMarkedAtFilterApplied
+    },
     client: {
       from(table: string) {
         if (table === 'members') {
@@ -388,13 +400,8 @@ function createRegistrationPostClient(options: {
 
               const chain = {
                 eq(column: string, value: string) {
-                  if (column === 'class_id') {
-                    expect(value).toBe('class-1')
-                  }
-
-                  if (column === 'period_start') {
-                    expect(value).toBe('2026-04-01')
-                  }
+                  expect(column).toBe('class_id')
+                  expect(value).toBe('class-1')
 
                   return chain
                 },
@@ -420,6 +427,55 @@ function createRegistrationPostClient(options: {
 
         if (table === 'class_attendance') {
           return {
+            select(columns: string) {
+              expect(columns).toBe('id, session_id')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('session_id')
+                  expect(values).toEqual((options.futureSessions ?? []).map((session) => String(session.id)))
+
+                  return {
+                    eq(column: string, value: string) {
+                      expect(column).toBe('member_id')
+                      expect(value).toBe(memberId)
+
+                      return {
+                        is(column: string, value: null) {
+                          expect(column).toBe('guest_profile_id')
+                          expect(value).toBeNull()
+
+                          return Promise.resolve({
+                            data: options.existingAttendance ?? [],
+                            error: null,
+                          })
+                        },
+                      }
+                    },
+                  }
+                },
+              }
+            },
+            delete() {
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('id')
+                  attendanceDeletes.push(...values)
+
+                  return {
+                    is(column: string, value: null) {
+                      expect(column).toBe('marked_at')
+                      expect(value).toBeNull()
+                      attendanceDeleteMarkedAtFilterApplied = true
+
+                      return Promise.resolve({
+                        error: null,
+                      })
+                    },
+                  }
+                },
+              }
+            },
             insert(values: Record<string, unknown> | Array<Record<string, unknown>>) {
               attendanceInserts.push(...(Array.isArray(values) ? values : [values]))
 
@@ -433,6 +489,40 @@ function createRegistrationPostClient(options: {
         expect(table).toBe('class_registrations')
 
         return {
+          select(columns: string) {
+            expect(columns).toBe('id, month_start')
+
+            return {
+              eq(column: string, value: string) {
+                expect(column).toBe('class_id')
+                expect(value).toBe('class-1')
+
+                const chain = {
+                  eq(nextColumn: string, nextValue: string) {
+                    if (nextColumn === 'status') {
+                      expect(nextValue).toBe('approved')
+                      return chain
+                    }
+
+                    expect(nextColumn).toBe('member_id')
+                    expect(nextValue).toBe('member-1')
+                    return chain
+                  },
+                  is(nextColumn: string, nextValue: null) {
+                    expect(nextColumn).toBe('guest_profile_id')
+                    expect(nextValue).toBeNull()
+
+                    return Promise.resolve({
+                      data: [{ id: 'registration-1', month_start: '2026-04-10' }],
+                      error: null,
+                    })
+                  },
+                }
+
+                return chain
+              },
+            }
+          },
           insert(values: Record<string, unknown>) {
             registrationValues.push(values)
 
@@ -761,19 +851,26 @@ function createAttendancePatchClient() {
 }
 
 function createRegistrationReviewClient(options: {
-  reviewState?: { id: string; class_id: string; status: string } | null
+  reviewState?: { id: string; class_id: string; status: string; payment_recorded_at?: string | null } | null
   updatedRegistration?: { id: string } | null
   updateError?: { message: string } | null
   futureSessions?: Array<Record<string, unknown>>
+  existingAttendance?: Array<Record<string, unknown>>
   futureSessionsError?: { message: string } | null
   attendanceInsertError?: { message: string } | null
 } = {}) {
   const updateValues: Array<Record<string, unknown>> = []
   const attendanceInserts: Array<Record<string, unknown>> = []
+  const attendanceDeletes: string[] = []
+  let attendanceDeleteMarkedAtFilterApplied = false
 
   return {
     updateValues,
     attendanceInserts,
+    attendanceDeletes,
+    get attendanceDeleteMarkedAtFilterApplied() {
+      return attendanceDeleteMarkedAtFilterApplied
+    },
     client: {
       from(table: string) {
         if (table === 'class_sessions') {
@@ -783,13 +880,8 @@ function createRegistrationReviewClient(options: {
 
               const chain = {
                 eq(column: string, value: string) {
-                  if (column === 'class_id') {
-                    expect(value).toBe('class-1')
-                  }
-
-                  if (column === 'period_start') {
-                    expect(value).toBe('2026-04-01')
-                  }
+                  expect(column).toBe('class_id')
+                  expect(value).toBe('class-1')
 
                   return chain
                 },
@@ -815,6 +907,55 @@ function createRegistrationReviewClient(options: {
 
         if (table === 'class_attendance') {
           return {
+            select(columns: string) {
+              expect(columns).toBe('id, session_id')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('session_id')
+                  expect(values).toEqual((options.futureSessions ?? []).map((session) => String(session.id)))
+
+                  return {
+                    eq(column: string, value: string) {
+                      expect(column).toBe('member_id')
+                      expect(value).toBe('member-1')
+
+                      return {
+                        is(column: string, value: null) {
+                          expect(column).toBe('guest_profile_id')
+                          expect(value).toBeNull()
+
+                          return Promise.resolve({
+                            data: options.existingAttendance ?? [],
+                            error: null,
+                          })
+                        },
+                      }
+                    },
+                  }
+                },
+              }
+            },
+            delete() {
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('id')
+                  attendanceDeletes.push(...values)
+
+                  return {
+                    is(column: string, value: null) {
+                      expect(column).toBe('marked_at')
+                      expect(value).toBeNull()
+                      attendanceDeleteMarkedAtFilterApplied = true
+
+                      return Promise.resolve({
+                        error: null,
+                      })
+                    },
+                  }
+                },
+              }
+            },
             insert(values: Record<string, unknown> | Array<Record<string, unknown>>) {
               attendanceInserts.push(...(Array.isArray(values) ? values : [values]))
 
@@ -829,7 +970,40 @@ function createRegistrationReviewClient(options: {
 
         return {
           select(columns: string) {
-            expect(columns).toBe('id, class_id, status')
+            if (columns === 'id, month_start') {
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('class_id')
+                  expect(value).toBe('class-1')
+
+                  const chain = {
+                    eq(nextColumn: string, nextValue: string) {
+                      if (nextColumn === 'status') {
+                        expect(nextValue).toBe('approved')
+                        return chain
+                      }
+
+                      expect(nextColumn).toBe('member_id')
+                      expect(nextValue).toBe('member-1')
+                      return chain
+                    },
+                    is(nextColumn: string, nextValue: null) {
+                      expect(nextColumn).toBe('guest_profile_id')
+                      expect(nextValue).toBeNull()
+
+                      return Promise.resolve({
+                        data: [{ id: 'registration-1', month_start: '2026-04-10' }],
+                        error: null,
+                      })
+                    },
+                  }
+
+                  return chain
+                },
+              }
+            }
+
+            expect(columns).toBe('id, class_id, status, payment_recorded_at')
 
             return {
               eq(column: string, value: string) {
@@ -848,6 +1022,7 @@ function createRegistrationReviewClient(options: {
                             id: 'registration-1',
                             class_id: 'class-1',
                             status: 'pending',
+                            payment_recorded_at: null,
                           },
                         error: null,
                       }),
@@ -1333,6 +1508,7 @@ describe('classes routes', () => {
           registrant_type: 'member',
           member_id: '11111111-1111-1111-1111-111111111111',
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1360,6 +1536,7 @@ describe('classes routes', () => {
           registrant_type: 'member',
           member_id: '11111111-1111-1111-1111-111111111111',
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1390,6 +1567,7 @@ describe('classes routes', () => {
           registrant_type: 'member',
           member_id: '11111111-1111-1111-1111-111111111111',
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1439,10 +1617,11 @@ describe('classes routes', () => {
           guest: {
             name: '  Guest One  ',
             phone: '   ',
-            email: null,
+            email: ' guest.one@example.com ',
             remark: 'Has a prior visit note.',
           },
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1467,9 +1646,9 @@ describe('classes routes', () => {
         value: null,
       },
       {
-        operator: 'is',
+        operator: 'eq',
         column: 'email',
-        value: null,
+        value: 'guest.one@example.com',
       },
     ])
     expect(guestLookupOrders).toEqual([
@@ -1508,6 +1687,7 @@ describe('classes routes', () => {
           registrant_type: 'member',
           member_id: '11111111-1111-1111-1111-111111111111',
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1540,8 +1720,10 @@ describe('classes routes', () => {
           registrant_type: 'guest',
           guest: {
             name: 'Guest One',
+            email: 'guest.one@example.com',
           },
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1580,9 +1762,10 @@ describe('classes routes', () => {
           guest: {
             name: 'Guest One',
             phone: null,
-            email: null,
+            email: 'guest.one@example.com',
           },
           month_start: '2026-04-10',
+          fee_type: 'custom',
           amount_paid: 3000,
           payment_received: true,
         }),
@@ -1597,6 +1780,41 @@ describe('classes routes', () => {
     expect(guestInserts).toEqual([])
     expect(guestDeletes).toEqual([])
     expect(body.error).toContain('A registration already exists')
+  })
+
+  it('returns 400 for invalid fee selection before creating or looking up a guest profile', async () => {
+    mockAuthenticatedUser()
+    readStaffProfileMock.mockResolvedValue(buildProfile())
+    readClassByIdMock.mockResolvedValue(buildClass())
+    const { client, guestDeletes, guestInserts, guestLookupFilters } = createRegistrationPostClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await postClassRegistration(
+      new Request('http://localhost/api/classes/class-1/registrations', {
+        method: 'POST',
+        body: JSON.stringify({
+          registrant_type: 'guest',
+          guest: {
+            name: 'Guest One',
+            email: 'guest.one@example.com',
+          },
+          month_start: '2026-04-10',
+          fee_type: 'custom',
+          amount_paid: 0,
+          payment_received: true,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toBe('Custom class fee must be a whole-number JMD amount of at least 1.')
+    expect(guestLookupFilters).toEqual([])
+    expect(guestInserts).toEqual([])
+    expect(guestDeletes).toEqual([])
   })
 
   it('requires a denial reason when denying a registration', async () => {
@@ -1627,6 +1845,7 @@ describe('classes routes', () => {
     readClassRegistrationByIdMock.mockResolvedValue(
       buildRegistration({
         status: 'approved',
+        month_start: '2026-04-01',
         amount_paid: 3200,
         review_note: 'Paid at the desk.',
       }),
@@ -1639,7 +1858,10 @@ describe('classes routes', () => {
         method: 'PATCH',
         body: JSON.stringify({
           status: 'approved',
+          fee_type: 'custom',
           amount_paid: 3200,
+          payment_received: true,
+          notes: 'Paid at the desk.',
           review_note: 'Paid at the desk.',
         }),
       }),
@@ -1652,7 +1874,10 @@ describe('classes routes', () => {
     expect(response.status).toBe(200)
     expect(updateValues[0]).toMatchObject({
       status: 'approved',
+      fee_type: 'custom',
       amount_paid: 3200,
+      payment_recorded_at: expect.any(String),
+      notes: 'Paid at the desk.',
       review_note: 'Paid at the desk.',
       reviewed_by: 'admin-1',
     })
@@ -1665,6 +1890,7 @@ describe('classes routes', () => {
         id: 'admin-1',
       },
     })
+    readClassByIdMock.mockResolvedValue(buildClass())
     const { client } = createRegistrationReviewClient({
       updatedRegistration: null,
     })
@@ -1675,7 +1901,10 @@ describe('classes routes', () => {
         method: 'PATCH',
         body: JSON.stringify({
           status: 'approved',
+          fee_type: 'custom',
           amount_paid: 3200,
+          payment_received: true,
+          notes: 'Paid at the desk.',
           review_note: 'Paid at the desk.',
         }),
       }),
@@ -1691,10 +1920,48 @@ describe('classes routes', () => {
       error: 'This class registration has already been reviewed.',
     })
     expect(readClassRegistrationByIdMock).not.toHaveBeenCalled()
-    expect(readClassByIdMock).not.toHaveBeenCalled()
+    expect(readClassByIdMock).toHaveBeenCalledWith(client, 'class-1')
   })
 
-  it('backfills attendance when approving a pending registration', async () => {
+  it('returns 400 when fee selection validation fails during registration approval', async () => {
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+      },
+    })
+    readClassByIdMock.mockResolvedValue(
+      buildClass({
+        monthly_fee: null,
+      }),
+    )
+    const { client, updateValues } = createRegistrationReviewClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await patchClassRegistration(
+      new Request('http://localhost/api/classes/class-1/registrations/registration-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'approved',
+          fee_type: 'monthly',
+          amount_paid: 3200,
+          payment_received: true,
+          notes: 'Paid at the desk.',
+          review_note: 'Paid at the desk.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1', registrationId: 'registration-1' }),
+      },
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toBe('Monthly fee is not configured for this class.')
+    expect(updateValues).toEqual([])
+    expect(readClassRegistrationByIdMock).not.toHaveBeenCalled()
+  })
+
+  it('backfills current-period attendance when approving a pending registration', async () => {
     mockAdminUser({
       profile: {
         id: 'admin-1',
@@ -1704,6 +1971,7 @@ describe('classes routes', () => {
     readClassRegistrationByIdMock.mockResolvedValue(
       buildRegistration({
         status: 'approved',
+        month_start: '2026-04-01',
         amount_paid: 3200,
         review_note: 'Paid at the desk.',
       }),
@@ -1712,7 +1980,7 @@ describe('classes routes', () => {
       futureSessions: [
         {
           id: 'session-1',
-          scheduled_at: '2026-04-12T09:00:00-05:00',
+          scheduled_at: '2026-04-15T09:00:00-05:00',
           period_start: '2026-04-01',
         },
       ],
@@ -1724,7 +1992,10 @@ describe('classes routes', () => {
         method: 'PATCH',
         body: JSON.stringify({
           status: 'approved',
+          fee_type: 'custom',
           amount_paid: 3200,
+          payment_received: true,
+          notes: 'Paid at the desk.',
           review_note: 'Paid at the desk.',
         }),
       }),
@@ -1743,6 +2014,61 @@ describe('classes routes', () => {
         marked_by: null,
       },
     ])
+  })
+
+  it('only deletes unmarked attendance rows when reconciling current-period attendance', async () => {
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+      },
+    })
+    readClassByIdMock.mockResolvedValue(buildClass())
+    readClassRegistrationByIdMock.mockResolvedValue(
+      buildRegistration({
+        status: 'approved',
+        month_start: '2026-04-15',
+      }),
+    )
+    const reviewClient = createRegistrationReviewClient({
+      futureSessions: [
+        {
+          id: 'session-1',
+          scheduled_at: '2026-04-05T09:00:00-05:00',
+          period_start: '2026-04-01',
+        },
+        {
+          id: 'session-2',
+          scheduled_at: '2026-04-17T09:00:00-05:00',
+          period_start: '2026-04-01',
+        },
+      ],
+      existingAttendance: [
+        { id: 'attendance-1', session_id: 'session-1' },
+        { id: 'attendance-2', session_id: 'session-2' },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(reviewClient.client)
+
+    const response = await patchClassRegistration(
+      new Request('http://localhost/api/classes/class-1/registrations/registration-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'approved',
+          fee_type: 'custom',
+          amount_paid: 3200,
+          payment_received: true,
+          notes: 'Paid at the desk.',
+          review_note: 'Paid at the desk.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1', registrationId: 'registration-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(reviewClient.attendanceDeletes).toEqual(['attendance-1'])
+    expect(reviewClient.attendanceDeleteMarkedAtFilterApplied).toBe(true)
   })
 
   it('returns class trainers for admins', async () => {
@@ -2228,6 +2554,7 @@ describe('classes routes', () => {
             registrant_type: 'member',
             member_id: '11111111-1111-1111-1111-111111111111',
             month_start: '2026-04-10',
+            fee_type: 'custom',
             amount_paid: 3000,
             payment_received: true,
           }),
@@ -2239,15 +2566,6 @@ describe('classes routes', () => {
       const body = await response.json()
 
       expect(response.status).toBe(200)
-      expect(attendanceInserts).toEqual([
-        {
-          session_id: 'session-1',
-          member_id: 'member-1',
-          guest_profile_id: null,
-          marked_at: null,
-          marked_by: null,
-        },
-      ])
       expect(consoleErrorMock).toHaveBeenCalledWith(
         'Failed to backfill class attendance rows after registration:',
         expect.any(Error),

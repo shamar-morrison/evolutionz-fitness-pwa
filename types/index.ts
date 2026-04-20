@@ -373,6 +373,9 @@ export type ClassTrainer = {
   created_at: string
 }
 
+export type ClassRegistrationFeeType = 'monthly' | 'per_session' | 'custom'
+export type ClassRegistrationRequestStatus = 'pending' | 'approved' | 'rejected'
+
 export type ClassRegistration = {
   id: string
   class_id: string
@@ -380,8 +383,12 @@ export type ClassRegistration = {
   guest_profile_id: string | null
   month_start: string
   status: 'pending' | 'approved' | 'denied'
+  fee_type: ClassRegistrationFeeType | null
   amount_paid: number
   payment_recorded_at: string | null
+  notes: string | null
+  receipt_number: string | null
+  receipt_sent_at: string | null
   reviewed_by: string | null
   reviewed_at: string | null
   review_note: string | null
@@ -426,6 +433,53 @@ export type ClassAttendanceListItem = ClassAttendance & {
   registrant_type: 'member' | 'guest'
 }
 
+export type ClassRegistrationEditRequest = {
+  id: string
+  registrationId: string
+  classId: string
+  className: string
+  memberId: string | null
+  guestProfileId: string | null
+  registrantName: string
+  registrantEmail: string | null
+  currentFeeType: ClassRegistrationFeeType | null
+  currentAmountPaid: number
+  currentPeriodStart: string
+  currentPaymentReceived: boolean
+  currentNotes: string | null
+  proposedFeeType: ClassRegistrationFeeType | null
+  proposedAmountPaid: number
+  proposedPeriodStart: string
+  proposedPaymentReceived: boolean
+  proposedNotes: string | null
+  requestedBy: string
+  requestedByName: string | null
+  reviewedBy: string | null
+  reviewedByName: string | null
+  reviewedAt: string | null
+  status: ClassRegistrationRequestStatus
+  createdAt: string
+}
+
+export type ClassRegistrationRemovalRequest = {
+  id: string
+  registrationId: string
+  classId: string
+  className: string
+  memberId: string | null
+  guestProfileId: string | null
+  registrantName: string
+  registrantEmail: string | null
+  amountPaidAtRequest: number
+  requestedBy: string
+  requestedByName: string | null
+  reviewedBy: string | null
+  reviewedByName: string | null
+  reviewedAt: string | null
+  status: ClassRegistrationRequestStatus
+  createdAt: string
+}
+
 // Dashboard Types
 export type DashboardSignupsByMonthItem = {
   month: string
@@ -450,6 +504,8 @@ export type PendingApprovalCounts = {
   member_extension_requests: number
   member_pause_requests: number
   member_pause_resume_requests: number
+  class_registration_edit_requests: number
+  class_registration_removal_requests: number
   pt_reschedule_requests: number
   pt_session_update_requests: number
 }

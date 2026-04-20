@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { backfillRegistrationAttendanceForCurrentPeriod } from '@/app/api/classes/_registration-attendance'
+import {
+  getNextPaymentRecordedAt,
+  getStoredRegistrationAmount,
+  isUniqueViolation,
+  normalizeOptionalText,
+  resolveClassRegistrationFeeSelection,
+} from '@/app/api/classes/_registration-utils'
 import { getUtcDateFromDateValue } from '@/lib/classes'
 import {
   readClassById,
@@ -14,7 +21,8 @@ import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const statusSchema = z.enum(['pending', 'approved', 'denied'])
 const dateValueSchema = z.string().trim().regex(/^(\d{4})-(\d{2})-(\d{2})$/u)
-const amountSchema = z.number().finite().min(0)
+const amountSchema = z.number().finite().int().min(0)
+const feeTypeSchema = z.enum(['monthly', 'per_session', 'custom'])
 const optionalTextSchema = z.string().trim().nullable().optional()
 
 const registrationsFilterSchema = z.object({
@@ -25,7 +33,7 @@ const createGuestSchema = z
   .object({
     name: z.string().trim().min(1, 'Guest name is required.'),
     phone: optionalTextSchema,
-    email: z.string().trim().email('Enter a valid email address.').nullable().optional(),
+    email: z.string().trim().email('Enter a valid email address.'),
     remark: optionalTextSchema,
   })
   .strict()
@@ -36,8 +44,10 @@ const createClassRegistrationSchema = z.union([
       registrant_type: z.literal('member'),
       member_id: z.string().uuid(),
       month_start: dateValueSchema,
+      fee_type: feeTypeSchema,
       amount_paid: amountSchema,
       payment_received: z.boolean(),
+      notes: optionalTextSchema,
     })
     .strict(),
   z
@@ -45,8 +55,10 @@ const createClassRegistrationSchema = z.union([
       registrant_type: z.literal('guest'),
       guest: createGuestSchema,
       month_start: dateValueSchema,
+      fee_type: feeTypeSchema,
       amount_paid: amountSchema,
       payment_received: z.boolean(),
+      notes: optionalTextSchema,
     })
     .strict(),
 ])
@@ -58,20 +70,6 @@ function createErrorResponse(error: string, status: number) {
       error,
     },
     { status },
-  )
-}
-
-function normalizeOptionalText(value: string | null | undefined) {
-  const normalizedValue = typeof value === 'string' ? value.trim() : ''
-  return normalizedValue || null
-}
-
-function isUniqueViolation(error: unknown) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: string }).code === '23505'
   )
 }
 
@@ -202,6 +200,22 @@ export async function POST(
       return createErrorResponse('Class not found.', 404)
     }
 
+    let selectedAmount: number
+
+    try {
+      selectedAmount = resolveClassRegistrationFeeSelection({
+        classItem,
+        feeType: input.fee_type,
+        requestedAmount: input.amount_paid,
+      })
+    } catch (error) {
+      if (error instanceof Error) {
+        return createErrorResponse(error.message, 400)
+      }
+
+      throw error
+    }
+
     let memberId: string | null = null
     let guestProfileId: string | null = null
     let createdGuestProfileId: string | null = null
@@ -261,8 +275,15 @@ export async function POST(
         member_id: memberId,
         guest_profile_id: guestProfileId,
         month_start: input.month_start,
-        amount_paid: input.payment_received ? input.amount_paid : 0,
-        payment_recorded_at: input.payment_received ? new Date().toISOString() : null,
+        fee_type: input.fee_type,
+        amount_paid: getStoredRegistrationAmount({
+          selectedAmount,
+          paymentReceived: input.payment_received,
+        }),
+        payment_recorded_at: getNextPaymentRecordedAt({
+          paymentReceived: input.payment_received,
+        }),
+        notes: normalizeOptionalText(input.notes),
         status: registrationStatus,
       })
       .select('id')
@@ -304,7 +325,6 @@ export async function POST(
         await backfillRegistrationAttendanceForCurrentPeriod({
           supabase,
           classId: id,
-          currentPeriodStart: classItem.current_period_start,
           registration,
         })
       } catch (attendanceError) {

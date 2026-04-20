@@ -324,7 +324,7 @@ describe('EmailClient', () => {
     await clickElement(expiredMembersCheckbox as HTMLInputElement)
 
     expect(container.textContent).toContain(
-      'You can send up to 2 recipients per day. Only the first 2 recipients will receive this email.',
+      'You can send up to 2 emails per day. Only the first 2 recipients will receive this email.',
     )
   })
 

@@ -16,6 +16,8 @@ export type NotificationType = Extract<
   | 'member_payment_request'
   | 'member_extension_request'
   | 'member_pause_request'
+  | 'class_registration_edit_request'
+  | 'class_registration_removal_request'
 >
 
 export async function notifyAdminsOfRequest(
