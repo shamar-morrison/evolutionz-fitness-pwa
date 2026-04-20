@@ -260,6 +260,7 @@ function createRegistrationPostClient(options: {
   existingGuestProfile?: Record<string, unknown> | null
   existingGuestProfileError?: { message: string } | null
   futureSessions?: Array<Record<string, unknown>>
+  existingAttendance?: Array<Record<string, unknown>>
   futureSessionsError?: { message: string } | null
   attendanceInsertError?: { message: string } | null
 } = {}) {
@@ -278,6 +279,8 @@ function createRegistrationPostClient(options: {
   }> = []
   const guestLookupLimits: number[] = []
   const attendanceInserts: Array<Record<string, unknown>> = []
+  const attendanceDeletes: string[] = []
+  let attendanceDeleteMarkedAtFilterApplied = false
 
   return {
     registrationValues,
@@ -287,6 +290,10 @@ function createRegistrationPostClient(options: {
     guestLookupOrders,
     guestLookupLimits,
     attendanceInserts,
+    attendanceDeletes,
+    get attendanceDeleteMarkedAtFilterApplied() {
+      return attendanceDeleteMarkedAtFilterApplied
+    },
     client: {
       from(table: string) {
         if (table === 'members') {
@@ -439,11 +446,31 @@ function createRegistrationPostClient(options: {
                           expect(value).toBeNull()
 
                           return Promise.resolve({
-                            data: [],
+                            data: options.existingAttendance ?? [],
                             error: null,
                           })
                         },
                       }
+                    },
+                  }
+                },
+              }
+            },
+            delete() {
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('id')
+                  attendanceDeletes.push(...values)
+
+                  return {
+                    is(column: string, value: null) {
+                      expect(column).toBe('marked_at')
+                      expect(value).toBeNull()
+                      attendanceDeleteMarkedAtFilterApplied = true
+
+                      return Promise.resolve({
+                        error: null,
+                      })
                     },
                   }
                 },
@@ -828,15 +855,22 @@ function createRegistrationReviewClient(options: {
   updatedRegistration?: { id: string } | null
   updateError?: { message: string } | null
   futureSessions?: Array<Record<string, unknown>>
+  existingAttendance?: Array<Record<string, unknown>>
   futureSessionsError?: { message: string } | null
   attendanceInsertError?: { message: string } | null
 } = {}) {
   const updateValues: Array<Record<string, unknown>> = []
   const attendanceInserts: Array<Record<string, unknown>> = []
+  const attendanceDeletes: string[] = []
+  let attendanceDeleteMarkedAtFilterApplied = false
 
   return {
     updateValues,
     attendanceInserts,
+    attendanceDeletes,
+    get attendanceDeleteMarkedAtFilterApplied() {
+      return attendanceDeleteMarkedAtFilterApplied
+    },
     client: {
       from(table: string) {
         if (table === 'class_sessions') {
@@ -892,11 +926,31 @@ function createRegistrationReviewClient(options: {
                           expect(value).toBeNull()
 
                           return Promise.resolve({
-                            data: [],
+                            data: options.existingAttendance ?? [],
                             error: null,
                           })
                         },
                       }
+                    },
+                  }
+                },
+              }
+            },
+            delete() {
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('id')
+                  attendanceDeletes.push(...values)
+
+                  return {
+                    is(column: string, value: null) {
+                      expect(column).toBe('marked_at')
+                      expect(value).toBeNull()
+                      attendanceDeleteMarkedAtFilterApplied = true
+
+                      return Promise.resolve({
+                        error: null,
+                      })
                     },
                   }
                 },
@@ -1756,6 +1810,7 @@ describe('classes routes', () => {
     readClassRegistrationByIdMock.mockResolvedValue(
       buildRegistration({
         status: 'approved',
+        month_start: '2026-04-01',
         amount_paid: 3200,
         review_note: 'Paid at the desk.',
       }),
@@ -1833,7 +1888,7 @@ describe('classes routes', () => {
     expect(readClassByIdMock).toHaveBeenCalledWith(client, 'class-1')
   })
 
-  it('backfills attendance when approving a pending registration', async () => {
+  it('backfills current-period attendance when approving a pending registration', async () => {
     mockAdminUser({
       profile: {
         id: 'admin-1',
@@ -1843,6 +1898,7 @@ describe('classes routes', () => {
     readClassRegistrationByIdMock.mockResolvedValue(
       buildRegistration({
         status: 'approved',
+        month_start: '2026-04-01',
         amount_paid: 3200,
         review_note: 'Paid at the desk.',
       }),
@@ -1851,7 +1907,7 @@ describe('classes routes', () => {
       futureSessions: [
         {
           id: 'session-1',
-          scheduled_at: '2026-04-12T09:00:00-05:00',
+          scheduled_at: '2026-04-15T09:00:00-05:00',
           period_start: '2026-04-01',
         },
       ],
@@ -1885,6 +1941,61 @@ describe('classes routes', () => {
         marked_by: null,
       },
     ])
+  })
+
+  it('only deletes unmarked attendance rows when reconciling current-period attendance', async () => {
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+      },
+    })
+    readClassByIdMock.mockResolvedValue(buildClass())
+    readClassRegistrationByIdMock.mockResolvedValue(
+      buildRegistration({
+        status: 'approved',
+        month_start: '2026-04-15',
+      }),
+    )
+    const reviewClient = createRegistrationReviewClient({
+      futureSessions: [
+        {
+          id: 'session-1',
+          scheduled_at: '2026-04-05T09:00:00-05:00',
+          period_start: '2026-04-01',
+        },
+        {
+          id: 'session-2',
+          scheduled_at: '2026-04-17T09:00:00-05:00',
+          period_start: '2026-04-01',
+        },
+      ],
+      existingAttendance: [
+        { id: 'attendance-1', session_id: 'session-1' },
+        { id: 'attendance-2', session_id: 'session-2' },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(reviewClient.client)
+
+    const response = await patchClassRegistration(
+      new Request('http://localhost/api/classes/class-1/registrations/registration-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'approved',
+          fee_type: 'custom',
+          amount_paid: 3200,
+          payment_received: true,
+          notes: 'Paid at the desk.',
+          review_note: 'Paid at the desk.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'class-1', registrationId: 'registration-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(reviewClient.attendanceDeletes).toEqual(['attendance-1'])
+    expect(reviewClient.attendanceDeleteMarkedAtFilterApplied).toBe(true)
   })
 
   it('returns class trainers for admins', async () => {

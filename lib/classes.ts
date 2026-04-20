@@ -163,6 +163,7 @@ const attendanceResponseSchema = z.object({
 const registrationMutationResponseSchema = z.object({
   ok: z.literal(true),
   registration: classRegistrationSchema,
+  amountChanged: z.boolean().optional().default(false),
 })
 
 const classMutationResponseSchema = z.object({
@@ -515,7 +516,7 @@ export function getClassRegistrationPresetAmount(
   classItem: Pick<Class, 'monthly_fee' | 'per_session_fee'>,
   feeType: Exclude<ClassRegistrationFeeType, 'custom'>,
 ) {
-  return feeType === 'monthly' ? classItem.monthly_fee ?? 0 : classItem.per_session_fee ?? 0
+  return feeType === 'monthly' ? classItem.monthly_fee ?? null : classItem.per_session_fee ?? null
 }
 
 export function calculateClassRegistrationAmount({
@@ -532,10 +533,15 @@ export function calculateClassRegistrationAmount({
   const resolvedFeeType = fee_type ?? getDefaultClassRegistrationFeeType(classItem)
 
   if (resolvedFeeType === 'custom') {
-    return Number.isFinite(custom_amount) ? Math.max(0, Math.trunc(custom_amount ?? 0)) : 0
+    if (!Number.isFinite(custom_amount) || custom_amount === null || custom_amount === undefined) {
+      return null
+    }
+
+    return custom_amount >= 0 ? Math.trunc(custom_amount) : null
   }
 
-  return Math.max(0, Math.trunc(getClassRegistrationPresetAmount(classItem, resolvedFeeType)))
+  const presetAmount = getClassRegistrationPresetAmount(classItem, resolvedFeeType)
+  return typeof presetAmount === 'number' ? Math.max(0, Math.trunc(presetAmount)) : null
 }
 
 export function formatClassDate(value: string | null) {
@@ -1173,13 +1179,7 @@ export async function updateClassRegistration(
 
   return {
     registration: parsed.data.registration as ClassRegistrationListItem,
-    amountChanged:
-      Boolean(
-        payload &&
-          typeof payload === 'object' &&
-          'amountChanged' in payload &&
-          payload.amountChanged === true,
-      ),
+    amountChanged: parsed.data.amountChanged,
   }
 }
 

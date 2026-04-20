@@ -117,9 +117,12 @@ export function ClassRegistrationDialog({
     ? calculateClassRegistrationAmount({
         classItem,
         fee_type: feeType,
-        custom_amount: Number.isFinite(parsedCustomAmount) ? parsedCustomAmount : 0,
+        custom_amount:
+          Number.isFinite(parsedCustomAmount) && Number.isInteger(parsedCustomAmount)
+            ? parsedCustomAmount
+            : null,
       })
-    : 0
+    : null
   const registrationNeedsApproval = requiresApproval('classes.register')
 
   useEffect(() => {
@@ -162,6 +165,30 @@ export function ClassRegistrationDialog({
     event.preventDefault()
 
     if (!canContinue) {
+      return
+    }
+
+    if (
+      feeType === 'custom' &&
+      (customAmount.trim() === '' ||
+        !Number.isFinite(parsedCustomAmount) ||
+        !Number.isInteger(parsedCustomAmount) ||
+        parsedCustomAmount < 1)
+    ) {
+      toast({
+        title: 'Custom fee required',
+        description: 'Enter a whole-number JMD amount greater than 0 before submitting.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (calculatedAmount === null) {
+      toast({
+        title: 'Fee not configured',
+        description: 'The selected fee type is not configured for this class.',
+        variant: 'destructive',
+      })
       return
     }
 

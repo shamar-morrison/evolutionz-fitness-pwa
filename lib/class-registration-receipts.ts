@@ -39,11 +39,23 @@ const classRegistrationReceiptPreviewResponseSchema = z.object({
   receiptSentAt: z.string().trim().nullable(),
 })
 
-const sendClassRegistrationReceiptResponseSchema = z.object({
+const sendClassRegistrationReceiptSuccessResponseSchema = z.object({
   ok: z.literal(true),
   alreadySent: z.boolean().optional(),
   receiptSentAt: z.string().trim().nullable(),
 })
+
+const sendClassRegistrationReceiptInProgressResponseSchema = z.object({
+  ok: z.literal(false),
+  sendInProgress: z.literal(true),
+  error: z.string().trim().min(1),
+  receiptSentAt: z.null(),
+})
+
+const sendClassRegistrationReceiptResponseSchema = z.union([
+  sendClassRegistrationReceiptSuccessResponseSchema,
+  sendClassRegistrationReceiptInProgressResponseSchema,
+])
 
 export type ClassRegistrationReceipt = z.infer<typeof classRegistrationReceiptSchema>
 export type ClassRegistrationReceiptPreviewResponse = z.infer<
@@ -66,6 +78,19 @@ function escapeHtml(value: string | null | undefined) {
     .replaceAll("'", '&#39;')
 }
 
+function getErrorMessage(responseBody: unknown, fallback: string) {
+  if (
+    typeof responseBody === 'object' &&
+    responseBody !== null &&
+    'error' in responseBody &&
+    typeof responseBody.error === 'string'
+  ) {
+    return responseBody.error
+  }
+
+  return fallback
+}
+
 function formatDateValue(value: string | null) {
   const normalizedValue = normalizeText(value)
 
@@ -73,7 +98,16 @@ function formatDateValue(value: string | null) {
     return 'N/A'
   }
 
-  const timestamp = new Date(normalizedValue)
+  const timestamp = /^\d{4}-\d{2}-\d{2}$/u.test(normalizedValue)
+    ? new Date(
+        Date.UTC(
+          Number(normalizedValue.slice(0, 4)),
+          Number(normalizedValue.slice(5, 7)) - 1,
+          Number(normalizedValue.slice(8, 10)),
+          12,
+        ),
+      )
+    : new Date(normalizedValue)
 
   if (Number.isNaN(timestamp.getTime())) {
     return normalizedValue
@@ -210,14 +244,40 @@ export async function fetchClassRegistrationReceiptPreview(
 export async function sendClassRegistrationReceipt(
   registrationId: string,
 ): Promise<SendClassRegistrationReceiptResponse> {
-  return apiFetch(
+  const response = await fetch(
     `/api/classes/registrations/${encodeURIComponent(registrationId)}/receipt/send`,
     {
       method: 'POST',
     },
-    sendClassRegistrationReceiptResponseSchema,
-    'Failed to send the class registration receipt.',
   )
+
+  let responseBody: unknown | null = null
+
+  try {
+    responseBody = await response.json()
+  } catch {
+    responseBody = null
+  }
+
+  if (response.status === 409) {
+    const parsedConflict = sendClassRegistrationReceiptInProgressResponseSchema.safeParse(responseBody)
+
+    if (parsedConflict.success) {
+      return parsedConflict.data
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(responseBody, 'Failed to send the class registration receipt.'))
+  }
+
+  const parsed = sendClassRegistrationReceiptSuccessResponseSchema.safeParse(responseBody)
+
+  if (!parsed.success) {
+    throw new Error('Failed to send the class registration receipt.')
+  }
+
+  return parsed.data
 }
 
 export function formatClassRegistrationReceiptDateValue(value: string | null) {

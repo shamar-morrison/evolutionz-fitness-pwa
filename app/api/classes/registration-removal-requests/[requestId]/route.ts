@@ -155,19 +155,6 @@ export async function PATCH(
     }
 
     try {
-      try {
-        await clearFutureRegistrationAttendance({
-          supabase,
-          classId: requestRecord.class_id,
-          registration,
-        })
-      } catch (attendanceError) {
-        console.error(
-          'Failed to clear future class attendance rows before removing a registration:',
-          attendanceError,
-        )
-      }
-
       const { data: deletedRegistration, error: deleteError } = await supabase
         .from('class_registrations')
         .delete()
@@ -183,7 +170,21 @@ export async function PATCH(
       }
 
       if (!deletedRegistration) {
+        await revertRemovalRequestToPending(supabase, requestId)
         return createErrorResponse('This registration can no longer be removed.', 400)
+      }
+
+      try {
+        await clearFutureRegistrationAttendance({
+          supabase,
+          classId: requestRecord.class_id,
+          registration,
+        })
+      } catch (attendanceError) {
+        console.error(
+          'Failed to clear future class attendance rows after removing a registration:',
+          attendanceError,
+        )
       }
 
       try {

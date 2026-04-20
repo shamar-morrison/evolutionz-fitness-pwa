@@ -326,7 +326,7 @@ async function hydrateClassRegistrations(
       guest_profile_id: normalizeNullableText(row.guest_profile_id),
       month_start: normalizeText(row.month_start),
       status: row.status,
-      fee_type: row.fee_type,
+      fee_type: row.fee_type ?? 'custom',
       amount_paid: normalizeNumber(row.amount_paid),
       payment_recorded_at: normalizeNullableText(row.payment_recorded_at),
       notes: normalizeNullableText(row.notes),

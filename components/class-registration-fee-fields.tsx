@@ -47,7 +47,10 @@ export function ClassRegistrationFeeFields({
   const calculatedAmount = calculateClassRegistrationAmount({
     classItem,
     fee_type: feeType,
-    custom_amount: Number.isFinite(parsedCustomAmount) ? parsedCustomAmount : 0,
+    custom_amount:
+      Number.isFinite(parsedCustomAmount) && Number.isInteger(parsedCustomAmount)
+        ? parsedCustomAmount
+        : null,
   })
   const effectiveAmountPaid = paymentReceived ? calculatedAmount : 0
 

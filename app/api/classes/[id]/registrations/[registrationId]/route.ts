@@ -150,7 +150,6 @@ export async function PATCH(
           await backfillRegistrationAttendanceForCurrentPeriod({
             supabase,
             classId: id,
-            currentPeriodStart: classItem.current_period_start,
             registration,
           })
         }

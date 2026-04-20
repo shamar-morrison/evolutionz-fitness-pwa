@@ -124,11 +124,22 @@ export async function POST(
       return createErrorResponse('Class registration not found.', 404)
     }
 
-    const selectedAmount = resolveClassRegistrationFeeSelection({
-      classItem,
-      feeType: input.fee_type,
-      requestedAmount: input.amount_paid,
-    })
+    let selectedAmount: number
+
+    try {
+      selectedAmount = resolveClassRegistrationFeeSelection({
+        classItem,
+        feeType: input.fee_type,
+        requestedAmount: input.amount_paid,
+      })
+    } catch (error) {
+      return createErrorResponse(
+        error instanceof Error
+          ? error.message
+          : 'Failed to resolve the requested class registration fee.',
+        400,
+      )
+    }
 
     const { data: insertedRequest, error: insertError } = await supabase
       .from('class_registration_edit_requests')

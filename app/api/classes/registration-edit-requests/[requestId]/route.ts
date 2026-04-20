@@ -173,9 +173,10 @@ export async function PATCH(
     }
 
     try {
+      const effectiveFeeType = requestRecord.proposed_fee_type ?? 'custom'
       const selectedAmount = resolveClassRegistrationFeeSelection({
         classItem,
-        feeType: requestRecord.proposed_fee_type ?? 'custom',
+        feeType: effectiveFeeType,
         requestedAmount: normalizeAmount(requestRecord.proposed_amount_paid),
       })
       const previousAmountPaid = registration.amount_paid
@@ -183,7 +184,7 @@ export async function PATCH(
         .from('class_registrations')
         .update({
           month_start: requestRecord.proposed_period_start,
-          fee_type: requestRecord.proposed_fee_type,
+          fee_type: effectiveFeeType,
           amount_paid: getStoredRegistrationAmount({
             selectedAmount,
             paymentReceived: requestRecord.proposed_payment_received,
@@ -206,6 +207,7 @@ export async function PATCH(
       }
 
       if (!updatedRegistrationResult) {
+        await revertEditRequestToPending(supabase, requestId)
         return createErrorResponse('This registration can no longer be edited.', 400)
       }
 

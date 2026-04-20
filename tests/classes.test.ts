@@ -87,4 +87,26 @@ describe('classes billing helpers', () => {
       }),
     ).toBe(4000)
   })
+
+  it('returns null when the selected preset fee is not configured', () => {
+    expect(
+      calculateClassRegistrationAmount({
+        classItem: buildClass({
+          monthly_fee: null,
+          per_session_fee: null,
+        }),
+        fee_type: 'monthly',
+      }),
+    ).toBeNull()
+  })
+
+  it('returns null when the custom amount is invalid', () => {
+    expect(
+      calculateClassRegistrationAmount({
+        classItem: buildClass(),
+        fee_type: 'custom',
+        custom_amount: Number.NaN,
+      }),
+    ).toBeNull()
+  })
 })

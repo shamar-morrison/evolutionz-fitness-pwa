@@ -283,8 +283,14 @@ function buildClass(overrides: Partial<ClassWithTrainers> = {}): ClassWithTraine
     id: overrides.id ?? 'class-1',
     name: overrides.name ?? 'Weight Loss Club',
     schedule_description: overrides.schedule_description ?? '3 times per week',
-    per_session_fee: overrides.per_session_fee ?? null,
-    monthly_fee: overrides.monthly_fee ?? 15500,
+    per_session_fee:
+      Object.prototype.hasOwnProperty.call(overrides, 'per_session_fee')
+        ? (overrides.per_session_fee ?? null)
+        : null,
+    monthly_fee:
+      Object.prototype.hasOwnProperty.call(overrides, 'monthly_fee')
+        ? (overrides.monthly_fee ?? null)
+        : 15500,
     trainer_compensation_pct: overrides.trainer_compensation_pct ?? 30,
     current_period_start:
       Object.prototype.hasOwnProperty.call(overrides, 'current_period_start')
@@ -1045,4 +1051,40 @@ describe('classes pages', () => {
     },
     10_000,
   )
+
+  it('blocks class registration submission when the custom fee is blank', async () => {
+    authState.role = 'staff'
+    authState.profile = {
+      id: 'user-2',
+      name: 'Assistant User',
+      role: 'staff',
+      titles: ['Assistant'],
+    }
+
+    await act(async () => {
+      root.render(
+        <ClassRegistrationDialog
+          classItem={buildClass({
+            current_period_start: null,
+            monthly_fee: null,
+            per_session_fee: null,
+          })}
+          open
+          onOpenChange={() => {}}
+        />,
+      )
+    })
+
+    const memberField = getInputByLabel(container, 'Member')
+    await setInputValue(memberField, 'member-1')
+    await clickButton(container, 'Next')
+    await clickButton(container, 'Submit for Approval')
+
+    expect(createClassRegistrationMock).not.toHaveBeenCalled()
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Custom fee required',
+      }),
+    )
+  })
 })

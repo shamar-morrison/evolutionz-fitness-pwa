@@ -567,10 +567,15 @@ export default function ClassDetailPage() {
             fee_type: nextFeeType,
             custom_amount: registration.amount_paid,
           })
+    const resolvedFeeType = suggestedAmount === null ? 'custom' : nextFeeType
 
     setApproveRegistrationItem(registration)
-    setApproveFeeType(nextFeeType)
-    setApproveAmount(nextFeeType === 'custom' ? String(suggestedAmount || '') : '')
+    setApproveFeeType(resolvedFeeType)
+    setApproveAmount(
+      resolvedFeeType === 'custom'
+        ? String(suggestedAmount ?? registration.amount_paid)
+        : '',
+    )
     setApprovePaymentReceived(registration.amount_paid > 0)
     setApproveRegistrationNotes(registration.notes ?? '')
     setApproveNote(registration.review_note ?? '')
@@ -590,11 +595,16 @@ export default function ClassDetailPage() {
             fee_type: nextFeeType,
             custom_amount: registration.amount_paid,
           })
+    const resolvedFeeType = suggestedAmount === null ? 'custom' : nextFeeType
 
     setEditRegistrationItem(registration)
     setEditPeriodStart(registration.month_start)
-    setEditFeeType(nextFeeType)
-    setEditAmount(nextFeeType === 'custom' ? String(suggestedAmount || '') : '')
+    setEditFeeType(resolvedFeeType)
+    setEditAmount(
+      resolvedFeeType === 'custom'
+        ? String(suggestedAmount ?? registration.amount_paid)
+        : '',
+    )
     setEditPaymentReceived(registration.amount_paid > 0)
     setEditRegistrationNotes(registration.notes ?? '')
   }
@@ -612,8 +622,21 @@ export default function ClassDetailPage() {
     const calculatedAmount = calculateClassRegistrationAmount({
       classItem: classItem!,
       fee_type: approveFeeType,
-      custom_amount: Number.isFinite(parsedAmount) ? parsedAmount : 0,
+      custom_amount:
+        Number.isFinite(parsedAmount) && Number.isInteger(parsedAmount) ? parsedAmount : null,
     })
+
+    if (calculatedAmount === null) {
+      toast({
+        title: approveFeeType === 'custom' ? 'Custom fee required' : 'Fee not configured',
+        description:
+          approveFeeType === 'custom'
+            ? 'Enter a whole-number JMD amount greater than 0 before submitting.'
+            : 'The selected fee type is not configured for this class.',
+        variant: 'destructive',
+      })
+      return
+    }
 
     setPendingAction('approve')
 
@@ -662,8 +685,21 @@ export default function ClassDetailPage() {
     const calculatedAmount = calculateClassRegistrationAmount({
       classItem,
       fee_type: editFeeType,
-      custom_amount: Number.isFinite(parsedAmount) ? parsedAmount : 0,
+      custom_amount:
+        Number.isFinite(parsedAmount) && Number.isInteger(parsedAmount) ? parsedAmount : null,
     })
+
+    if (calculatedAmount === null) {
+      toast({
+        title: editFeeType === 'custom' ? 'Custom fee required' : 'Fee not configured',
+        description:
+          editFeeType === 'custom'
+            ? 'Enter a whole-number JMD amount greater than 0 before submitting.'
+            : 'The selected fee type is not configured for this class.',
+        variant: 'destructive',
+      })
+      return
+    }
 
     setPendingAction('registration-edit')
 

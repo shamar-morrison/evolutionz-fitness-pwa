@@ -145,6 +145,7 @@ export async function reconcileRegistrationAttendance({
       .from('class_attendance')
       .delete()
       .in('id', attendanceIdsToDelete)
+      .is('marked_at', null)
 
     if (deleteError) {
       throw new Error(`Failed to remove class attendance rows: ${deleteError.message}`)
@@ -256,17 +257,16 @@ export async function clearFutureRegistrationAttendance({
 export async function backfillRegistrationAttendanceForCurrentPeriod({
   supabase,
   classId,
-  currentPeriodStart,
   registration,
 }: {
   supabase: ClassesAttendanceClient
   classId: string
-  currentPeriodStart: string
   registration: Pick<ClassRegistrationListItem, 'id' | 'member_id' | 'guest_profile_id'>
 }) {
   await reconcileRegistrationAttendance({
     supabase,
     classId,
     registration,
+    includeFutureOnly: false,
   })
 }

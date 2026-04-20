@@ -18,6 +18,7 @@ import type { ClassRegistrationFeeType } from '@/types'
 const CLASS_REGISTRATION_RECEIPT_SELECT = [
   'id',
   'class_id',
+  'status',
   'member_id',
   'guest_profile_id',
   'fee_type',
@@ -34,6 +35,7 @@ const CLASS_REGISTRATION_RECEIPT_SELECT = [
 type ClassRegistrationReceiptRow = {
   id: string
   class_id: string
+  status: 'pending' | 'approved' | 'denied'
   member_id: string | null
   guest_profile_id: string | null
   fee_type: ClassRegistrationFeeType | null
@@ -103,18 +105,21 @@ async function readRegistrationReceipt(
 
   const registrant = row.member ?? row.guest ?? null
 
-  return buildClassRegistrationReceipt({
-    registrationId: row.id,
-    receiptNumber: normalizeText(row.receipt_number) || null,
-    receiptSentAt: normalizeText(row.receipt_sent_at) || null,
-    registrantName: normalizeText(registrant?.name) || 'Unknown registrant',
-    recipientEmail: normalizeText(registrant?.email) || null,
-    className: normalizeText(row.class?.name) || 'Unknown class',
-    feeType: row.fee_type,
-    amountPaid: normalizeAmount(row.amount_paid),
-    paymentDate: normalizeText(row.payment_recorded_at) || null,
-    notes: normalizeText(row.notes) || null,
-  })
+  return {
+    status: row.status,
+    receipt: buildClassRegistrationReceipt({
+      registrationId: row.id,
+      receiptNumber: normalizeText(row.receipt_number) || null,
+      receiptSentAt: normalizeText(row.receipt_sent_at) || null,
+      registrantName: normalizeText(registrant?.name) || 'Unknown registrant',
+      recipientEmail: normalizeText(registrant?.email) || null,
+      className: normalizeText(row.class?.name) || 'Unknown class',
+      feeType: row.fee_type,
+      amountPaid: normalizeAmount(row.amount_paid),
+      paymentDate: normalizeText(row.payment_recorded_at) || null,
+      notes: normalizeText(row.notes) || null,
+    }),
+  }
 }
 
 async function syncReceiptSentAt(
@@ -176,11 +181,17 @@ export async function POST(
 
     const { registrationId } = await params
     const supabase = getSupabaseAdminClient() as any
-    const receipt = await readRegistrationReceipt(supabase, registrationId)
+    const receiptResult = await readRegistrationReceipt(supabase, registrationId)
 
-    if (!receipt) {
+    if (!receiptResult) {
       return createErrorResponse('Class registration not found.', 404)
     }
+
+    if (receiptResult.status !== 'approved') {
+      return createErrorResponse('Only approved registrations can send a receipt.', 400)
+    }
+
+    const receipt = receiptResult.receipt
 
     const deliveryStore = createSupabaseAdminEmailDeliveryStore(supabase)
     const existingDelivery = await deliveryStore.readReceiptDelivery({
@@ -235,7 +246,7 @@ export async function POST(
       idempotencyKey: registrationId,
     })
 
-    if (reservationState === 'sent' || reservationState === 'pending') {
+    if (reservationState === 'sent') {
       const sentAt =
         normalizeText(
           (
@@ -245,15 +256,31 @@ export async function POST(
           )?.sentAt,
         ) || null
 
-      if (reservationState === 'sent' && sentAt && !receipt.receiptSentAt) {
+      if (sentAt && !receipt.receiptSentAt) {
         await syncReceiptSentAt(supabase, registrationId, sentAt)
       }
 
-      return NextResponse.json({
-        ok: true,
-        alreadySent: true,
-        receiptSentAt: sentAt,
-      })
+      if (sentAt) {
+        return NextResponse.json({
+          ok: true,
+          alreadySent: true,
+          receiptSentAt: sentAt,
+        })
+      }
+
+      throw new Error('Failed to confirm the class registration receipt delivery state.')
+    }
+
+    if (reservationState === 'pending') {
+      return NextResponse.json(
+        {
+          ok: false,
+          sendInProgress: true,
+          error: 'A receipt send is already in progress for this registration.',
+          receiptSentAt: null,
+        },
+        { status: 409 },
+      )
     }
 
     let providerMessageId: string | null = null

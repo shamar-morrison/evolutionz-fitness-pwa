@@ -173,11 +173,18 @@ describe('PendingClassRegistrationRequestsPage', () => {
   })
 
   it('opens the receipt preview when the approved edit keeps a paid amount and email', async () => {
+    useClassRegistrationRequestsMock.mockReturnValue({
+      editRequests: [createEditRequest({ registrantEmail: null })],
+      removalRequests: [],
+      isLoading: false,
+      error: null,
+    })
     reviewClassRegistrationEditRequestMock.mockResolvedValueOnce({
       ok: true,
       amountChanged: true,
       registration: {
         amount_paid: 12000,
+        registrant_email: 'updated.client@example.com',
       },
     })
 

@@ -55,6 +55,7 @@ export function ClassRegistrationReceiptPreviewDialog({
     let isMounted = true
 
     async function loadPreview() {
+      setPreview(null)
       setIsLoading(true)
       setErrorMessage(null)
 
@@ -99,6 +100,15 @@ export function ClassRegistrationReceiptPreviewDialog({
 
     try {
       const response = await sendClassRegistrationReceipt(registrationId)
+
+      if (!response.ok) {
+        toast({
+          title: 'Receipt send in progress',
+          description: response.error,
+        })
+        return
+      }
+
       onSent?.(response.receiptSentAt)
       toast({
         title: response.alreadySent ? 'Receipt already sent' : 'Receipt sent',

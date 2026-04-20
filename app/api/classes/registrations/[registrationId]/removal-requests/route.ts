@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { isUniqueViolation } from '@/app/api/classes/_registration-utils'
 import { readClassRegistrationById } from '@/lib/classes-server'
 import { notifyAdminsOfRequest } from '@/lib/notify-admins-of-request'
 import { resolvePermissionsForProfile } from '@/lib/server-permissions'
@@ -115,6 +116,10 @@ export async function POST(
       .maybeSingle()
 
     if (insertError) {
+      if (isUniqueViolation(insertError)) {
+        return createErrorResponse('A pending removal request already exists for this registration.', 409)
+      }
+
       throw new Error(`Failed to create class registration removal request: ${insertError.message}`)
     }
 

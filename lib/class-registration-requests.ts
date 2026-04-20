@@ -69,6 +69,7 @@ const reviewClassRegistrationEditRequestResponseSchema = z.object({
   registration: z
     .object({
       amount_paid: z.number().finite(),
+      registrant_email: z.string().trim().nullable(),
     })
     .passthrough()
     .optional(),

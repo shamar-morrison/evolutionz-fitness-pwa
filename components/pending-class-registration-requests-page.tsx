@@ -141,7 +141,7 @@ export function PendingClassRegistrationRequestsPage() {
         action === 'approve' &&
         result.amountChanged &&
         (result.registration?.amount_paid ?? 0) > 0 &&
-        request.registrantEmail
+        result.registration?.registrant_email
       ) {
         setReceiptState({
           registrationId: request.registrationId,
