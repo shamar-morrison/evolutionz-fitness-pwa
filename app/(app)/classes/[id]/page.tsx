@@ -1527,7 +1527,7 @@ export default function ClassDetailPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg" isLoading={isEditingRegistration}>
+        <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-4rem)] overflow-y-auto" isLoading={isEditingRegistration}>
           <DialogHeader>
             <DialogTitle>
               {profile?.role === 'admin' ? 'Edit Registration' : 'Request Registration Edit'}
@@ -1989,7 +1989,7 @@ export default function ClassDetailPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg" isLoading={isApproving}>
+        <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-4rem)] overflow-y-auto" isLoading={isApproving}>
           <DialogHeader>
             <DialogTitle>Approve Registration</DialogTitle>
             <DialogDescription>

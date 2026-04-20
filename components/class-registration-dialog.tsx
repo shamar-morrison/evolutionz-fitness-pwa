@@ -446,19 +446,21 @@ export function ClassRegistrationDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[640px] max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-4rem)] overflow-y-auto" isLoading={isSubmitting}>
-        <DialogStepForm
-          steps={steps}
-          currentStep={currentStep}
-          isSubmitting={isSubmitting}
-          onCancel={() => onOpenChange(false)}
-          onBack={() => setCurrentStep(1)}
-          onNext={() => setCurrentStep(2)}
-          onSubmit={handleSubmit}
-          nextDisabled={!canContinue}
-          submitLabel={registrationNeedsApproval ? 'Submit for Approval' : 'Register'}
-          submitLoadingLabel={registrationNeedsApproval ? 'Submitting...' : 'Registering...'}
-        />
+      <DialogContent className="sm:max-w-[640px] p-0" isLoading={isSubmitting}>
+        <div className="max-h-[calc(100dvh-2rem)] overflow-y-auto p-6 sm:max-h-[calc(100dvh-4rem)]">
+          <DialogStepForm
+            steps={steps}
+            currentStep={currentStep}
+            isSubmitting={isSubmitting}
+            onCancel={() => onOpenChange(false)}
+            onBack={() => setCurrentStep(1)}
+            onNext={() => setCurrentStep(2)}
+            onSubmit={handleSubmit}
+            nextDisabled={!canContinue}
+            submitLabel={registrationNeedsApproval ? 'Submit for Approval' : 'Register'}
+            submitLoadingLabel={registrationNeedsApproval ? 'Submitting...' : 'Registering...'}
+          />
+        </div>
       </DialogContent>
     </Dialog>
   )

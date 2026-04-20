@@ -370,54 +370,55 @@ export function PtAssignmentDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]"
+        className="sm:max-w-[560px] p-0"
         isLoading={isSubmitting}
       >
-        <DialogHeader>
-          <DialogTitle>{mode === 'create' ? 'Assign Trainer' : 'Edit Assignment'}</DialogTitle>
-          <DialogDescription>
-            {mode === 'create'
-              ? 'Create a new personal training assignment for this member.'
-              : 'Update the trainer schedule, pricing, and notes for this member.'}
-          </DialogDescription>
-        </DialogHeader>
+        <div className="max-h-[90vh] overflow-y-auto p-6">
+          <DialogHeader>
+            <DialogTitle>{mode === 'create' ? 'Assign Trainer' : 'Edit Assignment'}</DialogTitle>
+            <DialogDescription>
+              {mode === 'create'
+                ? 'Create a new personal training assignment for this member.'
+                : 'Update the trainer schedule, pricing, and notes for this member.'}
+            </DialogDescription>
+          </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor={`${mode}-pt-trainer`}>Trainer</Label>
-            {mode === 'create' ? (
-              <SearchableSelect
-                value={formData.trainerId || null}
-                onValueChange={(trainerId) =>
-                  setFormData((current) => ({
-                    ...current,
-                    trainerId,
-                  }))
-                }
-                options={trainers.map((trainer) => ({
-                  value: trainer.id,
-                  label: trainer.name,
-                  description: trainer.titles.join(', '),
-                  keywords: trainer.titles,
-                }))}
-                placeholder={trainers.length > 0 ? 'Select a trainer' : 'No trainers available'}
-                searchPlaceholder="Search trainers..."
-                emptyMessage="No matching trainers found."
-                disabled={trainers.length === 0 || isSubmitting}
-              />
-            ) : (
-              <div className="space-y-2 rounded-md border p-3">
-                <div className="font-medium">{assignment?.trainerName ?? selectedTrainer?.name ?? 'Trainer'}</div>
-                <div className="flex flex-wrap gap-2">
-                  {(assignment?.trainerTitles ?? selectedTrainer?.titles ?? []).map((title) => (
-                    <Badge key={title} variant="outline">
-                      {title}
-                    </Badge>
-                  ))}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor={`${mode}-pt-trainer`}>Trainer</Label>
+              {mode === 'create' ? (
+                <SearchableSelect
+                  value={formData.trainerId || null}
+                  onValueChange={(trainerId) =>
+                    setFormData((current) => ({
+                      ...current,
+                      trainerId,
+                    }))
+                  }
+                  options={trainers.map((trainer) => ({
+                    value: trainer.id,
+                    label: trainer.name,
+                    description: trainer.titles.join(', '),
+                    keywords: trainer.titles,
+                  }))}
+                  placeholder={trainers.length > 0 ? 'Select a trainer' : 'No trainers available'}
+                  searchPlaceholder="Search trainers..."
+                  emptyMessage="No matching trainers found."
+                  disabled={trainers.length === 0 || isSubmitting}
+                />
+              ) : (
+                <div className="space-y-2 rounded-md border p-3">
+                  <div className="font-medium">{assignment?.trainerName ?? selectedTrainer?.name ?? 'Trainer'}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {(assignment?.trainerTitles ?? selectedTrainer?.titles ?? []).map((title) => (
+                      <Badge key={title} variant="outline">
+                        {title}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
           <div className="space-y-2">
             <Label htmlFor={`${mode}-pt-frequency`}>Sessions per week</Label>
@@ -684,7 +685,8 @@ export function PtAssignmentDialog({
               )}
             </Button>
           </DialogFooter>
-        </form>
+          </form>
+        </div>
       </DialogContent>
     </Dialog>
   )
