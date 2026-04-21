@@ -2,26 +2,31 @@
 
 import { format } from 'date-fns'
 import { useQueryClient } from '@tanstack/react-query'
-import {
-  AlertCircle,
-  ArrowLeft,
-  Calendar as CalendarIcon,
-  Plus,
-  Trash2,
-  X,
-} from 'lucide-react'
+import { AlertCircle, ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { AddScheduleRuleDialog } from '@/components/class-detail/add-schedule-rule-dialog'
+import { AddTrainerDialog } from '@/components/class-detail/add-trainer-dialog'
+import { ApproveRegistrationDialog } from '@/components/class-detail/approve-registration-dialog'
+import {
+  EmptyCardState,
+  InfoField,
+  RegistrationsTable,
+  SessionsTable,
+} from '@/components/class-detail/class-detail-helpers'
+import { DenyRegistrationDialog } from '@/components/class-detail/deny-registration-dialog'
+import { EditRegistrationDialog } from '@/components/class-detail/edit-registration-dialog'
+import { GenerateSessionsDialog } from '@/components/class-detail/generate-sessions-dialog'
+import { RemoveRegistrationDialog } from '@/components/class-detail/remove-registration-dialog'
+import { RemoveTrainerDialog } from '@/components/class-detail/remove-trainer-dialog'
+import { SetBillingPeriodDialog } from '@/components/class-detail/set-billing-period-dialog'
 import { ClassAttendanceDialog } from '@/components/class-attendance-dialog'
-import { ClassRegistrationFeeFields } from '@/components/class-registration-fee-fields'
 import { ClassRegistrationDialog } from '@/components/class-registration-dialog'
 import { ClassRegistrationReceiptPreviewDialog } from '@/components/class-registration-receipt-preview-dialog'
-import { ConfirmDialog } from '@/components/confirm-dialog'
-import { SearchableSelect } from '@/components/searchable-select'
+import { RedirectOnMount } from '@/components/redirect-on-mount'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Calendar } from '@/components/ui/calendar'
 import {
   Card,
   CardContent,
@@ -29,36 +34,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { StringDatePicker } from '@/components/ui/string-date-picker'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/auth-context'
 import { useBackLink } from '@/hooks/use-back-link'
 import {
@@ -71,7 +48,6 @@ import {
 import { usePermissions } from '@/hooks/use-permissions'
 import { useStaff } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
-import { RedirectOnMount } from '@/components/redirect-on-mount'
 import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
 import {
   createClassRegistrationEditRequest,
@@ -86,9 +62,6 @@ import {
   type ClassTrainerProfile,
   deleteClassScheduleRule,
   formatClassDate,
-  formatClassDateTime,
-  formatClassSessionDate,
-  formatClassSessionTime,
   formatClassTime,
   formatOptionalJmd,
   generateClassSessions,
@@ -115,198 +88,6 @@ type ClassesTab = 'registrations' | 'pending' | 'sessions'
 
 const DEFAULT_SCHEDULE_RULE_DAY: ClassScheduleRuleDay = 1
 const DEFAULT_SCHEDULE_RULE_TIME = '09:00'
-
-function InfoField({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <div className="space-y-1">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="font-medium">{value}</p>
-    </div>
-  )
-}
-
-function EmptyCardState({
-  label,
-}: {
-  label: string
-}) {
-  return (
-    <Card>
-      <CardContent className="p-8 text-center text-sm text-muted-foreground">
-        {label}
-      </CardContent>
-    </Card>
-  )
-}
-
-function RegistrationsTable({
-  registrations,
-  showStatus = false,
-  showActions = false,
-  onApprove,
-  onDeny,
-  onEdit,
-  onRemove,
-}: {
-  registrations: ClassRegistrationListItem[]
-  showStatus?: boolean
-  showActions?: boolean
-  onApprove?: (registration: ClassRegistrationListItem) => void
-  onDeny?: (registration: ClassRegistrationListItem) => void
-  onEdit?: (registration: ClassRegistrationListItem) => void
-  onRemove?: (registration: ClassRegistrationListItem) => void
-}) {
-  if (registrations.length === 0) {
-    return (
-      <EmptyCardState
-        label={showActions ? 'No pending approvals.' : 'No approved registrations yet.'}
-      />
-    )
-  }
-
-  return (
-    <Card className="overflow-hidden gap-0 py-0">
-      <CardContent className="p-0">
-        <Table size="compact">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Amount Paid</TableHead>
-              <TableHead>Period Start</TableHead>
-              <TableHead>Registered At</TableHead>
-              {showStatus ? <TableHead>Status</TableHead> : null}
-              {showActions ? <TableHead className="text-right">Actions</TableHead> : null}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {registrations.map((registration) => (
-              <TableRow key={registration.id}>
-                <TableCell className="font-medium">{registration.registrant_name}</TableCell>
-                <TableCell>
-                  {registration.registrant_type === 'member' ? 'Member' : 'Guest'}
-                </TableCell>
-                <TableCell>{formatOptionalJmd(registration.amount_paid)}</TableCell>
-                <TableCell>{formatClassDate(registration.month_start)}</TableCell>
-                <TableCell>{formatClassDateTime(registration.created_at)}</TableCell>
-                {showStatus ? (
-                  <TableCell className="capitalize">{registration.status}</TableCell>
-                ) : null}
-                {showActions ? (
-                  <TableCell>
-                    <div className="flex justify-end gap-2">
-                      {onDeny && onApprove ? (
-                        <>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => onDeny?.(registration)}
-                          >
-                            Deny
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => onApprove?.(registration)}
-                          >
-                            Approve
-                          </Button>
-                        </>
-                      ) : null}
-                      {onEdit ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onEdit(registration)}
-                        >
-                          Edit
-                        </Button>
-                      ) : null}
-                      {onRemove ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => onRemove(registration)}
-                        >
-                          Remove
-                        </Button>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                ) : null}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  )
-}
-
-function SessionsTable({
-  sessions,
-  actionLabel,
-  onOpenAttendance,
-}: {
-  sessions: ClassSessionListItem[]
-  actionLabel: string
-  onOpenAttendance: (session: ClassSessionListItem) => void
-}) {
-  if (sessions.length === 0) {
-    return <EmptyCardState label="No sessions generated for this period." />
-  }
-
-  return (
-    <Card className="overflow-hidden gap-0 py-0">
-      <CardContent className="p-0">
-        <Table size="compact">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Time</TableHead>
-              <TableHead>Attendance</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sessions.map((session) => (
-              <TableRow key={session.id}>
-                <TableCell className="font-medium">
-                  {formatClassSessionDate(session.scheduled_at)}
-                </TableCell>
-                <TableCell>{formatClassSessionTime(session.scheduled_at)}</TableCell>
-                <TableCell>
-                  {session.marked_count} / {session.total_count}
-                </TableCell>
-                <TableCell>
-                  <div className="flex justify-end">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onOpenAttendance(session)}
-                    >
-                      {actionLabel}
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  )
-}
 
 export default function ClassDetailPage() {
   const params = useParams()
@@ -1511,622 +1292,115 @@ export default function ClassDetailPage() {
         }}
       />
 
-      <Dialog
-        open={Boolean(editRegistrationItem)}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen && isEditingRegistration) {
-            return
-          }
-
-          if (!nextOpen) {
-            setEditRegistrationItem(null)
-            setEditPeriodStart(getDefaultClassDateValue())
-            setEditFeeType('custom')
-            setEditAmount('')
-            setEditPaymentReceived(false)
-            setEditRegistrationNotes('')
-          }
-        }}
-      >
-          <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-4rem)] overflow-y-auto" isLoading={isEditingRegistration}>
-          <DialogHeader>
-            <DialogTitle>
-              {canManageClasses ? 'Edit Registration' : 'Request Registration Edit'}
-            </DialogTitle>
-            <DialogDescription>
-              {canManageClasses
-                ? 'Update the registration details below.'
-                : 'Submit the proposed registration changes for admin approval.'}
-            </DialogDescription>
-          </DialogHeader>
-
-          {editRegistrationItem ? (
-            <div className="space-y-4">
-              <div className="rounded-lg border bg-muted/20 p-4">
-                <div className="space-y-2 text-sm">
-                  <p>
-                    <span className="text-muted-foreground">Name:</span>{' '}
-                    <span className="font-medium">{editRegistrationItem.registrant_name}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Type:</span>{' '}
-                    <span className="font-medium capitalize">
-                      {editRegistrationItem.registrant_type}
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-period-start">Period start</Label>
-                <StringDatePicker
-                  id="edit-period-start"
-                  value={editPeriodStart}
-                  onChange={setEditPeriodStart}
-                  disabled={isEditingRegistration}
-                />
-              </div>
-
-              <ClassRegistrationFeeFields
-                classItem={classItem}
-                feeType={editFeeType}
-                customAmount={editAmount}
-                paymentReceived={editPaymentReceived}
-                notes={editRegistrationNotes}
-                onFeeTypeChange={setEditFeeType}
-                onCustomAmountChange={setEditAmount}
-                onPaymentReceivedChange={setEditPaymentReceived}
-                onNotesChange={setEditRegistrationNotes}
-              />
-            </div>
-          ) : null}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setEditRegistrationItem(null)}
-              disabled={isEditingRegistration}
-            >
-              Cancel
-            </Button>
-            <Button type="button" onClick={() => void handleEditRegistration()} loading={isEditingRegistration}>
-              {canManageClasses ? 'Save Changes' : 'Submit Request'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <ConfirmDialog
-        open={Boolean(removeRegistrationItem)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setRemoveRegistrationItem(null)
-          }
-        }}
-        title={canManageClasses ? 'Remove registration?' : 'Request registration removal?'}
-        description={
-          removeRegistrationItem
-            ? removeRegistrationItem.amount_paid > 0
-              ? `Removing this registration will reverse the recorded payment of ${formatOptionalJmd(removeRegistrationItem.amount_paid)}. This action cannot be undone.`
-              : 'This registration has no recorded payment. This action cannot be undone.'
-            : 'This action cannot be undone.'
-        }
-        confirmLabel={canManageClasses ? 'Remove Registration' : 'Submit Request'}
-        cancelLabel="Cancel"
-        onConfirm={() => void handleRemoveRegistration()}
-        onCancel={() => setRemoveRegistrationItem(null)}
-        variant="destructive"
-        isLoading={isRemovingRegistration}
+      <EditRegistrationDialog
+        classItem={classItem}
+        canManageClasses={canManageClasses}
+        editRegistrationItem={editRegistrationItem}
+        setEditRegistrationItem={setEditRegistrationItem}
+        editPeriodStart={editPeriodStart}
+        setEditPeriodStart={setEditPeriodStart}
+        editFeeType={editFeeType}
+        setEditFeeType={setEditFeeType}
+        editAmount={editAmount}
+        setEditAmount={setEditAmount}
+        editPaymentReceived={editPaymentReceived}
+        setEditPaymentReceived={setEditPaymentReceived}
+        editRegistrationNotes={editRegistrationNotes}
+        setEditRegistrationNotes={setEditRegistrationNotes}
+        isEditingRegistration={isEditingRegistration}
+        onSubmit={handleEditRegistration}
       />
 
-      <Dialog
+      <RemoveRegistrationDialog
+        canManageClasses={canManageClasses}
+        removeRegistrationItem={removeRegistrationItem}
+        setRemoveRegistrationItem={setRemoveRegistrationItem}
+        isRemovingRegistration={isRemovingRegistration}
+        onConfirm={handleRemoveRegistration}
+      />
+
+      <AddTrainerDialog
         open={showAddTrainerDialog}
-        onOpenChange={(nextOpen) => {
-          if (isSavingTrainer) {
-            return
-          }
-
-          setShowAddTrainerDialog(nextOpen)
-        }}
-      >
-        <DialogContent className="sm:max-w-md" isLoading={isSavingTrainer}>
-          <DialogHeader>
-            <DialogTitle>Add Trainer</DialogTitle>
-            <DialogDescription>
-              Assign a trainer-title staff profile to this class.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="class-trainer-select">Trainer</Label>
-              <SearchableSelect
-                value={selectedTrainerId || null}
-                onValueChange={setSelectedTrainerId}
-                options={availableTrainers.map((trainer) => ({
-                  value: trainer.id,
-                  label: trainer.name,
-                  description: trainer.titles.join(', '),
-                  keywords: trainer.titles,
-                }))}
-                placeholder={availableTrainers.length > 0 ? 'Select a trainer' : 'No trainers available'}
-                searchPlaceholder="Search trainers..."
-                emptyMessage="No matching trainers found."
-                disabled={
-                  isSavingTrainer ||
-                  trainersQuery.isLoading ||
-                  staffQuery.isLoading ||
-                  Boolean(staffQuery.error) ||
-                  availableTrainers.length === 0
-                }
-              />
-            </div>
-
-            {staffQuery.error ? (
-              <p className="text-sm text-destructive">
-                {staffQuery.error instanceof Error
-                  ? staffQuery.error.message
-                  : 'Failed to load available trainers.'}
-              </p>
-            ) : null}
-
-            {availableTrainers.length === 0 && !staffQuery.isLoading && !staffQuery.error ? (
-              <p className="text-sm text-muted-foreground">
-                All trainer-title staff are already assigned to this class.
-              </p>
-            ) : null}
-
-            {selectedTrainer ? (
-              <div className="rounded-lg border p-3">
-                <div className="font-medium">{selectedTrainer.name}</div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {selectedTrainer.titles.map((title) => (
-                    <Badge key={title} variant="outline">
-                      {title}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowAddTrainerDialog(false)}
-              disabled={isSavingTrainer}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              loading={isSavingTrainer}
-              onClick={() => void handleAddTrainer()}
-              disabled={
-                isSavingTrainer ||
-                trainersQuery.isLoading ||
-                staffQuery.isLoading ||
-                Boolean(staffQuery.error) ||
-                !selectedTrainer
-              }
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <ConfirmDialog
-        open={Boolean(trainerToRemove)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setTrainerToRemove(null)
-          }
-        }}
-        title="Remove trainer from class?"
-        description={
-          trainerToRemove
-            ? `${trainerToRemove.name} will no longer be assigned to ${classItem.name}.`
-            : 'This trainer will no longer be assigned to this class.'
-        }
-        confirmLabel="Remove Trainer"
-        cancelLabel="Cancel"
-        onConfirm={() => void handleRemoveTrainer()}
-        onCancel={() => setTrainerToRemove(null)}
-        variant="destructive"
+        setOpen={setShowAddTrainerDialog}
+        isSavingTrainer={isSavingTrainer}
+        selectedTrainerId={selectedTrainerId}
+        setSelectedTrainerId={setSelectedTrainerId}
+        availableTrainers={availableTrainers}
+        selectedTrainer={selectedTrainer}
+        staffError={staffQuery.error}
+        staffLoading={staffQuery.isLoading}
+        trainersLoading={trainersQuery.isLoading}
+        onSave={handleAddTrainer}
       />
 
-      <Dialog open={showAddRuleDialog} onOpenChange={setShowAddRuleDialog}>
-        <DialogContent className="sm:max-w-md" isLoading={isSavingScheduleRule}>
-          <DialogHeader>
-            <DialogTitle>Add Schedule Rule</DialogTitle>
-            <DialogDescription>
-              Add a recurring weekday and time used when generating current-period sessions.
-            </DialogDescription>
-          </DialogHeader>
+      <RemoveTrainerDialog
+        classItemName={classItem.name}
+        trainerToRemove={trainerToRemove}
+        setTrainerToRemove={setTrainerToRemove}
+        onConfirm={handleRemoveTrainer}
+      />
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="schedule-rule-day">Day of week</Label>
-              <Select
-                value={String(scheduleRuleDay)}
-                onValueChange={(value) => setScheduleRuleDay(Number(value) as ClassScheduleRuleDay)}
-                disabled={isSavingScheduleRule}
-              >
-                <SelectTrigger id="schedule-rule-day" className="w-full">
-                  <SelectValue placeholder="Select a day" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 7 }).map((_, index) => (
-                    <SelectItem key={index} value={String(index)}>
-                      {getClassDayOfWeekLabel(index)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+      <AddScheduleRuleDialog
+        open={showAddRuleDialog}
+        setOpen={setShowAddRuleDialog}
+        scheduleRuleDay={scheduleRuleDay}
+        setScheduleRuleDay={setScheduleRuleDay}
+        scheduleRuleTime={scheduleRuleTime}
+        setScheduleRuleTime={setScheduleRuleTime}
+        isSavingScheduleRule={isSavingScheduleRule}
+        onSave={handleAddScheduleRule}
+      />
 
-            <div className="space-y-2">
-              <Label htmlFor="schedule-rule-time">Session time</Label>
-              <Input
-                id="schedule-rule-time"
-                type="time"
-                value={scheduleRuleTime}
-                onChange={(event) => setScheduleRuleTime(event.target.value)}
-                disabled={isSavingScheduleRule}
-              />
-            </div>
-          </div>
+      <GenerateSessionsDialog
+        open={showGenerateDialog}
+        setOpen={setShowGenerateDialog}
+        isGeneratingSessions={isGeneratingSessions}
+        currentPeriodStart={classItem.current_period_start}
+        hasScheduleRules={sortedScheduleRules.length > 0}
+        hasExistingSessions={sessionsQuery.sessions.length > 0}
+        previewItems={previewItems}
+        setPreviewItems={setPreviewItems}
+        onConfirm={handleGenerateSessions}
+      />
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowAddRuleDialog(false)}
-              disabled={isSavingScheduleRule}
-            >
-              Cancel
-            </Button>
-            <Button type="button" onClick={() => void handleAddScheduleRule()} loading={isSavingScheduleRule}>
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SetBillingPeriodDialog
+        open={showPeriodDialog}
+        setOpen={setShowPeriodDialog}
+        isSavingPeriod={isSavingPeriod}
+        isPeriodPickerOpen={isPeriodPickerOpen}
+        setIsPeriodPickerOpen={setIsPeriodPickerOpen}
+        displayedPeriodStart={displayedPeriodStart}
+        selectedPeriodStartDate={selectedPeriodStartDate}
+        setPeriodStart={setPeriodStart}
+        onSave={handleUpdatePeriodStart}
+      />
 
-      <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" isLoading={isGeneratingSessions}>
-          <DialogHeader>
-            <DialogTitle>Generate Sessions</DialogTitle>
-            <DialogDescription>
-              Review the current-period session preview before creating class sessions.
-            </DialogDescription>
-          </DialogHeader>
+      <ApproveRegistrationDialog
+        classItem={classItem}
+        approveRegistrationItem={approveRegistrationItem}
+        setApproveRegistrationItem={setApproveRegistrationItem}
+        approveFeeType={approveFeeType}
+        setApproveFeeType={setApproveFeeType}
+        approveAmount={approveAmount}
+        setApproveAmount={setApproveAmount}
+        approvePaymentReceived={approvePaymentReceived}
+        setApprovePaymentReceived={setApprovePaymentReceived}
+        approveRegistrationNotes={approveRegistrationNotes}
+        setApproveRegistrationNotes={setApproveRegistrationNotes}
+        approveNote={approveNote}
+        setApproveNote={setApproveNote}
+        isApproving={isApproving}
+        onApprove={handleApprove}
+      />
 
-          <div className="space-y-4">
-            {!classItem.current_period_start ? (
-              <Alert variant="warning">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Period Start Required</AlertTitle>
-                <AlertDescription>
-                  Set a period start date before generating sessions.
-                </AlertDescription>
-              </Alert>
-            ) : null}
-
-            {sortedScheduleRules.length === 0 ? (
-              <Alert variant="warning">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Schedule Rules Required</AlertTitle>
-                <AlertDescription>
-                  Add schedule rules before generating sessions.
-                </AlertDescription>
-              </Alert>
-            ) : null}
-
-            {classItem.current_period_start && sessionsQuery.sessions.length > 0 ? (
-              <Alert variant="warning">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Sessions Already Exist</AlertTitle>
-                <AlertDescription>
-                  Sessions already exist for this period. You can still continue; duplicates will be
-                  ignored server-side.
-                </AlertDescription>
-              </Alert>
-            ) : null}
-
-            {previewItems.length === 0 && classItem.current_period_start && sortedScheduleRules.length > 0 ? (
-              <Alert variant="warning">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>No Preview Dates Remaining</AlertTitle>
-                <AlertDescription>
-                  Keep at least one preview date before confirming session generation.
-                </AlertDescription>
-              </Alert>
-            ) : null}
-
-            {previewItems.length > 0 ? (
-              <div className="rounded-lg border">
-                {previewItems.map((previewItem) => (
-                  <div
-                    key={previewItem.scheduled_at}
-                    className="flex items-center justify-between gap-4 border-b px-4 py-3 last:border-b-0"
-                  >
-                    <div>
-                      <p className="font-medium">{formatClassDate(previewItem.date_value)}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {getClassDayOfWeekLabel(previewItem.day_of_week)} at{' '}
-                        {formatClassTime(previewItem.session_time)}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Remove ${previewItem.scheduled_at}`}
-                      disabled={isGeneratingSessions}
-                      onClick={() =>
-                        setPreviewItems((current) =>
-                          current.filter(
-                            (currentPreviewItem) =>
-                              currentPreviewItem.scheduled_at !== previewItem.scheduled_at,
-                          ),
-                        )
-                      }
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowGenerateDialog(false)}
-              disabled={isGeneratingSessions}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void handleGenerateSessions()}
-              disabled={
-                isGeneratingSessions ||
-                !classItem.current_period_start ||
-                sortedScheduleRules.length === 0 ||
-                previewItems.length === 0
-              }
-              loading={isGeneratingSessions}
-            >
-              Confirm
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showPeriodDialog} onOpenChange={setShowPeriodDialog}>
-        <DialogContent className="sm:max-w-md" isLoading={isSavingPeriod}>
-          <DialogHeader>
-            <DialogTitle>Set Billing Period Start</DialogTitle>
-            <DialogDescription>
-              Update the start date of the active 28-day billing period for this class.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="period-start">Current period start</Label>
-              <Popover open={isPeriodPickerOpen} onOpenChange={setIsPeriodPickerOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    id="period-start"
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-between"
-                  >
-                    <span>{displayedPeriodStart}</span>
-                    <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={selectedPeriodStartDate ?? undefined}
-                    onSelect={(date) => {
-                      if (!date) {
-                        return
-                      }
-
-                      setPeriodStart(
-                        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
-                          2,
-                          '0',
-                        )}-${String(date.getDate()).padStart(2, '0')}`,
-                      )
-                      setIsPeriodPickerOpen(false)
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowPeriodDialog(false)}
-              disabled={isSavingPeriod}
-            >
-              Cancel
-            </Button>
-            <Button type="button" onClick={handleUpdatePeriodStart} loading={isSavingPeriod}>
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(approveRegistrationItem)}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen && isApproving) {
-            return
-          }
-
-          if (!nextOpen) {
-            setApproveRegistrationItem(null)
-            setApproveFeeType('custom')
-            setApproveAmount('')
-            setApprovePaymentReceived(false)
-            setApproveRegistrationNotes('')
-            setApproveNote('')
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-lg max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-4rem)] overflow-y-auto" isLoading={isApproving}>
-          <DialogHeader>
-            <DialogTitle>Approve Registration</DialogTitle>
-            <DialogDescription>
-              Confirm the registration details and adjust the fee, payment status, or notes if needed.
-            </DialogDescription>
-          </DialogHeader>
-
-          {approveRegistrationItem ? (
-            <div className="space-y-4">
-              <div className="rounded-lg border bg-muted/20 p-4">
-                <div className="space-y-2 text-sm">
-                  <p>
-                    <span className="text-muted-foreground">Name:</span>{' '}
-                    <span className="font-medium">{approveRegistrationItem.registrant_name}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Type:</span>{' '}
-                    <span className="font-medium capitalize">
-                      {approveRegistrationItem.registrant_type}
-                    </span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">First class date:</span>{' '}
-                    <span className="font-medium">
-                      {formatClassDate(approveRegistrationItem.month_start)}
-                    </span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Submitted:</span>{' '}
-                    <span className="font-medium">
-                      {formatClassDateTime(approveRegistrationItem.created_at)}
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              <ClassRegistrationFeeFields
-                classItem={classItem!}
-                feeType={approveFeeType}
-                customAmount={approveAmount}
-                paymentReceived={approvePaymentReceived}
-                notes={approveRegistrationNotes}
-                onFeeTypeChange={setApproveFeeType}
-                onCustomAmountChange={setApproveAmount}
-                onPaymentReceivedChange={setApprovePaymentReceived}
-                onNotesChange={setApproveRegistrationNotes}
-              />
-
-              <div className="space-y-2">
-                <Label htmlFor="approve-note">Review note</Label>
-                <Textarea
-                  id="approve-note"
-                  value={approveNote}
-                  onChange={(event) => setApproveNote(event.target.value)}
-                  placeholder="Optional note"
-                />
-              </div>
-            </div>
-          ) : null}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setApproveRegistrationItem(null)}
-              disabled={isApproving}
-            >
-              Cancel
-            </Button>
-            <Button type="button" onClick={handleApprove} loading={isApproving}>
-              Approve
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(denyRegistrationItem)}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen && isDenying) {
-            return
-          }
-
-          if (!nextOpen) {
-            setDenyRegistrationItem(null)
-            setDenyReason('')
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-lg" isLoading={isDenying}>
-          <DialogHeader>
-            <DialogTitle>Deny Registration</DialogTitle>
-            <DialogDescription>
-              Enter the reason for denying this class registration.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="rounded-lg border bg-muted/20 p-4 text-sm">
-              {denyRegistrationItem ? (
-                <>
-                  <p className="font-medium">{denyRegistrationItem.registrant_name}</p>
-                  <p className="text-muted-foreground">
-                    {formatClassDate(denyRegistrationItem.month_start)} ·{' '}
-                    {denyRegistrationItem.registrant_type === 'member' ? 'Member' : 'Guest'}
-                  </p>
-                </>
-              ) : null}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="deny-reason">Reason</Label>
-              <Textarea
-                id="deny-reason"
-                value={denyReason}
-                onChange={(event) => setDenyReason(event.target.value)}
-                placeholder="Explain why this registration is being denied."
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDenyRegistrationItem(null)}
-              disabled={isDenying}
-            >
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" onClick={handleDeny} loading={isDenying}>
-              Deny
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DenyRegistrationDialog
+        denyRegistrationItem={denyRegistrationItem}
+        setDenyRegistrationItem={setDenyRegistrationItem}
+        denyReason={denyReason}
+        setDenyReason={setDenyReason}
+        isDenying={isDenying}
+        onDeny={handleDeny}
+      />
     </>
   )
 }
