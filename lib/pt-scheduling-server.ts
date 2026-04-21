@@ -183,6 +183,39 @@ function normalizeJsonObject(value: unknown) {
   return value as Record<string, unknown>
 }
 
+function getChangeScheduledAt(value: unknown) {
+  const objectValue = normalizeJsonObject(value)
+  const scheduledAt = objectValue?.scheduledAt
+
+  return typeof scheduledAt === 'string' ? scheduledAt : null
+}
+
+function areEqualTimestampValues(left: string, right: string) {
+  const leftTime = new Date(left).getTime()
+  const rightTime = new Date(right).getTime()
+
+  if (!Number.isNaN(leftTime) && !Number.isNaN(rightTime)) {
+    return leftTime === rightTime
+  }
+
+  return left === right
+}
+
+function isNoOpRescheduleChange(row: PtSessionChangeRow) {
+  if (row.change_type !== 'reschedule') {
+    return false
+  }
+
+  const oldScheduledAt = getChangeScheduledAt(row.old_value)
+  const newScheduledAt = getChangeScheduledAt(row.new_value)
+
+  if (!oldScheduledAt || !newScheduledAt) {
+    return false
+  }
+
+  return areEqualTimestampValues(oldScheduledAt, newScheduledAt)
+}
+
 function buildLegacyScheduledSessions(row: TrainerClientRow): TrainerClient['scheduledSessions'] {
   const legacySessionTime = normalizeSessionTimeValue(row.session_time) ?? normalizeText(row.session_time)
 
@@ -912,7 +945,9 @@ export async function readPtSessionChanges(
     throw new Error(`Failed to read PT session history for ${sessionId}: ${error.message}`)
   }
 
-  const rows = (data ?? []) as PtSessionChangeRow[]
+  const rows = ((data ?? []) as PtSessionChangeRow[]).filter(
+    (row) => !isNoOpRescheduleChange(row),
+  )
   const profileIds = Array.from(new Set(rows.map((row) => row.changed_by)))
   const profileById = await loadTrainerSummaries(supabase, profileIds)
 
