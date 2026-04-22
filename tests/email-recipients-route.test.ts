@@ -117,7 +117,9 @@ describe('GET /api/email/recipients', () => {
   it('returns the union of matching recipients and removes duplicates by member id', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-11T12:00:00.000Z'))
-    const memberTypeId = '123e4567-e89b-12d3-a456-426614174100'
+    const activeMemberTypeId = '123e4567-e89b-12d3-a456-426614174100'
+    const expiringMemberTypeId = '123e4567-e89b-12d3-a456-426614174101'
+    const expiredMemberTypeId = '123e4567-e89b-12d3-a456-426614174102'
     const directMemberId = '123e4567-e89b-12d3-a456-426614174004'
 
     getSupabaseAdminClientMock.mockReturnValue(
@@ -127,7 +129,7 @@ describe('GET /api/email/recipients', () => {
           name: 'Active Member',
           email: 'active@example.com',
           status: 'Active',
-          member_type_id: null,
+          member_type_id: activeMemberTypeId,
           end_time: '2026-05-01T00:00:00-05:00',
         },
         {
@@ -135,7 +137,7 @@ describe('GET /api/email/recipients', () => {
           name: 'Expiring Member',
           email: 'expiring@example.com',
           status: 'Active',
-          member_type_id: null,
+          member_type_id: expiringMemberTypeId,
           end_time: '2026-04-16T00:00:00-05:00',
         },
         {
@@ -143,7 +145,7 @@ describe('GET /api/email/recipients', () => {
           name: 'Type Match',
           email: 'type@example.com',
           status: 'Active',
-          member_type_id: memberTypeId,
+          member_type_id: expiredMemberTypeId,
           end_time: '2026-05-15T00:00:00-05:00',
         },
         {
@@ -151,7 +153,7 @@ describe('GET /api/email/recipients', () => {
           name: 'Expired Direct',
           email: 'direct@example.com',
           status: 'Expired',
-          member_type_id: memberTypeId,
+          member_type_id: expiredMemberTypeId,
           end_time: '2026-04-01T00:00:00-05:00',
         },
         {
@@ -159,7 +161,7 @@ describe('GET /api/email/recipients', () => {
           name: 'Blank Email',
           email: '',
           status: 'Active',
-          member_type_id: memberTypeId,
+          member_type_id: expiringMemberTypeId,
           end_time: '2026-04-17T00:00:00-05:00',
         },
       ]),
@@ -167,7 +169,7 @@ describe('GET /api/email/recipients', () => {
 
     const response = await GET(
       new Request(
-        `http://localhost/api/email/recipients?activeMembers=true&expiringMembers=true&expiredMembers=true&memberTypeIds=${memberTypeId}&individualIds=${directMemberId}`,
+        `http://localhost/api/email/recipients?activeMembers=true&expiringMembers=true&expiredMembers=true&activeMemberTypeIds=${activeMemberTypeId}&expiringMemberTypeIds=${expiringMemberTypeId}&expiredMemberTypeIds=${expiredMemberTypeId}&individualIds=${directMemberId}`,
       ),
     )
 
@@ -186,11 +188,6 @@ describe('GET /api/email/recipients', () => {
           email: 'expiring@example.com',
         },
         {
-          id: '123e4567-e89b-12d3-a456-426614174003',
-          name: 'Type Match',
-          email: 'type@example.com',
-        },
-        {
           id: directMemberId,
           name: 'Expired Direct',
           email: 'direct@example.com',
@@ -201,7 +198,7 @@ describe('GET /api/email/recipients', () => {
 
   it('returns 400 when the filters contain invalid ids', async () => {
     const response = await GET(
-      new Request('http://localhost/api/email/recipients?memberTypeIds=not-a-uuid'),
+      new Request('http://localhost/api/email/recipients?activeMemberTypeIds=not-a-uuid'),
     )
 
     expect(response.status).toBe(400)

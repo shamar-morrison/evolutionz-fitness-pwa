@@ -353,6 +353,45 @@ describe('POST /api/email/send', () => {
     expect(deliveries.every((record) => record.status === 'sent')).toBe(true)
   })
 
+  it('applies the quota cap to the posted recipient order without sorting', async () => {
+    configureDeliveryStore()
+    process.env.RESEND_API_KEY = 'resend-key'
+    process.env.MEMBERSHIP_EXPIRY_EMAIL_FROM = 'Evolutionz Fitness <reminders@example.com>'
+    process.env.RESEND_DAILY_EMAIL_LIMIT = '2'
+    const fetchMock = vi.fn().mockResolvedValue(createSuccessResponse())
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await POST(
+      createSendRequest({
+        recipients: [
+          { name: 'Zoe Zebra', email: 'zebra@example.com' },
+          { name: 'Amy Adams', email: 'adams@example.com' },
+          { name: 'Mia Miller', email: 'miller@example.com' },
+        ],
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      sentCount: 2,
+      alreadySentCount: 0,
+      skippedDueToQuotaCount: 1,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+
+    const firstPayload = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))
+    const secondPayload = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))
+
+    expect(firstPayload.to).toEqual(['zebra@example.com'])
+    expect(secondPayload.to).toEqual(['adams@example.com'])
+    expect(deliveries.map((record) => record.recipientEmail)).toEqual([
+      'zebra@example.com',
+      'adams@example.com',
+    ])
+  })
+
   it('persists sent counts across requests and skips recipients once the daily quota is exhausted', async () => {
     configureDeliveryStore()
     process.env.RESEND_API_KEY = 'resend-key'

@@ -99,6 +99,46 @@ export function dedupeRecipientsById<T extends { id: string }>(recipients: T[]) 
   })
 }
 
+function getRecipientLastName(name: string) {
+  const nameParts = normalizeText(name).split(/\s+/u).filter(Boolean)
+
+  return nameParts[nameParts.length - 1] ?? ''
+}
+
+function compareNormalizedText(left: string, right: string) {
+  return normalizeText(left).localeCompare(normalizeText(right), undefined, {
+    sensitivity: 'base',
+  })
+}
+
+export function compareEmailRecipientsByLastName<T extends { name: string; email: string }>(
+  left: T,
+  right: T,
+) {
+  const lastNameComparison = compareNormalizedText(
+    getRecipientLastName(left.name),
+    getRecipientLastName(right.name),
+  )
+
+  if (lastNameComparison !== 0) {
+    return lastNameComparison
+  }
+
+  const fullNameComparison = compareNormalizedText(left.name, right.name)
+
+  if (fullNameComparison !== 0) {
+    return fullNameComparison
+  }
+
+  return compareNormalizedText(left.email, right.email)
+}
+
+export function sortEmailRecipientsByLastName<T extends { name: string; email: string }>(
+  recipients: T[],
+) {
+  return [...recipients].sort(compareEmailRecipientsByLastName)
+}
+
 export function toEmailRecipient(member: Pick<Member, 'id' | 'name' | 'email'>) {
   const id = normalizeText(member.id)
   const name = normalizeText(member.name)
@@ -131,14 +171,25 @@ export function resolveDraftEmailRecipients(
     activeMembers: boolean
     expiringMembers: boolean
     expiredMembers: boolean
-    includeMemberTypes: boolean
-    memberTypeIds: string[]
+    activeMemberTypeIds: string[]
+    expiringMemberTypeIds: string[]
+    expiredMemberTypeIds: string[]
     individualIds: string[]
     now?: Date
   },
 ) {
-  const selectedMemberTypeIds = new Set(options.memberTypeIds.map((value) => normalizeText(value)))
-  const selectedIndividualIds = new Set(options.individualIds.map((value) => normalizeText(value)))
+  const selectedActiveMemberTypeIds = new Set(
+    options.activeMemberTypeIds.map((value) => normalizeText(value)).filter(Boolean),
+  )
+  const selectedExpiringMemberTypeIds = new Set(
+    options.expiringMemberTypeIds.map((value) => normalizeText(value)).filter(Boolean),
+  )
+  const selectedExpiredMemberTypeIds = new Set(
+    options.expiredMemberTypeIds.map((value) => normalizeText(value)).filter(Boolean),
+  )
+  const selectedIndividualIds = new Set(
+    options.individualIds.map((value) => normalizeText(value)).filter(Boolean),
+  )
   const now = options.now ?? new Date()
   const recipients = members.flatMap((member) => {
     const recipient = toEmailRecipient(member)
@@ -147,21 +198,28 @@ export function resolveDraftEmailRecipients(
       return []
     }
 
-    const matchesActiveMembers = options.activeMembers && member.status === 'Active'
-    const matchesExpiringMembers = options.expiringMembers && isMemberExpiringSoon(member, now)
-    const matchesExpiredMembers = options.expiredMembers && member.status === 'Expired'
-    const matchesMemberType =
-      options.includeMemberTypes &&
+    const memberTypeId = normalizeText(member.memberTypeId)
+    const matchesActiveMembers =
+      options.activeMembers &&
+      selectedActiveMemberTypeIds.size > 0 &&
       member.status === 'Active' &&
-      Boolean(member.memberTypeId) &&
-      selectedMemberTypeIds.has(normalizeText(member.memberTypeId))
+      selectedActiveMemberTypeIds.has(memberTypeId)
+    const matchesExpiringMembers =
+      options.expiringMembers &&
+      selectedExpiringMemberTypeIds.size > 0 &&
+      isMemberExpiringSoon(member, now) &&
+      selectedExpiringMemberTypeIds.has(memberTypeId)
+    const matchesExpiredMembers =
+      options.expiredMembers &&
+      selectedExpiredMemberTypeIds.size > 0 &&
+      member.status === 'Expired' &&
+      selectedExpiredMemberTypeIds.has(memberTypeId)
     const matchesIndividual = selectedIndividualIds.has(recipient.id)
 
     if (
       !matchesActiveMembers &&
       !matchesExpiringMembers &&
       !matchesExpiredMembers &&
-      !matchesMemberType &&
       !matchesIndividual
     ) {
       return []

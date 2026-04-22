@@ -5,11 +5,13 @@ import {
   getServerResendDailyEmailLimit,
   hasMeaningfulHtmlContent,
   resolveDraftEmailRecipients,
+  sortEmailRecipientsByLastName,
   toEmailRecipient,
 } from '@/lib/admin-email'
 import type { Member } from '@/types'
 
 const MEMBER_TYPE_ID = '123e4567-e89b-12d3-a456-426614174100'
+const OTHER_MEMBER_TYPE_ID = '123e4567-e89b-12d3-a456-426614174101'
 
 function createMember(overrides: Partial<Member> = {}): Member {
   return {
@@ -140,46 +142,50 @@ describe('admin email helpers', () => {
     })
   })
 
-  it('resolves selected recipients and deduplicates by email for live counts', () => {
+  it('intersects status filters with their selected membership types', () => {
     const members = [
       createMember({
         id: '123e4567-e89b-12d3-a456-426614174001',
-        name: 'Active Member',
-        email: 'active@example.com',
-        status: 'Active',
-        endTime: '2026-04-30T00:00:00.000Z',
-      }),
-      createMember({
-        id: '123e4567-e89b-12d3-a456-426614174002',
-        name: 'Expiring Member',
-        email: 'expire@example.com',
-        status: 'Active',
-        endTime: '2026-04-15T03:00:00.000Z',
-      }),
-      createMember({
-        id: '123e4567-e89b-12d3-a456-426614174003',
-        name: 'Type Match',
-        email: 'type@example.com',
+        name: 'Active General',
+        email: 'active-general@example.com',
         status: 'Active',
         memberTypeId: MEMBER_TYPE_ID,
         endTime: '2026-04-30T00:00:00.000Z',
       }),
       createMember({
-        id: '123e4567-e89b-12d3-a456-426614174004',
-        name: 'Duplicate Email',
-        email: 'TYPE@example.com',
+        id: '123e4567-e89b-12d3-a456-426614174002',
+        name: 'Expiring Other',
+        email: 'expiring-other@example.com',
+        status: 'Active',
+        memberTypeId: OTHER_MEMBER_TYPE_ID,
+        endTime: '2026-04-15T03:00:00.000Z',
+      }),
+      createMember({
+        id: '123e4567-e89b-12d3-a456-426614174003',
+        name: 'Expired General',
+        email: 'expired-general@example.com',
         status: 'Expired',
+        memberTypeId: MEMBER_TYPE_ID,
         endTime: '2026-04-01T00:00:00.000Z',
+      }),
+      createMember({
+        id: '123e4567-e89b-12d3-a456-426614174004',
+        name: 'Active Other',
+        email: 'active-other@example.com',
+        status: 'Active',
+        memberTypeId: OTHER_MEMBER_TYPE_ID,
+        endTime: '2026-04-30T00:00:00.000Z',
       }),
     ]
 
     const recipients = resolveDraftEmailRecipients(members, {
       activeMembers: true,
       expiringMembers: true,
-      expiredMembers: false,
-      includeMemberTypes: true,
-      memberTypeIds: [MEMBER_TYPE_ID],
-      individualIds: ['123e4567-e89b-12d3-a456-426614174004'],
+      expiredMembers: true,
+      activeMemberTypeIds: [MEMBER_TYPE_ID],
+      expiringMemberTypeIds: [OTHER_MEMBER_TYPE_ID],
+      expiredMemberTypeIds: [MEMBER_TYPE_ID],
+      individualIds: [],
       now: new Date('2026-04-11T12:00:00.000Z'),
     })
 
@@ -187,28 +193,24 @@ describe('admin email helpers', () => {
       '123e4567-e89b-12d3-a456-426614174001',
       '123e4567-e89b-12d3-a456-426614174002',
       '123e4567-e89b-12d3-a456-426614174003',
-      '123e4567-e89b-12d3-a456-426614174004',
-    ])
-    expect(dedupeRecipientsByEmail(recipients).map((recipient) => recipient.email)).toEqual([
-      'active@example.com',
-      'expire@example.com',
-      'type@example.com',
     ])
   })
 
-  it('includes expired members only when the expired filter is selected', () => {
+  it('requires at least one membership type per status filter but still includes individuals', () => {
     const members = [
       createMember({
         id: '123e4567-e89b-12d3-a456-426614174010',
         name: 'Active Member',
         email: 'shared@example.com',
         status: 'Active',
+        memberTypeId: MEMBER_TYPE_ID,
       }),
       createMember({
         id: '123e4567-e89b-12d3-a456-426614174011',
         name: 'Expired Member',
         email: 'shared@example.com',
         status: 'Expired',
+        memberTypeId: MEMBER_TYPE_ID,
       }),
       createMember({
         id: '123e4567-e89b-12d3-a456-426614174012',
@@ -223,8 +225,9 @@ describe('admin email helpers', () => {
         activeMembers: false,
         expiringMembers: false,
         expiredMembers: false,
-        includeMemberTypes: false,
-        memberTypeIds: [],
+        activeMemberTypeIds: [],
+        expiringMemberTypeIds: [],
+        expiredMemberTypeIds: [],
         individualIds: [],
       }),
     ).toEqual([])
@@ -233,17 +236,29 @@ describe('admin email helpers', () => {
       activeMembers: true,
       expiringMembers: false,
       expiredMembers: true,
-      includeMemberTypes: false,
-      memberTypeIds: [],
-      individualIds: [],
+      activeMemberTypeIds: [],
+      expiringMemberTypeIds: [],
+      expiredMemberTypeIds: [],
+      individualIds: ['123e4567-e89b-12d3-a456-426614174012'],
     })
 
     expect(expiredRecipients.map((recipient) => recipient.id)).toEqual([
-      '123e4567-e89b-12d3-a456-426614174010',
-      '123e4567-e89b-12d3-a456-426614174011',
+      '123e4567-e89b-12d3-a456-426614174012',
     ])
-    expect(dedupeRecipientsByEmail(expiredRecipients).map((recipient) => recipient.email)).toEqual([
-      'shared@example.com',
-    ])
+  })
+
+  it('deduplicates by email and sorts recipients alphabetically by last name', () => {
+    const recipients = [
+      { id: '1', name: 'Jordan Smith', email: 'smith@example.com' },
+      { id: '2', name: 'Avery Brown', email: 'brown@example.com' },
+      { id: '3', name: 'Casey Adams', email: 'SMITH@example.com' },
+      { id: '4', name: 'Taylor Brown', email: 'taylor@example.com' },
+    ]
+
+    expect(
+      dedupeRecipientsByEmail(sortEmailRecipientsByLastName(recipients)).map(
+        (recipient) => recipient.name,
+      ),
+    ).toEqual(['Casey Adams', 'Avery Brown', 'Taylor Brown'])
   })
 })

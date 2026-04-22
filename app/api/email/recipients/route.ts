@@ -9,7 +9,9 @@ const recipientFiltersSchema = z.object({
   activeMembers: z.enum(['true', 'false']).default('false'),
   expiringMembers: z.enum(['true', 'false']).default('false'),
   expiredMembers: z.enum(['true', 'false']).default('false'),
-  memberTypeIds: z.string().default(''),
+  activeMemberTypeIds: z.string().default(''),
+  expiringMemberTypeIds: z.string().default(''),
+  expiredMemberTypeIds: z.string().default(''),
   individualIds: z.string().default(''),
 })
 
@@ -79,10 +81,14 @@ export async function GET(request: Request) {
       activeMembers: searchParams.get('activeMembers') ?? 'false',
       expiringMembers: searchParams.get('expiringMembers') ?? 'false',
       expiredMembers: searchParams.get('expiredMembers') ?? 'false',
-      memberTypeIds: searchParams.get('memberTypeIds') ?? '',
+      activeMemberTypeIds: searchParams.get('activeMemberTypeIds') ?? '',
+      expiringMemberTypeIds: searchParams.get('expiringMemberTypeIds') ?? '',
+      expiredMemberTypeIds: searchParams.get('expiredMemberTypeIds') ?? '',
       individualIds: searchParams.get('individualIds') ?? '',
     })
-    const memberTypeIds = parseUuidList(parsedFilters.memberTypeIds)
+    const activeMemberTypeIds = parseUuidList(parsedFilters.activeMemberTypeIds)
+    const expiringMemberTypeIds = parseUuidList(parsedFilters.expiringMemberTypeIds)
+    const expiredMemberTypeIds = parseUuidList(parsedFilters.expiredMemberTypeIds)
     const individualIds = parseUuidList(parsedFilters.individualIds)
     const recipientsById = new Map<string, z.infer<typeof emailRecipientWithIdSchema>>()
     const supabase = getSupabaseAdminClient() as any
@@ -95,17 +101,22 @@ export async function GET(request: Request) {
       }
     }
 
-    if (parsedFilters.activeMembers === 'true') {
+    if (parsedFilters.activeMembers === 'true' && activeMemberTypeIds.length > 0) {
       addRecipients(
         await executeRecipientQuery(
-          supabase.from('members').select('id, name, email').eq('status', 'Active').order('name', {
-            ascending: true,
-          }),
+          supabase
+            .from('members')
+            .select('id, name, email')
+            .eq('status', 'Active')
+            .in('member_type_id', activeMemberTypeIds)
+            .order('name', {
+              ascending: true,
+            }),
         ),
       )
     }
 
-    if (parsedFilters.expiringMembers === 'true') {
+    if (parsedFilters.expiringMembers === 'true' && expiringMemberTypeIds.length > 0) {
       const { startInclusive, endExclusive } = getJamaicaExpiringWindow(new Date())
       addRecipients(
         await executeRecipientQuery(
@@ -113,6 +124,7 @@ export async function GET(request: Request) {
             .from('members')
             .select('id, name, email')
             .eq('status', 'Active')
+            .in('member_type_id', expiringMemberTypeIds)
             .gte('end_time', startInclusive)
             .lt('end_time', endExclusive)
             .order('end_time', { ascending: true }),
@@ -120,24 +132,14 @@ export async function GET(request: Request) {
       )
     }
 
-    if (parsedFilters.expiredMembers === 'true') {
-      addRecipients(
-        await executeRecipientQuery(
-          supabase.from('members').select('id, name, email').eq('status', 'Expired').order('name', {
-            ascending: true,
-          }),
-        ),
-      )
-    }
-
-    if (memberTypeIds.length > 0) {
+    if (parsedFilters.expiredMembers === 'true' && expiredMemberTypeIds.length > 0) {
       addRecipients(
         await executeRecipientQuery(
           supabase
             .from('members')
             .select('id, name, email')
-            .eq('status', 'Active')
-            .in('member_type_id', memberTypeIds)
+            .eq('status', 'Expired')
+            .in('member_type_id', expiredMemberTypeIds)
             .order('name', { ascending: true }),
         ),
       )

@@ -130,6 +130,25 @@ vi.mock('@/components/ui/checkbox', () => ({
   ),
 }))
 
+vi.mock('@/components/ui/dialog', () => ({
+  Dialog: ({ children, open }: { children: ReactNode; open?: boolean }) =>
+    open ? <div>{children}</div> : null,
+  DialogContent: ({ children, ...props }: ComponentProps<'div'>) => (
+    <div role="dialog" {...props}>
+      {children}
+    </div>
+  ),
+  DialogDescription: ({ children, ...props }: ComponentProps<'p'>) => (
+    <p {...props}>{children}</p>
+  ),
+  DialogHeader: ({ children, ...props }: ComponentProps<'div'>) => (
+    <div {...props}>{children}</div>
+  ),
+  DialogTitle: ({ children, ...props }: ComponentProps<'h2'>) => (
+    <h2 {...props}>{children}</h2>
+  ),
+}))
+
 vi.mock('@/components/ui/input', () => ({
   Input: ({
     className,
@@ -186,6 +205,9 @@ vi.mock('@/hooks/use-toast', () => ({
 
 import { EmailClient } from '@/app/(app)/email/email-client'
 
+const GENERAL_MEMBER_TYPE_ID = 'type-general'
+const STUDENT_MEMBER_TYPE_ID = 'type-student'
+
 function createMember(overrides: Partial<Member> = {}): Member {
   return {
     id: overrides.id ?? 'member-1',
@@ -196,7 +218,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     cardStatus: overrides.cardStatus ?? null,
     cardLostAt: overrides.cardLostAt ?? null,
     type: overrides.type ?? 'General',
-    memberTypeId: overrides.memberTypeId ?? null,
+    memberTypeId: overrides.memberTypeId ?? GENERAL_MEMBER_TYPE_ID,
     status: overrides.status ?? 'Active',
     deviceAccessState: overrides.deviceAccessState ?? 'ready',
     gender: overrides.gender ?? null,
@@ -240,6 +262,31 @@ async function flushAsyncWork() {
   })
 }
 
+function getCheckbox(container: HTMLElement, selector: string) {
+  const checkbox = container.querySelector(selector)
+
+  expect(checkbox).toBeInstanceOf(HTMLInputElement)
+
+  return checkbox as HTMLInputElement
+}
+
+function getButton(container: HTMLElement, selector: string) {
+  const button = container.querySelector(selector)
+
+  expect(button).toBeInstanceOf(HTMLButtonElement)
+
+  return button as HTMLButtonElement
+}
+
+async function selectMemberTypeFilter(
+  container: HTMLElement,
+  status: 'active' | 'expiring' | 'expired',
+  memberTypeId = GENERAL_MEMBER_TYPE_ID,
+) {
+  await clickElement(getCheckbox(container, `#email-${status}-members`))
+  await clickElement(getCheckbox(container, `#email-${status}-member-type-${memberTypeId}`))
+}
+
 describe('EmailClient', () => {
   let container: HTMLDivElement
   let root: Root
@@ -273,7 +320,22 @@ describe('EmailClient', () => {
       error: null,
     })
     useMemberTypesMock.mockReturnValue({
-      memberTypes: [] as MemberTypeRecord[],
+      memberTypes: [
+        {
+          id: GENERAL_MEMBER_TYPE_ID,
+          name: 'General',
+          monthly_rate: 5000,
+          is_active: true,
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: STUDENT_MEMBER_TYPE_ID,
+          name: 'Student',
+          monthly_rate: 3000,
+          is_active: true,
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
+      ] as MemberTypeRecord[],
       isLoading: false,
       error: null,
     })
@@ -341,14 +403,8 @@ describe('EmailClient', () => {
       root.render(<EmailClient resendDailyLimit={10} />)
     })
 
-    const activeMembersCheckbox = container.querySelector('#email-active-members')
-    const expiredMembersCheckbox = container.querySelector('#email-expired-members')
-
-    expect(activeMembersCheckbox).toBeInstanceOf(HTMLInputElement)
-    expect(expiredMembersCheckbox).toBeInstanceOf(HTMLInputElement)
-
-    await clickElement(activeMembersCheckbox as HTMLInputElement)
-    await clickElement(expiredMembersCheckbox as HTMLInputElement)
+    await selectMemberTypeFilter(container, 'active')
+    await selectMemberTypeFilter(container, 'expired')
 
     expect(container.textContent).toContain(
       'You have 2 emails remaining today. Only the first 2 recipients will receive this email.',
@@ -391,14 +447,8 @@ describe('EmailClient', () => {
       root.render(<EmailClient resendDailyLimit={2} />)
     })
 
-    const activeMembersCheckbox = container.querySelector('#email-active-members')
-    const expiredMembersCheckbox = container.querySelector('#email-expired-members')
-
-    expect(activeMembersCheckbox).toBeInstanceOf(HTMLInputElement)
-    expect(expiredMembersCheckbox).toBeInstanceOf(HTMLInputElement)
-
-    await clickElement(activeMembersCheckbox as HTMLInputElement)
-    await clickElement(expiredMembersCheckbox as HTMLInputElement)
+    await selectMemberTypeFilter(container, 'active')
+    await selectMemberTypeFilter(container, 'expired')
 
     expect(container.textContent).toContain(
       'You can send up to 2 emails per day. Only the first 2 recipients will receive this email.',
@@ -472,8 +522,243 @@ describe('EmailClient', () => {
 
     await clickElement(expiredMembersCheckbox as HTMLInputElement)
 
+    expect(container.textContent).toContain('0Recipients Selected')
+    expect(container.textContent).toContain('Membership types')
+
+    await clickElement(getCheckbox(container, `#email-expired-member-type-${GENERAL_MEMBER_TYPE_ID}`))
+
     expect(container.textContent).toContain('1Recipient Selected')
     expect(container.textContent).toContain('All expired members')
+  })
+
+  it('renders status membership type selectors independently and removes the standalone type filter', async () => {
+    useMembersMock.mockReturnValue({
+      members: [
+        createMember({
+          id: 'member-1',
+          name: 'Active General',
+          email: 'active-general@example.com',
+          status: 'Active',
+          memberTypeId: GENERAL_MEMBER_TYPE_ID,
+        }),
+        createMember({
+          id: 'member-2',
+          name: 'Active Student',
+          email: 'active-student@example.com',
+          status: 'Active',
+          memberTypeId: STUDENT_MEMBER_TYPE_ID,
+        }),
+        createMember({
+          id: 'member-3',
+          name: 'Expired Student',
+          email: 'expired-student@example.com',
+          status: 'Expired',
+          memberTypeId: STUDENT_MEMBER_TYPE_ID,
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<EmailClient resendDailyLimit={10} />)
+    })
+
+    expect(container.textContent).not.toContain('By membership type')
+
+    await clickElement(getCheckbox(container, '#email-active-members'))
+
+    expect(container.textContent).toContain('Membership types')
+    expect(container.textContent).toContain('0Recipients Selected')
+
+    await clickElement(getCheckbox(container, `#email-active-member-type-${GENERAL_MEMBER_TYPE_ID}`))
+
+    expect(container.textContent).toContain('1Recipient Selected')
+
+    await clickElement(getCheckbox(container, '#email-expired-members'))
+    await clickElement(getCheckbox(container, `#email-expired-member-type-${STUDENT_MEMBER_TYPE_ID}`))
+
+    expect(container.textContent).toContain('2Recipients Selected')
+    expect(getCheckbox(container, `#email-active-member-type-${STUDENT_MEMBER_TYPE_ID}`).checked).toBe(false)
+    expect(getCheckbox(container, `#email-expired-member-type-${GENERAL_MEMBER_TYPE_ID}`).checked).toBe(false)
+  })
+
+  it('opens a sorted quota-aware recipients preview', async () => {
+    useMembersMock.mockReturnValue({
+      members: [
+        createMember({
+          id: 'member-z',
+          name: 'Maya Zebra',
+          email: 'zebra@example.com',
+          status: 'Active',
+        }),
+        createMember({
+          id: 'member-b',
+          name: 'Avery Brown',
+          email: 'brown@example.com',
+          status: 'Active',
+        }),
+        createMember({
+          id: 'member-a',
+          name: 'Chris Adams',
+          email: 'adams@example.com',
+          status: 'Active',
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+    useEmailQuotaMock.mockReturnValue({
+      quota: {
+        sent: 98,
+        limit: 100,
+        remaining: 2,
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(<EmailClient resendDailyLimit={10} />)
+    })
+
+    await selectMemberTypeFilter(container, 'active')
+    await clickElement(getButton(container, 'button[aria-label="View 3 recipients selected"]'))
+
+    const dialog = container.querySelector('[role="dialog"]')
+
+    expect(dialog).toBeInstanceOf(HTMLDivElement)
+    expect(dialog?.textContent).toContain('3 recipients selected (2 will receive this email)')
+    expect(dialog?.textContent).toContain('Will receive this email')
+    expect(dialog?.textContent).toContain('Will not receive this email (quota exceeded)')
+
+    const dialogText = dialog?.textContent ?? ''
+
+    expect(dialogText).toContain('Chris Adams')
+    expect(dialogText).toContain('Avery Brown')
+    expect(dialogText).toContain('Maya Zebra')
+    expect(dialogText.indexOf('Chris Adams')).toBeLessThan(dialogText.indexOf('Avery Brown'))
+    expect(dialogText.indexOf('Avery Brown')).toBeLessThan(dialogText.indexOf('Maya Zebra'))
+  })
+
+  it('deselects recipients from the preview and sends the same sorted filtered list', async () => {
+    const sentRecipients: Array<{ name: string; email: string }> = []
+
+    useMembersMock.mockReturnValue({
+      members: [
+        createMember({
+          id: 'member-z',
+          name: 'Maya Zebra',
+          email: 'zebra@example.com',
+          status: 'Active',
+        }),
+        createMember({
+          id: 'member-b',
+          name: 'Avery Brown',
+          email: 'brown@example.com',
+          status: 'Active',
+        }),
+        createMember({
+          id: 'member-a',
+          name: 'Chris Adams',
+          email: 'adams@example.com',
+          status: 'Active',
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+    vi.stubGlobal('crypto', {
+      randomUUID: vi.fn().mockReturnValue('11111111-1111-4111-8111-111111111111'),
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url
+
+        if (url.startsWith('/api/email/recipients')) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              recipients: [
+                { id: 'member-z', name: 'Maya Zebra', email: 'zebra@example.com' },
+                { id: 'member-b', name: 'Avery Brown', email: 'brown@example.com' },
+                { id: 'member-a', name: 'Chris Adams', email: 'adams@example.com' },
+              ],
+            }),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            },
+          )
+        }
+
+        if (url === '/api/email/send') {
+          const formData = init?.body as FormData
+          sentRecipients.push(
+            ...(JSON.parse(String(formData.get('recipients'))) as Array<{
+              name: string
+              email: string
+            }>),
+          )
+
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              sentCount: 2,
+              alreadySentCount: 0,
+              skippedDueToQuotaCount: 0,
+            }),
+            {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            },
+          )
+        }
+
+        throw new Error(`Unexpected fetch call: ${url}`)
+      }),
+    )
+
+    await act(async () => {
+      root.render(<EmailClient resendDailyLimit={10} />)
+    })
+
+    await selectMemberTypeFilter(container, 'active')
+    await clickElement(getButton(container, 'button[aria-label="View 3 recipients selected"]'))
+    await clickElement(getButton(container, 'button[aria-label="Remove Avery Brown"]'))
+
+    expect(container.textContent).toContain('2Recipients Selected')
+
+    const subjectInput = container.querySelector('#email-subject')
+    const bodyInput = container.querySelector('textarea[aria-label="Email body editor"]')
+    const sendButton = Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.replace(/\s+/gu, ' ').trim() === 'Send Email',
+    )
+
+    expect(subjectInput).toBeInstanceOf(HTMLInputElement)
+    expect(bodyInput).toBeInstanceOf(HTMLTextAreaElement)
+    expect(sendButton).toBeInstanceOf(HTMLButtonElement)
+
+    await setInputValue(subjectInput as HTMLInputElement, 'Hello members')
+    await setInputValue(bodyInput as HTMLTextAreaElement, '<p>Hello team</p>')
+    await clickElement(sendButton as HTMLButtonElement)
+    await flushAsyncWork()
+
+    expect(sentRecipients).toEqual([
+      { name: 'Chris Adams', email: 'adams@example.com' },
+      { name: 'Maya Zebra', email: 'zebra@example.com' },
+    ])
   })
 
   it('reuses the idempotency key after a failed send and regenerates it after a draft edit', async () => {
@@ -555,22 +840,18 @@ describe('EmailClient', () => {
       root.render(<EmailClient resendDailyLimit={5} />)
     })
 
-    const activeMembersCheckbox = container.querySelector('#email-active-members')
-    const expiredMembersCheckbox = container.querySelector('#email-expired-members')
     const subjectInput = container.querySelector('#email-subject')
     const bodyInput = container.querySelector('textarea[aria-label="Email body editor"]')
     const sendButton = Array.from(container.querySelectorAll('button')).find(
       (candidate) => candidate.textContent?.replace(/\s+/gu, ' ').trim() === 'Send Email',
     )
 
-    expect(activeMembersCheckbox).toBeInstanceOf(HTMLInputElement)
-    expect(expiredMembersCheckbox).toBeInstanceOf(HTMLInputElement)
     expect(subjectInput).toBeInstanceOf(HTMLInputElement)
     expect(bodyInput).toBeInstanceOf(HTMLTextAreaElement)
     expect(sendButton).toBeInstanceOf(HTMLButtonElement)
 
-    await clickElement(activeMembersCheckbox as HTMLInputElement)
-    await clickElement(expiredMembersCheckbox as HTMLInputElement)
+    await selectMemberTypeFilter(container, 'active')
+    await selectMemberTypeFilter(container, 'expired')
     await setInputValue(subjectInput as HTMLInputElement, 'Hello members')
     await setInputValue(bodyInput as HTMLTextAreaElement, '<p>Hello team</p>')
 
@@ -584,8 +865,8 @@ describe('EmailClient', () => {
       '11111111-1111-4111-8111-111111111111',
     ])
     expect(recipientLookupUrls).toEqual([
-      '/api/email/recipients?activeMembers=true&expiredMembers=true',
-      '/api/email/recipients?activeMembers=true&expiredMembers=true',
+      '/api/email/recipients?activeMembers=true&expiredMembers=true&activeMemberTypeIds=type-general&expiredMemberTypeIds=type-general',
+      '/api/email/recipients?activeMembers=true&expiredMembers=true&activeMemberTypeIds=type-general&expiredMemberTypeIds=type-general',
     ])
 
     await setInputValue(subjectInput as HTMLInputElement, 'Updated subject')
@@ -598,9 +879,9 @@ describe('EmailClient', () => {
       '22222222-2222-4222-8222-222222222222',
     ])
     expect(recipientLookupUrls).toEqual([
-      '/api/email/recipients?activeMembers=true&expiredMembers=true',
-      '/api/email/recipients?activeMembers=true&expiredMembers=true',
-      '/api/email/recipients?activeMembers=true&expiredMembers=true',
+      '/api/email/recipients?activeMembers=true&expiredMembers=true&activeMemberTypeIds=type-general&expiredMemberTypeIds=type-general',
+      '/api/email/recipients?activeMembers=true&expiredMembers=true&activeMemberTypeIds=type-general&expiredMemberTypeIds=type-general',
+      '/api/email/recipients?activeMembers=true&expiredMembers=true&activeMemberTypeIds=type-general&expiredMemberTypeIds=type-general',
     ])
     expect(randomUUIDMock).toHaveBeenCalledTimes(2)
   })
@@ -669,19 +950,17 @@ describe('EmailClient', () => {
       root.render(<EmailClient resendDailyLimit={5} />)
     })
 
-    const activeMembersCheckbox = container.querySelector('#email-active-members')
     const subjectInput = container.querySelector('#email-subject')
     const bodyInput = container.querySelector('textarea[aria-label="Email body editor"]')
     const sendButton = Array.from(container.querySelectorAll('button')).find(
       (candidate) => candidate.textContent?.replace(/\s+/gu, ' ').trim() === 'Send Email',
     )
 
-    expect(activeMembersCheckbox).toBeInstanceOf(HTMLInputElement)
     expect(subjectInput).toBeInstanceOf(HTMLInputElement)
     expect(bodyInput).toBeInstanceOf(HTMLTextAreaElement)
     expect(sendButton).toBeInstanceOf(HTMLButtonElement)
 
-    await clickElement(activeMembersCheckbox as HTMLInputElement)
+    await selectMemberTypeFilter(container, 'active')
     await setInputValue(subjectInput as HTMLInputElement, 'Hello members')
     await setInputValue(bodyInput as HTMLTextAreaElement, '<p>Hello team</p>')
     await clickElement(sendButton as HTMLButtonElement)

@@ -10,6 +10,7 @@ import {
   dedupeRecipientsByEmail,
   hasMeaningfulHtmlContent,
   resolveDraftEmailRecipients,
+  sortEmailRecipientsByLastName,
   toEmailRecipient,
   type EmailRecipient,
   type EmailRecipientWithId,
@@ -18,6 +19,13 @@ import { SearchableSelect, type SearchableSelectOption } from '@/components/sear
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
@@ -48,6 +56,8 @@ type SendSuccessResponse = {
   alreadySentCount: number
   skippedDueToQuotaCount: number
 }
+
+type MemberTypeFilter = 'active' | 'expiring' | 'expired'
 
 function formatAttachmentSize(size: number) {
   const sizeInMegabytes = size / (1024 * 1024)
@@ -129,7 +139,9 @@ function buildRecipientsLookupUrl(input: {
   activeMembers: boolean
   expiringMembers: boolean
   expiredMembers: boolean
-  memberTypeIds: string[]
+  activeMemberTypeIds: string[]
+  expiringMemberTypeIds: string[]
+  expiredMemberTypeIds: string[]
   individualIds: string[]
 }) {
   const searchParams = new URLSearchParams()
@@ -146,8 +158,16 @@ function buildRecipientsLookupUrl(input: {
     searchParams.set('expiredMembers', 'true')
   }
 
-  if (input.memberTypeIds.length > 0) {
-    searchParams.set('memberTypeIds', input.memberTypeIds.join(','))
+  if (input.activeMemberTypeIds.length > 0) {
+    searchParams.set('activeMemberTypeIds', input.activeMemberTypeIds.join(','))
+  }
+
+  if (input.expiringMemberTypeIds.length > 0) {
+    searchParams.set('expiringMemberTypeIds', input.expiringMemberTypeIds.join(','))
+  }
+
+  if (input.expiredMemberTypeIds.length > 0) {
+    searchParams.set('expiredMemberTypeIds', input.expiredMemberTypeIds.join(','))
   }
 
   if (input.individualIds.length > 0) {
@@ -158,13 +178,28 @@ function buildRecipientsLookupUrl(input: {
   return queryString ? `/api/email/recipients?${queryString}` : '/api/email/recipients'
 }
 
+function getCanonicalRecipients<T extends { name: string; email: string }>(recipients: T[]) {
+  return dedupeRecipientsByEmail(sortEmailRecipientsByLastName(recipients))
+}
+
+function updateSelectedIds(currentIds: string[], id: string, checked: boolean) {
+  if (checked) {
+    return currentIds.includes(id) ? currentIds : [...currentIds, id]
+  }
+
+  return currentIds.filter((currentId) => currentId !== id)
+}
+
 export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   const [includeActiveMembers, setIncludeActiveMembers] = useState(false)
   const [includeExpiringMembers, setIncludeExpiringMembers] = useState(false)
   const [includeExpiredMembers, setIncludeExpiredMembers] = useState(false)
-  const [includeMemberTypes, setIncludeMemberTypes] = useState(false)
-  const [selectedMemberTypeIds, setSelectedMemberTypeIds] = useState<string[]>([])
+  const [selectedActiveMemberTypeIds, setSelectedActiveMemberTypeIds] = useState<string[]>([])
+  const [selectedExpiringMemberTypeIds, setSelectedExpiringMemberTypeIds] = useState<string[]>([])
+  const [selectedExpiredMemberTypeIds, setSelectedExpiredMemberTypeIds] = useState<string[]>([])
   const [selectedIndividuals, setSelectedIndividuals] = useState<EmailRecipientWithId[]>([])
+  const [excludedRecipientIds, setExcludedRecipientIds] = useState<string[]>([])
+  const [isRecipientsPreviewOpen, setIsRecipientsPreviewOpen] = useState(false)
   const [subject, setSubject] = useState('')
   const [bodyHtml, setBodyHtml] = useState('')
   const [attachment, setAttachment] = useState<File | null>(null)
@@ -188,29 +223,38 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     () => selectedIndividuals.map((recipient) => recipient.id),
     [selectedIndividuals],
   )
+  const excludedRecipientIdSet = useMemo(
+    () => new Set(excludedRecipientIds),
+    [excludedRecipientIds],
+  )
   const liveRecipients = useMemo(
     () =>
       resolveDraftEmailRecipients(members, {
         activeMembers: includeActiveMembers,
         expiringMembers: includeExpiringMembers,
         expiredMembers: includeExpiredMembers,
-        includeMemberTypes,
-        memberTypeIds: selectedMemberTypeIds,
+        activeMemberTypeIds: selectedActiveMemberTypeIds,
+        expiringMemberTypeIds: selectedExpiringMemberTypeIds,
+        expiredMemberTypeIds: selectedExpiredMemberTypeIds,
         individualIds: selectedIndividualIds,
       }),
     [
       includeActiveMembers,
       includeExpiringMembers,
       includeExpiredMembers,
-      includeMemberTypes,
       members,
+      selectedActiveMemberTypeIds,
+      selectedExpiredMemberTypeIds,
+      selectedExpiringMemberTypeIds,
       selectedIndividualIds,
-      selectedMemberTypeIds,
     ],
   )
-  const dedupedLiveRecipients = useMemo(
-    () => dedupeRecipientsByEmail(liveRecipients),
-    [liveRecipients],
+  const canonicalLiveRecipients = useMemo(
+    () =>
+      getCanonicalRecipients(
+        liveRecipients.filter((recipient) => !excludedRecipientIdSet.has(recipient.id)),
+      ),
+    [excludedRecipientIdSet, liveRecipients],
   )
   const individualPickerOptions = useMemo<SearchableSelectOption[]>(
     () =>
@@ -235,10 +279,12 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     [members, selectedIndividualIds],
   )
   const isBodyEmpty = !hasMeaningfulHtmlContent(bodyHtml)
-  const recipientCount = dedupedLiveRecipients.length
+  const recipientCount = canonicalLiveRecipients.length
   const isUsingQuotaForRecipientWarning = quota !== null
   const recipientWarningLimit = isUsingQuotaForRecipientWarning ? quota.remaining : resendDailyLimit
   const shouldShowLimitWarning = recipientCount > recipientWarningLimit
+  const quotaLimitedRecipients = canonicalLiveRecipients.slice(0, recipientWarningLimit)
+  const quotaExceededRecipients = canonicalLiveRecipients.slice(recipientWarningLimit)
   const shouldShowQuotaWarning = Boolean(quota && quota.remaining <= 20)
   const isSendDisabled =
     isSending || recipientCount === 0 || !subject.trim() || isBodyEmpty || isMembersLoading
@@ -276,8 +322,9 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
       activeMembers: false,
       expiringMembers: false,
       expiredMembers: false,
-      includeMemberTypes: false,
-      memberTypeIds: [],
+      activeMemberTypeIds: [],
+      expiringMemberTypeIds: [],
+      expiredMemberTypeIds: [],
       individualIds: [memberId],
     })[0]
 
@@ -286,6 +333,9 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     }
 
     handleDraftChanged()
+    setExcludedRecipientIds((currentIds) =>
+      currentIds.filter((currentId) => currentId !== recipientToAdd.id),
+    )
     setSelectedIndividuals((currentRecipients) => {
       if (currentRecipients.some((recipient) => recipient.id === recipientToAdd.id)) {
         return currentRecipients
@@ -302,16 +352,134 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     )
   }
 
-  const handleToggleMemberType = (memberTypeId: string, checked: boolean) => {
+  const handleDeselectRecipient = (memberId: string) => {
     handleDraftChanged()
-    setSelectedMemberTypeIds((currentIds) => {
-      if (checked) {
-        return currentIds.includes(memberTypeId) ? currentIds : [...currentIds, memberTypeId]
+    setExcludedRecipientIds((currentIds) => {
+      if (currentIds.includes(memberId)) {
+        return currentIds
       }
 
-      return currentIds.filter((currentId) => currentId !== memberTypeId)
+      return [...currentIds, memberId]
     })
+    setSelectedIndividuals((currentRecipients) =>
+      currentRecipients.filter((recipient) => recipient.id !== memberId),
+    )
   }
+
+  const handleToggleMemberType = (
+    filter: MemberTypeFilter,
+    memberTypeId: string,
+    checked: boolean,
+  ) => {
+    handleDraftChanged()
+
+    if (filter === 'active') {
+      setSelectedActiveMemberTypeIds((currentIds) =>
+        updateSelectedIds(currentIds, memberTypeId, checked),
+      )
+      return
+    }
+
+    if (filter === 'expiring') {
+      setSelectedExpiringMemberTypeIds((currentIds) =>
+        updateSelectedIds(currentIds, memberTypeId, checked),
+      )
+      return
+    }
+
+    setSelectedExpiredMemberTypeIds((currentIds) =>
+      updateSelectedIds(currentIds, memberTypeId, checked),
+    )
+  }
+
+  const renderMembershipTypeSelector = (filter: MemberTypeFilter, selectedIds: string[]) => (
+    <div className="rounded-xl border border-dashed border-border bg-background/80 p-4">
+      <div className="mb-3 space-y-1">
+        <p className="text-sm font-medium text-foreground">Membership types</p>
+        <p className="text-xs text-muted-foreground">Select at least one type for this filter.</p>
+      </div>
+      {isMemberTypesLoading ? (
+        <p className="text-sm text-muted-foreground">Loading membership types...</p>
+      ) : activeMemberTypes.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No active membership types are available.
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-1">
+          {activeMemberTypes.map((memberType) => {
+            const checkboxId = `email-${filter}-member-type-${memberType.id}`
+            const isChecked = selectedIds.includes(memberType.id)
+
+            return (
+              <label
+                key={memberType.id}
+                htmlFor={checkboxId}
+                className={cn(
+                  'flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 transition-colors',
+                  isChecked
+                    ? 'border-primary/50 bg-primary/10'
+                    : 'border-border bg-card hover:bg-muted/50',
+                )}
+              >
+                <Checkbox
+                  id={checkboxId}
+                  checked={isChecked}
+                  onCheckedChange={(checked) =>
+                    handleToggleMemberType(filter, memberType.id, checked === true)
+                  }
+                  className="mt-0.5"
+                />
+                <span className="space-y-1">
+                  <span className="block text-sm font-medium text-foreground">
+                    {memberType.name}
+                  </span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+
+  const renderRecipientPreviewRows = (
+    recipients: EmailRecipientWithId[],
+    emptyMessage: string,
+  ) => (
+    <div className="overflow-hidden rounded-xl border border-border">
+      {recipients.length === 0 ? (
+        <p className="px-4 py-3 text-sm text-muted-foreground">{emptyMessage}</p>
+      ) : (
+        <div className="divide-y divide-border">
+          {recipients.map((recipient) => (
+            <div key={recipient.id} className="flex items-center gap-3 px-4 py-3">
+              <Checkbox
+                checked
+                aria-label={`Remove ${recipient.name} from recipients`}
+                onCheckedChange={(checked) => {
+                  if (checked !== true) {
+                    handleDeselectRecipient(recipient.id)
+                  }
+                }}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">{recipient.name}</p>
+                <p className="truncate text-xs text-muted-foreground">{recipient.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDeselectRecipient(recipient.id)}
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                aria-label={`Remove ${recipient.name}`}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   const handleAttachmentChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null
@@ -339,9 +507,12 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     setIncludeActiveMembers(false)
     setIncludeExpiringMembers(false)
     setIncludeExpiredMembers(false)
-    setIncludeMemberTypes(false)
-    setSelectedMemberTypeIds([])
+    setSelectedActiveMemberTypeIds([])
+    setSelectedExpiringMemberTypeIds([])
+    setSelectedExpiredMemberTypeIds([])
     setSelectedIndividuals([])
+    setExcludedRecipientIds([])
+    setIsRecipientsPreviewOpen(false)
     setSubject('')
     setAttachment(null)
     setAttachmentError(null)
@@ -372,7 +543,9 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
           activeMembers: includeActiveMembers,
           expiringMembers: includeExpiringMembers,
           expiredMembers: includeExpiredMembers,
-          memberTypeIds: includeMemberTypes ? selectedMemberTypeIds : [],
+          activeMemberTypeIds: includeActiveMembers ? selectedActiveMemberTypeIds : [],
+          expiringMemberTypeIds: includeExpiringMembers ? selectedExpiringMemberTypeIds : [],
+          expiredMemberTypeIds: includeExpiredMembers ? selectedExpiredMemberTypeIds : [],
           individualIds: selectedIndividualIds,
         }),
         {
@@ -404,11 +577,15 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
         )
       }
 
-      const resolvedRecipients = recipientsResponseBody.recipients.map(({ name, email }) => ({
+      const resolvedRecipients = getCanonicalRecipients(
+        recipientsResponseBody.recipients.filter(
+          (recipient) => !excludedRecipientIdSet.has(recipient.id),
+        ),
+      )
+      const recipientsToSend: EmailRecipient[] = resolvedRecipients.map(({ name, email }) => ({
         name,
         email,
       }))
-      const recipientsToSend: EmailRecipient[] = dedupeRecipientsByEmail(resolvedRecipients)
 
       if (recipientsToSend.length === 0) {
         throw new Error('Select at least one recipient before sending.')
@@ -538,119 +715,100 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
 
             <div className="space-y-5">
               <div className="space-y-4">
-                <div className="flex items-start gap-3 rounded-lg border border-transparent hover:bg-muted/50 p-2 -mx-2 transition-colors">
-                  <Checkbox
-                    id="email-active-members"
-                    checked={includeActiveMembers}
-                    onCheckedChange={(checked) => {
-                      handleDraftChanged()
-                      setIncludeActiveMembers(checked === true)
-                    }}
-                    className="mt-1"
-                  />
-                  <div className="space-y-1">
-                    <Label htmlFor="email-active-members" className="cursor-pointer">All active members</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Members whose status is currently Active.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 rounded-lg border border-transparent hover:bg-muted/50 p-2 -mx-2 transition-colors">
-                  <Checkbox
-                    id="email-expiring-members"
-                    checked={includeExpiringMembers}
-                    onCheckedChange={(checked) => {
-                      handleDraftChanged()
-                      setIncludeExpiringMembers(checked === true)
-                    }}
-                    className="mt-1"
-                  />
-                  <div className="space-y-1">
-                    <Label htmlFor="email-expiring-members" className="cursor-pointer">All expiring members</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Active members whose membership ends within the next 7 days.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 rounded-lg border border-transparent hover:bg-muted/50 p-2 -mx-2 transition-colors">
-                  <Checkbox
-                    id="email-expired-members"
-                    checked={includeExpiredMembers}
-                    onCheckedChange={(checked) => {
-                      handleDraftChanged()
-                      setIncludeExpiredMembers(checked === true)
-                    }}
-                    className="mt-1"
-                  />
-                  <div className="space-y-1">
-                    <Label htmlFor="email-expired-members" className="cursor-pointer">All expired members</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Members whose status is currently Expired.
-                    </p>
-                  </div>
-                </div>
-
-                <div className={cn("space-y-4 rounded-xl border p-4 transition-colors", includeMemberTypes ? "border-primary/20 bg-primary/5" : "border-border/70 bg-muted/20 hover:border-border")}>
+                <div
+                  className={cn(
+                    'space-y-3 rounded-xl border p-3 transition-colors',
+                    includeActiveMembers
+                      ? 'border-primary/20 bg-primary/5'
+                      : 'border-transparent hover:bg-muted/50',
+                  )}
+                >
                   <div className="flex items-start gap-3">
                     <Checkbox
-                      id="email-member-types"
-                      checked={includeMemberTypes}
+                      id="email-active-members"
+                      checked={includeActiveMembers}
                       onCheckedChange={(checked) => {
                         handleDraftChanged()
-                        setIncludeMemberTypes(checked === true)
+                        setIncludeActiveMembers(checked === true)
                       }}
                       className="mt-1"
                     />
                     <div className="space-y-1">
-                      <Label htmlFor="email-member-types" className="cursor-pointer">By membership type</Label>
+                      <Label htmlFor="email-active-members" className="cursor-pointer">
+                        All active members
+                      </Label>
                       <p className="text-xs text-muted-foreground">
-                        Choose one or more active membership types to include.
+                        Members whose status is currently Active.
                       </p>
                     </div>
                   </div>
+                  {includeActiveMembers
+                    ? renderMembershipTypeSelector('active', selectedActiveMemberTypeIds)
+                    : null}
+                </div>
 
-                  {includeMemberTypes ? (
-                    <div className="rounded-xl border border-dashed border-border bg-background/80 p-4">
-                      {isMemberTypesLoading ? (
-                        <p className="text-sm text-muted-foreground">Loading membership types...</p>
-                      ) : activeMemberTypes.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          No active membership types are available.
-                        </p>
-                      ) : (
-                        <div className="grid gap-3 sm:grid-cols-1">
-                          {activeMemberTypes.map((memberType) => {
-                            const checkboxId = `email-member-type-${memberType.id}`
-                            const isChecked = selectedMemberTypeIds.includes(memberType.id)
-
-                            return (
-                              <label
-                                key={memberType.id}
-                                htmlFor={checkboxId}
-                                className={cn("flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 transition-colors", isChecked ? "border-primary/50 bg-primary/10" : "border-border bg-card hover:bg-muted/50")}
-                              >
-                                <Checkbox
-                                  id={checkboxId}
-                                  checked={isChecked}
-                                  onCheckedChange={(checked) =>
-                                    handleToggleMemberType(memberType.id, checked === true)
-                                  }
-                                  className="mt-0.5"
-                                />
-                                <span className="space-y-1">
-                                  <span className="block text-sm font-medium text-foreground">
-                                    {memberType.name}
-                                  </span>
-                                </span>
-                              </label>
-                            )
-                          })}
-                        </div>
-                      )}
+                <div
+                  className={cn(
+                    'space-y-3 rounded-xl border p-3 transition-colors',
+                    includeExpiringMembers
+                      ? 'border-primary/20 bg-primary/5'
+                      : 'border-transparent hover:bg-muted/50',
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="email-expiring-members"
+                      checked={includeExpiringMembers}
+                      onCheckedChange={(checked) => {
+                        handleDraftChanged()
+                        setIncludeExpiringMembers(checked === true)
+                      }}
+                      className="mt-1"
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="email-expiring-members" className="cursor-pointer">
+                        All expiring members
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Active members whose membership ends within the next 7 days.
+                      </p>
                     </div>
-                  ) : null}
+                  </div>
+                  {includeExpiringMembers
+                    ? renderMembershipTypeSelector('expiring', selectedExpiringMemberTypeIds)
+                    : null}
+                </div>
+
+                <div
+                  className={cn(
+                    'space-y-3 rounded-xl border p-3 transition-colors',
+                    includeExpiredMembers
+                      ? 'border-primary/20 bg-primary/5'
+                      : 'border-transparent hover:bg-muted/50',
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="email-expired-members"
+                      checked={includeExpiredMembers}
+                      onCheckedChange={(checked) => {
+                        handleDraftChanged()
+                        setIncludeExpiredMembers(checked === true)
+                      }}
+                      className="mt-1"
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="email-expired-members" className="cursor-pointer">
+                        All expired members
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Members whose status is currently Expired.
+                      </p>
+                    </div>
+                  </div>
+                  {includeExpiredMembers
+                    ? renderMembershipTypeSelector('expired', selectedExpiredMemberTypeIds)
+                    : null}
                 </div>
               </div>
 
@@ -701,14 +859,24 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
             </div>
 
             <div className="mt-auto pt-6 space-y-3">
-              <div className={cn("rounded-xl p-4 text-center transition-colors", recipientCount > 0 ? "bg-primary/10 text-primary-foreground" : "bg-muted/50")}>
+              <button
+                type="button"
+                onClick={() => setIsRecipientsPreviewOpen(true)}
+                className={cn(
+                  'w-full rounded-xl p-4 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+                  recipientCount > 0
+                    ? 'bg-primary/10 text-primary-foreground hover:bg-primary/15'
+                    : 'bg-muted/50 hover:bg-muted',
+                )}
+                aria-label={`View ${formatRecipientLabel(recipientCount)} selected`}
+              >
                 <p className={cn("text-2xl font-bold", recipientCount > 0 ? "text-primary" : "text-muted-foreground")}>
                   {recipientCount}
                 </p>
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Recipient{recipientCount === 1 ? '' : 's'} Selected
                 </p>
-              </div>
+              </button>
               
               {shouldShowLimitWarning ? (
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
@@ -917,6 +1085,50 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
           </section>
         </div>
       </form>
+
+      <Dialog open={isRecipientsPreviewOpen} onOpenChange={setIsRecipientsPreviewOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[680px]">
+          <DialogHeader>
+            <DialogTitle>
+              {shouldShowLimitWarning
+                ? `${recipientCount} recipients selected (${quotaLimitedRecipients.length} will receive this email)`
+                : `${recipientCount} recipients selected`}
+            </DialogTitle>
+            <DialogDescription>
+              Review the selected members and remove anyone who should not receive this email.
+            </DialogDescription>
+          </DialogHeader>
+
+          {recipientCount === 0 ? (
+            <p className="text-sm text-muted-foreground">No recipients selected.</p>
+          ) : shouldShowLimitWarning ? (
+            <div className="space-y-5">
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold text-foreground">Will receive this email</h3>
+                {renderRecipientPreviewRows(
+                  quotaLimitedRecipients,
+                  'No recipients will receive this email with the current quota.',
+                )}
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Will not receive this email (quota exceeded)
+                </h3>
+                {renderRecipientPreviewRows(
+                  quotaExceededRecipients,
+                  'No recipients are over the quota.',
+                )}
+              </section>
+            </div>
+          ) : (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-foreground">Recipients</h3>
+              {renderRecipientPreviewRows(canonicalLiveRecipients, 'No recipients selected.')}
+            </section>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
