@@ -445,6 +445,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   const renderRecipientPreviewRows = (
     recipients: EmailRecipientWithId[],
     emptyMessage: string,
+    options: { readOnly?: boolean } = {},
   ) => (
     <div className="overflow-hidden rounded-xl border border-border">
       {recipients.length === 0 ? (
@@ -453,27 +454,31 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
         <div className="divide-y divide-border">
           {recipients.map((recipient) => (
             <div key={recipient.id} className="flex items-center gap-3 px-4 py-3">
-              <Checkbox
-                checked
-                aria-label={`Remove ${recipient.name} from recipients`}
-                onCheckedChange={(checked) => {
-                  if (checked !== true) {
-                    handleDeselectRecipient(recipient.id)
-                  }
-                }}
-              />
+              {options.readOnly ? null : (
+                <Checkbox
+                  checked
+                  aria-label={`Remove ${recipient.name} from recipients`}
+                  onCheckedChange={(checked) => {
+                    if (checked !== true) {
+                      handleDeselectRecipient(recipient.id)
+                    }
+                  }}
+                />
+              )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-foreground">{recipient.name}</p>
                 <p className="truncate text-xs text-muted-foreground">{recipient.email}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => handleDeselectRecipient(recipient.id)}
-                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                aria-label={`Remove ${recipient.name}`}
-              >
-                <X className="h-4 w-4" />
-              </button>
+              {options.readOnly ? null : (
+                <button
+                  type="button"
+                  onClick={() => handleDeselectRecipient(recipient.id)}
+                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  aria-label={`Remove ${recipient.name}`}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -1118,6 +1123,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
                 {renderRecipientPreviewRows(
                   quotaExceededRecipients,
                   'No recipients are over the quota.',
+                  { readOnly: true },
                 )}
               </section>
             </div>

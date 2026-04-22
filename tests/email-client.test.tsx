@@ -112,12 +112,14 @@ vi.mock('@/components/ui/checkbox', () => ({
     id,
     disabled,
     className,
+    'aria-label': ariaLabel,
   }: {
     checked?: boolean
     onCheckedChange?: (checked: boolean) => void
     id?: string
     disabled?: boolean
     className?: string
+    'aria-label'?: string
   }) => (
     <input
       id={id}
@@ -125,6 +127,7 @@ vi.mock('@/components/ui/checkbox', () => ({
       checked={checked === true}
       disabled={disabled}
       className={className}
+      aria-label={ariaLabel}
       onChange={(event) => onCheckedChange?.(event.currentTarget.checked)}
     />
   ),
@@ -640,6 +643,20 @@ describe('EmailClient', () => {
     expect(dialogText).toContain('Maya Zebra')
     expect(dialogText.indexOf('Chris Adams')).toBeLessThan(dialogText.indexOf('Avery Brown'))
     expect(dialogText.indexOf('Avery Brown')).toBeLessThan(dialogText.indexOf('Maya Zebra'))
+    expect(dialog?.querySelector('button[aria-label="Remove Chris Adams"]')).toBeInstanceOf(
+      HTMLButtonElement,
+    )
+    expect(dialog?.querySelector('input[aria-label="Remove Chris Adams from recipients"]')).toBeInstanceOf(
+      HTMLInputElement,
+    )
+    expect(dialog?.querySelector('button[aria-label="Remove Avery Brown"]')).toBeInstanceOf(
+      HTMLButtonElement,
+    )
+    expect(dialog?.querySelector('input[aria-label="Remove Avery Brown from recipients"]')).toBeInstanceOf(
+      HTMLInputElement,
+    )
+    expect(dialog?.querySelector('button[aria-label="Remove Maya Zebra"]')).toBeNull()
+    expect(dialog?.querySelector('input[aria-label="Remove Maya Zebra from recipients"]')).toBeNull()
   })
 
   it('deselects recipients from the preview and sends the same sorted filtered list', async () => {
