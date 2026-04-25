@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { readClasses } from '@/lib/classes-server'
 import { requireAuthenticatedUser } from '@/lib/server-auth'
-import { readStaffProfile } from '@/lib/staff'
+import { hasStaffTitle, readStaffProfile } from '@/lib/staff'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 function createErrorResponse(error: string, status: number) {
@@ -30,7 +30,11 @@ export async function GET() {
       return createErrorResponse('Forbidden', 403)
     }
 
-    const classes = await readClasses(supabase)
+    const trainerProfileId =
+      profile.role === 'staff' && hasStaffTitle(profile.titles, 'Trainer') ? profile.id : undefined
+    const classes = trainerProfileId
+      ? await readClasses(supabase, trainerProfileId)
+      : await readClasses(supabase)
 
     return NextResponse.json({
       classes,

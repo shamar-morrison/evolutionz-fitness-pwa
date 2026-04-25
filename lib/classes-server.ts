@@ -420,11 +420,20 @@ async function hydrateClassAttendanceRows(
   })
 }
 
-export async function readClasses(supabase: ClassesAdminClient) {
-  const { data, error } = await supabase
-    .from('classes')
-    .select(CLASS_SELECT)
-    .order('name', { ascending: true })
+export async function readClasses(
+  supabase: ClassesAdminClient,
+  trainerProfileId?: string,
+) {
+  const selectClause = trainerProfileId
+    ? `${CLASS_SELECT}, class_trainers!inner(profile_id)`
+    : CLASS_SELECT
+  let query = supabase.from('classes').select(selectClause)
+
+  if (trainerProfileId) {
+    query = query.eq('class_trainers.profile_id', trainerProfileId)
+  }
+
+  const { data, error } = await query.order('name', { ascending: true })
 
   if (error) {
     throw new Error(`Failed to read classes: ${error.message}`)

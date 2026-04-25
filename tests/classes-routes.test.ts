@@ -1084,7 +1084,7 @@ describe('classes routes', () => {
     vi.clearAllMocks()
   })
 
-  it('returns the classes list for authenticated users', async () => {
+  it('returns the full classes list for front desk staff', async () => {
     mockAuthenticatedUser()
     getSupabaseAdminClientMock.mockReturnValue({})
     readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'staff', titles: ['Assistant'] }))
@@ -1095,7 +1095,47 @@ describe('classes routes', () => {
 
     expect(response.status).toBe(200)
     expect(body.classes).toHaveLength(1)
-    expect(readClassesMock).toHaveBeenCalled()
+    expect(readClassesMock).toHaveBeenCalledWith({})
+  })
+
+  it('filters the classes list to the authenticated trainer profile', async () => {
+    mockAuthenticatedUser({
+      id: '55555555-5555-4555-8555-555555555555',
+      email: 'trainer@evolutionzfitness.com',
+    })
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readStaffProfileMock.mockResolvedValue(
+      buildProfile({
+        id: '55555555-5555-4555-8555-555555555555',
+        role: 'staff',
+        titles: ['Trainer', 'Assistant'],
+      }),
+    )
+    readClassesMock.mockResolvedValue([buildClass()])
+
+    const response = await getClasses()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.classes).toHaveLength(1)
+    expect(readClassesMock).toHaveBeenCalledWith(
+      {},
+      '55555555-5555-4555-8555-555555555555',
+    )
+  })
+
+  it('returns the full classes list for admins even when they also have the trainer title', async () => {
+    mockAuthenticatedUser()
+    getSupabaseAdminClientMock.mockReturnValue({})
+    readStaffProfileMock.mockResolvedValue(buildProfile({ role: 'admin', titles: ['Owner', 'Trainer'] }))
+    readClassesMock.mockResolvedValue([buildClass()])
+
+    const response = await getClasses()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.classes).toHaveLength(1)
+    expect(readClassesMock).toHaveBeenCalledWith({})
   })
 
   it('logs class-loading failures and returns a generic 500 response', async () => {
