@@ -112,6 +112,22 @@ function normalizeText(value: string | null | undefined) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+async function readMemberHasRecordedPayment(
+  supabase: MembersReadClient,
+  memberId: string,
+) {
+  const { count, error } = await supabase
+    .from('member_payments')
+    .select('id', { count: 'exact', head: true })
+    .eq('member_id', memberId)
+
+  if (error) {
+    throw new Error(`Failed to read member payments for ${memberId}: ${error.message}`)
+  }
+
+  return (count ?? 0) > 0
+}
+
 async function deleteUserFromDevice(
   employeeNo: string,
   supabase: AccessControlJobsClient,
@@ -158,15 +174,17 @@ export async function GET(
       )
     }
 
-    const [member, activePause] = await Promise.all([
+    const [member, activePause, hasRecordedPayment] = await Promise.all([
       hydrateMemberPhotoUrl(supabase, memberRecord),
       readActiveMemberPause(supabase, id),
+      readMemberHasRecordedPayment(supabase, id),
     ])
 
     return NextResponse.json({
       ok: true,
       member: {
         ...member,
+        hasRecordedPayment,
         activePause,
       },
     })

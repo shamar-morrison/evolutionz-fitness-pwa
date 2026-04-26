@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act } from 'react'
+import { act, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -118,6 +118,32 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogFooter: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
   DialogHeader: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
   DialogTitle: ({ children }: React.ComponentProps<'h2'>) => <h2>{children}</h2>,
+}))
+
+vi.mock('@/components/ui/alert-dialog', () => ({
+  AlertDialog: ({
+    children,
+    open,
+  }: {
+    children: React.ReactNode
+    open: boolean
+  }) => (open ? <div>{children}</div> : null),
+  AlertDialogAction: ({
+    children,
+  }: React.ComponentProps<'button'> & { children: React.ReactNode }) => <>{children}</>,
+  AlertDialogContent: ({
+    children,
+    className,
+    isLoading = false,
+  }: React.ComponentProps<'div'> & { isLoading?: boolean }) => (
+    <div className={className} data-is-loading={isLoading ? 'true' : 'false'}>
+      {children}
+    </div>
+  ),
+  AlertDialogDescription: ({ children }: React.ComponentProps<'p'>) => <p>{children}</p>,
+  AlertDialogFooter: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  AlertDialogHeader: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+  AlertDialogTitle: ({ children }: React.ComponentProps<'h2'>) => <h2>{children}</h2>,
 }))
 
 vi.mock('@/components/ui/file-upload', () => ({
@@ -434,6 +460,20 @@ function mockPermissions(role: 'admin' | 'staff' = 'admin') {
   })
 }
 
+function ControlledAddMemberModal() {
+  const [open, setOpen] = useState(true)
+
+  return (
+    <AddMemberModal
+      open={open}
+      onOpenChange={(nextOpen) => {
+        onOpenChangeMock(nextOpen)
+        setOpen(nextOpen)
+      }}
+    />
+  )
+}
+
 describe('AddMemberModal', () => {
   let container: HTMLDivElement
   let root: Root
@@ -489,7 +529,7 @@ describe('AddMemberModal', () => {
     mockPermissions('staff')
 
     await act(async () => {
-      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+      root.render(<ControlledAddMemberModal />)
     })
     await flushAsyncWork()
 
@@ -537,10 +577,18 @@ describe('AddMemberModal', () => {
     expect(addMemberMock).not.toHaveBeenCalled()
     expect(uploadMemberPhotoMock).not.toHaveBeenCalled()
     expect(uploadMemberApprovalRequestPhotoMock).not.toHaveBeenCalled()
-    expect(toastMock).toHaveBeenCalledWith({
-      title: 'Request submitted',
-      description: 'Jane Doe was submitted for admin approval.',
-    })
+    expect(onOpenChangeMock).toHaveBeenCalledWith(false)
+    expect(container.textContent).toContain('Member request submitted')
+    expect(container.textContent).toContain(
+      'Remember to record payment once the request is approved.',
+    )
+    expect(container.textContent).toContain('Got it')
+    expect(container.textContent).not.toContain('Step 3 of 3')
+    expect(toastMock).not.toHaveBeenCalled()
+
+    await clickButton(container, 'Got it')
+
+    expect(container.textContent).not.toContain('Member request submitted')
   })
 
   it('creates a member directly for admins, uploads the member photo, and refreshes member data', async () => {

@@ -37,6 +37,8 @@ function createMembersAdminClient({
   activePauseError = null,
   pendingPauseResumeRows = [],
   pendingPauseResumeError = null,
+  paymentCount = 0,
+  paymentCountError = null,
   cardRows = [],
   cardsError = null,
   publicUrl = 'https://public.example.com/member-photos/member-2.jpg',
@@ -49,6 +51,8 @@ function createMembersAdminClient({
   activePauseError?: { message: string } | null
   pendingPauseResumeRows?: Array<Record<string, unknown>>
   pendingPauseResumeError?: { message: string } | null
+  paymentCount?: number | null
+  paymentCountError?: { message: string } | null
   cardRows?: Array<Record<string, unknown>>
   cardsError?: { message: string } | null
   publicUrl?: string
@@ -143,6 +147,27 @@ function createMembersAdminClient({
             }
 
             return query
+          },
+        }
+      }
+
+      if (table === 'member_payments') {
+        return {
+          select(columns: string, options: { count: 'exact'; head: true }) {
+            expect(columns).toBe('id')
+            expect(options).toEqual({ count: 'exact', head: true })
+
+            return {
+              eq(column: string, value: string) {
+                expect(column).toBe('member_id')
+                expect(value).toBeDefined()
+
+                return Promise.resolve({
+                  count: paymentCount,
+                  error: paymentCountError,
+                })
+              },
+            }
           },
         }
       }
@@ -296,8 +321,47 @@ describe('members API routes', () => {
         photoUrl: null,
         beginTime: '2026-03-01T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
+        hasRecordedPayment: false,
         activePause: null,
       },
+    })
+  })
+
+  it('returns hasRecordedPayment as true when the member has recorded payments', async () => {
+    getSupabaseAdminClientMock.mockReturnValue(
+      createMembersAdminClient({
+        detailRow: {
+          id: 'member-2',
+          employee_no: '000777',
+          name: 'A1 Marcus Brown',
+          card_no: '0102857149',
+          type: 'Student/BPO',
+          status: 'Active',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: 'Requires weekend access',
+          photo_url: null,
+          begin_time: '2026-03-01T00:00:00Z',
+          end_time: '2026-07-15T23:59:59Z',
+          created_at: '2026-03-01T10:00:00Z',
+          updated_at: '2026-03-01T10:00:00Z',
+        },
+        paymentCount: 1,
+        cardRows: [{ card_no: '0102857149', card_code: 'A1', status: 'assigned', lost_at: null }],
+      }),
+    )
+
+    const response = await getMember(new Request('http://localhost/api/members/member-2'), {
+      params: Promise.resolve({ id: 'member-2' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      member: expect.objectContaining({
+        hasRecordedPayment: true,
+      }),
     })
   })
 
@@ -352,6 +416,7 @@ describe('members API routes', () => {
         photoUrl: 'https://public.example.com/member-photos/member-2.jpg',
         beginTime: '2026-03-01T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
+        hasRecordedPayment: false,
         activePause: null,
       },
     })
@@ -432,6 +497,7 @@ describe('members API routes', () => {
         photoUrl: 'https://public.example.com/member-photos/member-2.jpg',
         beginTime: '2026-03-01T00:00:00.000Z',
         endTime: '2026-07-15T23:59:59.000Z',
+        hasRecordedPayment: false,
         activePause: null,
       },
     })

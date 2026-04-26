@@ -274,6 +274,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     joinedAt: overrides.joinedAt ?? null,
     beginTime: overrides.beginTime ?? '2026-01-01',
     endTime: overrides.endTime ?? '2026-12-31',
+    hasRecordedPayment: overrides.hasRecordedPayment,
   }
 }
 
@@ -458,6 +459,84 @@ describe('Member detail page tabs', () => {
     expect(container.textContent).toContain('Record Payment')
     expect(container.textContent).not.toContain('Membership Type')
     expect(container.textContent).not.toContain('Payments')
+  })
+
+  it('shows the no-payment reminder banner for payment-capable staff when no payment is recorded', async () => {
+    currentRoleState.role = 'staff'
+    currentProfileState.profile = {
+      id: 'assistant-1',
+      name: 'Avery Assistant',
+      role: 'staff',
+      titles: ['Administrative Assistant'],
+    }
+    useMemberMock.mockReturnValue({
+      member: createMember({ hasRecordedPayment: false }),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    expect(container.textContent).toContain('No payment has been recorded for this member.')
+    expect(container.textContent).toContain('Use the Record Payment button to add one.')
+  })
+
+  it('hides the no-payment reminder banner after a payment is recorded', async () => {
+    currentRoleState.role = 'staff'
+    currentProfileState.profile = {
+      id: 'assistant-1',
+      name: 'Avery Assistant',
+      role: 'staff',
+      titles: ['Administrative Assistant'],
+    }
+    useMemberMock.mockReturnValue({
+      member: createMember({ hasRecordedPayment: true }),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    expect(container.textContent).not.toContain('No payment has been recorded for this member.')
+  })
+
+  it('does not show the no-payment reminder banner to admins', async () => {
+    useMemberMock.mockReturnValue({
+      member: createMember({ hasRecordedPayment: false }),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    expect(container.textContent).not.toContain('No payment has been recorded for this member.')
+  })
+
+  it('does not show the no-payment reminder banner to staff without payment access', async () => {
+    currentRoleState.role = 'staff'
+    currentProfileState.profile = {
+      id: 'trainer-1',
+      name: 'Jordan Trainer',
+      role: 'staff',
+      titles: ['Trainer'],
+    }
+    useMemberMock.mockReturnValue({
+      member: createMember({ hasRecordedPayment: false }),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    expect(container.textContent).not.toContain('No payment has been recorded for this member.')
   })
 
   it('uses permissions instead of auth role alone for migrated member detail controls', async () => {

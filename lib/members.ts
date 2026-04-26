@@ -30,6 +30,7 @@ const memberSchema = z.object({
   joinedAt: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().default(null),
   beginTime: z.string().trim().min(1).nullable(),
   endTime: z.string().trim().min(1).nullable(),
+  hasRecordedPayment: z.boolean().optional(),
   activePause: z
     .object({
       id: z.string().trim().min(1),

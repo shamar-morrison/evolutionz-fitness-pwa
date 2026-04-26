@@ -19,6 +19,7 @@ import { ExtendMembershipDialog } from '@/components/extend-membership-dialog'
 import { PauseMembershipDialog } from '@/components/pause-membership-dialog'
 import { RecordMemberPaymentDialog } from '@/components/record-member-payment-dialog'
 import { RoleGuard } from '@/components/role-guard'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -62,6 +63,7 @@ import {
   BanknoteIcon,
   CalendarDays,
   X,
+  AlertCircle,
 } from 'lucide-react'
 
 function resolveReturnToPath(
@@ -427,6 +429,10 @@ export default function MemberDetailPage() {
   const showRecordPaymentAction = can('members.recordPayment')
   const showPtAttendance = canViewAllPtSchedules || isFrontDesk
   const showPaymentsTab = role === 'admin'
+  const showPaymentReminderBanner =
+    role !== 'admin' &&
+    showRecordPaymentAction &&
+    member.hasRecordedPayment === false
   const cardActionState = getMemberCardActionState({
     cardNo: member.cardNo,
     cardStatus: member.cardStatus,
@@ -455,6 +461,15 @@ export default function MemberDetailPage() {
         </Button>
         <h1 className="text-3xl font-bold tracking-tight">Member Details</h1>
       </div>
+
+      {showPaymentReminderBanner ? (
+        <Alert variant="warning">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            No payment has been recorded for this member. Use the Record Payment button to add one.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="relative lg:col-span-1">

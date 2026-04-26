@@ -12,7 +12,20 @@ import {
 } from '@/components/member-form-fields'
 import { AddAccessCardModal } from '@/components/add-access-card-modal'
 import { DialogStepForm, type DialogStep } from '@/components/dialog-step-form'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+} from '@/components/ui/dialog'
 import { useAvailableCards } from '@/hooks/use-available-cards'
 import { useMemberTypes } from '@/hooks/use-member-types'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -71,6 +84,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
   const [photoFile, setPhotoFile] = useState<FileWithPreview | null>(null)
   const [isStartDatePickerOpen, setIsStartDatePickerOpen] = useState(false)
   const [isAddAccessCardModalOpen, setIsAddAccessCardModalOpen] = useState(false)
+  const [showSubmissionReminder, setShowSubmissionReminder] = useState(false)
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const {
     cards: availableCards,
@@ -374,10 +388,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
         queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.pending }),
       ])
       onSuccess?.()
-      toast({
-        title: 'Request submitted',
-        description: `${createdRequest.name} was submitted for admin approval.`,
-      })
+      setShowSubmissionReminder(true)
     } catch (error) {
       console.error('Failed to submit member request:', error)
       toast({
@@ -635,6 +646,31 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           }))
         }}
       />
+
+      <AlertDialog
+        open={showSubmissionReminder}
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) {
+            setShowSubmissionReminder(true)
+          }
+        }}
+      >
+        <AlertDialogContent className="sm:max-w-[420px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Member request submitted</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remember to record payment once the request is approved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction asChild>
+              <Button type="button" onClick={() => setShowSubmissionReminder(false)}>
+                Got it
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

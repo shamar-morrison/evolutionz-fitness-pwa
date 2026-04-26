@@ -293,6 +293,7 @@ export type Member = {
   joinedAt: string | null
   beginTime: string | null // ISO date string
   endTime: string | null // ISO date string
+  hasRecordedPayment?: boolean
   activePause?: MemberActivePause | null
 }
 
