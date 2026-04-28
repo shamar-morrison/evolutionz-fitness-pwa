@@ -1,15 +1,15 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, WandSparkles } from 'lucide-react'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { PtSessionDialog } from '@/components/pt-session-dialog'
 import { RoleGuard } from '@/components/role-guard'
-import { SearchableSelect } from '@/components/searchable-select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,7 @@ import { usePtAssignments, usePtSessions } from '@/hooks/use-pt-scheduling'
 import { useStaff } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
 import {
+  fetchPtSessions,
   formatPtSessionStatusLabel,
   formatScheduleSummary,
   generatePtAssignmentSessions,
@@ -42,7 +43,9 @@ import {
   getPtSessionStatusBadgeClassName,
   MAX_PT_SESSIONS_PER_WEEK,
   parseMonthValue,
+  type GeneratePtSessionsResult,
   SESSION_STATUSES,
+  type TrainerClient,
   type PtSessionFilterStatus,
   type SessionStatus,
 } from '@/lib/pt-scheduling'
@@ -56,6 +59,25 @@ const scheduleCalendarStatusBadgeClassNames: Partial<Record<SessionStatus, strin
   cancelled: 'bg-amber-500/15 text-amber-700 hover:bg-amber-500/25',
   rescheduled: 'bg-orange-500/15 text-orange-700 hover:bg-orange-500/25',
 }
+
+type PendingGenerateOverride = {
+  month: number
+  year: number
+  warnings: Array<{
+    assignmentId: string
+    warning: Extract<GeneratePtSessionsResult, { ok: false }>
+  }>
+  generatedAssignments: number
+  skippedAssignments: number
+}
+
+type BulkGenerationSummary = {
+  generatedAssignments: number
+  skippedAssignments: number
+  unconfirmedOverrideAssignments: number
+}
+
+const EMPTY_ACTIVE_ASSIGNMENTS: TrainerClient[] = []
 
 function formatPtSessionTime(value: string) {
   return new Intl.DateTimeFormat('en-JM', {
@@ -151,23 +173,76 @@ function getScheduleCalendarStatusBadgeClassName(status: SessionStatus) {
   return scheduleCalendarStatusBadgeClassNames[status] ?? getPtSessionStatusBadgeClassName(status)
 }
 
+function formatGenerateAssignmentLabel(
+  assignment: Pick<TrainerClient, 'memberName' | 'trainerName'>,
+) {
+  return `${assignment.memberName ?? 'Member'} <-> ${assignment.trainerName ?? 'Trainer'}`
+}
+
+function getBulkGenerationToastTitle(summary: BulkGenerationSummary) {
+  return summary.generatedAssignments > 0 ? 'Sessions generated' : 'No sessions generated'
+}
+
+function getBulkGenerationToastDescription(summary: BulkGenerationSummary) {
+  if (summary.generatedAssignments === 0 && summary.skippedAssignments > 0 && summary.unconfirmedOverrideAssignments === 0) {
+    return 'No sessions were generated. Sessions already exist for the selected month for all selected assignments.'
+  }
+
+  const parts: string[] = []
+
+  if (summary.generatedAssignments > 0) {
+    parts.push(
+      `Sessions generated for ${summary.generatedAssignments} assignment${summary.generatedAssignments === 1 ? '' : 's'}.`,
+    )
+  } else {
+    parts.push('No sessions were generated.')
+  }
+
+  if (summary.skippedAssignments > 0) {
+    parts.push(`${summary.skippedAssignments} skipped — sessions already exist for the selected month.`)
+  }
+
+  if (summary.unconfirmedOverrideAssignments > 0) {
+    parts.push(
+      `${summary.unconfirmedOverrideAssignments} not generated — override was not confirmed.`,
+    )
+  }
+
+  return parts.join(' ')
+}
+
+function getPendingOverrideDescription(pendingOverride: PendingGenerateOverride) {
+  const weeks = Array.from(
+    new Set(
+      pendingOverride.warnings.flatMap((item) =>
+        item.warning.code === 'WEEK_LIMIT_EXCEEDED' ? item.warning.weeks : [],
+      ),
+    ),
+  ).sort()
+  const assignmentLabel = `${pendingOverride.warnings.length} assignment${
+    pendingOverride.warnings.length === 1 ? '' : 's'
+  }`
+
+  if (weeks.length > 0) {
+    return `${assignmentLabel} would exceed ${MAX_PT_SESSIONS_PER_WEEK} sessions in some weeks (${weeks.join(', ')}). Override and generate anyway?`
+  }
+
+  return `${assignmentLabel} ${pendingOverride.warnings.length === 1 ? 'requires' : 'require'} an override to continue generation. Override and generate anyway?`
+}
+
 function SchedulePageContent() {
   const queryClient = useQueryClient()
   const calendarHeaderScrollRef = useRef<HTMLDivElement | null>(null)
   const calendarBodyScrollRef = useRef<HTMLDivElement | null>(null)
   const scrollSyncSourceRef = useRef<'header' | 'body' | null>(null)
+  const overrideResolutionInFlightRef = useRef(false)
   const [monthValue, setMonthValue] = useState(() => getMonthValueInJamaica())
   const [trainerFilter, setTrainerFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<'all' | PtSessionFilterStatus>('active')
   const [showGenerateDialog, setShowGenerateDialog] = useState(false)
-  const [generateAssignmentId, setGenerateAssignmentId] = useState<string | null>(null)
+  const [selectedGenerateAssignmentIds, setSelectedGenerateAssignmentIds] = useState<string[]>([])
   const [generateMonthValue, setGenerateMonthValue] = useState(() => getMonthValueInJamaica())
-  const [pendingOverride, setPendingOverride] = useState<{
-    assignmentId: string
-    month: number
-    year: number
-    weeks: string[]
-  } | null>(null)
+  const [pendingOverride, setPendingOverride] = useState<PendingGenerateOverride | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const monthParts = parseMonthValue(monthValue)
@@ -181,10 +256,30 @@ function SchedulePageContent() {
   })
   const { staff } = useStaff()
   const activeAssignmentsQuery = usePtAssignments({ status: 'active' })
+  const activeAssignments = activeAssignmentsQuery.data ?? EMPTY_ACTIVE_ASSIGNMENTS
   const trainerOptions = useMemo(
     () => staff.filter((profile) => hasStaffTitle(profile.titles, 'Trainer')),
     [staff],
   )
+  const selectedGenerateAssignmentIdSet = useMemo(
+    () => new Set(selectedGenerateAssignmentIds),
+    [selectedGenerateAssignmentIds],
+  )
+  const selectedGenerateAssignments = useMemo(
+    () => activeAssignments.filter((assignment) => selectedGenerateAssignmentIdSet.has(assignment.id)),
+    [activeAssignments, selectedGenerateAssignmentIdSet],
+  )
+  const allGenerateAssignmentsSelected =
+    activeAssignments.length > 0 &&
+    selectedGenerateAssignments.length === activeAssignments.length
+  const generateSelectAllState: boolean | 'indeterminate' =
+    selectedGenerateAssignments.length === 0
+      ? false
+      : allGenerateAssignmentsSelected
+        ? true
+        : 'indeterminate'
+  const canGenerateSelectedAssignments =
+    Boolean(generateMonthParts) && selectedGenerateAssignments.length > 0 && !isGenerating
   const sessionsByDate = useMemo(() => {
     const groupedSessions = new Map<string, typeof sessions>()
 
@@ -200,6 +295,14 @@ function SchedulePageContent() {
 
     return groupedSessions
   }, [sessions])
+
+  useEffect(() => {
+    const availableAssignmentIds = new Set(activeAssignments.map((assignment) => assignment.id))
+
+    setSelectedGenerateAssignmentIds((current) =>
+      current.filter((assignmentId) => availableAssignmentIds.has(assignmentId)),
+    )
+  }, [activeAssignments])
 
   const syncCalendarScroll = (source: 'header' | 'body', scrollLeft: number) => {
     const target = source === 'header' ? calendarBodyScrollRef.current : calendarHeaderScrollRef.current
@@ -230,11 +333,53 @@ function SchedulePageContent() {
     syncCalendarScroll(source, scrollLeft)
   }
 
-  const handleGenerate = async (override = false) => {
-    if (!generateAssignmentId || !generateMonthParts) {
+  const resetGenerateSelection = () => {
+    setSelectedGenerateAssignmentIds([])
+  }
+
+  const handleGenerateDialogOpenChange = (open: boolean) => {
+    if (!open && isGenerating) {
+      return
+    }
+
+    setShowGenerateDialog(open)
+
+    if (!open) {
+      resetGenerateSelection()
+    }
+  }
+
+  const finalizeBulkGeneration = async (summary: BulkGenerationSummary) => {
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.ptScheduling.sessions({}),
+      exact: false,
+    })
+    setShowGenerateDialog(false)
+    resetGenerateSelection()
+    setPendingOverride(null)
+    toast({
+      title: getBulkGenerationToastTitle(summary),
+      description: getBulkGenerationToastDescription(summary),
+    })
+  }
+
+  const handleGenerateAssignmentToggle = (assignmentId: string) => {
+    setSelectedGenerateAssignmentIds((current) =>
+      current.includes(assignmentId)
+        ? current.filter((currentAssignmentId) => currentAssignmentId !== assignmentId)
+        : [...current, assignmentId],
+    )
+  }
+
+  const handleSelectAllGenerateAssignments = (checked: boolean) => {
+    setSelectedGenerateAssignmentIds(checked ? activeAssignments.map((assignment) => assignment.id) : [])
+  }
+
+  const handleGenerate = async () => {
+    if (selectedGenerateAssignments.length === 0 || !generateMonthParts) {
       toast({
-        title: 'Assignment required',
-        description: 'Choose an active assignment and month before generating sessions.',
+        title: 'Selection required',
+        description: 'Choose at least one active assignment and a month before generating sessions.',
         variant: 'destructive',
       })
       return
@@ -243,32 +388,60 @@ function SchedulePageContent() {
     setIsGenerating(true)
 
     try {
-      const result = await generatePtAssignmentSessions(generateAssignmentId, {
-        month: generateMonthParts.month,
-        year: generateMonthParts.year,
-        ...(override ? { override: true } : {}),
+      const monthSessions = await queryClient.fetchQuery({
+        queryKey: queryKeys.ptScheduling.sessions({ month: generateMonthValue }),
+        queryFn: () => fetchPtSessions({ month: generateMonthValue }),
       })
+      const existingAssignmentIds = new Set(
+        monthSessions.map((session) => session.assignmentId).filter((assignmentId) => Boolean(assignmentId)),
+      )
+      const warnings: PendingGenerateOverride['warnings'] = []
+      let generatedAssignments = 0
+      let skippedAssignments = 0
 
-      if (!result.ok) {
-        setPendingOverride({
-          assignmentId: generateAssignmentId,
+      for (const assignment of selectedGenerateAssignments) {
+        if (existingAssignmentIds.has(assignment.id)) {
+          skippedAssignments += 1
+          continue
+        }
+
+        const result = await generatePtAssignmentSessions(assignment.id, {
           month: generateMonthParts.month,
           year: generateMonthParts.year,
-          weeks: result.weeks,
+        })
+
+        if (!result.ok) {
+          warnings.push({
+            assignmentId: assignment.id,
+            warning: result,
+          })
+          continue
+        }
+
+        if (result.generated > 0) {
+          generatedAssignments += 1
+        } else {
+          skippedAssignments += 1
+        }
+      }
+
+      if (warnings.length > 0) {
+        setShowGenerateDialog(false)
+        resetGenerateSelection()
+        setPendingOverride({
+          month: generateMonthParts.month,
+          year: generateMonthParts.year,
+          warnings,
+          generatedAssignments,
+          skippedAssignments,
         })
         return
       }
 
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.ptScheduling.sessions({}),
-        exact: false,
-      })
-      setShowGenerateDialog(false)
-      setGenerateAssignmentId(null)
-      setPendingOverride(null)
-      toast({
-        title: 'Sessions generated',
-        description: `${result.generated} session${result.generated === 1 ? '' : 's'} generated and ${result.skipped} skipped.`,
+      await finalizeBulkGeneration({
+        generatedAssignments,
+        skippedAssignments,
+        unconfirmedOverrideAssignments: 0,
       })
     } catch (error) {
       toast({
@@ -277,6 +450,68 @@ function SchedulePageContent() {
         variant: 'destructive',
       })
     } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const resolvePendingOverride = async (action: 'confirm' | 'decline') => {
+    if (!pendingOverride || overrideResolutionInFlightRef.current) {
+      return
+    }
+
+    overrideResolutionInFlightRef.current = true
+    const currentPendingOverride = pendingOverride
+    setPendingOverride(null)
+    setIsGenerating(true)
+
+    try {
+      if (action === 'decline') {
+        await finalizeBulkGeneration({
+          generatedAssignments: currentPendingOverride.generatedAssignments,
+          skippedAssignments: currentPendingOverride.skippedAssignments,
+          unconfirmedOverrideAssignments: currentPendingOverride.warnings.length,
+        })
+        return
+      }
+
+      let generatedAssignments = currentPendingOverride.generatedAssignments
+      let skippedAssignments = currentPendingOverride.skippedAssignments
+
+      for (const item of currentPendingOverride.warnings) {
+        const result = await generatePtAssignmentSessions(item.assignmentId, {
+          month: currentPendingOverride.month,
+          year: currentPendingOverride.year,
+          override: true,
+        })
+
+        if (!result.ok) {
+          throw new Error('Failed to override PT session generation for one or more assignments.')
+        }
+
+        if (result.generated > 0) {
+          generatedAssignments += 1
+        } else {
+          skippedAssignments += 1
+        }
+      }
+
+      await finalizeBulkGeneration({
+        generatedAssignments,
+        skippedAssignments,
+        unconfirmedOverrideAssignments: 0,
+      })
+    } catch (error) {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.ptScheduling.sessions({}),
+        exact: false,
+      })
+      toast({
+        title: 'Generation failed',
+        description: error instanceof Error ? error.message : 'Failed to generate PT sessions.',
+        variant: 'destructive',
+      })
+    } finally {
+      overrideResolutionInFlightRef.current = false
       setIsGenerating(false)
     }
   }
@@ -480,34 +715,16 @@ function SchedulePageContent() {
         </Card>
       </div>
 
-      <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
+      <Dialog open={showGenerateDialog} onOpenChange={handleGenerateDialogOpenChange}>
         <DialogContent className="sm:max-w-[560px]" isLoading={isGenerating}>
           <DialogHeader>
             <DialogTitle>Generate Sessions</DialogTitle>
             <DialogDescription>
-              Create recurring PT sessions for an active assignment and month.
+              Create recurring PT sessions for one or more active assignments in the selected month.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5">
-            <div className="space-y-2">
-              <Label>Assignment</Label>
-              <SearchableSelect
-                value={generateAssignmentId}
-                onValueChange={setGenerateAssignmentId}
-                options={(activeAssignmentsQuery.data ?? []).map((assignment) => ({
-                  value: assignment.id,
-                  label: `${assignment.memberName ?? 'Member'} <-> ${assignment.trainerName ?? 'Trainer'}`,
-                  description: formatScheduleSummary(assignment.scheduledSessions, assignment.sessionsPerWeek),
-                  keywords: [assignment.memberName ?? '', assignment.trainerName ?? ''],
-                }))}
-                placeholder="Select an assignment"
-                searchPlaceholder="Search assignments..."
-                emptyMessage="No active assignments found."
-                disabled={activeAssignmentsQuery.isLoading || isGenerating}
-              />
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="generate-month">Month</Label>
               <Input
@@ -518,16 +735,125 @@ function SchedulePageContent() {
                 disabled={isGenerating}
               />
             </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label className="text-base">Assignments</Label>
+                  <p className="text-muted-foreground text-sm">
+                    {selectedGenerateAssignments.length} of {activeAssignments.length} selected
+                  </p>
+                </div>
+
+                <div
+                  className={`flex items-center gap-2 ${
+                    activeAssignments.length === 0 || isGenerating ? '' : 'cursor-pointer'
+                  }`}
+                  role="button"
+                  tabIndex={activeAssignments.length === 0 || isGenerating ? -1 : 0}
+                  onClick={() => {
+                    if (activeAssignments.length === 0 || isGenerating) {
+                      return
+                    }
+
+                    handleSelectAllGenerateAssignments(!allGenerateAssignmentsSelected)
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      activeAssignments.length === 0 ||
+                      isGenerating ||
+                      (event.key !== 'Enter' && event.key !== ' ')
+                    ) {
+                      return
+                    }
+
+                    event.preventDefault()
+                    handleSelectAllGenerateAssignments(!allGenerateAssignmentsSelected)
+                  }}
+                >
+                  <Checkbox
+                    id="generate-select-all"
+                    checked={generateSelectAllState}
+                    onCheckedChange={(checked) =>
+                      handleSelectAllGenerateAssignments(checked === true)
+                    }
+                    disabled={activeAssignments.length === 0 || isGenerating}
+                    aria-label="Select all assignments"
+                    onClick={(event) => event.stopPropagation()}
+                  />
+                  <Label htmlFor="generate-select-all" className="cursor-pointer">
+                    Select all
+                  </Label>
+                </div>
+              </div>
+
+              {activeAssignmentsQuery.isLoading ? (
+                <Skeleton className="h-[240px] w-full rounded-lg" />
+              ) : activeAssignments.length > 0 ? (
+                <div className="max-h-[320px] overflow-y-auto rounded-lg border">
+                  {activeAssignments.map((assignment) => {
+                    const isSelected = selectedGenerateAssignmentIdSet.has(assignment.id)
+
+                    return (
+                      <div
+                        key={assignment.id}
+                        data-testid={`generate-assignment-row-${assignment.id}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleGenerateAssignmentToggle(assignment.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            handleGenerateAssignmentToggle(assignment.id)
+                          }
+                        }}
+                        className={`flex items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0 ${
+                          isSelected ? 'bg-muted/40' : 'hover:bg-muted/20'
+                        } ${isGenerating ? 'pointer-events-none opacity-70' : 'cursor-pointer'}`}
+                      >
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => handleGenerateAssignmentToggle(assignment.id)}
+                          disabled={isGenerating}
+                          aria-label={`Select ${formatGenerateAssignmentLabel(assignment)}`}
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">
+                            {formatGenerateAssignmentLabel(assignment)}
+                          </p>
+                          <p className="text-muted-foreground text-sm">
+                            {formatScheduleSummary(
+                              assignment.scheduledSessions,
+                              assignment.sessionsPerWeek,
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-muted-foreground rounded-lg border border-dashed px-4 py-6 text-sm">
+                  No active assignments found.
+                </p>
+              )}
+            </div>
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setShowGenerateDialog(false)} disabled={isGenerating}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleGenerateDialogOpenChange(false)}
+              disabled={isGenerating}
+            >
               Cancel
             </Button>
             <Button
               type="button"
               onClick={() => void handleGenerate()}
-              disabled={isGenerating}
+              disabled={!canGenerateSelectedAssignments}
               loading={isGenerating}
             >
               {isGenerating ? 'Generating...' : 'Generate'}
@@ -539,20 +865,20 @@ function SchedulePageContent() {
       <ConfirmDialog
         open={Boolean(pendingOverride)}
         onOpenChange={(open) => {
-          if (!open) {
-            setPendingOverride(null)
+          if (!open && pendingOverride && !isGenerating) {
+            void resolvePendingOverride('decline')
           }
         }}
-        title="Override week limit?"
+        title="Override generation warnings?"
         description={
           pendingOverride
-            ? `Some weeks would exceed ${MAX_PT_SESSIONS_PER_WEEK} sessions (${pendingOverride.weeks.join(', ')}). Override and generate anyway?`
-            : `Some weeks would exceed ${MAX_PT_SESSIONS_PER_WEEK} sessions. Override and generate anyway?`
+            ? getPendingOverrideDescription(pendingOverride)
+            : 'Some selected assignments require an override to continue generation.'
         }
-        confirmLabel="Override"
+        confirmLabel="Generate remaining"
         cancelLabel="Cancel"
-        onConfirm={() => void handleGenerate(true)}
-        onCancel={() => setPendingOverride(null)}
+        onConfirm={() => void resolvePendingOverride('confirm')}
+        onCancel={() => void resolvePendingOverride('decline')}
         isLoading={isGenerating}
       />
 
