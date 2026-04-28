@@ -269,6 +269,7 @@ describe('POST /api/classes/registrations/[registrationId]/edit-requests', () =>
       },
     )
 
+    expect(notifyAdminsOfRequestMock).not.toHaveBeenCalled()
     expect(response.status).toBe(401)
     await expect(response.json()).resolves.toEqual({
       error: 'Unauthorized',
@@ -310,6 +311,7 @@ describe('POST /api/classes/registrations/[registrationId]/edit-requests', () =>
       },
     )
 
+    expect(notifyAdminsOfRequestMock).not.toHaveBeenCalled()
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toEqual({
       ok: false,
@@ -352,6 +354,7 @@ describe('POST /api/classes/registrations/[registrationId]/edit-requests', () =>
       },
     )
 
+    expect(notifyAdminsOfRequestMock).not.toHaveBeenCalled()
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toEqual({
       ok: false,

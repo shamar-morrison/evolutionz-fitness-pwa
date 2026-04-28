@@ -6,9 +6,6 @@ import {
   resetServerAuthMocks,
 } from '@/tests/support/server-auth'
 
-const MEMBER_JOIN_DATE_WARNING =
-  'Member was created successfully, but the join date could not be fully saved. Please verify the member details manually.'
-
 const {
   getSupabaseAdminClientMock,
   provisionMemberAccessMock,
@@ -45,7 +42,7 @@ vi.mock('@/lib/server-auth', async () => {
   }
 })
 
-import { POST } from '@/app/api/members/route'
+import { MEMBER_JOIN_DATE_WARNING, POST } from '@/app/api/members/route'
 
 const MEMBER_TYPE_ID_GENERAL = '11111111-1111-4111-8111-111111111111'
 

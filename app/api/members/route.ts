@@ -7,7 +7,7 @@ import { readMemberWithCardCode, readMembersWithCardCodes, type MembersReadClien
 import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
-const MEMBER_JOIN_DATE_WARNING =
+export const MEMBER_JOIN_DATE_WARNING =
   'Member was created successfully, but the join date could not be fully saved. Please verify the member details manually.'
 
 const createMemberSchema = provisionMemberAccessRequestSchema
