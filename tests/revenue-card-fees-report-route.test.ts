@@ -154,6 +154,7 @@ describe('GET /api/reports/revenue/card-fees', () => {
       payments: [
         {
           id: 'payment-1',
+          memberId: 'member-1',
           memberName: 'Member One',
           amount: 2500,
           paymentMethod: 'cash',
@@ -162,6 +163,7 @@ describe('GET /api/reports/revenue/card-fees', () => {
         },
         {
           id: 'payment-2',
+          memberId: 'member-2',
           memberName: 'Member Two',
           amount: 2500,
           paymentMethod: 'fygaro',

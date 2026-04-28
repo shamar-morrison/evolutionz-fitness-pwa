@@ -289,6 +289,7 @@ describe('GET /api/reports/revenue/membership', () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: 'payment-1',
+          memberId: 'member-1',
           memberName: 'Member One',
           memberTypeName: 'General',
           amount: 12000,
@@ -297,6 +298,7 @@ describe('GET /api/reports/revenue/membership', () => {
         }),
         expect.objectContaining({
           id: 'payment-2',
+          memberId: 'member-2',
           memberName: 'Member Two',
           memberTypeName: 'Student/BPO',
           amount: 9000,

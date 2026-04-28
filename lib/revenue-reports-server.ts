@@ -292,6 +292,7 @@ export async function readMembershipRevenueReport(
 
     return {
       id: payment.id,
+      memberId: normalizeText(payment.member_id),
       memberName,
       memberTypeName,
       amount,
@@ -385,6 +386,7 @@ export async function readCardFeeRevenueReport(
 
     return {
       id: payment.id,
+      memberId: normalizeText(payment.member_id),
       memberName,
       amount,
       paymentMethod: payment.payment_method,
@@ -479,6 +481,7 @@ export async function readPtRevenueReport(
 
     return {
       id: session.id,
+      memberId: normalizeText(session.member_id),
       memberName,
       trainerName,
       ptFee,

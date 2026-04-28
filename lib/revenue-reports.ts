@@ -23,6 +23,7 @@ const membershipRevenueReportSchema = z.object({
   payments: z.array(
     z.object({
       id: z.string().trim().min(1),
+      memberId: z.string().trim().min(1),
       memberName: z.string().trim().min(1),
       memberTypeName: z.string().trim().min(1),
       amount: z.number().finite(),
@@ -55,6 +56,7 @@ const cardFeeRevenueReportSchema = z.object({
   payments: z.array(
     z.object({
       id: z.string().trim().min(1),
+      memberId: z.string().trim().min(1),
       memberName: z.string().trim().min(1),
       amount: z.number().finite(),
       paymentMethod: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
@@ -79,6 +81,7 @@ const ptRevenueReportSchema = z.object({
   sessions: z.array(
     z.object({
       id: z.string().trim().min(1),
+      memberId: z.string().trim().min(1),
       memberName: z.string().trim().min(1),
       trainerName: z.string().trim().min(1),
       ptFee: z.number().finite(),

@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { usePathname, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
 import { BarChart3, Download, FileText } from 'lucide-react'
+import { useProgressRouter } from '@/hooks/use-progress-router'
 import {
   useCardFeeRevenueReport,
   useMembershipRevenueReport,
@@ -44,6 +46,16 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 type RevenueTab = 'membership' | 'card-fees' | 'pt' | 'overall'
+
+function buildReturnTo(pathname: string | null, searchParams: ReadonlyURLSearchParams | null) {
+  if (!pathname) {
+    return null
+  }
+
+  const query = searchParams?.toString() ?? ''
+
+  return query ? `${pathname}?${query}` : pathname
+}
 
 function getPdfCursorY(doc: { lastAutoTable?: { finalY: number } }, fallback: number) {
   return (doc.lastAutoTable?.finalY ?? fallback) + 20
@@ -660,12 +672,14 @@ function MembershipRevenueContent({
   error,
   appliedRange,
   onExport,
+  onMemberSelect,
 }: {
   report: MembershipRevenueReport | null
   isLoading: boolean
   error: Error | null
   appliedRange: DateRangeValue | null
   onExport: () => void
+  onMemberSelect: (memberId: string) => void
 }) {
   if (!appliedRange) {
     return <InitialReportState />
@@ -732,7 +746,11 @@ function MembershipRevenueContent({
               <TableBody>
                 {report.payments.length > 0 ? (
                   report.payments.map((payment) => (
-                    <TableRow key={payment.id}>
+                    <TableRow
+                      key={payment.id}
+                      onClick={() => onMemberSelect(payment.memberId)}
+                      className="cursor-pointer hover:bg-muted/20"
+                    >
                       <TableCell className="font-medium">{payment.memberName}</TableCell>
                       <TableCell>{payment.memberTypeName}</TableCell>
                       <TableCell className="text-right">{formatRevenueCurrency(payment.amount)}</TableCell>
@@ -821,12 +839,14 @@ function CardFeeRevenueContent({
   error,
   appliedRange,
   onExport,
+  onMemberSelect,
 }: {
   report: CardFeeRevenueReport | null
   isLoading: boolean
   error: Error | null
   appliedRange: DateRangeValue | null
   onExport: () => void
+  onMemberSelect: (memberId: string) => void
 }) {
   if (!appliedRange) {
     return <InitialReportState />
@@ -936,7 +956,11 @@ function CardFeeRevenueContent({
               <TableBody>
                 {report.payments.length > 0 ? (
                   report.payments.map((payment) => (
-                    <TableRow key={payment.id}>
+                    <TableRow
+                      key={payment.id}
+                      onClick={() => onMemberSelect(payment.memberId)}
+                      className="cursor-pointer hover:bg-muted/20"
+                    >
                       <TableCell className="font-medium">{payment.memberName}</TableCell>
                       <TableCell className="text-right">
                         {formatRevenueCurrency(payment.amount)}
@@ -968,12 +992,14 @@ function PtRevenueContent({
   error,
   appliedRange,
   onExport,
+  onMemberSelect,
 }: {
   report: PtRevenueReport | null
   isLoading: boolean
   error: Error | null
   appliedRange: DateRangeValue | null
   onExport: () => void
+  onMemberSelect: (memberId: string) => void
 }) {
   if (!appliedRange) {
     return <InitialReportState />
@@ -1038,7 +1064,11 @@ function PtRevenueContent({
               <TableBody>
                 {report.sessions.length > 0 ? (
                   report.sessions.map((session) => (
-                    <TableRow key={session.id}>
+                    <TableRow
+                      key={session.id}
+                      onClick={() => onMemberSelect(session.memberId)}
+                      className="cursor-pointer hover:bg-muted/20"
+                    >
                       <TableCell className="font-medium">{session.memberName}</TableCell>
                       <TableCell>{session.trainerName}</TableCell>
                       <TableCell className="text-right">{formatRevenueCurrency(session.ptFee)}</TableCell>
@@ -1191,6 +1221,9 @@ function OverallRevenueContent({
 }
 
 export function RevenueReportClient() {
+  const router = useProgressRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<RevenueTab>('membership')
   const [draftPeriod, setDraftPeriod] = useState<RevenuePeriod>('this-month')
   const [draftRange, setDraftRange] = useState<DateRangeValue>(() =>
@@ -1262,6 +1295,15 @@ export function RevenueReportClient() {
       from: draftRange.from,
       to: draftRange.to,
     })
+  }
+
+  const handleMemberSelect = (memberId: string) => {
+    const returnTo = buildReturnTo(pathname, searchParams)
+    const href = returnTo
+      ? `/members/${memberId}?returnTo=${encodeURIComponent(returnTo)}`
+      : `/members/${memberId}`
+
+    router.push(href)
   }
 
   const handleMembershipPdfDownload = async () => {
@@ -1448,6 +1490,7 @@ export function RevenueReportClient() {
             error={membershipReportQuery.error as Error | null}
             appliedRange={appliedRange}
             onExport={() => void handleMembershipPdfDownload()}
+            onMemberSelect={handleMemberSelect}
           />
         </TabsContent>
 
@@ -1458,6 +1501,7 @@ export function RevenueReportClient() {
             error={cardFeeReportQuery.error as Error | null}
             appliedRange={appliedRange}
             onExport={() => void handleCardFeePdfDownload()}
+            onMemberSelect={handleMemberSelect}
           />
         </TabsContent>
 
@@ -1468,6 +1512,7 @@ export function RevenueReportClient() {
             error={ptReportQuery.error as Error | null}
             appliedRange={appliedRange}
             onExport={() => void handlePtPdfDownload()}
+            onMemberSelect={handleMemberSelect}
           />
         </TabsContent>
 

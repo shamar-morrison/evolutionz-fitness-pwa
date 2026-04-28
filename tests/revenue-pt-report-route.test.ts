@@ -276,12 +276,14 @@ describe('GET /api/reports/revenue/pt', () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: 'session-1',
+          memberId: 'member-1',
           memberName: 'Member One',
           trainerName: 'Jordan Trainer',
           ptFee: 15000,
         }),
         expect.objectContaining({
           id: 'session-4',
+          memberId: 'member-3',
           memberName: 'Member Three',
           trainerName: 'Alex Coach',
           ptFee: 20000,
