@@ -11,12 +11,14 @@ const {
   markPtSessionMock,
   toastMock,
   useQueryMock,
+  useTrainerPtAssignmentsMock,
 } = vi.hoisted(() => ({
   createPtRescheduleRequestMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   markPtSessionMock: vi.fn(),
   toastMock: vi.fn(),
   useQueryMock: vi.fn(),
+  useTrainerPtAssignmentsMock: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -110,6 +112,10 @@ vi.mock('@/components/ui/tabs', () => ({
   TabsContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
   TabsList: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
   TabsTrigger: ({ children }: React.ComponentProps<'button'>) => <button type="button">{children}</button>,
+}))
+
+vi.mock('@/hooks/use-pt-scheduling', () => ({
+  useTrainerPtAssignments: useTrainerPtAssignmentsMock,
 }))
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -247,6 +253,11 @@ describe('Trainer schedule loading feedback', () => {
       isLoading: false,
       error: null,
     }))
+    useTrainerPtAssignmentsMock.mockReturnValue({
+      assignments: [],
+      isLoading: false,
+      error: null,
+    })
 
     createPtRescheduleRequestMock.mockResolvedValue({ id: 'request-1' })
     markPtSessionMock.mockResolvedValue({ ok: true, pending: true })

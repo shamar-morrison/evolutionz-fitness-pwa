@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -190,9 +191,24 @@ export function PtSessionDialog({ sessionId, open, onOpenChange }: PtSessionDial
         ) : detail && formData ? (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="rounded-md border p-4">
-              <p className="font-medium">{detail.session.memberName ?? 'Unknown member'}</p>
+              <p className="font-medium">
+                <Link
+                  data-progress
+                  href={`/members/${detail.session.memberId}`}
+                  className="transition-colors hover:text-primary hover:underline"
+                >
+                  {detail.session.memberName ?? 'Unknown member'}
+                </Link>
+              </p>
               <p className="text-muted-foreground text-sm">
-                Trainer: {detail.session.trainerName ?? 'Unknown trainer'}
+                Trainer:{' '}
+                <Link
+                  data-progress
+                  href={`/staff/${detail.session.trainerId}`}
+                  className="text-foreground transition-colors hover:text-primary hover:underline"
+                >
+                  {detail.session.trainerName ?? 'Unknown trainer'}
+                </Link>
               </p>
               <p className="text-muted-foreground mt-1 text-sm">
                 Currently scheduled for {formatPtSessionDateTime(detail.session.scheduledAt)}

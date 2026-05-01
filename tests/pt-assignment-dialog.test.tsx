@@ -267,6 +267,18 @@ async function flushAsyncWork() {
   })
 }
 
+async function submitForm(container: HTMLDivElement) {
+  await act(async () => {
+    const form = container.querySelector('form')
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('Assignment form not found.')
+    }
+
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  })
+}
+
 describe('PtAssignmentDialog', () => {
   let container: HTMLDivElement
   let root: Root
@@ -543,6 +555,26 @@ describe('PtAssignmentDialog', () => {
     ])
   })
 
+  it('exposes aria-pressed state on scheduled day toggles', async () => {
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="create"
+          memberId="22222222-2222-2222-2222-222222222222"
+          trainers={[createTrainer()]}
+        />,
+      )
+    })
+
+    expect(getButton(container, 'Monday').getAttribute('aria-pressed')).toBe('false')
+
+    await clickButton(container, 'Monday')
+
+    expect(getButton(container, 'Monday').getAttribute('aria-pressed')).toBe('true')
+  })
+
   it('blocks submission when a custom training type is selected but left empty', async () => {
     await act(async () => {
       root.render(
@@ -581,7 +613,15 @@ describe('PtAssignmentDialog', () => {
       setInputValue(mondayTrainingTypeSelect, '__custom__')
     })
 
-    await clickButton(container, 'Assign Trainer')
+    const customTrainingTypeInput = container.querySelector('input[aria-label="Monday custom training type"]')
+
+    if (!(customTrainingTypeInput instanceof HTMLInputElement)) {
+      throw new Error('Custom training type input not found.')
+    }
+
+    expect(getButton(container, 'Assign Trainer').disabled).toBe(true)
+
+    await submitForm(container)
     await flushAsyncWork()
 
     expect(createPtAssignmentMock).not.toHaveBeenCalled()
@@ -621,7 +661,9 @@ describe('PtAssignmentDialog', () => {
       setInputValue(getSessionTimeInput(container, 'Wednesday'), '')
     })
 
-    await clickButton(container, 'Assign Trainer')
+    expect(getButton(container, 'Assign Trainer').disabled).toBe(true)
+
+    await submitForm(container)
     await flushAsyncWork()
 
     expect(createPtAssignmentMock).not.toHaveBeenCalled()

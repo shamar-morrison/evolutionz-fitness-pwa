@@ -33,10 +33,17 @@ vi.mock('@/lib/staff', () => ({
   readStaffProfile: readStaffProfileMock,
 }))
 
-vi.mock('@/lib/pt-scheduling-server', () => ({
-  readTrainerClientById: readTrainerClientByIdMock,
-  readTrainerClientRowById: readTrainerClientRowByIdMock,
-}))
+vi.mock('@/lib/pt-scheduling-server', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/pt-scheduling-server')>(
+    '@/lib/pt-scheduling-server',
+  )
+
+  return {
+    ...actual,
+    readTrainerClientById: readTrainerClientByIdMock,
+    readTrainerClientRowById: readTrainerClientRowByIdMock,
+  }
+})
 
 import { POST } from '@/app/api/pt/assignments/route'
 import { GET, PATCH } from '@/app/api/pt/assignments/[id]/route'
@@ -246,16 +253,25 @@ function createPostClient(options: {
   }
 }
 
-function createPatchClient() {
+function createPatchClient(options: {
+  rpcErrors?: Partial<Record<string, string>>
+} = {}) {
   const assignmentUpdates: Array<Record<string, unknown>> = []
-  const deletedTrainingPlanAssignments: string[] = []
-  const insertedTrainingPlans: Array<Array<Record<string, unknown>>> = []
+  const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = []
 
   return {
     assignmentUpdates,
-    deletedTrainingPlanAssignments,
-    insertedTrainingPlans,
+    rpcCalls,
     client: {
+      rpc(fn: string, args: Record<string, unknown>) {
+        rpcCalls.push({ fn, args })
+        const rpcError = options.rpcErrors?.[fn]
+
+        return Promise.resolve({
+          data: rpcError ? null : 'assignment-1',
+          error: rpcError ? { message: rpcError } : null,
+        } satisfies QueryResult<string>)
+      },
       from(table: string) {
         if (table === 'trainer_clients') {
           return {
@@ -322,32 +338,6 @@ function createPatchClient() {
                   }
                 },
               }
-            },
-          }
-        }
-
-        if (table === 'training_plan_days') {
-          return {
-            delete() {
-              return {
-                eq(column: string, value: string) {
-                  expect(column).toBe('assignment_id')
-                  deletedTrainingPlanAssignments.push(value)
-
-                  return Promise.resolve({
-                    data: null,
-                    error: null,
-                  } satisfies QueryResult<null>)
-                },
-              }
-            },
-            insert(values: Array<Record<string, unknown>>) {
-              insertedTrainingPlans.push(values)
-
-              return Promise.resolve({
-                data: null,
-                error: null,
-              } satisfies QueryResult<null>)
             },
           }
         }
@@ -531,8 +521,7 @@ describe('PT assignment training plan routes', () => {
   })
 
   it('PATCH replaces the training plan rows when trainingPlan is provided', async () => {
-    const { client, assignmentUpdates, deletedTrainingPlanAssignments, insertedTrainingPlans } =
-      createPatchClient()
+    const { client, assignmentUpdates, rpcCalls } = createPatchClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
     readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow())
     readTrainerClientByIdMock.mockResolvedValue(
@@ -578,29 +567,149 @@ describe('PT assignment training plan routes', () => {
 
     expect(response.status).toBe(200)
     expect(payload.ok).toBe(true)
-    expect(assignmentUpdates[0]).toEqual({
-      updated_at: expect.any(String),
-      pt_fee: 15500,
+    expect(assignmentUpdates).toEqual([])
+    expect(rpcCalls).toEqual([
+      {
+        fn: 'update_pt_assignment_with_schedule',
+        args: {
+          p_assignment_id: 'assignment-1',
+          p_sessions_per_week: 3,
+          p_scheduled_days: ['Monday', 'Wednesday', 'Friday'],
+          p_schedule: [
+            {
+              day_of_week: 'Monday',
+              session_time: '07:00:00',
+              training_type_name: 'Legs',
+            },
+            {
+              day_of_week: 'Wednesday',
+              session_time: '07:00:00',
+              training_type_name: 'Chest',
+            },
+            {
+              day_of_week: 'Friday',
+              session_time: '07:00:00',
+              training_type_name: null,
+            },
+          ],
+          p_updates: {
+            ptFee: 15500,
+          },
+        },
+      },
+    ])
+    expect(payload.assignment).toEqual(
+      buildAssignment({
+        trainingPlan: [
+          {
+            day: 'Monday',
+            trainingTypeName: 'Legs',
+            isCustom: false,
+          },
+          {
+            day: 'Wednesday',
+            trainingTypeName: 'Chest',
+            isCustom: false,
+          },
+        ],
+      }),
+    )
+  })
+
+  it('PATCH keeps direct-only assignment edits on the trainer_clients update path', async () => {
+    const { client, assignmentUpdates, rpcCalls } = createPatchClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow())
+    readTrainerClientByIdMock.mockResolvedValue(buildAssignment())
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ptFee: 15500,
+          notes: ' Updated notes ',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.ok).toBe(true)
+    expect(assignmentUpdates).toEqual([
+      {
+        updated_at: expect.any(String),
+        pt_fee: 15500,
+        notes: 'Updated notes',
+      },
+    ])
+    expect(rpcCalls).toEqual([])
+  })
+
+  it('PATCH returns a single error when the atomic schedule update rpc fails', async () => {
+    const { client, assignmentUpdates, rpcCalls } = createPatchClient({
+      rpcErrors: {
+        update_pt_assignment_with_schedule: 'rpc failed',
+      },
     })
-    expect(deletedTrainingPlanAssignments).toEqual(['assignment-1'])
-    expect(insertedTrainingPlans[0]).toEqual([
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow())
+    readTrainerClientByIdMock.mockResolvedValue(buildAssignment())
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ptFee: 15500,
+          trainingPlan: [
+            {
+              day: 'Monday',
+              trainingTypeName: 'Legs',
+            },
+          ],
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(payload.error).toBe('Failed to update the PT assignment: rpc failed')
+    expect(assignmentUpdates).toEqual([])
+    expect(rpcCalls).toEqual([
       {
-        assignment_id: 'assignment-1',
-        day_of_week: 'Monday',
-        session_time: '07:00:00',
-        training_type_name: 'Legs',
-      },
-      {
-        assignment_id: 'assignment-1',
-        day_of_week: 'Wednesday',
-        session_time: '07:00:00',
-        training_type_name: 'Chest',
-      },
-      {
-        assignment_id: 'assignment-1',
-        day_of_week: 'Friday',
-        session_time: '07:00:00',
-        training_type_name: null,
+        fn: 'update_pt_assignment_with_schedule',
+        args: {
+          p_assignment_id: 'assignment-1',
+          p_sessions_per_week: 3,
+          p_scheduled_days: ['Monday', 'Wednesday', 'Friday'],
+          p_schedule: [
+            {
+              day_of_week: 'Monday',
+              session_time: '07:00:00',
+              training_type_name: 'Legs',
+            },
+            {
+              day_of_week: 'Wednesday',
+              session_time: '07:00:00',
+              training_type_name: null,
+            },
+            {
+              day_of_week: 'Friday',
+              session_time: '07:00:00',
+              training_type_name: null,
+            },
+          ],
+          p_updates: {
+            ptFee: 15500,
+          },
+        },
       },
     ])
   })

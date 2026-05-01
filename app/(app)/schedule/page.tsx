@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, WandSparkles } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Trash2, WandSparkles } from 'lucide-react'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { PtSessionDialog } from '@/components/pt-session-dialog'
 import { RoleGuard } from '@/components/role-guard'
@@ -31,7 +31,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { usePtAssignments, usePtSessions } from '@/hooks/use-pt-scheduling'
 import { useStaff } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
+import { config } from '@/lib/config'
 import {
+  deletePtSessions,
   fetchPtSessions,
   formatPtSessionStatusLabel,
   formatScheduleSummary,
@@ -46,6 +48,7 @@ import {
   type GeneratePtSessionsResult,
   SESSION_STATUSES,
   type TrainerClient,
+  type PtSession,
   type PtSessionFilterStatus,
   type SessionStatus,
 } from '@/lib/pt-scheduling'
@@ -78,6 +81,15 @@ type BulkGenerationSummary = {
 }
 
 const EMPTY_ACTIVE_ASSIGNMENTS: TrainerClient[] = []
+const EMPTY_REMOVE_MONTH_SESSIONS: PtSession[] = []
+
+type RemoveMonthAssignmentTarget = {
+  assignmentId: string
+  memberName?: string
+  trainerName?: string
+  sessions: PtSession[]
+  statusCounts: Partial<Record<SessionStatus, number>>
+}
 
 function formatPtSessionTime(value: string) {
   return new Intl.DateTimeFormat('en-JM', {
@@ -179,6 +191,42 @@ function formatGenerateAssignmentLabel(
   return `${assignment.memberName ?? 'Member'} <-> ${assignment.trainerName ?? 'Trainer'}`
 }
 
+function formatPtAssignmentLabel(
+  target: Pick<TrainerClient, 'memberName' | 'trainerName'> | Pick<PtSession, 'memberName' | 'trainerName'>,
+) {
+  return `${target.memberName ?? 'Member'} <-> ${target.trainerName ?? 'Trainer'}`
+}
+
+function formatRemoveStatusSummary(statusCounts: Partial<Record<SessionStatus, number>>) {
+  return SESSION_STATUSES.flatMap((status) => {
+    const count = statusCounts[status] ?? 0
+
+    if (count === 0) {
+      return []
+    }
+
+    return `${formatPtSessionStatusLabel(status)} ${count}`
+  }).join(' • ')
+}
+
+function getRemoveSessionsToastDescription(
+  summary: {
+    deletedAssignments: number
+    deletedSessions: number
+  },
+  monthLabel: string,
+) {
+  if (summary.deletedSessions === 0) {
+    return `No matching sessions remained to remove for ${monthLabel}.`
+  }
+
+  return `Removed ${summary.deletedSessions} session${
+    summary.deletedSessions === 1 ? '' : 's'
+  } across ${summary.deletedAssignments} assignment${
+    summary.deletedAssignments === 1 ? '' : 's'
+  } for ${monthLabel}.`
+}
+
 function getBulkGenerationToastTitle(summary: BulkGenerationSummary) {
   return summary.generatedAssignments > 0 ? 'Sessions generated' : 'No sessions generated'
 }
@@ -236,6 +284,7 @@ function SchedulePageContent() {
   const calendarBodyScrollRef = useRef<HTMLDivElement | null>(null)
   const scrollSyncSourceRef = useRef<'header' | 'body' | null>(null)
   const overrideResolutionInFlightRef = useRef(false)
+  const showDevRemovePtSessionsButton = config.features.showDevRemovePtSessionsButton
   const [monthValue, setMonthValue] = useState(() => getMonthValueInJamaica())
   const [trainerFilter, setTrainerFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<'all' | PtSessionFilterStatus>('active')
@@ -244,10 +293,22 @@ function SchedulePageContent() {
   const [generateMonthValue, setGenerateMonthValue] = useState(() => getMonthValueInJamaica())
   const [pendingOverride, setPendingOverride] = useState<PendingGenerateOverride | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [showRemoveDialog, setShowRemoveDialog] = useState(false)
+  const [showRemoveConfirmDialog, setShowRemoveConfirmDialog] = useState(false)
+  const [selectedRemoveAssignmentIds, setSelectedRemoveAssignmentIds] = useState<string[]>([])
+  const [removeMonthValue, setRemoveMonthValue] = useState(() => getMonthValueInJamaica())
+  const [removeMonthSessions, setRemoveMonthSessions] = useState<PtSession[]>(EMPTY_REMOVE_MONTH_SESSIONS)
+  const [removeMonthSessionsError, setRemoveMonthSessionsError] = useState<string | null>(null)
+  const [isLoadingRemoveMonthSessions, setIsLoadingRemoveMonthSessions] = useState(false)
+  const [isRemovingSessions, setIsRemovingSessions] = useState(false)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const monthParts = parseMonthValue(monthValue)
   const calendarMonthLabel = monthParts ? getMonthLabel(monthParts.month, monthParts.year) : monthValue
   const generateMonthParts = parseMonthValue(generateMonthValue)
+  const removeMonthParts = parseMonthValue(removeMonthValue)
+  const removeMonthLabel = removeMonthParts
+    ? getMonthLabel(removeMonthParts.month, removeMonthParts.year)
+    : removeMonthValue
   const calendarCells = useMemo(() => getCalendarCells(monthValue), [monthValue])
   const { sessions, isLoading, error } = usePtSessions({
     month: monthValue,
@@ -269,6 +330,10 @@ function SchedulePageContent() {
     () => activeAssignments.filter((assignment) => selectedGenerateAssignmentIdSet.has(assignment.id)),
     [activeAssignments, selectedGenerateAssignmentIdSet],
   )
+  const selectedRemoveAssignmentIdSet = useMemo(
+    () => new Set(selectedRemoveAssignmentIds),
+    [selectedRemoveAssignmentIds],
+  )
   const allGenerateAssignmentsSelected =
     activeAssignments.length > 0 &&
     selectedGenerateAssignments.length === activeAssignments.length
@@ -280,6 +345,56 @@ function SchedulePageContent() {
         : 'indeterminate'
   const canGenerateSelectedAssignments =
     Boolean(generateMonthParts) && selectedGenerateAssignments.length > 0 && !isGenerating
+  const removeMonthAssignmentTargets = useMemo(() => {
+    const groupedTargets = new Map<string, RemoveMonthAssignmentTarget>()
+
+    for (const session of removeMonthSessions) {
+      const existingTarget = groupedTargets.get(session.assignmentId)
+      const statusCounts = existingTarget?.statusCounts ?? {}
+
+      statusCounts[session.status] = (statusCounts[session.status] ?? 0) + 1
+
+      groupedTargets.set(session.assignmentId, {
+        assignmentId: session.assignmentId,
+        memberName: existingTarget?.memberName ?? session.memberName,
+        trainerName: existingTarget?.trainerName ?? session.trainerName,
+        sessions: [...(existingTarget?.sessions ?? []), session],
+        statusCounts,
+      })
+    }
+
+    return Array.from(groupedTargets.values()).sort((left, right) =>
+      formatPtAssignmentLabel(left).localeCompare(formatPtAssignmentLabel(right)),
+    )
+  }, [removeMonthSessions])
+  const selectedRemoveAssignmentTargets = useMemo(
+    () =>
+      removeMonthAssignmentTargets.filter((target) =>
+        selectedRemoveAssignmentIdSet.has(target.assignmentId),
+      ),
+    [removeMonthAssignmentTargets, selectedRemoveAssignmentIdSet],
+  )
+  const allRemoveAssignmentsSelected =
+    removeMonthAssignmentTargets.length > 0 &&
+    selectedRemoveAssignmentTargets.length === removeMonthAssignmentTargets.length
+  const removeSelectAllState: boolean | 'indeterminate' =
+    selectedRemoveAssignmentTargets.length === 0
+      ? false
+      : allRemoveAssignmentsSelected
+        ? true
+        : 'indeterminate'
+  const selectedRemoveSessionIds = useMemo(
+    () =>
+      selectedRemoveAssignmentTargets.flatMap((target) =>
+        target.sessions.map((session) => session.id),
+      ),
+    [selectedRemoveAssignmentTargets],
+  )
+  const canReviewRemoveAssignments =
+    Boolean(removeMonthParts) &&
+    selectedRemoveAssignmentTargets.length > 0 &&
+    !isLoadingRemoveMonthSessions &&
+    !isRemovingSessions
   const sessionsByDate = useMemo(() => {
     const groupedSessions = new Map<string, typeof sessions>()
 
@@ -303,6 +418,66 @@ function SchedulePageContent() {
       current.filter((assignmentId) => availableAssignmentIds.has(assignmentId)),
     )
   }, [activeAssignments])
+
+  useEffect(() => {
+    const availableAssignmentIds = new Set(
+      removeMonthAssignmentTargets.map((target) => target.assignmentId),
+    )
+
+    setSelectedRemoveAssignmentIds((current) =>
+      current.filter((assignmentId) => availableAssignmentIds.has(assignmentId)),
+    )
+  }, [removeMonthAssignmentTargets])
+
+  useEffect(() => {
+    if (!showRemoveDialog) {
+      return
+    }
+
+    if (!parseMonthValue(removeMonthValue)) {
+      setRemoveMonthSessions([])
+      setRemoveMonthSessionsError(null)
+      setIsLoadingRemoveMonthSessions(false)
+      return
+    }
+
+    let isCancelled = false
+
+    setIsLoadingRemoveMonthSessions(true)
+    setRemoveMonthSessionsError(null)
+
+    void queryClient
+      .fetchQuery({
+        queryKey: queryKeys.ptScheduling.sessions({ month: removeMonthValue }),
+        queryFn: () => fetchPtSessions({ month: removeMonthValue }),
+      })
+      .then((loadedSessions) => {
+        if (isCancelled) {
+          return
+        }
+
+        setRemoveMonthSessions(loadedSessions)
+      })
+      .catch((loadError) => {
+        if (isCancelled) {
+          return
+        }
+
+        setRemoveMonthSessions([])
+        setRemoveMonthSessionsError(
+          loadError instanceof Error ? loadError.message : 'Failed to load PT sessions.',
+        )
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsLoadingRemoveMonthSessions(false)
+        }
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [queryClient, removeMonthValue, showRemoveDialog])
 
   const syncCalendarScroll = (source: 'header' | 'body', scrollLeft: number) => {
     const target = source === 'header' ? calendarBodyScrollRef.current : calendarHeaderScrollRef.current
@@ -337,6 +512,10 @@ function SchedulePageContent() {
     setSelectedGenerateAssignmentIds([])
   }
 
+  const resetRemoveSelection = () => {
+    setSelectedRemoveAssignmentIds([])
+  }
+
   const handleGenerateDialogOpenChange = (open: boolean) => {
     if (!open && isGenerating) {
       return
@@ -346,6 +525,21 @@ function SchedulePageContent() {
 
     if (!open) {
       resetGenerateSelection()
+    }
+  }
+
+  const handleRemoveDialogOpenChange = (open: boolean) => {
+    if (!open && isRemovingSessions) {
+      return
+    }
+
+    setShowRemoveDialog(open)
+
+    if (!open) {
+      setShowRemoveConfirmDialog(false)
+      setRemoveMonthSessions([])
+      setRemoveMonthSessionsError(null)
+      resetRemoveSelection()
     }
   }
 
@@ -373,6 +567,20 @@ function SchedulePageContent() {
 
   const handleSelectAllGenerateAssignments = (checked: boolean) => {
     setSelectedGenerateAssignmentIds(checked ? activeAssignments.map((assignment) => assignment.id) : [])
+  }
+
+  const handleRemoveAssignmentToggle = (assignmentId: string) => {
+    setSelectedRemoveAssignmentIds((current) =>
+      current.includes(assignmentId)
+        ? current.filter((currentAssignmentId) => currentAssignmentId !== assignmentId)
+        : [...current, assignmentId],
+    )
+  }
+
+  const handleSelectAllRemoveAssignments = (checked: boolean) => {
+    setSelectedRemoveAssignmentIds(
+      checked ? removeMonthAssignmentTargets.map((target) => target.assignmentId) : [],
+    )
   }
 
   const handleGenerate = async () => {
@@ -516,6 +724,66 @@ function SchedulePageContent() {
     }
   }
 
+  const handleRemoveSessions = async () => {
+    if (selectedRemoveAssignmentTargets.length === 0 || !removeMonthParts) {
+      toast({
+        title: 'Selection required',
+        description: 'Choose at least one assignment and a month before removing sessions.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const sessionIdsToRemove = new Set(selectedRemoveSessionIds)
+
+    setIsRemovingSessions(true)
+
+    try {
+      const result = await deletePtSessions({
+        month: removeMonthValue,
+        assignmentIds: selectedRemoveAssignmentTargets.map((target) => target.assignmentId),
+      })
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.ptScheduling.sessions({}),
+          exact: false,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.pendingApprovalCounts.all,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.rescheduleRequests.all,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.sessionUpdateRequests.all,
+        }),
+      ])
+
+      if (selectedSessionId && sessionIdsToRemove.has(selectedSessionId)) {
+        setSelectedSessionId(null)
+      }
+
+      setShowRemoveConfirmDialog(false)
+      setShowRemoveDialog(false)
+      setRemoveMonthSessions([])
+      setRemoveMonthSessionsError(null)
+      resetRemoveSelection()
+      toast({
+        title: result.deletedSessions > 0 ? 'Sessions removed' : 'No sessions removed',
+        description: getRemoveSessionsToastDescription(result, removeMonthLabel),
+      })
+    } catch (removeError) {
+      toast({
+        title: 'Removal failed',
+        description: removeError instanceof Error ? removeError.message : 'Failed to remove PT sessions.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsRemovingSessions(false)
+    }
+  }
+
   return (
     <>
       <div className="space-y-6">
@@ -542,10 +810,27 @@ function SchedulePageContent() {
               </Button>
             </div>
 
-            <Button onClick={() => setShowGenerateDialog(true)}>
-              <WandSparkles className="h-4 w-4" />
-              Generate Sessions
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {showDevRemovePtSessionsButton ? (
+                <Button
+                  variant="outline"
+                  className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => {
+                    setRemoveMonthValue(monthValue)
+                    setShowRemoveConfirmDialog(false)
+                    setShowRemoveDialog(true)
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  DEV: Remove Sessions
+                </Button>
+              ) : null}
+
+              <Button onClick={() => setShowGenerateDialog(true)}>
+                <WandSparkles className="h-4 w-4" />
+                Generate Sessions
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -861,6 +1146,217 @@ function SchedulePageContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={showRemoveDialog} onOpenChange={handleRemoveDialogOpenChange}>
+        <DialogContent className="sm:max-w-[640px]" isLoading={isRemovingSessions}>
+          <DialogHeader>
+            <DialogTitle>DEV: Remove Sessions</DialogTitle>
+            <DialogDescription>
+              Permanently remove PT sessions for selected assignments in the chosen month.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="remove-month">Month</Label>
+              <Input
+                id="remove-month"
+                type="month"
+                value={removeMonthValue}
+                onChange={(event) => {
+                  setRemoveMonthValue(event.target.value)
+                  setShowRemoveConfirmDialog(false)
+                  resetRemoveSelection()
+                }}
+                disabled={isRemovingSessions}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <Label className="text-base">Assignments</Label>
+                  <p className="text-muted-foreground text-sm">
+                    {selectedRemoveAssignmentTargets.length} of {removeMonthAssignmentTargets.length} selected
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`flex items-center gap-2 ${
+                      removeMonthAssignmentTargets.length === 0 ||
+                      isLoadingRemoveMonthSessions ||
+                      isRemovingSessions
+                        ? ''
+                        : 'cursor-pointer'
+                    }`}
+                    role="button"
+                    tabIndex={
+                      removeMonthAssignmentTargets.length === 0 ||
+                      isLoadingRemoveMonthSessions ||
+                      isRemovingSessions
+                        ? -1
+                        : 0
+                    }
+                    onClick={() => {
+                      if (
+                        removeMonthAssignmentTargets.length === 0 ||
+                        isLoadingRemoveMonthSessions ||
+                        isRemovingSessions
+                      ) {
+                        return
+                      }
+
+                      handleSelectAllRemoveAssignments(!allRemoveAssignmentsSelected)
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        removeMonthAssignmentTargets.length === 0 ||
+                        isLoadingRemoveMonthSessions ||
+                        isRemovingSessions ||
+                        (event.key !== 'Enter' && event.key !== ' ')
+                      ) {
+                        return
+                      }
+
+                      event.preventDefault()
+                      handleSelectAllRemoveAssignments(!allRemoveAssignmentsSelected)
+                    }}
+                  >
+                    <Checkbox
+                      id="remove-select-all"
+                      checked={removeSelectAllState}
+                      onCheckedChange={(checked) =>
+                        handleSelectAllRemoveAssignments(checked === true)
+                      }
+                      disabled={
+                        removeMonthAssignmentTargets.length === 0 ||
+                        isLoadingRemoveMonthSessions ||
+                        isRemovingSessions
+                      }
+                      aria-label="Select all removable assignments"
+                      onClick={(event) => event.stopPropagation()}
+                    />
+                    <Label htmlFor="remove-select-all" className="cursor-pointer">
+                      Select all
+                    </Label>
+                  </div>
+
+                  {selectedRemoveAssignmentTargets.length > 0 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => resetRemoveSelection()}
+                      disabled={isLoadingRemoveMonthSessions || isRemovingSessions}
+                    >
+                      Clear
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+
+              {isLoadingRemoveMonthSessions ? (
+                <Skeleton className="h-[240px] w-full rounded-lg" />
+              ) : removeMonthSessionsError ? (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-6">
+                  <p className="text-destructive text-sm">{removeMonthSessionsError}</p>
+                </div>
+              ) : removeMonthAssignmentTargets.length > 0 ? (
+                <div className="max-h-[320px] overflow-y-auto rounded-lg border">
+                  {removeMonthAssignmentTargets.map((target) => {
+                    const isSelected = selectedRemoveAssignmentIdSet.has(target.assignmentId)
+
+                    return (
+                      <div
+                        key={target.assignmentId}
+                        data-testid={`remove-assignment-row-${target.assignmentId}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleRemoveAssignmentToggle(target.assignmentId)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            handleRemoveAssignmentToggle(target.assignmentId)
+                          }
+                        }}
+                        className={`flex items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0 ${
+                          isSelected ? 'bg-muted/40' : 'hover:bg-muted/20'
+                        } ${
+                          isLoadingRemoveMonthSessions || isRemovingSessions
+                            ? 'pointer-events-none opacity-70'
+                            : 'cursor-pointer'
+                        }`}
+                      >
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => handleRemoveAssignmentToggle(target.assignmentId)}
+                          disabled={isLoadingRemoveMonthSessions || isRemovingSessions}
+                          aria-label={`Remove ${formatPtAssignmentLabel(target)}`}
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">
+                            {formatPtAssignmentLabel(target)}
+                          </p>
+                          <p className="text-muted-foreground text-sm">
+                            {target.sessions.length} session{target.sessions.length === 1 ? '' : 's'} •{' '}
+                            {formatRemoveStatusSummary(target.statusCounts)}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-muted-foreground rounded-lg border border-dashed px-4 py-6 text-sm">
+                  No PT sessions found for {removeMonthLabel}.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleRemoveDialogOpenChange(false)}
+              disabled={isRemovingSessions}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => setShowRemoveConfirmDialog(true)}
+              disabled={!canReviewRemoveAssignments}
+            >
+              Review Removal
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={showRemoveConfirmDialog}
+        onOpenChange={(open) => {
+          if (!open && !isRemovingSessions) {
+            setShowRemoveConfirmDialog(false)
+          }
+        }}
+        title="Delete selected sessions?"
+        description={`This will permanently delete ${selectedRemoveSessionIds.length} session${
+          selectedRemoveSessionIds.length === 1 ? '' : 's'
+        } across ${selectedRemoveAssignmentTargets.length} assignment${
+          selectedRemoveAssignmentTargets.length === 1 ? '' : 's'
+        } for ${removeMonthLabel}.`}
+        confirmLabel="Delete sessions"
+        cancelLabel="Keep sessions"
+        onConfirm={() => void handleRemoveSessions()}
+        onCancel={() => setShowRemoveConfirmDialog(false)}
+        isLoading={isRemovingSessions}
+        variant="destructive"
+      />
 
       <ConfirmDialog
         open={Boolean(pendingOverride)}

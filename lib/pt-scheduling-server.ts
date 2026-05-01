@@ -2,6 +2,7 @@ import {
   getMemberPhotoPublicUrl,
   type MemberPhotoStorageClient,
 } from '@/lib/member-photo-storage'
+import { normalizeTimeInputValue } from '@/lib/member-access-time'
 import {
   type ApprovalRequestStatus,
   buildAssignmentSchedule,
@@ -48,6 +49,7 @@ const PT_SESSION_UPDATE_REQUEST_SELECT =
 
 type PtSchedulingAdminClient = MemberPhotoStorageClient & {
   from(table: string): any
+  rpc?: (fn: string, args?: Record<string, unknown>) => Promise<any>
 }
 
 type TrainerClientRow = {
@@ -166,6 +168,12 @@ type PtPaymentSessionRow = {
   status: PtSession['status']
 }
 
+type ReplacePtAssignmentScheduleEntry = {
+  dayOfWeek: string
+  sessionTime: string
+  trainingTypeName: string | null
+}
+
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -225,6 +233,112 @@ function buildLegacyScheduledSessions(row: TrainerClientRow): TrainerClient['sch
       sessionTime: legacySessionTime,
     })),
   )
+}
+
+export function normalizePtAssignmentScheduleRows(
+  schedule: Array<Pick<AssignmentScheduleDay, 'day' | 'sessionTime' | 'trainingTypeName'>>,
+): ReplacePtAssignmentScheduleEntry[] | null {
+  const normalizedSchedule = schedule.map((entry) => {
+    const sessionTime = normalizeTimeInputValue(entry.sessionTime)
+
+    if (!sessionTime) {
+      return null
+    }
+
+    return {
+      dayOfWeek: entry.day,
+      sessionTime,
+      trainingTypeName: entry.trainingTypeName,
+    } satisfies ReplacePtAssignmentScheduleEntry
+  })
+
+  if (normalizedSchedule.some((entry) => entry === null)) {
+    return null
+  }
+
+  return normalizedSchedule as ReplacePtAssignmentScheduleEntry[]
+}
+
+export async function replacePtAssignmentSchedule(
+  supabase: PtSchedulingAdminClient,
+  params: {
+    assignmentId: string
+    sessionsPerWeek: number
+    scheduledDays: TrainerClient['scheduledDays']
+    schedule: ReplacePtAssignmentScheduleEntry[]
+  },
+) {
+  if (!supabase.rpc) {
+    throw new Error('Failed to replace the PT assignment schedule: RPC client is unavailable.')
+  }
+
+  const { data, error } = await supabase.rpc('replace_pt_assignment_schedule', {
+    p_assignment_id: params.assignmentId,
+    p_sessions_per_week: params.sessionsPerWeek,
+    p_scheduled_days: params.scheduledDays,
+    p_schedule: params.schedule.map((entry) => ({
+      day_of_week: entry.dayOfWeek,
+      session_time: entry.sessionTime,
+      training_type_name: entry.trainingTypeName,
+    })),
+  })
+
+  if (error) {
+    throw new Error(`Failed to replace the PT assignment schedule: ${error.message}`)
+  }
+
+  return typeof data === 'string' ? data : null
+}
+
+export async function updatePtAssignmentWithSchedule(
+  supabase: PtSchedulingAdminClient,
+  params: {
+    assignmentId: string
+    sessionsPerWeek: number
+    scheduledDays: TrainerClient['scheduledDays']
+    schedule: ReplacePtAssignmentScheduleEntry[]
+    updates: {
+      status?: TrainerClientStatus
+      ptFee?: number
+      notes?: string | null
+    }
+  },
+) {
+  if (!supabase.rpc) {
+    throw new Error('Failed to update the PT assignment: RPC client is unavailable.')
+  }
+
+  const rpcUpdates: Record<string, string | number | null> = {}
+
+  if (typeof params.updates.status === 'string') {
+    rpcUpdates.status = params.updates.status
+  }
+
+  if (typeof params.updates.ptFee === 'number') {
+    rpcUpdates.ptFee = params.updates.ptFee
+  }
+
+  if ('notes' in params.updates) {
+    rpcUpdates.notes = params.updates.notes ?? null
+  }
+
+  const { data, error } = await supabase.rpc('update_pt_assignment_with_schedule', {
+    p_assignment_id: params.assignmentId,
+    p_sessions_per_week: params.sessionsPerWeek,
+    p_scheduled_days: params.scheduledDays,
+    p_schedule: params.schedule.map((entry) => ({
+      day_of_week: entry.dayOfWeek,
+      session_time: entry.sessionTime,
+      training_type_name: entry.trainingTypeName,
+    })),
+    p_updates: rpcUpdates,
+  })
+
+  if (error) {
+    throw new Error(`Failed to update the PT assignment: ${error.message}`)
+  }
+
+  return typeof data === 'string' ? data : null
 }
 
 function sortAssignments(assignments: TrainerClient[]) {

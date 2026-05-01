@@ -6,6 +6,11 @@ export const config = {
      */
     showSyncMembersButton: process.env.NODE_ENV === 'development',
     /**
+     * Whether to show dev-only PT session cleanup controls.
+     * Default: true in development, false in other environments.
+     */
+    showDevRemovePtSessionsButton: process.env.NODE_ENV === 'development',
+    /**
      * Whether to show the "Sync Cards" button for eligible users.
      * Default: true in all environments.
      */

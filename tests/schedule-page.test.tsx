@@ -5,6 +5,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  configFeatures,
+  deletePtSessionsMock,
   fetchPtSessionsMock,
   fetchQueryMock,
   generatePtAssignmentSessionsMock,
@@ -14,6 +16,10 @@ const {
   usePtSessionsMock,
   useStaffMock,
 } = vi.hoisted(() => ({
+  configFeatures: {
+    showDevRemovePtSessionsButton: true,
+  },
+  deletePtSessionsMock: vi.fn(),
   fetchPtSessionsMock: vi.fn(),
   fetchQueryMock: vi.fn(),
   generatePtAssignmentSessionsMock: vi.fn(),
@@ -25,11 +31,13 @@ const {
 }))
 
 vi.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({
-    fetchQuery: fetchQueryMock,
-    invalidateQueries: invalidateQueriesMock,
-  }),
+  useQueryClient: () => queryClientMock,
 }))
+
+const queryClientMock = {
+  fetchQuery: fetchQueryMock,
+  invalidateQueries: invalidateQueriesMock,
+}
 
 vi.mock('@/hooks/use-pt-scheduling', () => ({
   usePtAssignments: usePtAssignmentsMock,
@@ -44,11 +52,22 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
 }))
 
+vi.mock('@/lib/config', () => ({
+  config: {
+    features: {
+      get showDevRemovePtSessionsButton() {
+        return configFeatures.showDevRemovePtSessionsButton
+      },
+    },
+  },
+}))
+
 vi.mock('@/lib/pt-scheduling', async () => {
   const actual = await vi.importActual<typeof import('@/lib/pt-scheduling')>('@/lib/pt-scheduling')
 
   return {
     ...actual,
+    deletePtSessions: deletePtSessionsMock,
     fetchPtSessions: fetchPtSessionsMock,
     generatePtAssignmentSessions: generatePtAssignmentSessionsMock,
     getMonthValueInJamaica: () => '2026-04',
@@ -269,6 +288,16 @@ function getMonthInput(container: HTMLDivElement) {
   return input
 }
 
+function getMonthInputById(container: HTMLDivElement, id: string) {
+  const input = container.querySelector(`input#${id}`)
+
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error(`${id} month input not found.`)
+  }
+
+  return input
+}
+
 function getCheckbox(container: HTMLDivElement, label: string) {
   const input = Array.from(container.querySelectorAll('input[type="checkbox"]')).find(
     (candidate) => candidate.getAttribute('aria-label') === label,
@@ -319,7 +348,7 @@ function createSession(overrides: Partial<{
   trainerId: string
   memberId: string
   scheduledAt: string
-  status: 'scheduled' | 'cancelled' | 'rescheduled'
+  status: 'scheduled' | 'completed' | 'missed' | 'cancelled' | 'rescheduled'
   trainingTypeName: string | null
   trainerName: string
   memberName: string
@@ -362,6 +391,8 @@ describe('SchedulePage', () => {
       data: [createAssignment()],
       isLoading: false,
     })
+    configFeatures.showDevRemovePtSessionsButton = true
+    deletePtSessionsMock.mockReset()
     useStaffMock.mockReturnValue({
       staff: [],
     })
@@ -456,6 +487,236 @@ describe('SchedulePage', () => {
       queryKey: queryKeys.ptScheduling.sessions({}),
       exact: false,
     })
+  })
+
+  it('shows the dev remove sessions button only when the feature flag is enabled', async () => {
+    configFeatures.showDevRemovePtSessionsButton = false
+
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    expect(container.textContent).not.toContain('DEV: Remove Sessions')
+
+    configFeatures.showDevRemovePtSessionsButton = true
+
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    expect(container.textContent).toContain('DEV: Remove Sessions')
+  })
+
+  it('opens the remove dialog with the currently viewed month', async () => {
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    await clickButton(container, 'Next')
+    await clickButton(container, 'DEV: Remove Sessions')
+    await flushAsyncWork()
+
+    expect(getMonthInputById(container, 'remove-month').value).toBe('2026-05')
+    expect(fetchPtSessionsMock).toHaveBeenCalledWith({
+      month: '2026-05',
+    })
+  })
+
+  it('loads removable assignments from the selected month sessions instead of the active assignment list', async () => {
+    usePtAssignmentsMock.mockReturnValue({
+      data: [],
+      isLoading: false,
+    })
+    fetchPtSessionsMock.mockResolvedValue([
+      createSession({
+        id: 'session-1',
+        assignmentId: 'assignment-1',
+        memberName: 'Member One',
+        trainerName: 'Jordan Trainer',
+        status: 'scheduled',
+      }),
+      createSession({
+        id: 'session-2',
+        assignmentId: 'assignment-2',
+        memberId: 'member-2',
+        memberName: 'Member Two',
+        trainerId: 'trainer-2',
+        trainerName: 'Alex Coach',
+        status: 'completed',
+        scheduledAt: '2026-04-08T07:00:00-05:00',
+      }),
+    ])
+
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    await clickButton(container, 'DEV: Remove Sessions')
+    await flushAsyncWork()
+
+    expect(container.textContent).toContain('0 of 2 selected')
+    expect(container.textContent).toContain('Member One <-> Jordan Trainer')
+    expect(container.textContent).toContain('Member Two <-> Alex Coach')
+    expect(container.textContent).toContain('Scheduled 1')
+    expect(container.textContent).toContain('Completed 1')
+  })
+
+  it('toggles removable assignments from the select-all checkbox and individual rows', async () => {
+    fetchPtSessionsMock.mockResolvedValue([
+      createSession({
+        id: 'session-1',
+        assignmentId: 'assignment-1',
+        memberName: 'Member One',
+        trainerName: 'Jordan Trainer',
+      }),
+      createSession({
+        id: 'session-2',
+        assignmentId: 'assignment-2',
+        memberId: 'member-2',
+        memberName: 'Member Two',
+        trainerId: 'trainer-2',
+        trainerName: 'Alex Coach',
+        scheduledAt: '2026-04-08T07:00:00-05:00',
+      }),
+    ])
+
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    await clickButton(container, 'DEV: Remove Sessions')
+    await flushAsyncWork()
+
+    await clickCheckbox(container, 'Select all removable assignments')
+
+    expect(container.textContent).toContain('2 of 2 selected')
+    expect(getCheckbox(container, 'Remove Member One <-> Jordan Trainer').checked).toBe(true)
+    expect(getCheckbox(container, 'Remove Member Two <-> Alex Coach').checked).toBe(true)
+
+    await clickByTestId(container, 'remove-assignment-row-assignment-1')
+
+    expect(container.textContent).toContain('1 of 2 selected')
+    expect(getCheckbox(container, 'Remove Member One <-> Jordan Trainer').checked).toBe(false)
+    expect(getCheckbox(container, 'Remove Member Two <-> Alex Coach').checked).toBe(true)
+  })
+
+  it('confirms dev removal with the selected month and assignment ids', async () => {
+    fetchPtSessionsMock.mockResolvedValue([
+      createSession({
+        id: 'session-1',
+        assignmentId: 'assignment-1',
+        memberName: 'Member One',
+        trainerName: 'Jordan Trainer',
+      }),
+    ])
+    deletePtSessionsMock.mockResolvedValue({
+      ok: true,
+      deletedSessions: 1,
+      deletedAssignments: 1,
+    })
+
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    await clickButton(container, 'DEV: Remove Sessions')
+    await flushAsyncWork()
+    await clickByTestId(container, 'remove-assignment-row-assignment-1')
+    await clickButton(container, 'Review Removal')
+    await clickButton(container, 'Delete sessions')
+    await flushAsyncWork()
+
+    expect(deletePtSessionsMock).toHaveBeenCalledWith({
+      month: '2026-04',
+      assignmentIds: ['assignment-1'],
+    })
+  })
+
+  it('invalidates PT scheduling cleanup queries and shows a success toast after removing sessions', async () => {
+    fetchPtSessionsMock.mockResolvedValue([
+      createSession({
+        id: 'session-1',
+        assignmentId: 'assignment-1',
+        memberName: 'Member One',
+        trainerName: 'Jordan Trainer',
+      }),
+      createSession({
+        id: 'session-2',
+        assignmentId: 'assignment-1',
+        memberName: 'Member One',
+        trainerName: 'Jordan Trainer',
+        status: 'completed',
+        scheduledAt: '2026-04-08T07:00:00-05:00',
+      }),
+    ])
+    deletePtSessionsMock.mockResolvedValue({
+      ok: true,
+      deletedSessions: 2,
+      deletedAssignments: 1,
+    })
+
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    await clickButton(container, 'DEV: Remove Sessions')
+    await flushAsyncWork()
+    await clickByTestId(container, 'remove-assignment-row-assignment-1')
+    await clickButton(container, 'Review Removal')
+    invalidateQueriesMock.mockClear()
+    toastMock.mockClear()
+
+    await clickButton(container, 'Delete sessions')
+    await flushAsyncWork()
+
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: queryKeys.ptScheduling.sessions({}),
+      exact: false,
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: queryKeys.pendingApprovalCounts.all,
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: queryKeys.rescheduleRequests.all,
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: queryKeys.sessionUpdateRequests.all,
+    })
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Sessions removed',
+      description: 'Removed 2 sessions across 1 assignment for April 2026.',
+    })
+  })
+
+  it('shows a destructive toast and keeps the removal flow open when deleting sessions fails', async () => {
+    fetchPtSessionsMock.mockResolvedValue([
+      createSession({
+        id: 'session-1',
+        assignmentId: 'assignment-1',
+        memberName: 'Member One',
+        trainerName: 'Jordan Trainer',
+      }),
+    ])
+    deletePtSessionsMock.mockRejectedValue(new Error('Failed to remove PT sessions.'))
+
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    await clickButton(container, 'DEV: Remove Sessions')
+    await flushAsyncWork()
+    await clickByTestId(container, 'remove-assignment-row-assignment-1')
+    await clickButton(container, 'Review Removal')
+    await clickButton(container, 'Delete sessions')
+    await flushAsyncWork()
+
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Removal failed',
+      description: 'Failed to remove PT sessions.',
+      variant: 'destructive',
+    })
+    expect(container.textContent).toContain('Delete selected sessions?')
+    expect(getButton(container, 'Delete sessions').disabled).toBe(false)
   })
 
   it('renders training types on session cards when available', async () => {

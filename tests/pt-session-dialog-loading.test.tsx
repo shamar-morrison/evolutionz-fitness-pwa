@@ -24,6 +24,18 @@ vi.mock('@tanstack/react-query', () => ({
   }),
 }))
 
+vi.mock('next/link', () => ({
+  default: ({
+    children,
+    href,
+    ...props
+  }: React.ComponentProps<'a'> & { href: string }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}))
+
 vi.mock('@/hooks/use-pt-scheduling', () => ({
   usePtSessionDetail: usePtSessionDetailMock,
 }))

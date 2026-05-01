@@ -7,9 +7,10 @@ import { MemberAvatar } from '@/components/member-avatar'
 import { PaginationControls } from '@/components/pagination-controls'
 import { RescheduleDateTimePicker } from '@/components/reschedule-date-time-picker'
 import { StaffOnly } from '@/components/staff-only'
+import { TrainerAssignmentScheduleDialog } from '@/components/trainer-assignment-schedule-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -30,10 +31,13 @@ import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/auth-context'
+import { usePermissions } from '@/hooks/use-permissions'
+import { useTrainerPtAssignments } from '@/hooks/use-pt-scheduling'
 import { toast } from '@/hooks/use-toast'
 import {
   createPtRescheduleRequest,
   fetchPtSessions,
+  formatScheduleSummary,
   formatPtSessionDateTime,
   formatPtSessionDateTimeInputValue,
   formatPtSessionStatusLabel,
@@ -41,6 +45,7 @@ import {
   getPtSessionStatusBadgeClassName,
   markPtSession,
   type PtSession,
+  type TrainerClient,
 } from '@/lib/pt-scheduling'
 import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
@@ -98,11 +103,21 @@ function ReadOnlyField({
   )
 }
 
+function getAssignmentScheduleSummary(assignment: TrainerClient) {
+  if (assignment.scheduledSessions.length === 0) {
+    return 'No schedule set'
+  }
+
+  return formatScheduleSummary(assignment.scheduledSessions, assignment.sessionsPerWeek)
+}
+
 function ScheduleContent() {
   const queryClient = useQueryClient()
   const { profile } = useAuth()
+  const { can } = usePermissions()
   const [activeTab, setActiveTab] = useState<TrainerScheduleTab>('upcoming')
   const [pastPage, setPastPage] = useState(0)
+  const [selectedAssignment, setSelectedAssignment] = useState<TrainerClient | null>(null)
   const [selectedRescheduleSession, setSelectedRescheduleSession] = useState<PtSession | null>(null)
   const [selectedCancellationSession, setSelectedCancellationSession] = useState<PtSession | null>(
     null,
@@ -119,6 +134,16 @@ function ScheduleContent() {
     Partial<Record<string, SessionPendingAction>>
   >({})
   const trainerId = profile?.id ?? ''
+  const canManageOwnSchedule = can('pt.manageOwnSchedule')
+  const {
+    assignments,
+    isLoading: isAssignmentsLoading,
+    error: assignmentsError,
+  } = useTrainerPtAssignments(trainerId)
+  const activeAssignments = useMemo(
+    () => assignments.filter((assignment) => assignment.status === 'active'),
+    [assignments],
+  )
 
   const upcomingQuery = useQuery({
     queryKey: queryKeys.ptScheduling.sessions({ trainerId, tab: 'upcoming' }),
@@ -188,6 +213,19 @@ function ScheduleContent() {
     Math.ceil(((pastQuery.data ?? []).length || 0) / PAST_PAGE_SIZE),
     1,
   )
+
+  const invalidateTrainerAssignmentQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.ptScheduling.assignments,
+        exact: false,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.ptScheduling.sessions({}),
+        exact: false,
+      }),
+    ])
+  }
 
   const invalidateTrainerWorkspaceQueries = async () => {
     await Promise.all([
@@ -354,15 +392,72 @@ function ScheduleContent() {
     }
   }
 
+  const handleAssignmentScheduleSaved = async () => {
+    await invalidateTrainerAssignmentQueries()
+  }
+
   return (
     <>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">My Schedule</h1>
           <p className="text-sm text-muted-foreground">
-            {profile?.name ?? 'Trainer'} • Upcoming sessions, today&apos;s activity, and past records.
+            Upcoming sessions, today&apos;s activity, and past records.
           </p>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Active Assignments</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isAssignmentsLoading ? (
+              <>
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+              </>
+            ) : assignmentsError ? (
+              <p className="text-sm text-destructive">
+                {assignmentsError instanceof Error
+                  ? assignmentsError.message
+                  : 'Failed to load active assignments.'}
+              </p>
+            ) : activeAssignments.length === 0 ? (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                No active assignments.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {activeAssignments.map((assignment) => (
+                  <div
+                    key={assignment.id}
+                    data-assignment-id={assignment.id}
+                    className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="space-y-1">
+                      <p className="font-medium">
+                        {assignment.memberName ?? 'Unknown member'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {getAssignmentScheduleSummary(assignment)}
+                      </p>
+                    </div>
+
+                    {canManageOwnSchedule ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setSelectedAssignment(assignment)}
+                      >
+                        Edit Schedule
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <Tabs
           value={activeTab}
@@ -655,6 +750,18 @@ function ScheduleContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TrainerAssignmentScheduleDialog
+        assignmentId={selectedAssignment?.id ?? null}
+        memberName={selectedAssignment?.memberName ?? 'this client'}
+        open={Boolean(selectedAssignment)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedAssignment(null)
+          }
+        }}
+        onSaved={handleAssignmentScheduleSaved}
+      />
     </>
   )
 }

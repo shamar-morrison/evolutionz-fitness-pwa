@@ -86,6 +86,7 @@ describe('permissions', () => {
 
     expect(permissions.has('staff.manage')).toBe(false)
     expect(permissions.has('pt.assign')).toBe(false)
+    expect(permissions.has('pt.manageOwnSchedule')).toBe(false)
     expect(permissions.has('classes.manage')).toBe(false)
     expect(permissions.has('classes.markAttendance')).toBe(true)
     expect(permissions.has('reports.view')).toBe(false)
@@ -119,6 +120,7 @@ describe('permissions', () => {
         'classes.view',
         'classes.register',
         'classes.markAttendance',
+        'pt.manageOwnSchedule',
         'pt.viewOwnSchedule',
         'pt.markSession',
         'pt.requestReschedule',
@@ -157,6 +159,7 @@ describe('resolvePermissionsForProfile', () => {
     })
 
     expect(permissions.role).toBe('staff')
+    expect(permissions.can('pt.manageOwnSchedule')).toBe(true)
     expect(permissions.can('pt.viewOwnSchedule')).toBe(true)
     expect(permissions.can('dashboard.view')).toBe(false)
     expect(permissions.requiresApproval('pt.markSession')).toBe(true)
@@ -198,7 +201,7 @@ describe('resolvePermissionsForProfile', () => {
         name: 'trainer',
         profile: { titles: ['Trainer'], role: 'staff' },
         expectedRole: 'staff',
-        allowed: ['pt.viewOwnSchedule', 'pt.markSession', 'classes.view'],
+        allowed: ['pt.viewOwnSchedule', 'pt.manageOwnSchedule', 'pt.markSession', 'classes.view'],
         denied: [
           'members.view',
           'reports.view',
@@ -230,6 +233,7 @@ describe('resolvePermissionsForProfile', () => {
         expectedRole: 'staff',
         allowed: [
           'pt.viewOwnSchedule',
+          'pt.manageOwnSchedule',
           'pt.markSession',
           'members.view',
           'members.edit',

@@ -10,6 +10,7 @@ export type Permission =
   | 'door.unlock'
   | 'pt.assign'
   | 'pt.viewOwnSchedule'
+  | 'pt.manageOwnSchedule'
   | 'pt.viewAllSchedules'
   | 'pt.markSession'
   | 'pt.requestReschedule'
@@ -38,6 +39,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'door.unlock',
     'pt.assign',
     'pt.viewOwnSchedule',
+    'pt.manageOwnSchedule',
     'pt.viewAllSchedules',
     'pt.markSession',
     'pt.requestReschedule',
@@ -55,6 +57,7 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
   ],
   trainer: [
     'pt.viewOwnSchedule',
+    'pt.manageOwnSchedule',
     'pt.markSession',
     'pt.requestReschedule',
     'classes.view',
