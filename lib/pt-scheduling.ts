@@ -268,6 +268,11 @@ export type GeneratePtSessionsRequest = {
   override?: boolean
 }
 
+export type DeletePtSessionsData = {
+  month: string
+  assignmentIds: string[]
+}
+
 export type GeneratePtSessionsResult =
   | {
       ok: true
@@ -403,6 +408,12 @@ const assignmentMutationResponseSchema = z.object({
 const assignmentDeleteResponseSchema = z.object({
   ok: z.literal(true),
   cancelledSessions: z.number().int().nonnegative(),
+})
+
+const ptSessionsDeleteResponseSchema = z.object({
+  ok: z.literal(true),
+  deletedSessions: z.number().int().nonnegative(),
+  deletedAssignments: z.number().int().nonnegative(),
 })
 
 const sessionsResponseSchema = z.object({
@@ -1440,6 +1451,31 @@ export async function deletePtAssignment(
 
   if (!parsed.success) {
     throw new Error('Failed to remove the trainer assignment.')
+  }
+
+  return parsed.data
+}
+
+export async function deletePtSessions(
+  data: DeletePtSessionsData,
+): Promise<{ ok: true; deletedSessions: number; deletedAssignments: number }> {
+  const response = await fetch('/api/pt/sessions', {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  })
+  const payload = await readJson(response)
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, 'Failed to remove PT sessions.'))
+  }
+
+  const parsed = ptSessionsDeleteResponseSchema.safeParse(payload)
+
+  if (!parsed.success) {
+    throw new Error('Failed to remove PT sessions.')
   }
 
   return parsed.data

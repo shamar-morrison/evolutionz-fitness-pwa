@@ -1127,8 +1127,8 @@ describe('POST /api/access/members/[id]/assign-card', () => {
           phone: null,
           remark: null,
           photo_url: null,
-          begin_time: '2026-04-05T00:00:00Z',
-          end_time: '2026-04-30T23:59:59Z',
+          begin_time: '2099-04-05T00:00:00Z',
+          end_time: '2099-04-30T23:59:59Z',
           updated_at: '2026-04-01T05:05:00Z',
         },
       ],
@@ -1143,8 +1143,8 @@ describe('POST /api/access/members/[id]/assign-card', () => {
         },
         body: JSON.stringify({
           cardNo: '0102857149',
-          beginTime: '2026-04-05T00:00:00',
-          endTime: '2026-04-30T23:59:59',
+          beginTime: '2099-04-05T00:00:00',
+          endTime: '2099-04-30T23:59:59',
         }),
       }),
       {
@@ -1155,8 +1155,8 @@ describe('POST /api/access/members/[id]/assign-card', () => {
     expect(response.status).toBe(200)
     expect(memberUpdateCalls).toEqual([
       {
-        begin_time: '2026-04-05T00:00:00',
-        end_time: '2026-04-30T23:59:59',
+        begin_time: '2099-04-05T00:00:00',
+        end_time: '2099-04-30T23:59:59',
         status: 'Active',
         id: 'member-1',
         employee_no: '000611',
@@ -1165,8 +1165,8 @@ describe('POST /api/access/members/[id]/assign-card', () => {
     await expect(response.json()).resolves.toEqual({
       ok: true,
       member: expect.objectContaining({
-        beginTime: '2026-04-05T00:00:00.000Z',
-        endTime: '2026-04-30T23:59:59.000Z',
+        beginTime: '2099-04-05T00:00:00.000Z',
+        endTime: '2099-04-30T23:59:59.000Z',
       }),
     })
   })

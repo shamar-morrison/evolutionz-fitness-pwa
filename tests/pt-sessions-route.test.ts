@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  mockAdminUser,
   mockAuthenticatedProfile,
   resetServerAuthMocks,
 } from '@/tests/support/server-auth'
 
-const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
+const { configFeatures, getSupabaseAdminClientMock } = vi.hoisted(() => ({
+  configFeatures: {
+    showDevRemovePtSessionsButton: true,
+  },
   getSupabaseAdminClientMock: vi.fn(),
 }))
 
@@ -21,13 +25,24 @@ vi.mock('@/lib/server-auth', async () => {
   }
 })
 
-import { GET } from '@/app/api/pt/sessions/route'
+vi.mock('@/lib/config', () => ({
+  config: {
+    features: {
+      get showDevRemovePtSessionsButton() {
+        return configFeatures.showDevRemovePtSessionsButton
+      },
+    },
+  },
+}))
+
+import { DELETE, GET } from '@/app/api/pt/sessions/route'
 
 type QueryOperation =
   | { type: 'select'; columns: string }
   | { type: 'order'; column: string; ascending: boolean }
   | { type: 'eq'; column: string; value: string }
   | { type: 'in'; column: string; values: string[] }
+  | { type: 'gte'; column: string; value: string }
   | { type: 'lt'; column: string; value: string }
 
 function createPtSessionsClient() {
@@ -256,10 +271,138 @@ function createHydratedPtSessionsClient() {
   }
 }
 
+function createDeletePtSessionsClient(
+  rows: Array<{ id: string; assignment_id: string }> = [
+    {
+      id: 'session-1',
+      assignment_id: 'assignment-1',
+    },
+    {
+      id: 'session-2',
+      assignment_id: 'assignment-1',
+    },
+    {
+      id: 'session-3',
+      assignment_id: 'assignment-2',
+    },
+  ],
+) {
+  const sessionSelectFilters: Array<{
+    assignmentIds?: string[]
+    startInclusive?: string
+    endExclusive?: string
+  }> = []
+  const deletedSessionIdLists: string[][] = []
+  const notificationUpdates: Array<{
+    values: Record<string, unknown>
+    types?: string[]
+    sessionIds?: string[]
+    archivedAtIsNull?: boolean
+  }> = []
+
+  return {
+    deletedSessionIdLists,
+    notificationUpdates,
+    sessionSelectFilters,
+    client: {
+      from(table: string) {
+        if (table === 'pt_sessions') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('id, assignment_id')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('assignment_id')
+                  sessionSelectFilters.push({ assignmentIds: values })
+
+                  return {
+                    gte(nextColumn: string, nextValue: string) {
+                      expect(nextColumn).toBe('scheduled_at')
+                      sessionSelectFilters[sessionSelectFilters.length - 1].startInclusive = nextValue
+
+                      return {
+                        lt(lastColumn: string, lastValue: string) {
+                          expect(lastColumn).toBe('scheduled_at')
+                          sessionSelectFilters[sessionSelectFilters.length - 1].endExclusive = lastValue
+
+                          return Promise.resolve({
+                            data: rows,
+                            error: null,
+                          })
+                        },
+                      }
+                    },
+                  }
+                },
+              }
+            },
+            delete() {
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('id')
+                  deletedSessionIdLists.push(values)
+
+                  return Promise.resolve({
+                    data: null,
+                    error: null,
+                  })
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'notifications') {
+          return {
+            update(values: Record<string, unknown>) {
+              notificationUpdates.push({ values })
+
+              return {
+                in(column: string, values: string[]) {
+                  const currentUpdate = notificationUpdates[notificationUpdates.length - 1]
+
+                  if (column === 'type') {
+                    currentUpdate.types = values
+
+                    return this
+                  }
+
+                  if (column === 'metadata->>sessionId') {
+                    currentUpdate.sessionIds = values
+
+                    return {
+                      is(isColumn: string, isValue: null) {
+                        expect(isColumn).toBe('archived_at')
+                        expect(isValue).toBeNull()
+                        currentUpdate.archivedAtIsNull = true
+
+                        return Promise.resolve({
+                          data: null,
+                          error: null,
+                        })
+                      },
+                    }
+                  }
+
+                  throw new Error(`Unexpected notifications in column: ${column}`)
+                },
+              }
+            },
+          }
+        }
+
+        throw new Error(`Unexpected table ${table}`)
+      },
+    },
+  }
+}
+
 describe('GET /api/pt/sessions', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
+    configFeatures.showDevRemovePtSessionsButton = true
     resetServerAuthMocks()
   })
 
@@ -450,5 +593,171 @@ describe('GET /api/pt/sessions', () => {
         }),
       ],
     })
+  })
+})
+
+describe('DELETE /api/pt/sessions', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    getSupabaseAdminClientMock.mockReset()
+    configFeatures.showDevRemovePtSessionsButton = true
+    resetServerAuthMocks()
+  })
+
+  it('returns 404 when the dev cleanup feature flag is disabled', async () => {
+    configFeatures.showDevRemovePtSessionsButton = false
+    mockAdminUser()
+
+    const response = await DELETE(
+      new Request('http://localhost/api/pt/sessions', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          month: '2026-04',
+          assignmentIds: ['assignment-1'],
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Not found.',
+    })
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid months and empty assignment selections', async () => {
+    mockAdminUser()
+
+    const invalidMonthResponse = await DELETE(
+      new Request('http://localhost/api/pt/sessions', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          month: '2026-13',
+          assignmentIds: ['assignment-1'],
+        }),
+      }),
+    )
+
+    expect(invalidMonthResponse.status).toBe(400)
+    await expect(invalidMonthResponse.json()).resolves.toEqual({
+      ok: false,
+      error: 'Month filters must use a valid calendar month.',
+    })
+
+    const emptyAssignmentsResponse = await DELETE(
+      new Request('http://localhost/api/pt/sessions', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          month: '2026-04',
+          assignmentIds: [],
+        }),
+      }),
+    )
+
+    expect(emptyAssignmentsResponse.status).toBe(400)
+    await expect(emptyAssignmentsResponse.json()).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining('Select at least one assignment.'),
+    })
+  })
+
+  it('deletes matching month-scoped sessions across all statuses and archives matching notifications', async () => {
+    mockAdminUser()
+    const { client, deletedSessionIdLists, notificationUpdates, sessionSelectFilters } =
+      createDeletePtSessionsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await DELETE(
+      new Request('http://localhost/api/pt/sessions', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          month: '2026-04',
+          assignmentIds: ['assignment-1', 'assignment-2'],
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      deletedSessions: 3,
+      deletedAssignments: 2,
+    })
+    expect(sessionSelectFilters).toEqual([
+      {
+        assignmentIds: ['assignment-1', 'assignment-2'],
+        startInclusive: '2026-04-01T00:00:00-05:00',
+        endExclusive: '2026-05-01T00:00:00-05:00',
+      },
+    ])
+    expect(deletedSessionIdLists).toEqual([
+      ['session-1', 'session-2', 'session-3'],
+    ])
+    expect(notificationUpdates).toEqual([
+      {
+        values: {
+          archived_at: expect.any(String),
+        },
+        types: [
+          'reschedule_request',
+          'reschedule_approved',
+          'reschedule_denied',
+          'status_change_request',
+          'status_change_approved',
+          'status_change_denied',
+        ],
+        sessionIds: ['session-1', 'session-2', 'session-3'],
+        archivedAtIsNull: true,
+      },
+    ])
+  })
+
+  it('only removes the sessions returned for the selected assignments', async () => {
+    mockAdminUser()
+    const { client, deletedSessionIdLists } = createDeletePtSessionsClient([
+      {
+        id: 'session-1',
+        assignment_id: 'assignment-1',
+      },
+      {
+        id: 'session-2',
+        assignment_id: 'assignment-1',
+      },
+    ])
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await DELETE(
+      new Request('http://localhost/api/pt/sessions', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          month: '2026-04',
+          assignmentIds: ['assignment-1'],
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      deletedSessions: 2,
+      deletedAssignments: 1,
+    })
+    expect(deletedSessionIdLists).toEqual([['session-1', 'session-2']])
   })
 })
