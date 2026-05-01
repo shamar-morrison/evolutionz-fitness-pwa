@@ -3,20 +3,35 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PtSession, TrainerClient } from '@/lib/pt-scheduling'
+import { formatScheduleSummary, type PtSession, type TrainerClient } from '@/lib/pt-scheduling'
 
 const {
+  authState,
   createPtRescheduleRequestMock,
+  fetchPtAssignmentScheduleMock,
   invalidateQueriesMock,
   markPtSessionMock,
   toastMock,
+  updatePtAssignmentScheduleMock,
   useQueryMock,
   useTrainerPtAssignmentsMock,
 } = vi.hoisted(() => ({
+  authState: {
+    value: {
+      profile: {
+        id: 'trainer-1',
+        name: 'Jordan Trainer',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    },
+  },
   createPtRescheduleRequestMock: vi.fn(),
+  fetchPtAssignmentScheduleMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   markPtSessionMock: vi.fn(),
   toastMock: vi.fn(),
+  updatePtAssignmentScheduleMock: vi.fn(),
   useQueryMock: vi.fn(),
   useTrainerPtAssignmentsMock: vi.fn(),
 }))
@@ -41,14 +56,7 @@ vi.mock('@tanstack/react-query', () => ({
 }))
 
 vi.mock('@/contexts/auth-context', () => ({
-  useAuth: () => ({
-    profile: {
-      id: 'trainer-1',
-      name: 'Jordan Trainer',
-      role: 'staff',
-      titles: ['Trainer'],
-    },
-  }),
+  useAuth: () => authState.value,
 }))
 
 vi.mock('@/components/staff-only', () => ({
@@ -133,6 +141,84 @@ vi.mock('@/components/ui/tabs', () => ({
   TabsTrigger: ({ children }: React.ComponentProps<'button'>) => <button type="button">{children}</button>,
 }))
 
+vi.mock('@/components/ui/select', () => ({
+  Select: ({
+    children,
+    value,
+    onValueChange,
+    disabled,
+  }: {
+    children: React.ReactNode
+    value?: string
+    onValueChange?: (value: string) => void
+    disabled?: boolean
+  }) => {
+    const items = Array.isArray(children) ? children : [children]
+    const content = items.find(
+      (child) =>
+        typeof child === 'object' &&
+        child &&
+        'type' in child &&
+        typeof child.type === 'function' &&
+        child.type.name === 'SelectContent',
+    ) as
+      | {
+          props?: {
+            children?: React.ReactNode
+          }
+        }
+      | undefined
+    const trigger = items.find(
+      (child) =>
+        typeof child === 'object' &&
+        child &&
+        'type' in child &&
+        typeof child.type === 'function' &&
+        child.type.name === 'SelectTrigger',
+    ) as
+      | {
+          props?: {
+            'aria-label'?: string
+          }
+        }
+      | undefined
+    const options = Array.isArray(content?.props?.children)
+      ? content.props.children
+      : content?.props?.children
+        ? [content.props.children]
+        : []
+
+    return (
+      <select
+        aria-label={trigger?.props?.['aria-label'] ?? 'Training type'}
+        value={value ?? ''}
+        onChange={(event) => onValueChange?.(event.target.value)}
+        disabled={disabled}
+      >
+        {options.map((option) =>
+          typeof option === 'object' &&
+          option &&
+          'type' in option &&
+          typeof option.type === 'function' &&
+          option.type.name === 'SelectItem' &&
+          'props' in option ? (
+            <option
+              key={(option.props as { value: string }).value}
+              value={(option.props as { value: string }).value}
+            >
+              {(option.props as { children: React.ReactNode }).children}
+            </option>
+          ) : null,
+        )}
+      </select>
+    )
+  },
+  SelectContent: ({ children }: React.ComponentProps<'div'>) => <>{children}</>,
+  SelectItem: ({ children }: React.ComponentProps<'div'> & { value: string }) => <>{children}</>,
+  SelectTrigger: ({ children }: React.ComponentProps<'button'>) => <>{children}</>,
+  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
+}))
+
 vi.mock('@/hooks/use-pt-scheduling', () => ({
   useTrainerPtAssignments: useTrainerPtAssignmentsMock,
 }))
@@ -147,7 +233,9 @@ vi.mock('@/lib/pt-scheduling', async () => {
   return {
     ...actual,
     createPtRescheduleRequest: createPtRescheduleRequestMock,
+    fetchPtAssignmentSchedule: fetchPtAssignmentScheduleMock,
     markPtSession: markPtSessionMock,
+    updatePtAssignmentSchedule: updatePtAssignmentScheduleMock,
   }
 })
 
@@ -282,6 +370,34 @@ async function setTextareaValue(textarea: HTMLTextAreaElement, value: string) {
   })
 }
 
+async function setInputValue(input: HTMLInputElement | HTMLSelectElement, value: string) {
+  await act(async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(input),
+      'value',
+    )
+    const setValue = descriptor?.set
+
+    if (!setValue) {
+      throw new Error('Input value setter is unavailable.')
+    }
+
+    setValue.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+}
+
+function getInputByAriaLabel(container: HTMLDivElement, label: string) {
+  const input = container.querySelector(`input[aria-label="${label}"]`)
+
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error(`${label} input not found.`)
+  }
+
+  return input
+}
+
 describe('Trainer pages', () => {
   let container: HTMLDivElement
   let root: Root
@@ -291,6 +407,14 @@ describe('Trainer pages', () => {
     vi.setSystemTime(new Date('2026-04-06T15:07:00.000Z'))
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
+    authState.value = {
+      profile: {
+        id: 'trainer-1',
+        name: 'Jordan Trainer',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    }
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -313,7 +437,13 @@ describe('Trainer pages', () => {
       error: null,
     })
     createPtRescheduleRequestMock.mockResolvedValue({ id: 'request-1' })
+    fetchPtAssignmentScheduleMock.mockResolvedValue(createAssignment({ notes: null }))
     markPtSessionMock.mockResolvedValue({ ok: true, pending: true })
+    updatePtAssignmentScheduleMock.mockResolvedValue(
+      createAssignment({
+        notes: null,
+      }),
+    )
   })
 
   afterEach(async () => {
@@ -335,10 +465,78 @@ describe('Trainer pages', () => {
     })
 
     expect(container.textContent).toContain('My Schedule')
+    expect(container.textContent).toContain('Active Assignments')
     expect(container.textContent).toContain('Client One')
     expect(container.textContent).toContain('Strength')
     expect(container.textContent).toContain('Mark Session')
     expect(container.textContent).toContain('Request Reschedule')
+  })
+
+  it('renders active assignment summaries and the no-schedule fallback', async () => {
+    useTrainerPtAssignmentsMock.mockReturnValue({
+      assignments: [
+        createAssignment({ notes: null }),
+        createAssignment({
+          id: 'assignment-2',
+          memberId: 'member-2',
+          memberName: 'Client Two',
+          scheduledSessions: [],
+          scheduledDays: [],
+          trainingPlan: [],
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<TrainerSchedulePage />)
+    })
+
+    expect(container.textContent).toContain(
+      formatScheduleSummary(createAssignment().scheduledSessions, createAssignment().sessionsPerWeek),
+    )
+    expect(container.textContent).toContain('No schedule set')
+  })
+
+  it('hides inactive assignments from the active assignments section', async () => {
+    useTrainerPtAssignmentsMock.mockReturnValue({
+      assignments: [
+        createAssignment({ memberName: 'Active Client' }),
+        createAssignment({
+          id: 'assignment-2',
+          memberId: 'member-2',
+          memberName: 'Inactive Client',
+          status: 'inactive',
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<TrainerSchedulePage />)
+    })
+
+    expect(container.textContent).toContain('Active Client')
+    expect(container.textContent).not.toContain('Inactive Client')
+  })
+
+  it('hides the edit schedule action when the trainer lacks permission', async () => {
+    authState.value = {
+      profile: {
+        id: 'assistant-1',
+        name: 'Jamie Assistant',
+        role: 'staff',
+        titles: ['Assistant'],
+      },
+    }
+
+    await act(async () => {
+      root.render(<TrainerSchedulePage />)
+    })
+
+    expect(container.textContent).not.toContain('Edit Schedule')
   })
 
   it('opens the cancellation modal, requires a reason, and submits a pending cancellation request', async () => {
@@ -450,6 +648,92 @@ describe('Trainer pages', () => {
     expect(container.textContent).toContain('Pending approval')
     expect(container.textContent).not.toContain('Mark Session')
     expect(container.textContent).not.toContain('Request Reschedule')
+  })
+
+  it('loads and saves the trainer-owned assignment schedule from the active assignments section', async () => {
+    updatePtAssignmentScheduleMock.mockResolvedValue(
+      createAssignment({
+        scheduledSessions: [
+          {
+            day: 'Monday',
+            sessionTime: '06:30',
+            trainingTypeName: 'Legs',
+            isCustom: false,
+          },
+          {
+            day: 'Wednesday',
+            sessionTime: '07:00',
+            trainingTypeName: 'Back',
+            isCustom: false,
+          },
+        ],
+        scheduledDays: ['Monday', 'Wednesday'],
+        trainingPlan: [
+          {
+            day: 'Monday',
+            trainingTypeName: 'Legs',
+            isCustom: false,
+          },
+          {
+            day: 'Wednesday',
+            trainingTypeName: 'Back',
+            isCustom: false,
+          },
+        ],
+      }),
+    )
+
+    await act(async () => {
+      root.render(<TrainerSchedulePage />)
+    })
+
+    await clickButton(container, 'Edit Schedule')
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(fetchPtAssignmentScheduleMock).toHaveBeenCalledWith('assignment-1')
+    expect(container.textContent).toContain('Edit Schedule')
+
+    await setInputValue(getInputByAriaLabel(container, 'Monday session time'), '06:30')
+    await clickButton(container, 'Save Changes')
+
+    expect(updatePtAssignmentScheduleMock).toHaveBeenCalledWith('assignment-1', {
+      sessionsPerWeek: 2,
+      scheduledSessions: [
+        {
+          day: 'Monday',
+          sessionTime: '06:30',
+        },
+        {
+          day: 'Wednesday',
+          sessionTime: '07:00',
+        },
+      ],
+      trainingPlan: [
+        {
+          day: 'Monday',
+          trainingTypeName: 'Legs',
+        },
+        {
+          day: 'Wednesday',
+          trainingTypeName: 'Back',
+        },
+      ],
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['pt-assignments'],
+      exact: false,
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['pt-sessions', {}],
+      exact: false,
+    })
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Schedule updated',
+      description: 'The client schedule was updated successfully.',
+    })
   })
 
   it('renders trainer client cards with the training plan and notes fallback', async () => {
