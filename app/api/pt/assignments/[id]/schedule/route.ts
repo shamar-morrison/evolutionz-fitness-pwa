@@ -10,6 +10,8 @@ import {
   type ScheduledSessionInput,
 } from '@/lib/pt-scheduling'
 import {
+  normalizePtAssignmentScheduleRows,
+  replacePtAssignmentSchedule,
   readTrainerClientById,
   readTrainerClientRowById,
 } from '@/lib/pt-scheduling-server'
@@ -249,56 +251,21 @@ export async function PUT(
       return createErrorResponse(trainingPlanError, 400)
     }
 
-    const normalizedSessionTime = nextSchedule[0]?.sessionTime
-      ? normalizeTimeInputValue(nextSchedule[0].sessionTime)
-      : null
+    const normalizedSchedule = normalizePtAssignmentScheduleRows(nextSchedule)
 
-    if (!normalizedSessionTime) {
+    if (!normalizedSchedule) {
       return createErrorResponse('Session time must use HH:MM format.', 400)
     }
 
-    const { data: updatedAssignment, error: updateError } = await supabase
-      .from('trainer_clients')
-      .update({
-        sessions_per_week: input.sessionsPerWeek,
-        scheduled_days: nextSchedule.map((entry) => entry.day),
-        session_time: normalizedSessionTime,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-      .select('id')
-      .maybeSingle()
+    const replacedAssignmentId = await replacePtAssignmentSchedule(supabase, {
+      assignmentId: id,
+      sessionsPerWeek: input.sessionsPerWeek,
+      scheduledDays: nextSchedule.map((entry) => entry.day),
+      schedule: normalizedSchedule,
+    })
 
-    if (updateError) {
-      throw new Error(`Failed to update the PT assignment schedule: ${updateError.message}`)
-    }
-
-    if (!updatedAssignment) {
+    if (!replacedAssignmentId) {
       return createErrorResponse('PT assignment not found.', 404)
-    }
-
-    const { error: deleteTrainingPlanError } = await supabase
-      .from('training_plan_days')
-      .delete()
-      .eq('assignment_id', id)
-
-    if (deleteTrainingPlanError) {
-      throw new Error(`Failed to replace the PT training plan: ${deleteTrainingPlanError.message}`)
-    }
-
-    const { error: insertTrainingPlanError } = await supabase
-      .from('training_plan_days')
-      .insert(
-        nextSchedule.map((entry) => ({
-          assignment_id: id,
-          day_of_week: entry.day,
-          session_time: normalizeTimeInputValue(entry.sessionTime),
-          training_type_name: entry.trainingTypeName,
-        })),
-      )
-
-    if (insertTrainingPlanError) {
-      throw new Error(`Failed to replace the PT training plan: ${insertTrainingPlanError.message}`)
     }
 
     const assignment = await readTrainerClientById(supabase, id)

@@ -50,10 +50,17 @@ vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdminClient: getSupabaseAdminClientMock,
 }))
 
-vi.mock('@/lib/pt-scheduling-server', () => ({
-  readTrainerClientById: readTrainerClientByIdMock,
-  readTrainerClientRowById: readTrainerClientRowByIdMock,
-}))
+vi.mock('@/lib/pt-scheduling-server', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/pt-scheduling-server')>(
+    '@/lib/pt-scheduling-server',
+  )
+
+  return {
+    ...actual,
+    readTrainerClientById: readTrainerClientByIdMock,
+    readTrainerClientRowById: readTrainerClientRowByIdMock,
+  }
+})
 
 import { GET, PUT } from '@/app/api/pt/assignments/[id]/schedule/route'
 
@@ -157,72 +164,20 @@ function buildAssignmentRow(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 function createPutClient() {
-  const assignmentUpdates: Array<Record<string, unknown>> = []
-  const deletedTrainingPlanAssignments: string[] = []
-  const insertedTrainingPlans: Array<Array<Record<string, unknown>>> = []
+  const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = []
 
   return {
-    assignmentUpdates,
-    deletedTrainingPlanAssignments,
-    insertedTrainingPlans,
+    rpcCalls,
     client: {
+      rpc(fn: string, args: Record<string, unknown>) {
+        rpcCalls.push({ fn, args })
+
+        return Promise.resolve({
+          data: 'assignment-1',
+          error: null,
+        } satisfies QueryResult<string>)
+      },
       from(table: string) {
-        if (table === 'trainer_clients') {
-          return {
-            update(values: Record<string, unknown>) {
-              assignmentUpdates.push(values)
-
-              return {
-                eq(column: string, value: string) {
-                  expect(column).toBe('id')
-                  expect(value).toBe('assignment-1')
-
-                  return {
-                    select(columns: string) {
-                      expect(columns).toBe('id')
-
-                      return {
-                        maybeSingle() {
-                          return Promise.resolve({
-                            data: { id: 'assignment-1' },
-                            error: null,
-                          } satisfies QueryResult<{ id: string }>)
-                        },
-                      }
-                    },
-                  }
-                },
-              }
-            },
-          }
-        }
-
-        if (table === 'training_plan_days') {
-          return {
-            delete() {
-              return {
-                eq(column: string, value: string) {
-                  expect(column).toBe('assignment_id')
-                  deletedTrainingPlanAssignments.push(value)
-
-                  return Promise.resolve({
-                    data: null,
-                    error: null,
-                  } satisfies QueryResult<null>)
-                },
-              }
-            },
-            insert(values: Array<Record<string, unknown>>) {
-              insertedTrainingPlans.push(values)
-
-              return Promise.resolve({
-                data: null,
-                error: null,
-              } satisfies QueryResult<null>)
-            },
-          }
-        }
-
         throw new Error(`Unexpected table: ${table}`)
       },
     },
@@ -332,8 +287,7 @@ describe('PT assignment schedule route', () => {
   })
 
   it('updates the assignment schedule and replaces training plan days', async () => {
-    const { client, assignmentUpdates, deletedTrainingPlanAssignments, insertedTrainingPlans } =
-      createPutClient()
+    const { client, rpcCalls } = createPutClient()
 
     createClientMock.mockResolvedValue({})
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -400,27 +354,54 @@ describe('PT assignment schedule route', () => {
 
     expect(response.status).toBe(200)
     expect(payload.ok).toBe(true)
-    expect(assignmentUpdates[0]).toEqual({
-      sessions_per_week: 2,
-      scheduled_days: ['Monday', 'Wednesday'],
-      session_time: '06:30:00',
-      updated_at: expect.any(String),
-    })
-    expect(deletedTrainingPlanAssignments).toEqual(['assignment-1'])
-    expect(insertedTrainingPlans[0]).toEqual([
+    expect(rpcCalls).toEqual([
       {
-        assignment_id: 'assignment-1',
-        day_of_week: 'Monday',
-        session_time: '06:30:00',
-        training_type_name: 'Legs',
-      },
-      {
-        assignment_id: 'assignment-1',
-        day_of_week: 'Wednesday',
-        session_time: '07:00:00',
-        training_type_name: null,
+        fn: 'replace_pt_assignment_schedule',
+        args: {
+          p_assignment_id: 'assignment-1',
+          p_sessions_per_week: 2,
+          p_scheduled_days: ['Monday', 'Wednesday'],
+          p_schedule: [
+            {
+              day_of_week: 'Monday',
+              session_time: '06:30:00',
+              training_type_name: 'Legs',
+            },
+            {
+              day_of_week: 'Wednesday',
+              session_time: '07:00:00',
+              training_type_name: null,
+            },
+          ],
+        },
       },
     ])
+    expect(payload.assignment).toEqual(
+      buildAssignment({
+        scheduledSessions: [
+          {
+            day: 'Monday',
+            sessionTime: '06:30',
+            trainingTypeName: 'Legs',
+            isCustom: false,
+          },
+          {
+            day: 'Wednesday',
+            sessionTime: '07:00',
+            trainingTypeName: null,
+            isCustom: false,
+          },
+        ],
+        trainingPlan: [
+          {
+            day: 'Monday',
+            trainingTypeName: 'Legs',
+            isCustom: false,
+          },
+        ],
+        sessionTime: '06:30',
+      }),
+    )
   })
 
   it('forbids a trainer from updating another trainer assignment schedule', async () => {

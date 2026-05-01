@@ -10,7 +10,12 @@ import {
   type AssignmentTrainingPlanInput,
   type ScheduledSessionInput,
 } from '@/lib/pt-scheduling'
-import { readTrainerClientById, readTrainerClientRowById } from '@/lib/pt-scheduling-server'
+import {
+  normalizePtAssignmentScheduleRows,
+  readTrainerClientById,
+  readTrainerClientRowById,
+  replacePtAssignmentSchedule,
+} from '@/lib/pt-scheduling-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -176,6 +181,8 @@ export async function PATCH(
     const scheduledSessionsError = validateScheduledSessions(nextScheduledSessions, nextSessionsPerWeek)
     const trainingPlanError = validateTrainingPlan(nextTrainingPlan, nextScheduledSessions)
     const nextSchedule = buildAssignmentSchedule(nextScheduledSessions, nextTrainingPlan)
+    const shouldReplaceSchedule =
+      typeof input.trainingPlan !== 'undefined' || typeof input.scheduledSessions !== 'undefined'
 
     if (scheduledSessionsError) {
       return createErrorResponse(scheduledSessionsError, 400)
@@ -183,6 +190,14 @@ export async function PATCH(
 
     if (trainingPlanError) {
       return createErrorResponse(trainingPlanError, 400)
+    }
+
+    const normalizedSchedule = shouldReplaceSchedule
+      ? normalizePtAssignmentScheduleRows(nextSchedule)
+      : null
+
+    if (shouldReplaceSchedule && !normalizedSchedule) {
+      return createErrorResponse('Session time must use HH:MM format.', 400)
     }
 
     const nextStatus = input.status ?? existingAssignment.status
@@ -206,8 +221,15 @@ export async function PATCH(
       }
     }
 
-    const updateValues: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
+    const updateValues: Record<string, unknown> = {}
+    const hasDirectAssignmentFieldUpdates =
+      Boolean(input.status) ||
+      typeof input.ptFee === 'number' ||
+      typeof input.notes !== 'undefined' ||
+      (typeof input.sessionsPerWeek === 'number' && !shouldReplaceSchedule)
+
+    if (!shouldReplaceSchedule || hasDirectAssignmentFieldUpdates) {
+      updateValues.updated_at = new Date().toISOString()
     }
 
     if (input.status) {
@@ -218,67 +240,41 @@ export async function PATCH(
       updateValues.pt_fee = input.ptFee
     }
 
-    if (typeof input.sessionsPerWeek === 'number') {
+    if (typeof input.sessionsPerWeek === 'number' && !shouldReplaceSchedule) {
       updateValues.sessions_per_week = input.sessionsPerWeek
-    }
-
-    if (input.scheduledSessions) {
-      const normalizedSessionTime = nextSchedule[0]?.sessionTime
-        ? normalizeTimeInputValue(nextSchedule[0].sessionTime)
-        : null
-
-      if (!normalizedSessionTime) {
-        return createErrorResponse('Session time must use HH:MM format.', 400)
-      }
-
-      updateValues.scheduled_days = nextSchedule.map((entry) => entry.day)
-      updateValues.session_time = normalizedSessionTime
     }
 
     if (typeof input.notes !== 'undefined') {
       updateValues.notes = normalizeOptionalNotes(input.notes)
     }
 
-    const { data: updatedAssignment, error: updateError } = await supabase
-      .from('trainer_clients')
-      .update(updateValues)
-      .eq('id', id)
-      .select('id')
-      .maybeSingle()
+    if (Object.keys(updateValues).length > 0) {
+      const { data: updatedAssignment, error: updateError } = await supabase
+        .from('trainer_clients')
+        .update(updateValues)
+        .eq('id', id)
+        .select('id')
+        .maybeSingle()
 
-    if (updateError) {
-      throw new Error(`Failed to update the PT assignment: ${updateError.message}`)
-    }
-
-    if (!updatedAssignment) {
-      return createErrorResponse('PT assignment not found.', 404)
-    }
-
-    if (typeof input.trainingPlan !== 'undefined' || typeof input.scheduledSessions !== 'undefined') {
-      const { error: deleteTrainingPlanError } = await supabase
-        .from('training_plan_days')
-        .delete()
-        .eq('assignment_id', id)
-
-      if (deleteTrainingPlanError) {
-        throw new Error(`Failed to replace the PT training plan: ${deleteTrainingPlanError.message}`)
+      if (updateError) {
+        throw new Error(`Failed to update the PT assignment: ${updateError.message}`)
       }
 
-      if (nextSchedule.length > 0) {
-        const { error: insertTrainingPlanError } = await supabase
-          .from('training_plan_days')
-          .insert(
-            nextSchedule.map((entry) => ({
-              assignment_id: id,
-              day_of_week: entry.day,
-              session_time: normalizeTimeInputValue(entry.sessionTime),
-              training_type_name: entry.trainingTypeName,
-            })),
-          )
+      if (!updatedAssignment) {
+        return createErrorResponse('PT assignment not found.', 404)
+      }
+    }
 
-        if (insertTrainingPlanError) {
-          throw new Error(`Failed to replace the PT training plan: ${insertTrainingPlanError.message}`)
-        }
+    if (shouldReplaceSchedule && normalizedSchedule) {
+      const replacedAssignmentId = await replacePtAssignmentSchedule(supabase, {
+        assignmentId: id,
+        sessionsPerWeek: nextSessionsPerWeek,
+        scheduledDays: nextSchedule.map((entry) => entry.day),
+        schedule: normalizedSchedule,
+      })
+
+      if (!replacedAssignmentId) {
+        return createErrorResponse('PT assignment not found.', 404)
       }
     }
 

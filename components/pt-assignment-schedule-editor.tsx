@@ -313,6 +313,7 @@ export function PtAssignmentScheduleEditor({
                 size="sm"
                 onClick={() => handleDayToggle(day)}
                 disabled={isSubmitting}
+                aria-pressed={selected}
               >
                 {day}
               </Button>
@@ -374,6 +375,7 @@ export function PtAssignmentScheduleEditor({
                     {scheduleEntry.mode === 'custom' ? (
                       <div className="flex items-center gap-2">
                         <Input
+                          aria-label={`${day} custom training type`}
                           value={scheduleEntry.trainingTypeName}
                           onChange={(event) =>
                             updateScheduleFormState((current) => ({

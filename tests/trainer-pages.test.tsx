@@ -398,6 +398,28 @@ function getInputByAriaLabel(container: HTMLDivElement, label: string) {
   return input
 }
 
+function createDeferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => undefined
+  let reject: (reason?: unknown) => void = () => undefined
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+
+  return {
+    promise,
+    resolve,
+    reject,
+  }
+}
+
+async function flushAsyncWork() {
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
 describe('Trainer pages', () => {
   let container: HTMLDivElement
   let root: Root
@@ -734,6 +756,105 @@ describe('Trainer pages', () => {
       title: 'Schedule updated',
       description: 'The client schedule was updated successfully.',
     })
+  })
+
+  it('disables save when the schedule has a custom training type error', async () => {
+    await act(async () => {
+      root.render(<TrainerSchedulePage />)
+    })
+
+    await clickButton(container, 'Edit Schedule')
+    await flushAsyncWork()
+
+    const mondayTrainingTypeSelect = container.querySelector('select[aria-label="Monday training type"]')
+
+    if (!(mondayTrainingTypeSelect instanceof HTMLSelectElement)) {
+      throw new Error('Monday training type select not found.')
+    }
+
+    await setInputValue(mondayTrainingTypeSelect, '__custom__')
+
+    const customTrainingTypeInput = container.querySelector('input[aria-label="Monday custom training type"]')
+
+    if (!(customTrainingTypeInput instanceof HTMLInputElement)) {
+      throw new Error('Custom training type input not found.')
+    }
+
+    expect(getButton(container, 'Save Changes').disabled).toBe(true)
+  })
+
+  it('ignores stale retry responses after the schedule dialog is remounted and reopened', async () => {
+    const initialLoad = createDeferred<TrainerClient>()
+    const retryLoad = createDeferred<TrainerClient>()
+    const reopenedLoad = createDeferred<TrainerClient>()
+
+    fetchPtAssignmentScheduleMock
+      .mockReset()
+      .mockImplementationOnce(() => initialLoad.promise)
+      .mockImplementationOnce(() => retryLoad.promise)
+      .mockImplementationOnce(() => reopenedLoad.promise)
+
+    await act(async () => {
+      root.render(<TrainerSchedulePage />)
+    })
+
+    await clickButton(container, 'Edit Schedule')
+
+    await act(async () => {
+      initialLoad.reject(new Error('Failed to load the assignment schedule.'))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('Failed to load the assignment schedule.')
+
+    await clickButton(container, 'Retry')
+
+    await act(async () => {
+      root.render(<div />)
+    })
+
+    await act(async () => {
+      root.render(<TrainerSchedulePage />)
+    })
+
+    await clickButton(container, 'Edit Schedule')
+
+    await act(async () => {
+      reopenedLoad.resolve(createAssignment({ sessionTime: '07:00', notes: null }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(getInputByAriaLabel(container, 'Monday session time').value).toBe('07:00')
+
+    await act(async () => {
+      retryLoad.resolve(
+        createAssignment({
+          sessionTime: '06:30',
+          scheduledSessions: [
+            {
+              day: 'Monday',
+              sessionTime: '06:30',
+              trainingTypeName: 'Legs',
+              isCustom: false,
+            },
+            {
+              day: 'Wednesday',
+              sessionTime: '07:00',
+              trainingTypeName: 'Back',
+              isCustom: false,
+            },
+          ],
+          notes: null,
+        }),
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(getInputByAriaLabel(container, 'Monday session time').value).toBe('07:00')
+    expect(fetchPtAssignmentScheduleMock).toHaveBeenCalledTimes(3)
   })
 
   it('renders trainer client cards with the training plan and notes fallback', async () => {

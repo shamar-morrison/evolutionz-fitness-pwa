@@ -33,10 +33,17 @@ vi.mock('@/lib/staff', () => ({
   readStaffProfile: readStaffProfileMock,
 }))
 
-vi.mock('@/lib/pt-scheduling-server', () => ({
-  readTrainerClientById: readTrainerClientByIdMock,
-  readTrainerClientRowById: readTrainerClientRowByIdMock,
-}))
+vi.mock('@/lib/pt-scheduling-server', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/pt-scheduling-server')>(
+    '@/lib/pt-scheduling-server',
+  )
+
+  return {
+    ...actual,
+    readTrainerClientById: readTrainerClientByIdMock,
+    readTrainerClientRowById: readTrainerClientRowByIdMock,
+  }
+})
 
 import { POST } from '@/app/api/pt/assignments/route'
 import { GET, PATCH } from '@/app/api/pt/assignments/[id]/route'
@@ -248,14 +255,20 @@ function createPostClient(options: {
 
 function createPatchClient() {
   const assignmentUpdates: Array<Record<string, unknown>> = []
-  const deletedTrainingPlanAssignments: string[] = []
-  const insertedTrainingPlans: Array<Array<Record<string, unknown>>> = []
+  const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = []
 
   return {
     assignmentUpdates,
-    deletedTrainingPlanAssignments,
-    insertedTrainingPlans,
+    rpcCalls,
     client: {
+      rpc(fn: string, args: Record<string, unknown>) {
+        rpcCalls.push({ fn, args })
+
+        return Promise.resolve({
+          data: 'assignment-1',
+          error: null,
+        } satisfies QueryResult<string>)
+      },
       from(table: string) {
         if (table === 'trainer_clients') {
           return {
@@ -322,32 +335,6 @@ function createPatchClient() {
                   }
                 },
               }
-            },
-          }
-        }
-
-        if (table === 'training_plan_days') {
-          return {
-            delete() {
-              return {
-                eq(column: string, value: string) {
-                  expect(column).toBe('assignment_id')
-                  deletedTrainingPlanAssignments.push(value)
-
-                  return Promise.resolve({
-                    data: null,
-                    error: null,
-                  } satisfies QueryResult<null>)
-                },
-              }
-            },
-            insert(values: Array<Record<string, unknown>>) {
-              insertedTrainingPlans.push(values)
-
-              return Promise.resolve({
-                data: null,
-                error: null,
-              } satisfies QueryResult<null>)
             },
           }
         }
@@ -531,8 +518,7 @@ describe('PT assignment training plan routes', () => {
   })
 
   it('PATCH replaces the training plan rows when trainingPlan is provided', async () => {
-    const { client, assignmentUpdates, deletedTrainingPlanAssignments, insertedTrainingPlans } =
-      createPatchClient()
+    const { client, assignmentUpdates, rpcCalls } = createPatchClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
     readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow())
     readTrainerClientByIdMock.mockResolvedValue(
@@ -582,27 +568,49 @@ describe('PT assignment training plan routes', () => {
       updated_at: expect.any(String),
       pt_fee: 15500,
     })
-    expect(deletedTrainingPlanAssignments).toEqual(['assignment-1'])
-    expect(insertedTrainingPlans[0]).toEqual([
+    expect(rpcCalls).toEqual([
       {
-        assignment_id: 'assignment-1',
-        day_of_week: 'Monday',
-        session_time: '07:00:00',
-        training_type_name: 'Legs',
-      },
-      {
-        assignment_id: 'assignment-1',
-        day_of_week: 'Wednesday',
-        session_time: '07:00:00',
-        training_type_name: 'Chest',
-      },
-      {
-        assignment_id: 'assignment-1',
-        day_of_week: 'Friday',
-        session_time: '07:00:00',
-        training_type_name: null,
+        fn: 'replace_pt_assignment_schedule',
+        args: {
+          p_assignment_id: 'assignment-1',
+          p_sessions_per_week: 3,
+          p_scheduled_days: ['Monday', 'Wednesday', 'Friday'],
+          p_schedule: [
+            {
+              day_of_week: 'Monday',
+              session_time: '07:00:00',
+              training_type_name: 'Legs',
+            },
+            {
+              day_of_week: 'Wednesday',
+              session_time: '07:00:00',
+              training_type_name: 'Chest',
+            },
+            {
+              day_of_week: 'Friday',
+              session_time: '07:00:00',
+              training_type_name: null,
+            },
+          ],
+        },
       },
     ])
+    expect(payload.assignment).toEqual(
+      buildAssignment({
+        trainingPlan: [
+          {
+            day: 'Monday',
+            trainingTypeName: 'Legs',
+            isCustom: false,
+          },
+          {
+            day: 'Wednesday',
+            trainingTypeName: 'Chest',
+            isCustom: false,
+          },
+        ],
+      }),
+    )
   })
 
   it('PATCH rejects training plan days that are outside the updated schedule', async () => {

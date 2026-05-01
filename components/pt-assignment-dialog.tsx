@@ -96,6 +96,12 @@ export function PtAssignmentDialog({
     [formData.trainerId, trainers],
   )
   const scheduleValidation = useMemo(() => validateAssignmentScheduleForm(formData), [formData])
+  const hasScheduledSessionErrors = Object.keys(scheduleValidation.scheduledSessionErrors).length > 0
+  const hasTrainingPlanErrors = Object.keys(scheduleValidation.trainingPlanErrors).length > 0
+  const hasScheduleValidationErrors =
+    Boolean(scheduleValidation.scheduledDaysError) ||
+    hasScheduledSessionErrors ||
+    hasTrainingPlanErrors
 
   useEffect(() => {
     setFormData(initialFormState)
@@ -126,7 +132,7 @@ export function PtAssignmentDialog({
       return
     }
 
-    if (Object.keys(scheduleValidation.scheduledSessionErrors).length > 0) {
+    if (hasScheduledSessionErrors) {
       toast({
         title: 'Invalid session time',
         description: 'Choose a valid HH:MM time for each selected day.',
@@ -139,7 +145,7 @@ export function PtAssignmentDialog({
       return
     }
 
-    if (Object.keys(scheduleValidation.trainingPlanErrors).length > 0) {
+    if (hasTrainingPlanErrors) {
       return
     }
 
@@ -317,7 +323,7 @@ export function PtAssignmentDialog({
               type="submit"
               disabled={
                 isSubmitting ||
-                Boolean(scheduleValidation.scheduledDaysError) ||
+                hasScheduleValidationErrors ||
                 (mode === 'edit' && !hasChanges) ||
                 (mode === 'create' && trainers.length === 0)
               }

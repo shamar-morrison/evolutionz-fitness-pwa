@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   PtAssignmentScheduleEditor,
   buildAssignmentScheduleFormState,
@@ -51,12 +51,19 @@ export function TrainerAssignmentScheduleDialog({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [showValidationErrors, setShowValidationErrors] = useState(false)
+  const activeRequestIdRef = useRef(0)
   const defaultSessionTime = assignment?.sessionTime ?? DEFAULT_PT_SESSION_TIME
   const initialFormState = useMemo(
     () => buildAssignmentScheduleFormState(assignment),
     [assignment],
   )
   const scheduleValidation = useMemo(() => validateAssignmentScheduleForm(formData), [formData])
+  const hasScheduledSessionErrors = Object.keys(scheduleValidation.scheduledSessionErrors).length > 0
+  const hasTrainingPlanErrors = Object.keys(scheduleValidation.trainingPlanErrors).length > 0
+  const hasScheduleValidationErrors =
+    Boolean(scheduleValidation.scheduledDaysError) ||
+    hasScheduledSessionErrors ||
+    hasTrainingPlanErrors
   const hasChanges = useMemo(
     () =>
       JSON.stringify(normalizeAssignmentScheduleForm(formData)) !==
@@ -64,22 +71,18 @@ export function TrainerAssignmentScheduleDialog({
     [formData, initialFormState],
   )
 
-  useEffect(() => {
-    if (!open || !assignmentId) {
-      return
-    }
-
-    let cancelled = false
-
+  const loadAssignment = (nextAssignmentId: string) => {
+    const requestId = activeRequestIdRef.current + 1
+    activeRequestIdRef.current = requestId
     setAssignment(null)
     setFormData(resetScheduleFormState())
     setLoadError(null)
     setShowValidationErrors(false)
     setIsLoadingAssignment(true)
 
-    void fetchPtAssignmentSchedule(assignmentId)
+    void fetchPtAssignmentSchedule(nextAssignmentId)
       .then((nextAssignment) => {
-        if (cancelled) {
+        if (activeRequestIdRef.current !== requestId) {
           return
         }
 
@@ -87,7 +90,7 @@ export function TrainerAssignmentScheduleDialog({
         setFormData(buildAssignmentScheduleFormState(nextAssignment))
       })
       .catch((error) => {
-        if (cancelled) {
+        if (activeRequestIdRef.current !== requestId) {
           return
         }
 
@@ -98,17 +101,27 @@ export function TrainerAssignmentScheduleDialog({
         )
       })
       .finally(() => {
-        if (!cancelled) {
+        if (activeRequestIdRef.current === requestId) {
           setIsLoadingAssignment(false)
         }
       })
+  }
+
+  useEffect(() => {
+    if (!open || !assignmentId) {
+      activeRequestIdRef.current += 1
+      return
+    }
+
+    loadAssignment(assignmentId)
 
     return () => {
-      cancelled = true
+      activeRequestIdRef.current += 1
     }
   }, [assignmentId, open])
 
   const resetDialogState = () => {
+    activeRequestIdRef.current += 1
     setAssignment(null)
     setFormData(resetScheduleFormState())
     setIsLoadingAssignment(false)
@@ -130,26 +143,7 @@ export function TrainerAssignmentScheduleDialog({
       return
     }
 
-    setLoadError(null)
-    setAssignment(null)
-    setFormData(resetScheduleFormState())
-    setIsLoadingAssignment(true)
-
-    void fetchPtAssignmentSchedule(assignmentId)
-      .then((nextAssignment) => {
-        setAssignment(nextAssignment)
-        setFormData(buildAssignmentScheduleFormState(nextAssignment))
-      })
-      .catch((error) => {
-        setLoadError(
-          error instanceof Error
-            ? error.message
-            : 'Failed to load the assignment schedule.',
-        )
-      })
-      .finally(() => {
-        setIsLoadingAssignment(false)
-      })
+    loadAssignment(assignmentId)
   }
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -160,7 +154,7 @@ export function TrainerAssignmentScheduleDialog({
       return
     }
 
-    if (Object.keys(scheduleValidation.scheduledSessionErrors).length > 0) {
+    if (hasScheduledSessionErrors) {
       toast({
         title: 'Invalid session time',
         description: 'Choose a valid HH:MM time for each selected day.',
@@ -173,7 +167,7 @@ export function TrainerAssignmentScheduleDialog({
       return
     }
 
-    if (Object.keys(scheduleValidation.trainingPlanErrors).length > 0) {
+    if (hasTrainingPlanErrors) {
       return
     }
 
@@ -253,7 +247,7 @@ export function TrainerAssignmentScheduleDialog({
                   disabled={
                     isLoadingAssignment ||
                     isSubmitting ||
-                    Boolean(scheduleValidation.scheduledDaysError) ||
+                    hasScheduleValidationErrors ||
                     !hasChanges
                   }
                   loading={isSubmitting}
