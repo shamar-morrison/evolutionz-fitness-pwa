@@ -24,6 +24,18 @@ vi.mock('@tanstack/react-query', () => ({
   }),
 }))
 
+vi.mock('next/link', () => ({
+  default: ({
+    children,
+    href,
+    ...props
+  }: React.ComponentProps<'a'> & { href: string }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}))
+
 vi.mock('@/hooks/use-pt-scheduling', () => ({
   usePtSessionDetail: usePtSessionDetailMock,
 }))
@@ -205,5 +217,26 @@ describe('PtSessionDialog', () => {
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['pt-sessions', 'detail', 'session-1'],
     })
+  })
+
+  it('links the member and trainer names to their detail pages', async () => {
+    usePtSessionDetailMock.mockReturnValue({
+      detail: createDetail(),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(
+        <PtSessionDialog
+          sessionId="session-1"
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    expect(container.querySelector('a[href="/members/member-1"]')?.textContent).toBe('Member One')
+    expect(container.querySelector('a[href="/staff/trainer-1"]')?.textContent).toBe('Jordan Trainer')
   })
 })

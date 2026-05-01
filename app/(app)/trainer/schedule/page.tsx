@@ -402,7 +402,7 @@ function ScheduleContent() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">My Schedule</h1>
           <p className="text-sm text-muted-foreground">
-            {profile?.name ?? 'Trainer'} • Upcoming sessions, today&apos;s activity, and past records.
+            Upcoming sessions, today&apos;s activity, and past records.
           </p>
         </div>
 
