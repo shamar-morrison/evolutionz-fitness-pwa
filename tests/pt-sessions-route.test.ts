@@ -292,19 +292,20 @@ function createDeletePtSessionsClient(
     startInclusive?: string
     endExclusive?: string
   }> = []
-  const deletedSessionIdLists: string[][] = []
-  const notificationUpdates: Array<{
-    values: Record<string, unknown>
-    types?: string[]
-    sessionIds?: string[]
-    archivedAtIsNull?: boolean
-  }> = []
+  const rpcCalls: Array<{ fn: string; args: Record<string, unknown> | undefined }> = []
 
   return {
-    deletedSessionIdLists,
-    notificationUpdates,
+    rpcCalls,
     sessionSelectFilters,
     client: {
+      rpc(fn: string, args?: Record<string, unknown>) {
+        rpcCalls.push({ fn, args })
+
+        return Promise.resolve({
+          data: null,
+          error: null,
+        })
+      },
       from(table: string) {
         if (table === 'pt_sessions') {
           return {
@@ -334,58 +335,6 @@ function createDeletePtSessionsClient(
                       }
                     },
                   }
-                },
-              }
-            },
-            delete() {
-              return {
-                in(column: string, values: string[]) {
-                  expect(column).toBe('id')
-                  deletedSessionIdLists.push(values)
-
-                  return Promise.resolve({
-                    data: null,
-                    error: null,
-                  })
-                },
-              }
-            },
-          }
-        }
-
-        if (table === 'notifications') {
-          return {
-            update(values: Record<string, unknown>) {
-              notificationUpdates.push({ values })
-
-              return {
-                in(column: string, values: string[]) {
-                  const currentUpdate = notificationUpdates[notificationUpdates.length - 1]
-
-                  if (column === 'type') {
-                    currentUpdate.types = values
-
-                    return this
-                  }
-
-                  if (column === 'metadata->>sessionId') {
-                    currentUpdate.sessionIds = values
-
-                    return {
-                      is(isColumn: string, isValue: null) {
-                        expect(isColumn).toBe('archived_at')
-                        expect(isValue).toBeNull()
-                        currentUpdate.archivedAtIsNull = true
-
-                        return Promise.resolve({
-                          data: null,
-                          error: null,
-                        })
-                      },
-                    }
-                  }
-
-                  throw new Error(`Unexpected notifications in column: ${column}`)
                 },
               }
             },
@@ -673,8 +622,7 @@ describe('DELETE /api/pt/sessions', () => {
 
   it('deletes matching month-scoped sessions across all statuses and archives matching notifications', async () => {
     mockAdminUser()
-    const { client, deletedSessionIdLists, notificationUpdates, sessionSelectFilters } =
-      createDeletePtSessionsClient()
+    const { client, rpcCalls, sessionSelectFilters } = createDeletePtSessionsClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
 
     const response = await DELETE(
@@ -703,31 +651,20 @@ describe('DELETE /api/pt/sessions', () => {
         endExclusive: '2026-05-01T00:00:00-05:00',
       },
     ])
-    expect(deletedSessionIdLists).toEqual([
-      ['session-1', 'session-2', 'session-3'],
-    ])
-    expect(notificationUpdates).toEqual([
+    expect(rpcCalls).toEqual([
       {
-        values: {
+        fn: 'delete_pt_sessions_and_archive_notifications',
+        args: {
+          session_ids: ['session-1', 'session-2', 'session-3'],
           archived_at: expect.any(String),
         },
-        types: [
-          'reschedule_request',
-          'reschedule_approved',
-          'reschedule_denied',
-          'status_change_request',
-          'status_change_approved',
-          'status_change_denied',
-        ],
-        sessionIds: ['session-1', 'session-2', 'session-3'],
-        archivedAtIsNull: true,
       },
     ])
   })
 
   it('only removes the sessions returned for the selected assignments', async () => {
     mockAdminUser()
-    const { client, deletedSessionIdLists } = createDeletePtSessionsClient([
+    const { client, rpcCalls } = createDeletePtSessionsClient([
       {
         id: 'session-1',
         assignment_id: 'assignment-1',
@@ -758,6 +695,14 @@ describe('DELETE /api/pt/sessions', () => {
       deletedSessions: 2,
       deletedAssignments: 1,
     })
-    expect(deletedSessionIdLists).toEqual([['session-1', 'session-2']])
+    expect(rpcCalls).toEqual([
+      {
+        fn: 'delete_pt_sessions_and_archive_notifications',
+        args: {
+          session_ids: ['session-1', 'session-2'],
+          archived_at: expect.any(String),
+        },
+      },
+    ])
   })
 })

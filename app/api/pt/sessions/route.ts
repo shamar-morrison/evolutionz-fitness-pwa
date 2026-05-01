@@ -23,15 +23,6 @@ const deletePtSessionsSchema = z
   })
   .strict()
 
-const PT_SESSION_NOTIFICATION_TYPES = [
-  'reschedule_request',
-  'reschedule_approved',
-  'reschedule_denied',
-  'status_change_request',
-  'status_change_approved',
-  'status_change_denied',
-] as const
-
 function createErrorResponse(error: string, status: number) {
   return NextResponse.json(
     {
@@ -153,24 +144,16 @@ export async function DELETE(request: Request) {
     const sessionIds = targetSessions.map((session) => session.id)
     const deletedAssignmentIds = new Set(targetSessions.map((session) => session.assignment_id))
     const archivedAt = new Date().toISOString()
-    const { error: deleteSessionsError } = await supabase
-      .from('pt_sessions')
-      .delete()
-      .in('id', sessionIds)
+    const { error: deleteSessionsError } = await supabase.rpc(
+      'delete_pt_sessions_and_archive_notifications',
+      {
+        session_ids: sessionIds,
+        archived_at: archivedAt,
+      },
+    )
 
     if (deleteSessionsError) {
       throw new Error(`Failed to remove PT sessions: ${deleteSessionsError.message}`)
-    }
-
-    const { error: archiveNotificationsError } = await supabase
-      .from('notifications')
-      .update({ archived_at: archivedAt })
-      .in('type', [...PT_SESSION_NOTIFICATION_TYPES])
-      .in('metadata->>sessionId', sessionIds)
-      .is('archived_at', null)
-
-    if (archiveNotificationsError) {
-      throw new Error(`Failed to archive PT session notifications: ${archiveNotificationsError.message}`)
     }
 
     return NextResponse.json({

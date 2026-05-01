@@ -253,7 +253,9 @@ function createPostClient(options: {
   }
 }
 
-function createPatchClient() {
+function createPatchClient(options: {
+  rpcErrors?: Partial<Record<string, string>>
+} = {}) {
   const assignmentUpdates: Array<Record<string, unknown>> = []
   const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = []
 
@@ -263,10 +265,11 @@ function createPatchClient() {
     client: {
       rpc(fn: string, args: Record<string, unknown>) {
         rpcCalls.push({ fn, args })
+        const rpcError = options.rpcErrors?.[fn]
 
         return Promise.resolve({
-          data: 'assignment-1',
-          error: null,
+          data: rpcError ? null : 'assignment-1',
+          error: rpcError ? { message: rpcError } : null,
         } satisfies QueryResult<string>)
       },
       from(table: string) {
@@ -564,13 +567,10 @@ describe('PT assignment training plan routes', () => {
 
     expect(response.status).toBe(200)
     expect(payload.ok).toBe(true)
-    expect(assignmentUpdates[0]).toEqual({
-      updated_at: expect.any(String),
-      pt_fee: 15500,
-    })
+    expect(assignmentUpdates).toEqual([])
     expect(rpcCalls).toEqual([
       {
-        fn: 'replace_pt_assignment_schedule',
+        fn: 'update_pt_assignment_with_schedule',
         args: {
           p_assignment_id: 'assignment-1',
           p_sessions_per_week: 3,
@@ -592,6 +592,9 @@ describe('PT assignment training plan routes', () => {
               training_type_name: null,
             },
           ],
+          p_updates: {
+            ptFee: 15500,
+          },
         },
       },
     ])
@@ -611,6 +614,104 @@ describe('PT assignment training plan routes', () => {
         ],
       }),
     )
+  })
+
+  it('PATCH keeps direct-only assignment edits on the trainer_clients update path', async () => {
+    const { client, assignmentUpdates, rpcCalls } = createPatchClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow())
+    readTrainerClientByIdMock.mockResolvedValue(buildAssignment())
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ptFee: 15500,
+          notes: ' Updated notes ',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.ok).toBe(true)
+    expect(assignmentUpdates).toEqual([
+      {
+        updated_at: expect.any(String),
+        pt_fee: 15500,
+        notes: 'Updated notes',
+      },
+    ])
+    expect(rpcCalls).toEqual([])
+  })
+
+  it('PATCH returns a single error when the atomic schedule update rpc fails', async () => {
+    const { client, assignmentUpdates, rpcCalls } = createPatchClient({
+      rpcErrors: {
+        update_pt_assignment_with_schedule: 'rpc failed',
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow())
+    readTrainerClientByIdMock.mockResolvedValue(buildAssignment())
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ptFee: 15500,
+          trainingPlan: [
+            {
+              day: 'Monday',
+              trainingTypeName: 'Legs',
+            },
+          ],
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(payload.error).toBe('Failed to update the PT assignment: rpc failed')
+    expect(assignmentUpdates).toEqual([])
+    expect(rpcCalls).toEqual([
+      {
+        fn: 'update_pt_assignment_with_schedule',
+        args: {
+          p_assignment_id: 'assignment-1',
+          p_sessions_per_week: 3,
+          p_scheduled_days: ['Monday', 'Wednesday', 'Friday'],
+          p_schedule: [
+            {
+              day_of_week: 'Monday',
+              session_time: '07:00:00',
+              training_type_name: 'Legs',
+            },
+            {
+              day_of_week: 'Wednesday',
+              session_time: '07:00:00',
+              training_type_name: null,
+            },
+            {
+              day_of_week: 'Friday',
+              session_time: '07:00:00',
+              training_type_name: null,
+            },
+          ],
+          p_updates: {
+            ptFee: 15500,
+          },
+        },
+      },
+    ])
   })
 
   it('PATCH rejects training plan days that are outside the updated schedule', async () => {

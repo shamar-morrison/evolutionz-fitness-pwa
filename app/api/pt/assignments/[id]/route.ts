@@ -14,7 +14,7 @@ import {
   normalizePtAssignmentScheduleRows,
   readTrainerClientById,
   readTrainerClientRowById,
-  replacePtAssignmentSchedule,
+  updatePtAssignmentWithSchedule,
 } from '@/lib/pt-scheduling-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -221,14 +221,11 @@ export async function PATCH(
       }
     }
 
+    const normalizedNotes =
+      typeof input.notes !== 'undefined' ? normalizeOptionalNotes(input.notes) : undefined
     const updateValues: Record<string, unknown> = {}
-    const hasDirectAssignmentFieldUpdates =
-      Boolean(input.status) ||
-      typeof input.ptFee === 'number' ||
-      typeof input.notes !== 'undefined' ||
-      (typeof input.sessionsPerWeek === 'number' && !shouldReplaceSchedule)
 
-    if (!shouldReplaceSchedule || hasDirectAssignmentFieldUpdates) {
+    if (!shouldReplaceSchedule) {
       updateValues.updated_at = new Date().toISOString()
     }
 
@@ -244,11 +241,29 @@ export async function PATCH(
       updateValues.sessions_per_week = input.sessionsPerWeek
     }
 
-    if (typeof input.notes !== 'undefined') {
-      updateValues.notes = normalizeOptionalNotes(input.notes)
+    if (typeof normalizedNotes !== 'undefined') {
+      updateValues.notes = normalizedNotes
     }
 
-    if (Object.keys(updateValues).length > 0) {
+    if (shouldReplaceSchedule && normalizedSchedule) {
+      const replacedAssignmentId = await updatePtAssignmentWithSchedule(supabase, {
+        assignmentId: id,
+        sessionsPerWeek: nextSessionsPerWeek,
+        scheduledDays: nextSchedule.map((entry) => entry.day),
+        schedule: normalizedSchedule,
+        updates: {
+          ...(input.status ? { status: input.status } : {}),
+          ...(typeof input.ptFee === 'number' ? { ptFee: input.ptFee } : {}),
+          ...(typeof normalizedNotes !== 'undefined' ? { notes: normalizedNotes } : {}),
+        },
+      })
+
+      if (!replacedAssignmentId) {
+        return createErrorResponse('PT assignment not found.', 404)
+      }
+    }
+
+    if (!shouldReplaceSchedule && Object.keys(updateValues).length > 0) {
       const { data: updatedAssignment, error: updateError } = await supabase
         .from('trainer_clients')
         .update(updateValues)
@@ -261,19 +276,6 @@ export async function PATCH(
       }
 
       if (!updatedAssignment) {
-        return createErrorResponse('PT assignment not found.', 404)
-      }
-    }
-
-    if (shouldReplaceSchedule && normalizedSchedule) {
-      const replacedAssignmentId = await replacePtAssignmentSchedule(supabase, {
-        assignmentId: id,
-        sessionsPerWeek: nextSessionsPerWeek,
-        scheduledDays: nextSchedule.map((entry) => entry.day),
-        schedule: normalizedSchedule,
-      })
-
-      if (!replacedAssignmentId) {
         return createErrorResponse('PT assignment not found.', 404)
       }
     }
