@@ -55,7 +55,7 @@ function createInitialFormState(assignment?: TrainerClient | null): FormState {
   return {
     trainerId: assignment?.trainerId ?? '',
     ...buildAssignmentScheduleFormState(assignment),
-    ptFee: assignment ? String(assignment.ptFee) : '',
+    ptFee: assignment ? (assignment.ptFee === null ? '' : String(assignment.ptFee)) : '',
     notes: assignment?.notes ?? '',
   }
 }
@@ -149,16 +149,23 @@ export function PtAssignmentDialog({
       return
     }
 
-    const ptFee = Number(formData.ptFee)
+    const normalizedPtFee = formData.ptFee.trim()
+    let ptFee: number | null = null
     const scheduleFormPayload = getAssignmentScheduleFormPayload(formData)
 
-    if (!Number.isInteger(ptFee) || ptFee < 0) {
-      toast({
-        title: 'Invalid PT fee',
-        description: 'Enter a whole-number PT fee in JMD.',
-        variant: 'destructive',
-      })
-      return
+    if (normalizedPtFee !== '') {
+      const parsedPtFee = Number(normalizedPtFee)
+
+      if (!Number.isInteger(parsedPtFee) || parsedPtFee < 0) {
+        toast({
+          title: 'Invalid PT fee',
+          description: 'Enter a whole-number PT fee in JMD.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      ptFee = parsedPtFee
     }
 
     setIsSubmitting(true)
@@ -289,7 +296,6 @@ export function PtAssignmentDialog({
                 }))
               }
               disabled={isSubmitting}
-              required
             />
           </div>
 

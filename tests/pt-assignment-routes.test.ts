@@ -448,6 +448,93 @@ describe('PT assignment routes', () => {
     expect('trainer_payout' in insertValues[0]).toBe(false)
   })
 
+  it('POST accepts an omitted PT fee and stores null', async () => {
+    const { client, insertValues } = createPostClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readStaffProfileMock.mockResolvedValue({
+      id: '11111111-1111-1111-1111-111111111111',
+      titles: ['Trainer'],
+    })
+    hasStaffTitleMock.mockReturnValue(true)
+    readTrainerClientByIdMock.mockResolvedValue(buildAssignment({ ptFee: null }))
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/assignments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          trainerId: '11111111-1111-1111-1111-111111111111',
+          memberId: '22222222-2222-2222-2222-222222222222',
+          sessionsPerWeek: 3,
+          scheduledSessions: [
+            { day: 'Monday', sessionTime: '07:00' },
+            { day: 'Wednesday', sessionTime: '07:00' },
+            { day: 'Friday', sessionTime: '07:00' },
+          ],
+        }),
+      }),
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(201)
+    expect(payload.ok).toBe(true)
+    expect(insertValues[0]).toEqual({
+      trainer_id: '11111111-1111-1111-1111-111111111111',
+      member_id: '22222222-2222-2222-2222-222222222222',
+      pt_fee: null,
+      sessions_per_week: 3,
+      scheduled_days: ['Monday', 'Wednesday', 'Friday'],
+      session_time: '07:00:00',
+      notes: null,
+    })
+  })
+
+  it('POST accepts an explicit null PT fee and stores null', async () => {
+    const { client, insertValues } = createPostClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readStaffProfileMock.mockResolvedValue({
+      id: '11111111-1111-1111-1111-111111111111',
+      titles: ['Trainer'],
+    })
+    hasStaffTitleMock.mockReturnValue(true)
+    readTrainerClientByIdMock.mockResolvedValue(buildAssignment({ ptFee: null }))
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/assignments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          trainerId: '11111111-1111-1111-1111-111111111111',
+          memberId: '22222222-2222-2222-2222-222222222222',
+          ptFee: null,
+          sessionsPerWeek: 3,
+          scheduledSessions: [
+            { day: 'Monday', sessionTime: '07:00' },
+            { day: 'Wednesday', sessionTime: '07:00' },
+            { day: 'Friday', sessionTime: '07:00' },
+          ],
+        }),
+      }),
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(201)
+    expect(payload.ok).toBe(true)
+    expect(insertValues[0]).toEqual({
+      trainer_id: '11111111-1111-1111-1111-111111111111',
+      member_id: '22222222-2222-2222-2222-222222222222',
+      pt_fee: null,
+      sessions_per_week: 3,
+      scheduled_days: ['Monday', 'Wednesday', 'Friday'],
+      session_time: '07:00:00',
+      notes: null,
+    })
+  })
+
   it('POST rejects stale trainer payout input', async () => {
     const response = await POST(
       new Request('http://localhost/api/pt/assignments', {
@@ -578,6 +665,71 @@ describe('PT assignment routes', () => {
 
     expect(staleResponse.status).toBe(400)
     expect(stalePayload.error).toContain('Unrecognized key')
+  })
+
+  it('PATCH keeps an existing PT fee when the request omits ptFee', async () => {
+    const { client, updateValues } = createPatchClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow({ pt_fee: 15500 }))
+    readTrainerClientByIdMock
+      .mockResolvedValueOnce(buildAssignment({ ptFee: 15500, notes: 'Existing notes' }))
+      .mockResolvedValueOnce(buildAssignment({ ptFee: 15500, notes: 'Updated notes' }))
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          notes: '  Updated notes  ',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.ok).toBe(true)
+    expect(payload.assignment).toEqual(
+      expect.objectContaining({
+        ptFee: 15500,
+        notes: 'Updated notes',
+      }),
+    )
+    expect(updateValues[0]).toEqual({
+      updated_at: expect.any(String),
+      notes: 'Updated notes',
+    })
+    expect('pt_fee' in updateValues[0]).toBe(false)
+  })
+
+  it('PATCH clears the PT fee when null is provided', async () => {
+    const { client, updateValues } = createPatchClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow())
+    readTrainerClientByIdMock.mockResolvedValue(buildAssignment({ ptFee: null }))
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ptFee: null,
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.ok).toBe(true)
+    expect(updateValues[0]).toEqual({
+      updated_at: expect.any(String),
+      pt_fee: null,
+    })
   })
 
   it('PATCH rejects scheduled session times that are not valid HH:MM values', async () => {

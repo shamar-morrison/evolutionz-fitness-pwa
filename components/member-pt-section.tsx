@@ -25,7 +25,7 @@ import { useStaff } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
 import {
   deletePtAssignment,
-  formatJmdCurrency,
+  formatOptionalJmdCurrency,
   formatScheduleSummary,
   generatePtAssignmentSessions,
   getMonthLabel,
@@ -258,7 +258,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
                   {!isFrontDesk ? (
                     <div className="space-y-1">
                       <p className="text-muted-foreground text-sm">PT Fee</p>
-                      <p className="font-medium">{formatJmdCurrency(assignment.ptFee)}</p>
+                      <p className="font-medium">{formatOptionalJmdCurrency(assignment.ptFee)}</p>
                     </div>
                   ) : null}
                 </div>

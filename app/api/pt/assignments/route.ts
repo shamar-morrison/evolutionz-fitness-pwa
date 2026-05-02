@@ -25,7 +25,7 @@ const createAssignmentSchema = z
   .object({
     trainerId: z.string().uuid(),
     memberId: z.string().uuid(),
-    ptFee: z.number().int().min(0, 'PT fee must be zero or greater.'),
+    ptFee: z.number().int().min(0, 'PT fee must be zero or greater.').nullable().optional(),
     sessionsPerWeek: z.number().int().min(1).max(MAX_PT_SESSIONS_PER_WEEK),
     scheduledSessions: z.array(
       z
@@ -256,7 +256,7 @@ export async function POST(request: Request) {
       .insert({
         trainer_id: input.trainerId,
         member_id: input.memberId,
-        pt_fee: input.ptFee,
+        pt_fee: input.ptFee ?? null,
         sessions_per_week: input.sessionsPerWeek,
         scheduled_days: normalizedSchedule.map((entry) => entry.day),
         session_time: normalizedSessionTime,

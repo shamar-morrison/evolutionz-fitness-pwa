@@ -237,6 +237,87 @@ describe('GET /api/reports/revenue/overall', () => {
     expect(body.breakdown[2].percentageOfTotal).toBeCloseTo(55.555, 2)
   })
 
+  it('excludes PT sessions tied to null PT fees from the overall PT revenue totals', async () => {
+    const { client } = createSupabaseOverallRevenueClient({
+      member_payments: [
+        {
+          id: 'payment-1',
+          member_id: 'member-1',
+          member_type_id: 'type-general',
+          payment_type: 'membership',
+          payment_method: 'cash',
+          amount_paid: 12000,
+          payment_date: '2026-04-02',
+          notes: null,
+        },
+      ],
+      member_types: [{ id: 'type-general', name: 'General' }],
+      members: [
+        { id: 'member-1', name: 'Member One' },
+        { id: 'member-2', name: 'Member Two' },
+      ],
+      pt_sessions: [
+        {
+          id: 'session-1',
+          assignment_id: 'assignment-1',
+          trainer_id: 'trainer-1',
+          member_id: 'member-1',
+          scheduled_at: '2026-04-10T09:00:00-05:00',
+          status: 'completed',
+        },
+        {
+          id: 'session-2',
+          assignment_id: 'assignment-2',
+          trainer_id: 'trainer-1',
+          member_id: 'member-2',
+          scheduled_at: '2026-04-12T09:00:00-05:00',
+          status: 'completed',
+        },
+      ],
+      trainer_clients: [
+        { id: 'assignment-1', pt_fee: 15000 },
+        { id: 'assignment-2', pt_fee: null },
+      ],
+      profiles: [{ id: 'trainer-1', name: 'Jordan Trainer' }],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(
+      new Request('http://localhost/api/reports/revenue/overall?from=2026-04-01&to=2026-04-30'),
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.summary).toEqual({
+      grandTotal: 27000,
+      membershipRevenue: 12000,
+      cardFeeRevenue: 0,
+      ptRevenue: 15000,
+    })
+    expect(body.breakdown).toHaveLength(3)
+    expect(body.breakdown[0]).toEqual(
+      expect.objectContaining({
+        revenueStream: 'Membership',
+        amount: 12000,
+      }),
+    )
+    expect(body.breakdown[1]).toEqual(
+      expect.objectContaining({
+        revenueStream: 'Card Fees',
+        amount: 0,
+      }),
+    )
+    expect(body.breakdown[2]).toEqual(
+      expect.objectContaining({
+        revenueStream: 'PT Revenue',
+        amount: 15000,
+      }),
+    )
+    expect(body.breakdown[0].percentageOfTotal).toBeCloseTo(44.444, 2)
+    expect(body.breakdown[1].percentageOfTotal).toBeCloseTo(0, 2)
+    expect(body.breakdown[2].percentageOfTotal).toBeCloseTo(55.555, 2)
+  })
+
   it('returns zeroed summary values when there is no revenue in range', async () => {
     const { client } = createSupabaseOverallRevenueClient()
     getSupabaseAdminClientMock.mockReturnValue(client)

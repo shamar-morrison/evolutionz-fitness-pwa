@@ -4,6 +4,7 @@ import {
   buildJamaicaScheduledAt,
   buildJamaicaScheduledAtFromLocalInput,
   calculateAttendanceRate,
+  formatOptionalJmdCurrency,
   formatScheduleSummary,
   formatSessionTime,
   formatPtSessionStatusLabel,
@@ -142,5 +143,9 @@ describe('PT scheduling helpers', () => {
 
   it('exposes the trainer payout constant used by reporting', () => {
     expect(TRAINER_PAYOUT_PER_CLIENT_JMD).toBe(10500)
+  })
+
+  it('formats a missing PT fee label for non-revenue displays', () => {
+    expect(formatOptionalJmdCurrency(null)).toBe('Not set')
   })
 })

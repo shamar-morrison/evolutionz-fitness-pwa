@@ -25,7 +25,7 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     trainerId: overrides.trainerId ?? 'trainer-1',
     memberId: overrides.memberId ?? 'member-1',
     status: overrides.status ?? 'active',
-    ptFee: overrides.ptFee ?? 14000,
+    ptFee: Object.prototype.hasOwnProperty.call(overrides, 'ptFee') ? (overrides.ptFee ?? null) : 14000,
     sessionsPerWeek: overrides.sessionsPerWeek ?? 1,
     scheduledSessions:
       overrides.scheduledSessions ??
@@ -105,5 +105,20 @@ describe('TrainerClientsSection', () => {
     expect(container.textContent).toContain('Training Plan')
     expect(container.textContent).toContain('Monday → Legs')
     expect(container.textContent).toContain('Friday → Back')
+  })
+
+  it('renders Not set when a trainer client assignment has no PT fee', async () => {
+    useTrainerPtAssignmentsMock.mockReturnValue({
+      assignments: [createAssignment({ ptFee: null })],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<TrainerClientsSection trainerId="trainer-1" />)
+    })
+
+    expect(container.textContent).toContain('PT Fee')
+    expect(container.textContent).toContain('Not set')
   })
 })

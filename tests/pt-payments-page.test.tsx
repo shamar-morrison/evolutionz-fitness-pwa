@@ -208,7 +208,7 @@ describe('PtPaymentsPage', () => {
                     {
                       memberId: 'member-2',
                       memberName: 'Member Two',
-                      ptFee: 16000,
+                      ptFee: null,
                       sessionsCompleted: 1,
                       sessionsMissed: 0,
                       attendanceRate: 100,
@@ -237,6 +237,7 @@ describe('PtPaymentsPage', () => {
     expect(container.textContent).toContain('2')
     expect(container.textContent).toContain('Jordan Trainer')
     expect(container.textContent).toContain('Member One')
+    expect(container.textContent).toContain('Not set')
     expect(container.textContent).toContain('67%')
     expect(container.textContent).toContain('Monthly Payout:')
   })
