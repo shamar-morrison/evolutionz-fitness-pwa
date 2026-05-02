@@ -667,6 +667,43 @@ describe('PT assignment routes', () => {
     expect(stalePayload.error).toContain('Unrecognized key')
   })
 
+  it('PATCH keeps an existing PT fee when the request omits ptFee', async () => {
+    const { client, updateValues } = createPatchClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow({ pt_fee: 15500 }))
+    readTrainerClientByIdMock
+      .mockResolvedValueOnce(buildAssignment({ ptFee: 15500, notes: 'Existing notes' }))
+      .mockResolvedValueOnce(buildAssignment({ ptFee: 15500, notes: 'Updated notes' }))
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          notes: '  Updated notes  ',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.ok).toBe(true)
+    expect(payload.assignment).toEqual(
+      expect.objectContaining({
+        ptFee: 15500,
+        notes: 'Updated notes',
+      }),
+    )
+    expect(updateValues[0]).toEqual({
+      updated_at: expect.any(String),
+      notes: 'Updated notes',
+    })
+    expect('pt_fee' in updateValues[0]).toBe(false)
+  })
+
   it('PATCH clears the PT fee when null is provided', async () => {
     const { client, updateValues } = createPatchClient()
     getSupabaseAdminClientMock.mockReturnValue(client)

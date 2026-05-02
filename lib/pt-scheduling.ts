@@ -335,7 +335,7 @@ const trainerClientSchema = z.object({
   trainerId: z.string().trim().min(1),
   memberId: z.string().trim().min(1),
   status: z.enum(PT_ASSIGNMENT_STATUSES),
-  ptFee: z.number().int().nullable(),
+  ptFee: z.number().int().nonnegative().nullable(),
   sessionsPerWeek: z.number().int().min(1).max(MAX_PT_SESSIONS_PER_WEEK),
   scheduledSessions: z
     .array(
