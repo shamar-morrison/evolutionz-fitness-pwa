@@ -264,7 +264,7 @@ export default function MemberDetailPage() {
         description: `${buildMemberDisplayName(member.name, member.cardCode)}'s Hik slot was returned to the available pool.`,
       })
     } catch (error) {
-      console.error('Failed to releasse Hik slot:', error)
+      console.error('Failed to release Hik slot:', error)
       toast({
         title: 'Slot release failed',
         description:
