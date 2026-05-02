@@ -42,6 +42,7 @@ type PtAssignmentDialogProps = {
   memberId: string
   assignment?: TrainerClient | null
   trainers: TrainerOption[]
+  inactiveAssignmentsByTrainerId?: Readonly<Record<string, TrainerClient>>
   onSaved?: (assignment: TrainerClient, mode: 'create' | 'edit') => void | Promise<void>
 }
 
@@ -78,6 +79,7 @@ export function PtAssignmentDialog({
   memberId,
   assignment = null,
   trainers,
+  inactiveAssignmentsByTrainerId = {},
   onSaved,
 }: PtAssignmentDialogProps) {
   const defaultSessionTime = assignment?.sessionTime ?? DEFAULT_PT_SESSION_TIME
@@ -149,6 +151,15 @@ export function PtAssignmentDialog({
       return
     }
 
+    if (mode === 'edit' && !assignment?.id) {
+      toast({
+        title: 'Assignment unavailable',
+        description: 'This PT assignment could not be loaded. Reopen the dialog and try again.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const normalizedPtFee = formData.ptFee.trim()
     let ptFee: number | null = null
     const scheduleFormPayload = getAssignmentScheduleFormPayload(formData)
@@ -171,24 +182,37 @@ export function PtAssignmentDialog({
     setIsSubmitting(true)
 
     try {
-      const nextAssignment =
-        mode === 'create'
-          ? await createPtAssignment({
+      const assignmentPayload = {
+        ptFee,
+        sessionsPerWeek: scheduleFormPayload.sessionsPerWeek,
+        scheduledSessions: scheduleFormPayload.scheduledSessions,
+        trainingPlan: scheduleFormPayload.trainingPlan,
+        notes: formData.notes.trim() || null,
+      }
+      const inactiveAssignment =
+        mode === 'create' ? inactiveAssignmentsByTrainerId[formData.trainerId] ?? null : null
+      let nextAssignment: TrainerClient
+
+      if (mode === 'create') {
+        nextAssignment = inactiveAssignment
+          ? await updatePtAssignment(inactiveAssignment.id, {
+              status: 'active',
+              ...assignmentPayload,
+            })
+          : await createPtAssignment({
               trainerId: formData.trainerId,
               memberId,
-              ptFee,
-              sessionsPerWeek: scheduleFormPayload.sessionsPerWeek,
-              scheduledSessions: scheduleFormPayload.scheduledSessions,
-              trainingPlan: scheduleFormPayload.trainingPlan,
-              notes: formData.notes.trim() || null,
+              ...assignmentPayload,
             })
-          : await updatePtAssignment(assignment?.id ?? '', {
-              ptFee,
-              sessionsPerWeek: scheduleFormPayload.sessionsPerWeek,
-              scheduledSessions: scheduleFormPayload.scheduledSessions,
-              trainingPlan: scheduleFormPayload.trainingPlan,
-              notes: formData.notes.trim() || null,
-            })
+      } else {
+        const assignmentId = assignment?.id
+
+        if (!assignmentId) {
+          throw new Error('This PT assignment could not be loaded. Reopen the dialog and try again.')
+        }
+
+        nextAssignment = await updatePtAssignment(assignmentId, assignmentPayload)
+      }
 
       handleOpenChange(false)
       await onSaved?.(nextAssignment, mode)

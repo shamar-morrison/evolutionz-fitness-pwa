@@ -10,6 +10,7 @@ const {
   generatePtAssignmentSessionsMock,
   invalidateQueriesMock,
   permissionState,
+  ptAssignmentDialogPropsMock,
   toastMock,
   useMemberPtAssignmentMock,
   usePtAssignmentsMock,
@@ -30,6 +31,7 @@ const {
   permissionState: {
     canAssignTrainer: true,
   },
+  ptAssignmentDialogPropsMock: vi.fn(),
   toastMock: vi.fn(),
   useMemberPtAssignmentMock: vi.fn(),
   usePtAssignmentsMock: vi.fn(),
@@ -108,20 +110,21 @@ vi.mock('@/lib/pt-scheduling', async () => {
 })
 
 vi.mock('@/components/pt-assignment-dialog', () => ({
-  PtAssignmentDialog: ({
-    open,
-    mode,
-    onSaved,
-  }: {
+  PtAssignmentDialog: (props: {
     open: boolean
     mode: 'create' | 'edit'
+    trainers: Array<{ id: string }>
+    inactiveAssignmentsByTrainerId?: Record<string, { id: string }>
     onSaved: (assignment: typeof savedAssignmentFromDialog, mode: 'create' | 'edit') => void
-  }) =>
-    open ? (
-      <button type="button" onClick={() => void onSaved(savedAssignmentFromDialog, mode)}>
+  }) => {
+    ptAssignmentDialogPropsMock(props)
+
+    return props.open ? (
+      <button type="button" onClick={() => void props.onSaved(savedAssignmentFromDialog, props.mode)}>
         Save Assignment
       </button>
-    ) : null,
+    ) : null
+  },
 }))
 
 vi.mock('@/components/confirm-dialog', () => ({
@@ -259,6 +262,21 @@ async function flushAsyncWork() {
   })
 }
 
+function getLatestPtAssignmentDialogProps() {
+  const lastCall = ptAssignmentDialogPropsMock.mock.lastCall
+
+  if (!lastCall) {
+    throw new Error('PT assignment dialog props were not captured.')
+  }
+
+  return lastCall[0] as {
+    open: boolean
+    mode: 'create' | 'edit'
+    trainers: Array<{ id: string }>
+    inactiveAssignmentsByTrainerId?: Record<string, { id: string }>
+  }
+}
+
 describe('MemberPtSection', () => {
   let container: HTMLDivElement
   let root: Root
@@ -371,6 +389,81 @@ describe('MemberPtSection', () => {
       queryKey: queryKeys.ptScheduling.sessions({}),
       exact: false,
     })
+  })
+
+  it('keeps trainers with only inactive history available for reassignment', async () => {
+    useMemberPtAssignmentMock.mockReturnValue({
+      assignment: null,
+      isLoading: false,
+      error: null,
+    })
+    usePtAssignmentsMock.mockReturnValue({
+      data: [
+        createAssignment({
+          id: 'assignment-inactive-older',
+          trainerId: 'trainer-1',
+          status: 'inactive',
+          updatedAt: '2026-04-01T00:00:00.000Z',
+        }),
+        createAssignment({
+          id: 'assignment-inactive-newer',
+          trainerId: 'trainer-1',
+          status: 'inactive',
+          updatedAt: '2026-04-05T00:00:00.000Z',
+        }),
+      ],
+      isLoading: false,
+    })
+
+    await act(async () => {
+      root.render(<MemberPtSection memberId="member-1" />)
+    })
+
+    await clickButton(container, 'Assign Trainer')
+
+    const dialogProps = getLatestPtAssignmentDialogProps()
+
+    expect(dialogProps.mode).toBe('create')
+    expect(dialogProps.trainers.map((trainer) => trainer.id)).toEqual(['trainer-1', 'trainer-2'])
+    expect(dialogProps.inactiveAssignmentsByTrainerId?.['trainer-1']?.id).toBe('assignment-inactive-newer')
+  })
+
+  it('excludes trainers with active assignments from the available trainer options', async () => {
+    const activeAssignment = createAssignment({
+      id: 'assignment-active',
+      trainerId: 'trainer-2',
+      trainerName: 'Jamie Trainer',
+    })
+
+    useMemberPtAssignmentMock.mockReturnValue({
+      assignment: activeAssignment,
+      isLoading: false,
+      error: null,
+    })
+    usePtAssignmentsMock.mockReturnValue({
+      data: [
+        createAssignment({
+          id: 'assignment-inactive',
+          trainerId: 'trainer-1',
+          status: 'inactive',
+        }),
+        activeAssignment,
+      ],
+      isLoading: false,
+    })
+
+    await act(async () => {
+      root.render(<MemberPtSection memberId="member-1" />)
+    })
+
+    await clickButton(container, 'Edit Assignment')
+
+    const dialogProps = getLatestPtAssignmentDialogProps()
+
+    expect(dialogProps.mode).toBe('edit')
+    expect(dialogProps.trainers.map((trainer) => trainer.id)).toEqual(['trainer-1'])
+    expect(dialogProps.inactiveAssignmentsByTrainerId?.['trainer-1']?.id).toBe('assignment-inactive')
+    expect(dialogProps.inactiveAssignmentsByTrainerId?.['trainer-2']).toBeUndefined()
   })
 
   it('renders the training plan summary and invalidates both old and new trainer detail caches after reassignment', async () => {
