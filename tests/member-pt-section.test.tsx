@@ -208,7 +208,7 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     trainerId: overrides.trainerId ?? 'trainer-1',
     memberId: overrides.memberId ?? 'member-1',
     status: overrides.status ?? 'active',
-    ptFee: overrides.ptFee ?? 14000,
+    ptFee: Object.prototype.hasOwnProperty.call(overrides, 'ptFee') ? (overrides.ptFee ?? null) : 14000,
     sessionsPerWeek: overrides.sessionsPerWeek ?? 1,
     scheduledSessions:
       overrides.scheduledSessions ??
@@ -463,5 +463,29 @@ describe('MemberPtSection', () => {
     expect(container.textContent).not.toContain('Remove Assignment')
     expect(container.textContent).not.toContain('Assign Trainer')
     expect(useStaffMock).toHaveBeenCalledWith({ enabled: false })
+  })
+
+  it('renders Not set when an admin views an assignment with no PT fee', async () => {
+    const assignment = createAssignment({
+      ptFee: null,
+      notes: 'Fee to be decided later.',
+    })
+
+    useMemberPtAssignmentMock.mockReturnValue({
+      assignment,
+      isLoading: false,
+      error: null,
+    })
+    usePtAssignmentsMock.mockReturnValue({
+      data: [assignment],
+      isLoading: false,
+    })
+
+    await act(async () => {
+      root.render(<MemberPtSection memberId="member-1" />)
+    })
+
+    expect(container.textContent).toContain('PT Fee')
+    expect(container.textContent).toContain('Not set')
   })
 })

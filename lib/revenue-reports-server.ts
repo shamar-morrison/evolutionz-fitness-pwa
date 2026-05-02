@@ -46,7 +46,7 @@ type PtSessionRevenueRow = {
 
 type TrainerClientRevenueRow = {
   id: string
-  pt_fee: number | string
+  pt_fee: number | string | null
 }
 
 type ProfileSummaryRow = {
@@ -69,6 +69,23 @@ function normalizeAmount(value: unknown) {
   }
 
   return 0
+}
+
+function normalizeNullableAmount(value: unknown) {
+  if (value === null || typeof value === 'undefined') {
+    return null
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  return null
 }
 
 function compareMemberTypeNames(left: string, right: string) {
@@ -171,9 +188,17 @@ async function loadPtFeesByAssignmentId(
     throw new Error(`Failed to read PT fees for the revenue report: ${error.message}`)
   }
 
-  return new Map(
-    ((data ?? []) as TrainerClientRevenueRow[]).map((row) => [row.id, normalizeAmount(row.pt_fee)]),
-  )
+  const ptFeesByAssignmentId = new Map<string, number>()
+
+  for (const row of (data ?? []) as TrainerClientRevenueRow[]) {
+    const ptFee = normalizeNullableAmount(row.pt_fee)
+
+    if (ptFee !== null) {
+      ptFeesByAssignmentId.set(row.id, ptFee)
+    }
+  }
+
+  return ptFeesByAssignmentId
 }
 
 export async function readMembershipRevenueReport(
@@ -464,8 +489,13 @@ export async function readPtRevenueReport(
     }
   >()
 
-  const reportSessions = sessions.map((session) => {
-    const ptFee = ptFeeByAssignmentId.get(session.assignment_id) ?? 0
+  const reportSessions = sessions.flatMap((session) => {
+    const ptFee = ptFeeByAssignmentId.get(session.assignment_id)
+
+    if (typeof ptFee !== 'number') {
+      return []
+    }
+
     const trainerName = normalizeText(trainerById.get(session.trainer_id)?.name) || 'Unknown trainer'
     const memberName = normalizeText(memberById.get(session.member_id)?.name) || 'Unknown member'
     const trainerTotals = totalsByTrainer.get(session.trainer_id) ?? {
@@ -479,14 +509,16 @@ export async function readPtRevenueReport(
     trainerTotals.sessionCount += 1
     totalsByTrainer.set(session.trainer_id, trainerTotals)
 
-    return {
-      id: session.id,
-      memberId: normalizeText(session.member_id),
-      memberName,
-      trainerName,
-      ptFee,
-      sessionDate: session.scheduled_at,
-    }
+    return [
+      {
+        id: session.id,
+        memberId: normalizeText(session.member_id),
+        memberName,
+        trainerName,
+        ptFee,
+        sessionDate: session.scheduled_at,
+      },
+    ]
   })
 
   return {

@@ -616,6 +616,78 @@ describe('PT assignment training plan routes', () => {
     )
   })
 
+  it('PATCH sends a null PT fee through the atomic schedule update rpc when the fee is cleared', async () => {
+    const { client, assignmentUpdates, rpcCalls } = createPatchClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow())
+    readTrainerClientByIdMock.mockResolvedValue(
+      buildAssignment({
+        ptFee: null,
+        trainingPlan: [
+          {
+            day: 'Monday',
+            trainingTypeName: 'Legs',
+            isCustom: false,
+          },
+        ],
+      }),
+    )
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ptFee: null,
+          trainingPlan: [
+            {
+              day: 'Monday',
+              trainingTypeName: 'Legs',
+            },
+          ],
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.ok).toBe(true)
+    expect(assignmentUpdates).toEqual([])
+    expect(rpcCalls).toEqual([
+      {
+        fn: 'update_pt_assignment_with_schedule',
+        args: {
+          p_assignment_id: 'assignment-1',
+          p_sessions_per_week: 3,
+          p_scheduled_days: ['Monday', 'Wednesday', 'Friday'],
+          p_schedule: [
+            {
+              day_of_week: 'Monday',
+              session_time: '07:00:00',
+              training_type_name: 'Legs',
+            },
+            {
+              day_of_week: 'Wednesday',
+              session_time: '07:00:00',
+              training_type_name: null,
+            },
+            {
+              day_of_week: 'Friday',
+              session_time: '07:00:00',
+              training_type_name: null,
+            },
+          ],
+          p_updates: {
+            ptFee: null,
+          },
+        },
+      },
+    ])
+  })
+
   it('PATCH keeps direct-only assignment edits on the trainer_clients update path', async () => {
     const { client, assignmentUpdates, rpcCalls } = createPatchClient()
     getSupabaseAdminClientMock.mockReturnValue(client)

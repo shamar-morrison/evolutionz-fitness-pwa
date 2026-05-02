@@ -316,6 +316,72 @@ describe('GET /api/reports/pt-payments', () => {
     })
   })
 
+  it('keeps active assignments with a null PT fee in the PT payments report', async () => {
+    const { client } = createSupabaseReportClient({
+      trainer_clients: [
+        {
+          id: 'assignment-1',
+          trainer_id: 'trainer-1',
+          member_id: 'member-1',
+          pt_fee: null,
+          created_at: '2026-04-05T12:00:00.000Z',
+        },
+      ],
+      pt_sessions: [
+        { assignment_id: 'assignment-1', status: 'completed' },
+        { assignment_id: 'assignment-1', status: 'missed' },
+      ],
+      profiles: [
+        {
+          id: 'trainer-1',
+          name: 'Alex Trainer',
+          titles: ['Trainer'],
+        },
+      ],
+      members: [
+        {
+          id: 'member-1',
+          name: 'Member One',
+        },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(
+      new Request(
+        'http://localhost/api/reports/pt-payments?startDate=2026-04-01&endDate=2026-04-30',
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      summary: {
+        totalAssignments: 1,
+        totalSessionsCompleted: 1,
+        totalPayout: TRAINER_PAYOUT_PER_CLIENT_JMD,
+      },
+      trainers: [
+        {
+          trainerId: 'trainer-1',
+          trainerName: 'Alex Trainer',
+          trainerTitles: ['Trainer'],
+          activeClients: 1,
+          monthlyPayout: TRAINER_PAYOUT_PER_CLIENT_JMD,
+          clients: [
+            {
+              memberId: 'member-1',
+              memberName: 'Member One',
+              ptFee: null,
+              sessionsCompleted: 1,
+              sessionsMissed: 1,
+              attendanceRate: 50,
+            },
+          ],
+        },
+      ],
+    })
+  })
+
   it('returns an empty report when there are no active trainer assignments in the period', async () => {
     const { client } = createSupabaseReportClient()
     getSupabaseAdminClientMock.mockReturnValue(client)

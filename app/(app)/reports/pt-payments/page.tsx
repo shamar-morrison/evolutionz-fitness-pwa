@@ -23,6 +23,7 @@ import { usePtPaymentsReport } from '@/hooks/use-pt-scheduling'
 import { toast } from '@/hooks/use-toast'
 import {
   formatJmdCurrency,
+  formatOptionalJmdCurrency,
   getCurrentMonthDateRangeInJamaica,
   JAMAICA_OFFSET,
   JAMAICA_TIME_ZONE,
@@ -169,7 +170,7 @@ async function downloadPtPaymentsPdf(
       head: [['Member', 'PT Fee', 'Sessions Completed', 'Sessions Missed', 'Attendance Rate']],
       body: trainer.clients.map((client) => [
         client.memberName,
-        formatJmdCurrency(client.ptFee),
+        formatOptionalJmdCurrency(client.ptFee),
         String(client.sessionsCompleted),
         String(client.sessionsMissed),
         formatAttendanceRate(client.attendanceRate),
@@ -428,7 +429,7 @@ function ReportsPageContent() {
                                   className="cursor-pointer hover:bg-muted/20"
                                 >
                                   <TableCell className="font-medium">{client.memberName}</TableCell>
-                                  <TableCell>{formatJmdCurrency(client.ptFee)}</TableCell>
+                                  <TableCell>{formatOptionalJmdCurrency(client.ptFee)}</TableCell>
                                   <TableCell>{client.sessionsCompleted}</TableCell>
                                   <TableCell>{client.sessionsMissed}</TableCell>
                                   <TableCell>{formatAttendanceRate(client.attendanceRate)}</TableCell>

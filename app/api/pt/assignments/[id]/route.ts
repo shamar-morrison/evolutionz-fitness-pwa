@@ -22,7 +22,7 @@ import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 const updateAssignmentSchema = z
   .object({
     status: z.enum(PT_ASSIGNMENT_STATUSES).optional(),
-    ptFee: z.number().int().min(0, 'PT fee must be zero or greater.').optional(),
+    ptFee: z.number().int().min(0, 'PT fee must be zero or greater.').nullable().optional(),
     sessionsPerWeek: z.number().int().min(1).max(MAX_PT_SESSIONS_PER_WEEK).optional(),
     scheduledSessions: z
       .array(
@@ -169,6 +169,7 @@ export async function PATCH(
       day,
       sessionTime,
     }))
+    const hasPtFeeUpdate = Object.prototype.hasOwnProperty.call(input, 'ptFee')
     const nextSessionsPerWeek = input.sessionsPerWeek ?? existingAssignmentRow.sessions_per_week
     const nextScheduledSessions = input.scheduledSessions ?? existingScheduledSessions
     const nextTrainingPlan =
@@ -233,8 +234,8 @@ export async function PATCH(
       updateValues.status = input.status
     }
 
-    if (typeof input.ptFee === 'number') {
-      updateValues.pt_fee = input.ptFee
+    if (hasPtFeeUpdate) {
+      updateValues.pt_fee = input.ptFee ?? null
     }
 
     if (typeof input.sessionsPerWeek === 'number' && !shouldReplaceSchedule) {
@@ -253,7 +254,7 @@ export async function PATCH(
         schedule: normalizedSchedule,
         updates: {
           ...(input.status ? { status: input.status } : {}),
-          ...(typeof input.ptFee === 'number' ? { ptFee: input.ptFee } : {}),
+          ...(hasPtFeeUpdate ? { ptFee: input.ptFee ?? null } : {}),
           ...(typeof normalizedNotes !== 'undefined' ? { notes: normalizedNotes } : {}),
         },
       })

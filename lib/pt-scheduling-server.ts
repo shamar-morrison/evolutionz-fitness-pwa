@@ -57,7 +57,7 @@ type TrainerClientRow = {
   trainer_id: string
   member_id: string
   status: TrainerClientStatus
-  pt_fee: number
+  pt_fee: number | null
   sessions_per_week: number
   scheduled_days: string[] | null
   session_time: string
@@ -159,7 +159,7 @@ type PtPaymentAssignmentRow = {
   id: string
   trainer_id: string
   member_id: string
-  pt_fee: number
+  pt_fee: number | null
   created_at: string
 }
 
@@ -299,7 +299,7 @@ export async function updatePtAssignmentWithSchedule(
     schedule: ReplacePtAssignmentScheduleEntry[]
     updates: {
       status?: TrainerClientStatus
-      ptFee?: number
+      ptFee?: number | null
       notes?: string | null
     }
   },
@@ -314,8 +314,8 @@ export async function updatePtAssignmentWithSchedule(
     rpcUpdates.status = params.updates.status
   }
 
-  if (typeof params.updates.ptFee === 'number') {
-    rpcUpdates.ptFee = params.updates.ptFee
+  if ('ptFee' in params.updates) {
+    rpcUpdates.ptFee = params.updates.ptFee ?? null
   }
 
   if ('notes' in params.updates) {

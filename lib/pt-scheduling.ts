@@ -82,7 +82,7 @@ export type TrainerClient = {
   trainerId: string
   memberId: string
   status: 'active' | 'inactive'
-  ptFee: number
+  ptFee: number | null
   sessionsPerWeek: number
   scheduledSessions: AssignmentScheduleDay[]
   scheduledDays: DayOfWeek[]
@@ -208,7 +208,7 @@ export type PtPaymentsReportSummary = {
 export type PtPaymentsReportClient = {
   memberId: string
   memberName: string
-  ptFee: number
+  ptFee: number | null
   sessionsCompleted: number
   sessionsMissed: number
   attendanceRate: number
@@ -246,7 +246,7 @@ export type PtSessionFilters = {
 export type CreatePtAssignmentData = {
   trainerId: string
   memberId: string
-  ptFee: number
+  ptFee?: number | null
   sessionsPerWeek: number
   scheduledSessions: ScheduledSessionInput[]
   trainingPlan?: AssignmentTrainingPlanInput[]
@@ -255,7 +255,7 @@ export type CreatePtAssignmentData = {
 
 export type UpdatePtAssignmentData = {
   status?: TrainerClientStatus
-  ptFee?: number
+  ptFee?: number | null
   sessionsPerWeek?: number
   scheduledSessions?: ScheduledSessionInput[]
   trainingPlan?: AssignmentTrainingPlanInput[]
@@ -335,7 +335,7 @@ const trainerClientSchema = z.object({
   trainerId: z.string().trim().min(1),
   memberId: z.string().trim().min(1),
   status: z.enum(PT_ASSIGNMENT_STATUSES),
-  ptFee: z.number().int(),
+  ptFee: z.number().int().nullable(),
   sessionsPerWeek: z.number().int().min(1).max(MAX_PT_SESSIONS_PER_WEEK),
   scheduledSessions: z
     .array(
@@ -540,7 +540,7 @@ const ptPaymentsReportResponseSchema = z.object({
             z.object({
               memberId: z.string().trim().min(1),
               memberName: z.string().trim().min(1),
-              ptFee: z.number().int().nonnegative(),
+              ptFee: z.number().int().nonnegative().nullable(),
               sessionsCompleted: z.number().int().nonnegative(),
               sessionsMissed: z.number().int().nonnegative(),
               attendanceRate: z.number().int().min(0).max(100),
@@ -996,6 +996,10 @@ export function formatJmdCurrency(value: number) {
     currency: 'JMD',
     maximumFractionDigits: 0,
   }).format(value)
+}
+
+export function formatOptionalJmdCurrency(value: number | null) {
+  return value === null ? 'Not set' : formatJmdCurrency(value)
 }
 
 export function calculateAttendanceRate(completedCount: number, missedCount: number) {

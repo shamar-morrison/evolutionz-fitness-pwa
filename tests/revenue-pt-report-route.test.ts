@@ -306,6 +306,70 @@ describe('GET /api/reports/revenue/pt', () => {
     ])
   })
 
+  it('excludes completed sessions tied to null PT fees from PT revenue rows and totals', async () => {
+    const { client } = createSupabasePtRevenueClient({
+      pt_sessions: [
+        {
+          id: 'session-1',
+          assignment_id: 'assignment-1',
+          trainer_id: 'trainer-1',
+          member_id: 'member-1',
+          scheduled_at: '2026-04-10T09:00:00-05:00',
+          status: 'completed',
+        },
+        {
+          id: 'session-2',
+          assignment_id: 'assignment-2',
+          trainer_id: 'trainer-1',
+          member_id: 'member-2',
+          scheduled_at: '2026-04-08T09:00:00-05:00',
+          status: 'completed',
+        },
+      ],
+      trainer_clients: [
+        { id: 'assignment-1', pt_fee: 15000 },
+        { id: 'assignment-2', pt_fee: null },
+      ],
+      members: [
+        { id: 'member-1', name: 'Member One' },
+        { id: 'member-2', name: 'Member Two' },
+      ],
+      profiles: [{ id: 'trainer-1', name: 'Jordan Trainer' }],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(
+      new Request('http://localhost/api/reports/revenue/pt?from=2026-04-01&to=2026-04-30'),
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toEqual({
+      summary: {
+        totalRevenue: 15000,
+        totalSessionsCompleted: 1,
+      },
+      sessions: [
+        {
+          id: 'session-1',
+          memberId: 'member-1',
+          memberName: 'Member One',
+          trainerName: 'Jordan Trainer',
+          ptFee: 15000,
+          sessionDate: '2026-04-10T09:00:00-05:00',
+        },
+      ],
+      totalsByTrainer: [
+        {
+          trainerId: 'trainer-1',
+          trainerName: 'Jordan Trainer',
+          totalRevenue: 15000,
+          sessionCount: 1,
+        },
+      ],
+    })
+  })
+
   it('returns an empty PT report when no sessions are completed in range', async () => {
     const { client } = createSupabasePtRevenueClient()
     getSupabaseAdminClientMock.mockReturnValue(client)

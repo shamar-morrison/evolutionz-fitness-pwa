@@ -186,7 +186,7 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     trainerId: overrides.trainerId ?? '11111111-1111-1111-1111-111111111111',
     memberId: overrides.memberId ?? '22222222-2222-2222-2222-222222222222',
     status: overrides.status ?? 'active',
-    ptFee: overrides.ptFee ?? 14000,
+    ptFee: Object.prototype.hasOwnProperty.call(overrides, 'ptFee') ? (overrides.ptFee ?? null) : 14000,
     sessionsPerWeek: overrides.sessionsPerWeek ?? 1,
     scheduledSessions:
       overrides.scheduledSessions ??
@@ -436,6 +436,68 @@ describe('PtAssignmentDialog', () => {
     expect('trainerPayout' in createPtAssignmentMock.mock.calls[0][0]).toBe(false)
   })
 
+  it('submits a blank PT fee as null when creating an assignment', async () => {
+    createPtAssignmentMock.mockResolvedValue(
+      createAssignment({
+        ptFee: null,
+        sessionsPerWeek: 3,
+        scheduledDays: ['Monday', 'Wednesday', 'Friday'],
+        trainingPlan: [],
+      }),
+    )
+
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="create"
+          memberId="22222222-2222-2222-2222-222222222222"
+          trainers={[createTrainer()]}
+        />,
+      )
+    })
+
+    const trainerSelect = container.querySelector('select[aria-label="Trainer"]')
+
+    if (!(trainerSelect instanceof HTMLSelectElement)) {
+      throw new Error('Trainer select not found.')
+    }
+
+    await act(async () => {
+      setInputValue(trainerSelect, '11111111-1111-1111-1111-111111111111')
+    })
+
+    await clickButton(container, 'Monday')
+    await clickButton(container, 'Wednesday')
+    await clickButton(container, 'Friday')
+    await clickButton(container, 'Assign Trainer')
+    await flushAsyncWork()
+
+    expect(createPtAssignmentMock).toHaveBeenCalledWith({
+      trainerId: '11111111-1111-1111-1111-111111111111',
+      memberId: '22222222-2222-2222-2222-222222222222',
+      ptFee: null,
+      sessionsPerWeek: 3,
+      scheduledSessions: [
+        {
+          day: 'Monday',
+          sessionTime: '07:00',
+        },
+        {
+          day: 'Wednesday',
+          sessionTime: '07:00',
+        },
+        {
+          day: 'Friday',
+          sessionTime: '07:00',
+        },
+      ],
+      trainingPlan: [],
+      notes: null,
+    })
+  })
+
   it('submits independent session times for each selected day', async () => {
     createPtAssignmentMock.mockResolvedValue(
       createAssignment({
@@ -553,6 +615,82 @@ describe('PtAssignmentDialog', () => {
       '6',
       '7',
     ])
+  })
+
+  it('shows an empty PT fee input when editing an assignment with no fee', async () => {
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="edit"
+          memberId="22222222-2222-2222-2222-222222222222"
+          assignment={createAssignment({ ptFee: null })}
+          trainers={[createTrainer()]}
+        />,
+      )
+    })
+
+    const ptFeeInput = container.querySelector('#edit-pt-fee')
+
+    if (!(ptFeeInput instanceof HTMLInputElement)) {
+      throw new Error('PT fee input not found.')
+    }
+
+    expect(ptFeeInput.value).toBe('')
+  })
+
+  it('submits a cleared PT fee as null when editing an assignment', async () => {
+    updatePtAssignmentMock.mockResolvedValue(
+      createAssignment({
+        ptFee: null,
+        notes: 'Updated notes',
+      }),
+    )
+
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="edit"
+          memberId="22222222-2222-2222-2222-222222222222"
+          assignment={createAssignment({
+            ptFee: 14000,
+            notes: 'Original notes',
+          })}
+          trainers={[createTrainer()]}
+        />,
+      )
+    })
+
+    const ptFeeInput = container.querySelector('#edit-pt-fee')
+    const notesInput = container.querySelector('#edit-pt-notes')
+
+    if (!(ptFeeInput instanceof HTMLInputElement) || !(notesInput instanceof HTMLTextAreaElement)) {
+      throw new Error('Edit form inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(ptFeeInput, '')
+      setInputValue(notesInput, 'Updated notes')
+    })
+
+    await clickButton(container, 'Save Changes')
+    await flushAsyncWork()
+
+    expect(updatePtAssignmentMock).toHaveBeenCalledWith('assignment-1', {
+      ptFee: null,
+      sessionsPerWeek: 1,
+      scheduledSessions: [
+        {
+          day: 'Monday',
+          sessionTime: '07:00',
+        },
+      ],
+      trainingPlan: [],
+      notes: 'Updated notes',
+    })
   })
 
   it('exposes aria-pressed state on scheduled day toggles', async () => {
