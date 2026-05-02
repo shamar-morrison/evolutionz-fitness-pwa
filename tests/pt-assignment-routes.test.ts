@@ -225,7 +225,7 @@ function createPostClient() {
   }
 }
 
-function createPatchClient() {
+function createPatchClient(options: { activeAssignment?: { id: string } | null } = {}) {
   const updateValues: Array<Record<string, unknown>> = []
 
   return {
@@ -260,7 +260,7 @@ function createPatchClient() {
                             return {
                               maybeSingle() {
                                 return Promise.resolve({
-                                  data: null,
+                                  data: options.activeAssignment ?? null,
                                   error: null,
                                 } satisfies QueryResult<{ id: string }>)
                               },
@@ -730,6 +730,67 @@ describe('PT assignment routes', () => {
       updated_at: expect.any(String),
       pt_fee: null,
     })
+  })
+
+  it('PATCH reactivates an inactive assignment when no other active assignment exists', async () => {
+    const { client, updateValues } = createPatchClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow({ status: 'inactive' }))
+    readTrainerClientByIdMock
+      .mockResolvedValueOnce(buildAssignment({ status: 'inactive' }))
+      .mockResolvedValueOnce(buildAssignment({ status: 'active' }))
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'active',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.ok).toBe(true)
+    expect(payload.assignment).toEqual(expect.objectContaining({ status: 'active' }))
+    expect(updateValues[0]).toEqual({
+      updated_at: expect.any(String),
+      status: 'active',
+    })
+  })
+
+  it('PATCH rejects reactivation when another active assignment already exists', async () => {
+    const { client, updateValues } = createPatchClient({
+      activeAssignment: { id: 'assignment-2' },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow({ status: 'inactive' }))
+    readTrainerClientByIdMock.mockResolvedValue(buildAssignment({ status: 'inactive' }))
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'active',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(payload).toEqual({
+      ok: false,
+      error: 'This member already has another active trainer assignment.',
+    })
+    expect(updateValues).toEqual([])
   })
 
   it('PATCH rejects scheduled session times that are not valid HH:MM values', async () => {

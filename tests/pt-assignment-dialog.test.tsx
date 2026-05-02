@@ -436,6 +436,146 @@ describe('PtAssignmentDialog', () => {
     expect('trainerPayout' in createPtAssignmentMock.mock.calls[0][0]).toBe(false)
   })
 
+  it('reactivates an inactive assignment when the selected trainer has prior history', async () => {
+    updatePtAssignmentMock.mockResolvedValue(
+      createAssignment({
+        id: 'assignment-inactive',
+        status: 'active',
+        sessionsPerWeek: 3,
+        scheduledDays: ['Monday', 'Wednesday', 'Friday'],
+      }),
+    )
+
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="create"
+          memberId="22222222-2222-2222-2222-222222222222"
+          trainers={[createTrainer()]}
+          inactiveAssignmentsByTrainerId={{
+            '11111111-1111-1111-1111-111111111111': createAssignment({
+              id: 'assignment-inactive',
+              status: 'inactive',
+            }),
+          }}
+        />,
+      )
+    })
+
+    const trainerSelect = container.querySelector('select[aria-label="Trainer"]')
+    const ptFeeInput = container.querySelector('#create-pt-fee')
+
+    if (!(trainerSelect instanceof HTMLSelectElement) || !(ptFeeInput instanceof HTMLInputElement)) {
+      throw new Error('Assignment form inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(trainerSelect, '11111111-1111-1111-1111-111111111111')
+      setInputValue(ptFeeInput, '15000')
+    })
+
+    await clickButton(container, 'Monday')
+    await clickButton(container, 'Wednesday')
+    await clickButton(container, 'Friday')
+    await clickButton(container, 'Assign Trainer')
+    await flushAsyncWork()
+
+    expect(updatePtAssignmentMock).toHaveBeenCalledWith('assignment-inactive', {
+      status: 'active',
+      ptFee: 15000,
+      sessionsPerWeek: 3,
+      scheduledSessions: [
+        {
+          day: 'Monday',
+          sessionTime: '07:00',
+        },
+        {
+          day: 'Wednesday',
+          sessionTime: '07:00',
+        },
+        {
+          day: 'Friday',
+          sessionTime: '07:00',
+        },
+      ],
+      trainingPlan: [],
+      notes: null,
+    })
+    expect(createPtAssignmentMock).not.toHaveBeenCalled()
+  })
+
+  it('creates a new assignment when the selected trainer has no inactive history', async () => {
+    createPtAssignmentMock.mockResolvedValue(
+      createAssignment({
+        sessionsPerWeek: 3,
+        scheduledDays: ['Monday', 'Wednesday', 'Friday'],
+      }),
+    )
+
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="create"
+          memberId="22222222-2222-2222-2222-222222222222"
+          trainers={[createTrainer()]}
+          inactiveAssignmentsByTrainerId={{
+            '99999999-9999-9999-9999-999999999999': createAssignment({
+              id: 'assignment-other-trainer',
+              trainerId: '99999999-9999-9999-9999-999999999999',
+              status: 'inactive',
+            }),
+          }}
+        />,
+      )
+    })
+
+    const trainerSelect = container.querySelector('select[aria-label="Trainer"]')
+    const ptFeeInput = container.querySelector('#create-pt-fee')
+
+    if (!(trainerSelect instanceof HTMLSelectElement) || !(ptFeeInput instanceof HTMLInputElement)) {
+      throw new Error('Assignment form inputs not found.')
+    }
+
+    await act(async () => {
+      setInputValue(trainerSelect, '11111111-1111-1111-1111-111111111111')
+      setInputValue(ptFeeInput, '15000')
+    })
+
+    await clickButton(container, 'Monday')
+    await clickButton(container, 'Wednesday')
+    await clickButton(container, 'Friday')
+    await clickButton(container, 'Assign Trainer')
+    await flushAsyncWork()
+
+    expect(createPtAssignmentMock).toHaveBeenCalledWith({
+      trainerId: '11111111-1111-1111-1111-111111111111',
+      memberId: '22222222-2222-2222-2222-222222222222',
+      ptFee: 15000,
+      sessionsPerWeek: 3,
+      scheduledSessions: [
+        {
+          day: 'Monday',
+          sessionTime: '07:00',
+        },
+        {
+          day: 'Wednesday',
+          sessionTime: '07:00',
+        },
+        {
+          day: 'Friday',
+          sessionTime: '07:00',
+        },
+      ],
+      trainingPlan: [],
+      notes: null,
+    })
+    expect(updatePtAssignmentMock).not.toHaveBeenCalled()
+  })
+
   it('submits a blank PT fee as null when creating an assignment', async () => {
     createPtAssignmentMock.mockResolvedValue(
       createAssignment({

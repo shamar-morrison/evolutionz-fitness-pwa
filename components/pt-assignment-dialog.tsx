@@ -42,6 +42,7 @@ type PtAssignmentDialogProps = {
   memberId: string
   assignment?: TrainerClient | null
   trainers: TrainerOption[]
+  inactiveAssignmentsByTrainerId?: Readonly<Record<string, TrainerClient>>
   onSaved?: (assignment: TrainerClient, mode: 'create' | 'edit') => void | Promise<void>
 }
 
@@ -78,6 +79,7 @@ export function PtAssignmentDialog({
   memberId,
   assignment = null,
   trainers,
+  inactiveAssignmentsByTrainerId = {},
   onSaved,
 }: PtAssignmentDialogProps) {
   const defaultSessionTime = assignment?.sessionTime ?? DEFAULT_PT_SESSION_TIME
@@ -171,24 +173,28 @@ export function PtAssignmentDialog({
     setIsSubmitting(true)
 
     try {
+      const assignmentPayload = {
+        ptFee,
+        sessionsPerWeek: scheduleFormPayload.sessionsPerWeek,
+        scheduledSessions: scheduleFormPayload.scheduledSessions,
+        trainingPlan: scheduleFormPayload.trainingPlan,
+        notes: formData.notes.trim() || null,
+      }
+      const inactiveAssignment =
+        mode === 'create' ? inactiveAssignmentsByTrainerId[formData.trainerId] ?? null : null
       const nextAssignment =
         mode === 'create'
-          ? await createPtAssignment({
-              trainerId: formData.trainerId,
-              memberId,
-              ptFee,
-              sessionsPerWeek: scheduleFormPayload.sessionsPerWeek,
-              scheduledSessions: scheduleFormPayload.scheduledSessions,
-              trainingPlan: scheduleFormPayload.trainingPlan,
-              notes: formData.notes.trim() || null,
-            })
-          : await updatePtAssignment(assignment?.id ?? '', {
-              ptFee,
-              sessionsPerWeek: scheduleFormPayload.sessionsPerWeek,
-              scheduledSessions: scheduleFormPayload.scheduledSessions,
-              trainingPlan: scheduleFormPayload.trainingPlan,
-              notes: formData.notes.trim() || null,
-            })
+          ? inactiveAssignment
+            ? await updatePtAssignment(inactiveAssignment.id, {
+                status: 'active',
+                ...assignmentPayload,
+              })
+            : await createPtAssignment({
+                trainerId: formData.trainerId,
+                memberId,
+                ...assignmentPayload,
+              })
+          : await updatePtAssignment(assignment?.id ?? '', assignmentPayload)
 
       handleOpenChange(false)
       await onSaved?.(nextAssignment, mode)

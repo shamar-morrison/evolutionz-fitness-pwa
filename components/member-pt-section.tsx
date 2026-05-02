@@ -44,6 +44,41 @@ type MemberPtSectionProps = {
 
 type RemovalAction = 'keep' | 'cancel-future'
 
+function getAssignmentSortTimestamp(assignment: Pick<TrainerClient, 'updatedAt' | 'createdAt'>) {
+  const updatedAtTime = new Date(assignment.updatedAt).getTime()
+
+  if (!Number.isNaN(updatedAtTime)) {
+    return updatedAtTime
+  }
+
+  const createdAtTime = new Date(assignment.createdAt).getTime()
+
+  if (!Number.isNaN(createdAtTime)) {
+    return createdAtTime
+  }
+
+  return 0
+}
+
+function buildInactiveAssignmentsByTrainerId(assignments: ReadonlyArray<TrainerClient>) {
+  return assignments.reduce<Record<string, TrainerClient>>((lookup, existingAssignment) => {
+    if (existingAssignment.status !== 'inactive') {
+      return lookup
+    }
+
+    const currentAssignment = lookup[existingAssignment.trainerId]
+
+    if (
+      !currentAssignment ||
+      getAssignmentSortTimestamp(existingAssignment) >= getAssignmentSortTimestamp(currentAssignment)
+    ) {
+      lookup[existingAssignment.trainerId] = existingAssignment
+    }
+
+    return lookup
+  }, {})
+}
+
 async function invalidatePtQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   memberId: string,
@@ -94,20 +129,27 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
   const [removalAction, setRemovalAction] = useState<RemovalAction | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const isRemoving = removalAction !== null
+  const allAssignments = allAssignmentsQuery.data ?? []
+  const activeAssignments = useMemo(
+    () => allAssignments.filter((existingAssignment) => existingAssignment.status === 'active'),
+    [allAssignments],
+  )
+  const inactiveAssignmentsByTrainerId = useMemo(
+    () => buildInactiveAssignmentsByTrainerId(allAssignments),
+    [allAssignments],
+  )
   const availableTrainers = useMemo(() => {
     if (!canAssignTrainer) {
       return []
     }
 
-    const unavailableTrainerIds = new Set(
-      (allAssignmentsQuery.data ?? []).map((existingAssignment) => existingAssignment.trainerId),
-    )
+    const unavailableTrainerIds = new Set(activeAssignments.map((existingAssignment) => existingAssignment.trainerId))
 
     return staff.filter(
       (profile) =>
         hasStaffTitle(profile.titles, 'Trainer') && !unavailableTrainerIds.has(profile.id),
     )
-  }, [allAssignmentsQuery.data, canAssignTrainer, staff])
+  }, [activeAssignments, canAssignTrainer, staff])
 
   const handleAssignmentSaved = async (nextAssignment: TrainerClient, mode: 'create' | 'edit') => {
     await invalidatePtQueries(queryClient, memberId, nextAssignment.id, [
@@ -342,6 +384,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
             memberId={memberId}
             assignment={assignment}
             trainers={availableTrainers}
+            inactiveAssignmentsByTrainerId={inactiveAssignmentsByTrainerId}
             onSaved={handleAssignmentSaved}
           />
 
