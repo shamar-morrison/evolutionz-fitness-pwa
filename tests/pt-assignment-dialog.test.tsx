@@ -833,6 +833,31 @@ describe('PtAssignmentDialog', () => {
     })
   })
 
+  it('blocks edit submission when the assignment id is missing', async () => {
+    await act(async () => {
+      root.render(
+        <PtAssignmentDialog
+          open
+          onOpenChange={onOpenChangeMock}
+          mode="edit"
+          memberId="22222222-2222-2222-2222-222222222222"
+          assignment={createAssignment({ id: '' })}
+          trainers={[createTrainer()]}
+        />,
+      )
+    })
+
+    await submitForm(container)
+    await flushAsyncWork()
+
+    expect(updatePtAssignmentMock).not.toHaveBeenCalled()
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Assignment unavailable',
+      description: 'This PT assignment could not be loaded. Reopen the dialog and try again.',
+      variant: 'destructive',
+    })
+  })
+
   it('exposes aria-pressed state on scheduled day toggles', async () => {
     await act(async () => {
       root.render(

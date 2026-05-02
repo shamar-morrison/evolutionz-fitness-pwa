@@ -151,6 +151,15 @@ export function PtAssignmentDialog({
       return
     }
 
+    if (mode === 'edit' && !assignment?.id) {
+      toast({
+        title: 'Assignment unavailable',
+        description: 'This PT assignment could not be loaded. Reopen the dialog and try again.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const normalizedPtFee = formData.ptFee.trim()
     let ptFee: number | null = null
     const scheduleFormPayload = getAssignmentScheduleFormPayload(formData)
@@ -182,19 +191,28 @@ export function PtAssignmentDialog({
       }
       const inactiveAssignment =
         mode === 'create' ? inactiveAssignmentsByTrainerId[formData.trainerId] ?? null : null
-      const nextAssignment =
-        mode === 'create'
-          ? inactiveAssignment
-            ? await updatePtAssignment(inactiveAssignment.id, {
-                status: 'active',
-                ...assignmentPayload,
-              })
-            : await createPtAssignment({
-                trainerId: formData.trainerId,
-                memberId,
-                ...assignmentPayload,
-              })
-          : await updatePtAssignment(assignment?.id ?? '', assignmentPayload)
+      let nextAssignment: TrainerClient
+
+      if (mode === 'create') {
+        nextAssignment = inactiveAssignment
+          ? await updatePtAssignment(inactiveAssignment.id, {
+              status: 'active',
+              ...assignmentPayload,
+            })
+          : await createPtAssignment({
+              trainerId: formData.trainerId,
+              memberId,
+              ...assignmentPayload,
+            })
+      } else {
+        const assignmentId = assignment?.id
+
+        if (!assignmentId) {
+          throw new Error('This PT assignment could not be loaded. Reopen the dialog and try again.')
+        }
+
+        nextAssignment = await updatePtAssignment(assignmentId, assignmentPayload)
+      }
 
       handleOpenChange(false)
       await onSaved?.(nextAssignment, mode)
