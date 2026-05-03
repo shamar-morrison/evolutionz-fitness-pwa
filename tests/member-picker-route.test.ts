@@ -39,7 +39,7 @@ function createMemberPickerClient({
       id: 'member-2',
       employee_no: '000778',
       name: 'No Email',
-      email: '',
+      email: null,
       card_no: null,
       status: 'Active',
       created_at: '2026-03-02T10:00:00Z',
@@ -56,6 +56,7 @@ function createMemberPickerClient({
 } = {}) {
   const recorded = {
     eq: [] as Array<[string, string]>,
+    not: [] as Array<[string, string, null]>,
     order: [] as Array<[string, { ascending: boolean }]>,
     cardNos: [] as string[],
   }
@@ -78,9 +79,21 @@ function createMemberPickerClient({
                   recorded.eq.push([column, value])
                   return builder
                 },
+                not(column: string, operator: string, value: null) {
+                  recorded.not.push([column, operator, value])
+                  return builder
+                },
                 then(onfulfilled: (value: QueryResult<Array<Record<string, unknown>>>) => unknown) {
+                  const filteredMemberRows =
+                    recorded.not.some(
+                      ([column, operator, value]) =>
+                        column === 'email' && operator === 'is' && value === null,
+                    )
+                      ? memberRows.filter((row) => row.email !== null)
+                      : memberRows
+
                   return Promise.resolve({
-                    data: memberRows,
+                    data: filteredMemberRows,
                     error: memberError,
                   } satisfies QueryResult<Array<Record<string, unknown>>>).then(onfulfilled)
                 },
@@ -144,6 +157,7 @@ describe('GET /api/members/picker', () => {
       ],
     })
     expect(client.recorded.eq).toEqual([['status', 'Active']])
+    expect(client.recorded.not).toEqual([['email', 'is', null]])
     expect(client.recorded.order).toEqual([['created_at', { ascending: false }]])
     expect(client.recorded.cardNos).toEqual(['0102857149'])
   })

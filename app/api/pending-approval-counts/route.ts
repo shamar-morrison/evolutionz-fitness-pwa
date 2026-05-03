@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server'
-import { PRIVATE_STABLE_READ_CACHE_CONTROL } from '@/lib/http-cache'
 import { normalizePendingApprovalCounts } from '@/lib/pending-approval-counts'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -32,7 +31,7 @@ export async function GET() {
 
     return NextResponse.json(normalizePendingApprovalCounts(data), {
       headers: {
-        'Cache-Control': PRIVATE_STABLE_READ_CACHE_CONTROL,
+        'Cache-Control': 'private, max-age=0, stale-while-revalidate=30',
       },
     })
   } catch (error) {

@@ -73,7 +73,7 @@ describe('GET /api/pending-approval-counts', () => {
     expect(supabase.rpc).toHaveBeenCalledWith('get_pending_approval_counts')
     expect(response.status).toBe(200)
     expect(response.headers.get('Cache-Control')).toBe(
-      'private, max-age=60, stale-while-revalidate=300',
+      'private, max-age=0, stale-while-revalidate=30',
     )
     await expect(response.json()).resolves.toEqual(pendingApprovalCountsPayload)
   })

@@ -46,7 +46,7 @@ export async function GET(request: Request) {
       members,
     })
   } catch (error) {
-    if (error instanceof Error && error.name === 'ZodError') {
+    if (error instanceof z.ZodError) {
       return createErrorResponse(error.message, 400)
     }
 

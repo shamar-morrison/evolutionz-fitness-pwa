@@ -142,6 +142,10 @@ export async function readMemberPickerMembers(
     query = query.eq('status', options.status)
   }
 
+  if (options.hasEmail) {
+    query = query.not('email', 'is', null)
+  }
+
   const { data, error } = await query
 
   if (error) {
@@ -150,11 +154,5 @@ export async function readMemberPickerMembers(
 
   const memberRecords = (data ?? []) as MemberPickerRecord[]
   const cardCodeByCardNo = await loadCardCodeLookup(supabase, memberRecords)
-  const members = memberRecords.map((record) => mapMemberPickerRecord(record, cardCodeByCardNo))
-
-  if (!options.hasEmail) {
-    return members
-  }
-
-  return members.filter((member) => member.email !== null)
+  return memberRecords.map((record) => mapMemberPickerRecord(record, cardCodeByCardNo))
 }
