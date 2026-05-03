@@ -24,7 +24,6 @@ export async function fetchCardFeeSettings(): Promise<CardFeeSettings> {
     '/api/settings/card-fee',
     {
       method: 'GET',
-      cache: 'no-store',
     },
     cardFeeSettingsResponseSchema,
     'Failed to load card fee settings.',

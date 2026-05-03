@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { normalizeDashboardStats } from '@/lib/dashboard-stats'
+import { PRIVATE_STABLE_READ_CACHE_CONTROL } from '@/lib/http-cache'
 import { JAMAICA_OFFSET } from '@/lib/jamaica-time'
 import { getMemberPauseJamaicaNow } from '@/lib/member-pause'
 import { requireAdminUser } from '@/lib/server-auth'
@@ -37,7 +38,11 @@ export async function GET() {
       throw new Error(`Failed to load dashboard stats: ${error.message}`)
     }
 
-    return NextResponse.json(normalizeDashboardStats(data))
+    return NextResponse.json(normalizeDashboardStats(data), {
+      headers: {
+        'Cache-Control': PRIVATE_STABLE_READ_CACHE_CONTROL,
+      },
+    })
   } catch (error) {
     return NextResponse.json(
       {

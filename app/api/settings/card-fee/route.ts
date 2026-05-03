@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { readCardFeeSettings, upsertCardFeeSettings } from '@/lib/card-fee-settings-server'
+import { PRIVATE_STABLE_READ_CACHE_CONTROL } from '@/lib/http-cache'
 import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -33,6 +34,10 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       settings,
+    }, {
+      headers: {
+        'Cache-Control': PRIVATE_STABLE_READ_CACHE_CONTROL,
+      },
     })
   } catch (error) {
     return createErrorResponse(

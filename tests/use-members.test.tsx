@@ -211,6 +211,9 @@ describe('useMembers', () => {
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['members', 'all'],
     })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['member-picker'],
+    })
   })
 
   it('does not open members realtime subscription when user is not authenticated', async () => {

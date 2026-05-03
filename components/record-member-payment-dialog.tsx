@@ -190,6 +190,7 @@ export function RecordMemberPaymentDialog({
       queryClient.invalidateQueries({ queryKey: queryKeys.memberPayments.member(member.id) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
     ])
   }
 

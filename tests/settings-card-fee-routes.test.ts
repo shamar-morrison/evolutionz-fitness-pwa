@@ -146,6 +146,9 @@ describe('card fee settings routes', () => {
         amountJmd: 3200,
       },
     })
+    expect(response.headers.get('Cache-Control')).toBe(
+      'private, max-age=60, stale-while-revalidate=300',
+    )
     expect(requireAuthenticatedUserMock).toHaveBeenCalledTimes(1)
     expect(requireAdminUserMock).not.toHaveBeenCalled()
   })

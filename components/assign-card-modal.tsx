@@ -235,6 +235,7 @@ export function AssignCardModal({
       onOpenChange(false)
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
       ])

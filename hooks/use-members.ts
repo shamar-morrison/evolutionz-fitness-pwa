@@ -52,6 +52,7 @@ export function useMembers(options: UseMembersOptions = {}) {
         },
         () => {
           void queryClient.invalidateQueries({ queryKey: queryKeys.members.all })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all })
         },
       )
       .subscribe()

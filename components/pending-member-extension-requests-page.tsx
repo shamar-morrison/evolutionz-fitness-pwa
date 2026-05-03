@@ -52,6 +52,7 @@ export function PendingMemberExtensionRequestsPage() {
         queryClient.invalidateQueries({ queryKey: queryKeys.memberExtensionRequests.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberExtensionRequests.pending }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(memberId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),

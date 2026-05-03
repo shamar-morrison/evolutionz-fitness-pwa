@@ -143,6 +143,7 @@ function MembersPageContent() {
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.recentMembers }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
       ])
     } catch (syncError) {
       toast({

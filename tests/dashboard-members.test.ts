@@ -71,6 +71,24 @@ describe('dashboard member helpers', () => {
     })
   })
 
+  it('passes through an optional expiring members limit', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          members: [EXPIRING_MEMBER],
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchExpiringDashboardMembers({ limit: 8 })).resolves.toEqual([EXPIRING_MEMBER])
+    expect(fetchMock).toHaveBeenCalledWith('/api/dashboard/expiring-members?limit=8', {
+      method: 'GET',
+    })
+  })
+
   it('throws the route error when recent dashboard members fail', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       createJsonResponse(

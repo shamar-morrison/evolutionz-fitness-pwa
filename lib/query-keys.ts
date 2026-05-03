@@ -15,6 +15,11 @@ export const queryKeys = {
     detail: (id: string) => ['members', 'detail', id] as const,
     events: (id: string, page: number) => ['members', 'events', id, page] as const,
   },
+  memberPicker: {
+    all: ['member-picker'] as const,
+    list: (status: string, mode: boolean) =>
+      ['member-picker', status, mode ? 'with-email' : 'all-members'] as const,
+  },
   memberTypes: {
     all: ['memberTypes'] as const,
   },

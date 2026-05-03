@@ -91,6 +91,7 @@ export function PendingMemberPaymentRequestsPage() {
         queryClient.invalidateQueries({ queryKey: queryKeys.memberPaymentRequests.pending }),
         queryClient.invalidateQueries({ queryKey: queryKeys.memberPayments.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(request.memberId) }),
       ]
 

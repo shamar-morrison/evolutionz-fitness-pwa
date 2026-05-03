@@ -113,6 +113,7 @@ export function PauseMembershipDialog({
           queryClient.invalidateQueries({ queryKey: queryKeys.memberPauseRequests.all }),
           queryClient.invalidateQueries({ queryKey: queryKeys.memberPauseRequests.pending }),
           queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
           queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) }),
           queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
         ])
@@ -129,6 +130,7 @@ export function PauseMembershipDialog({
       })
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),

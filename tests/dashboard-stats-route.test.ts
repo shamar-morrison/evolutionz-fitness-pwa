@@ -128,6 +128,9 @@ describe('GET /api/dashboard/stats', () => {
       p_timezone_offset: '-05:00',
     })
     expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe(
+      'private, max-age=60, stale-while-revalidate=300',
+    )
     await expect(response.json()).resolves.toEqual(RPC_DASHBOARD_STATS_PAYLOAD)
   })
 

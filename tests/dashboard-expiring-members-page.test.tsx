@@ -3,17 +3,16 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { isMemberInStatusFilter, type MembersListStatusFilter } from '@/lib/member-list-status-filter'
-import type { Member } from '@/types'
+import type { DashboardMemberListItem } from '@/types'
 
 const {
   currentRoleState,
   pushMock,
-  useMembersMock,
+  useExpiringDashboardMembersMock,
 } = vi.hoisted(() => ({
   currentRoleState: { role: 'admin' as 'admin' | 'staff' },
   pushMock: vi.fn(),
-  useMembersMock: vi.fn(),
+  useExpiringDashboardMembersMock: vi.fn(),
 }))
 
 vi.mock('@/components/role-guard', () => ({
@@ -41,32 +40,18 @@ vi.mock('@/hooks/use-progress-router', () => ({
   }),
 }))
 
-vi.mock('@/hooks/use-members', () => ({
-  useMembers: useMembersMock,
+vi.mock('@/hooks/use-dashboard-members', () => ({
+  useExpiringDashboardMembers: useExpiringDashboardMembersMock,
 }))
 
 import ExpiringMembersPage from '@/app/(app)/dashboard/expiring-members/page'
 
-function createMember(overrides: Partial<Member> = {}): Member {
+function createMember(overrides: Partial<DashboardMemberListItem> = {}): DashboardMemberListItem {
   return {
     id: overrides.id ?? 'member-1',
-    employeeNo: overrides.employeeNo ?? '0001',
     name: overrides.name ?? 'Marcus Brown',
-    cardNo: overrides.cardNo ?? null,
-    cardCode: overrides.cardCode ?? null,
-    cardStatus: overrides.cardStatus ?? null,
-    cardLostAt: overrides.cardLostAt ?? null,
     type: overrides.type ?? 'General',
-    memberTypeId: overrides.memberTypeId ?? null,
     status: overrides.status ?? 'Active',
-    deviceAccessState: overrides.deviceAccessState ?? 'ready',
-    gender: overrides.gender ?? null,
-    email: overrides.email ?? null,
-    phone: overrides.phone ?? null,
-    remark: overrides.remark ?? null,
-    photoUrl: overrides.photoUrl ?? null,
-    joinedAt: overrides.joinedAt ?? null,
-    beginTime: overrides.beginTime ?? '2026-03-01T00:00:00.000Z',
     endTime: overrides.endTime ?? '2026-04-05T23:59:59.000Z',
   }
 }
@@ -85,50 +70,23 @@ describe('ExpiringMembersPage', () => {
     root = createRoot(container)
     currentRoleState.role = 'admin'
     pushMock.mockReset()
-    useMembersMock.mockImplementation(
-      (options: { status?: MembersListStatusFilter } = {}) => {
-        const sourceMembers = [
-          createMember({
-            id: 'member-1',
-            name: 'Marcus Brown',
-            endTime: '2026-04-05T23:59:59.000Z',
-          }),
-          createMember({
-            id: 'member-2',
-            name: 'Alicia Green',
-            endTime: '2026-04-09T23:59:59.000Z',
-          }),
-          createMember({
-            id: 'member-3',
-            name: 'Expired Member',
-            status: 'Expired',
-            endTime: '2026-04-05T23:59:59.000Z',
-          }),
-          createMember({
-            id: 'member-4',
-            name: 'Suspended Member',
-            status: 'Suspended',
-            endTime: '2026-04-06T23:59:59.000Z',
-          }),
-          createMember({
-            id: 'member-5',
-            name: 'Future Member',
-            endTime: '2026-04-12T00:00:00.000Z',
-          }),
-        ]
-        const statusFilter = options.status ?? 'All'
-        const filteredMembers = sourceMembers.filter((member) =>
-          isMemberInStatusFilter(member, statusFilter, new Date()),
-        )
-
-        return {
-          members: filteredMembers,
-          isLoading: false,
-          error: null,
-          refetch: vi.fn(),
-        }
-      },
-    )
+    useExpiringDashboardMembersMock.mockReturnValue({
+      data: [
+        createMember({
+          id: 'member-1',
+          name: 'Marcus Brown',
+          endTime: '2026-04-05T23:59:59.000Z',
+        }),
+        createMember({
+          id: 'member-2',
+          name: 'Alicia Green',
+          endTime: '2026-04-09T23:59:59.000Z',
+        }),
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
   })
 
   afterEach(async () => {
@@ -149,7 +107,7 @@ describe('ExpiringMembersPage', () => {
       root.render(<ExpiringMembersPage />)
     })
 
-    expect(useMembersMock).toHaveBeenCalledWith({ status: 'Expiring' })
+    expect(useExpiringDashboardMembersMock).toHaveBeenCalledWith()
     expect(container.textContent).toContain('Expiring Members')
     expect(container.textContent).toContain('Marcus Brown')
     expect(container.textContent).toContain('Alicia Green')
@@ -171,8 +129,8 @@ describe('ExpiringMembersPage', () => {
   })
 
   it('shows loading skeletons while members are loading', async () => {
-    useMembersMock.mockReturnValue({
-      members: [],
+    useExpiringDashboardMembersMock.mockReturnValue({
+      data: [],
       isLoading: true,
       error: null,
       refetch: vi.fn(),
@@ -186,8 +144,8 @@ describe('ExpiringMembersPage', () => {
   })
 
   it('shows an empty state when no memberships are expiring soon', async () => {
-    useMembersMock.mockReturnValue({
-      members: [],
+    useExpiringDashboardMembersMock.mockReturnValue({
+      data: [],
       isLoading: false,
       error: null,
       refetch: vi.fn(),
@@ -201,8 +159,8 @@ describe('ExpiringMembersPage', () => {
   })
 
   it('shows an error state with a dashboard escape hatch when members fail to load', async () => {
-    useMembersMock.mockReturnValue({
-      members: [],
+    useExpiringDashboardMembersMock.mockReturnValue({
+      data: [],
       isLoading: false,
       error: new Error('select exploded'),
       refetch: vi.fn(),

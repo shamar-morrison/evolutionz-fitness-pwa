@@ -12,7 +12,7 @@ const EMPTY_DASHBOARD_MEMBERS: DashboardMemberListItem[] = []
 const DASHBOARD_MEMBER_STALE_TIME = 60 * 60 * 1000
 
 function useDashboardMembersQuery(
-  queryKey: readonly string[],
+  queryKey: readonly unknown[],
   queryFn: () => Promise<DashboardMemberListItem[]>,
 ) {
   const dashboardMembersQuery = useQuery<DashboardMemberListItem[], Error>({
@@ -37,9 +37,9 @@ export function useRecentDashboardMembers() {
   )
 }
 
-export function useExpiringDashboardMembers() {
+export function useExpiringDashboardMembers(options: { limit?: number } = {}) {
   return useDashboardMembersQuery(
-    queryKeys.dashboard.expiringMembers,
-    fetchExpiringDashboardMembers,
+    [...queryKeys.dashboard.expiringMembers, options.limit ?? 'all'] as const,
+    () => fetchExpiringDashboardMembers(options),
   )
 }

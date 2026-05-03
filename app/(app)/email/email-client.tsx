@@ -9,9 +9,7 @@ import {
   ADMIN_EMAIL_ATTACHMENT_MAX_BYTES,
   dedupeRecipientsByEmail,
   hasMeaningfulHtmlContent,
-  resolveDraftEmailRecipients,
   sortEmailRecipientsByLastName,
-  toEmailRecipient,
   type EmailRecipient,
   type EmailRecipientWithId,
 } from '@/lib/admin-email'
@@ -30,10 +28,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import { Toggle } from '@/components/ui/toggle'
+import { useEmailRecipients } from '@/hooks/use-email-recipients'
 import { useEmailQuota } from '@/hooks/use-email-quota'
+import { useMemberPicker } from '@/hooks/use-member-picker'
 import { useMemberTypes } from '@/hooks/use-member-types'
-import { useMembers } from '@/hooks/use-members'
 import { toast } from '@/hooks/use-toast'
+import { fetchEmailRecipients } from '@/lib/email-recipients'
 import { cn } from '@/lib/utils'
 
 type EmailClientProps = {
@@ -43,11 +43,6 @@ type EmailClientProps = {
 type ErrorResponse = {
   ok?: false
   error: string
-}
-
-type RecipientsSuccessResponse = {
-  ok: true
-  recipients: EmailRecipientWithId[]
 }
 
 type SendSuccessResponse = {
@@ -135,49 +130,6 @@ function getResponseErrorMessage(responseBody: unknown, fallback: string) {
   return fallback
 }
 
-function buildRecipientsLookupUrl(input: {
-  activeMembers: boolean
-  expiringMembers: boolean
-  expiredMembers: boolean
-  activeMemberTypeIds: string[]
-  expiringMemberTypeIds: string[]
-  expiredMemberTypeIds: string[]
-  individualIds: string[]
-}) {
-  const searchParams = new URLSearchParams()
-
-  if (input.activeMembers) {
-    searchParams.set('activeMembers', 'true')
-  }
-
-  if (input.expiringMembers) {
-    searchParams.set('expiringMembers', 'true')
-  }
-
-  if (input.expiredMembers) {
-    searchParams.set('expiredMembers', 'true')
-  }
-
-  if (input.activeMemberTypeIds.length > 0) {
-    searchParams.set('activeMemberTypeIds', input.activeMemberTypeIds.join(','))
-  }
-
-  if (input.expiringMemberTypeIds.length > 0) {
-    searchParams.set('expiringMemberTypeIds', input.expiringMemberTypeIds.join(','))
-  }
-
-  if (input.expiredMemberTypeIds.length > 0) {
-    searchParams.set('expiredMemberTypeIds', input.expiredMemberTypeIds.join(','))
-  }
-
-  if (input.individualIds.length > 0) {
-    searchParams.set('individualIds', input.individualIds.join(','))
-  }
-
-  const queryString = searchParams.toString()
-  return queryString ? `/api/email/recipients?${queryString}` : '/api/email/recipients'
-}
-
 function getCanonicalRecipients<T extends { name: string; email: string }>(recipients: T[]) {
   return dedupeRecipientsByEmail(sortEmailRecipientsByLastName(recipients))
 }
@@ -213,7 +165,13 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     error: quotaError,
     refetch: refetchQuota,
   } = useEmailQuota()
-  const { members, isLoading: isMembersLoading, error: membersError } = useMembers()
+  const {
+    members: pickerMembers,
+    isLoading: isPickerMembersLoading,
+    error: pickerMembersError,
+  } = useMemberPicker({
+    hasEmail: true,
+  })
   const { memberTypes, isLoading: isMemberTypesLoading, error: memberTypesError } = useMemberTypes()
   const activeMemberTypes = useMemo(
     () => memberTypes.filter((memberType) => memberType.is_active),
@@ -227,56 +185,57 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
     () => new Set(excludedRecipientIds),
     [excludedRecipientIds],
   )
-  const liveRecipients = useMemo(
-    () =>
-      resolveDraftEmailRecipients(members, {
-        activeMembers: includeActiveMembers,
-        expiringMembers: includeExpiringMembers,
-        expiredMembers: includeExpiredMembers,
-        activeMemberTypeIds: selectedActiveMemberTypeIds,
-        expiringMemberTypeIds: selectedExpiringMemberTypeIds,
-        expiredMemberTypeIds: selectedExpiredMemberTypeIds,
-        individualIds: selectedIndividualIds,
-      }),
+  const recipientLookup = useMemo(
+    () => ({
+      activeMembers: includeActiveMembers,
+      expiringMembers: includeExpiringMembers,
+      expiredMembers: includeExpiredMembers,
+      activeMemberTypeIds: includeActiveMembers ? selectedActiveMemberTypeIds : [],
+      expiringMemberTypeIds: includeExpiringMembers ? selectedExpiringMemberTypeIds : [],
+      expiredMemberTypeIds: includeExpiredMembers ? selectedExpiredMemberTypeIds : [],
+      individualIds: selectedIndividualIds,
+    }),
     [
       includeActiveMembers,
       includeExpiringMembers,
       includeExpiredMembers,
-      members,
       selectedActiveMemberTypeIds,
-      selectedExpiredMemberTypeIds,
       selectedExpiringMemberTypeIds,
+      selectedExpiredMemberTypeIds,
       selectedIndividualIds,
     ],
   )
+  const { recipients: resolvedRecipients, error: recipientsError } = useEmailRecipients(recipientLookup)
   const canonicalLiveRecipients = useMemo(
     () =>
       getCanonicalRecipients(
-        liveRecipients.filter((recipient) => !excludedRecipientIdSet.has(recipient.id)),
+        resolvedRecipients.filter((recipient) => !excludedRecipientIdSet.has(recipient.id)),
       ),
-    [excludedRecipientIdSet, liveRecipients],
+    [excludedRecipientIdSet, resolvedRecipients],
+  )
+  const pickerMembersById = useMemo(
+    () => new Map(pickerMembers.map((member) => [member.id, member])),
+    [pickerMembers],
   )
   const individualPickerOptions = useMemo<SearchableSelectOption[]>(
     () =>
-      members
+      pickerMembers
         .flatMap((member) => {
-          const recipient = toEmailRecipient(member)
-
-          if (!recipient || selectedIndividualIds.includes(recipient.id)) {
+          if (!member.email || selectedIndividualIds.includes(member.id)) {
             return []
           }
 
           return [
             {
-              value: recipient.id,
-              label: recipient.name,
-              description: recipient.email,
-              keywords: [recipient.email, member.employeeNo, member.status],
+              value: member.id,
+              label: member.name,
+              description: member.email,
+              keywords: [member.email],
             } satisfies SearchableSelectOption,
           ]
         })
         .sort((left, right) => left.label.localeCompare(right.label)),
-    [members, selectedIndividualIds],
+    [pickerMembers, selectedIndividualIds],
   )
   const isBodyEmpty = !hasMeaningfulHtmlContent(bodyHtml)
   const recipientCount = canonicalLiveRecipients.length
@@ -287,7 +246,7 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   const quotaExceededRecipients = canonicalLiveRecipients.slice(recipientWarningLimit)
   const shouldShowQuotaWarning = Boolean(quota && quota.remaining <= 20)
   const isSendDisabled =
-    isSending || recipientCount === 0 || !subject.trim() || isBodyEmpty || isMembersLoading
+    isSending || recipientCount === 0 || !subject.trim() || isBodyEmpty || isPickerMembersLoading
 
   const handleDraftChanged = () => {
     setDraftIdempotencyKey(null)
@@ -318,19 +277,17 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
   })
 
   const handleSelectIndividual = (memberId: string) => {
-    const recipientToAdd = resolveDraftEmailRecipients(members, {
-      activeMembers: false,
-      expiringMembers: false,
-      expiredMembers: false,
-      activeMemberTypeIds: [],
-      expiringMemberTypeIds: [],
-      expiredMemberTypeIds: [],
-      individualIds: [memberId],
-    })[0]
+    const member = pickerMembersById.get(memberId)
 
-    if (!recipientToAdd) {
+    if (!member?.email) {
       return
     }
+
+    const recipientToAdd = {
+      id: member.id,
+      name: member.name,
+      email: member.email,
+    } satisfies EmailRecipientWithId
 
     handleDraftChanged()
     setExcludedRecipientIds((currentIds) =>
@@ -543,47 +500,8 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
         setDraftIdempotencyKey(idempotencyKey)
       }
 
-      const recipientsResponse = await fetch(
-        buildRecipientsLookupUrl({
-          activeMembers: includeActiveMembers,
-          expiringMembers: includeExpiringMembers,
-          expiredMembers: includeExpiredMembers,
-          activeMemberTypeIds: includeActiveMembers ? selectedActiveMemberTypeIds : [],
-          expiringMemberTypeIds: includeExpiringMembers ? selectedExpiringMemberTypeIds : [],
-          expiredMemberTypeIds: includeExpiredMembers ? selectedExpiredMemberTypeIds : [],
-          individualIds: selectedIndividualIds,
-        }),
-        {
-          method: 'GET',
-          cache: 'no-store',
-        },
-      )
-
-      let recipientsResponseBody: RecipientsSuccessResponse | ErrorResponse | null = null
-
-      try {
-        recipientsResponseBody = (await recipientsResponse.json()) as
-          | RecipientsSuccessResponse
-          | ErrorResponse
-      } catch {
-        recipientsResponseBody = null
-      }
-
-      if (
-        !recipientsResponse.ok ||
-        !recipientsResponseBody ||
-        !('recipients' in recipientsResponseBody)
-      ) {
-        throw new Error(
-          getResponseErrorMessage(
-            recipientsResponseBody,
-            'Failed to resolve email recipients.',
-          ),
-        )
-      }
-
       const resolvedRecipients = getCanonicalRecipients(
-        recipientsResponseBody.recipients.filter(
+        (await fetchEmailRecipients(recipientLookup)).filter(
           (recipient) => !excludedRecipientIdSet.has(recipient.id),
         ),
       )
@@ -830,10 +748,10 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
                     value={null}
                     onValueChange={handleSelectIndividual}
                     options={individualPickerOptions}
-                    placeholder={isMembersLoading ? 'Loading members...' : 'Search members by name'}
+                    placeholder={isPickerMembersLoading ? 'Loading members...' : 'Search members by name'}
                     searchPlaceholder="Search members..."
                     emptyMessage="No members with email addresses found."
-                    disabled={isMembersLoading || individualPickerOptions.length === 0}
+                    disabled={isPickerMembersLoading || individualPickerOptions.length === 0}
                   />
                 </div>
 
@@ -898,8 +816,11 @@ export function EmailClient({ resendDailyLimit }: EmailClientProps) {
                   )}
                 </div>
               ) : null}
-              {membersError ? (
-                <p className="text-sm text-destructive">{membersError.message}</p>
+              {pickerMembersError ? (
+                <p className="text-sm text-destructive">{pickerMembersError.message}</p>
+              ) : null}
+              {recipientsError ? (
+                <p className="text-sm text-destructive">{recipientsError.message}</p>
               ) : null}
               {memberTypesError ? (
                 <p className="text-sm text-destructive">{memberTypesError.message}</p>

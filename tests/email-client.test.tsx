@@ -5,17 +5,24 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps, ReactNode } from 'react'
 import type { Member, MemberTypeRecord } from '@/types'
+import { resolveDraftEmailRecipients } from '@/lib/admin-email'
 
 const {
   toastMock,
+  useEmailRecipientsMock,
   useEmailQuotaMock,
-  useMembersMock,
+  useMemberPickerMock,
   useMemberTypesMock,
+  recipientSourceMembersState,
 } = vi.hoisted(() => ({
   toastMock: vi.fn(),
+  useEmailRecipientsMock: vi.fn(),
   useEmailQuotaMock: vi.fn(),
-  useMembersMock: vi.fn(),
+  useMemberPickerMock: vi.fn(),
   useMemberTypesMock: vi.fn(),
+  recipientSourceMembersState: {
+    members: [] as Member[],
+  },
 }))
 
 vi.mock('@tiptap/react', async () => {
@@ -194,12 +201,16 @@ vi.mock('@/hooks/use-member-types', () => ({
   useMemberTypes: useMemberTypesMock,
 }))
 
+vi.mock('@/hooks/use-email-recipients', () => ({
+  useEmailRecipients: useEmailRecipientsMock,
+}))
+
 vi.mock('@/hooks/use-email-quota', () => ({
   useEmailQuota: useEmailQuotaMock,
 }))
 
-vi.mock('@/hooks/use-members', () => ({
-  useMembers: useMembersMock,
+vi.mock('@/hooks/use-member-picker', () => ({
+  useMemberPicker: useMemberPickerMock,
 }))
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -233,6 +244,10 @@ function createMember(overrides: Partial<Member> = {}): Member {
     beginTime: overrides.beginTime ?? null,
     endTime: overrides.endTime ?? null,
   }
+}
+
+function setRecipientSourceMembers(members: Member[]) {
+  recipientSourceMembersState.members = members
 }
 
 async function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: string) {
@@ -301,27 +316,48 @@ describe('EmailClient', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     toastMock.mockReset()
-    useMembersMock.mockReturnValue({
-      members: [
-        createMember({
-          id: 'member-1',
-          name: 'Alpha',
-          email: 'alpha@example.com',
-        }),
-        createMember({
-          id: 'member-2',
-          name: 'Beta',
-          email: 'beta@example.com',
-        }),
-        createMember({
-          id: 'member-3',
-          name: 'Gamma',
-          email: 'gamma@example.com',
-        }),
-      ],
+    setRecipientSourceMembers([
+      createMember({
+        id: 'member-1',
+        name: 'Alpha',
+        email: 'alpha@example.com',
+      }),
+      createMember({
+        id: 'member-2',
+        name: 'Beta',
+        email: 'beta@example.com',
+      }),
+      createMember({
+        id: 'member-3',
+        name: 'Gamma',
+        email: 'gamma@example.com',
+      }),
+    ])
+    useMemberPickerMock.mockImplementation(() => ({
+      members: recipientSourceMembersState.members
+        .filter((member) => typeof member.email === 'string' && member.email.trim().length > 0)
+        .map((member) => ({
+          id: member.id,
+          name: member.name,
+          email: member.email,
+        })),
       isLoading: false,
       error: null,
-    })
+    }))
+    useEmailRecipientsMock.mockImplementation((input: {
+      activeMembers: boolean
+      expiringMembers: boolean
+      expiredMembers: boolean
+      activeMemberTypeIds: string[]
+      expiringMemberTypeIds: string[]
+      expiredMemberTypeIds: string[]
+      individualIds: string[]
+    }) => ({
+      recipients: resolveDraftEmailRecipients(recipientSourceMembersState.members, input),
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    }))
     useMemberTypesMock.mockReturnValue({
       memberTypes: [
         {
@@ -361,36 +397,33 @@ describe('EmailClient', () => {
     container.remove()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
-    useMembersMock.mockReset()
+    useEmailRecipientsMock.mockReset()
+    useMemberPickerMock.mockReset()
     useMemberTypesMock.mockReset()
     useEmailQuotaMock.mockReset()
   })
 
   it('shows the remaining daily quota in the warning copy when quota data is available', async () => {
-    useMembersMock.mockReturnValue({
-      members: [
-        createMember({
-          id: 'member-1',
-          name: 'Alpha',
-          email: 'alpha@example.com',
-          status: 'Active',
-        }),
-        createMember({
-          id: 'member-2',
-          name: 'Beta',
-          email: 'beta@example.com',
-          status: 'Active',
-        }),
-        createMember({
-          id: 'member-3',
-          name: 'Gamma',
-          email: 'gamma@example.com',
-          status: 'Expired',
-        }),
-      ],
-      isLoading: false,
-      error: null,
-    })
+    setRecipientSourceMembers([
+      createMember({
+        id: 'member-1',
+        name: 'Alpha',
+        email: 'alpha@example.com',
+        status: 'Active',
+      }),
+      createMember({
+        id: 'member-2',
+        name: 'Beta',
+        email: 'beta@example.com',
+        status: 'Active',
+      }),
+      createMember({
+        id: 'member-3',
+        name: 'Gamma',
+        email: 'gamma@example.com',
+        status: 'Expired',
+      }),
+    ])
     useEmailQuotaMock.mockReturnValue({
       quota: {
         sent: 98,
@@ -415,30 +448,26 @@ describe('EmailClient', () => {
   })
 
   it('falls back to the configured daily limit warning while quota is loading', async () => {
-    useMembersMock.mockReturnValue({
-      members: [
-        createMember({
-          id: 'member-1',
-          name: 'Alpha',
-          email: 'alpha@example.com',
-          status: 'Active',
-        }),
-        createMember({
-          id: 'member-2',
-          name: 'Beta',
-          email: 'beta@example.com',
-          status: 'Active',
-        }),
-        createMember({
-          id: 'member-3',
-          name: 'Gamma',
-          email: 'gamma@example.com',
-          status: 'Expired',
-        }),
-      ],
-      isLoading: false,
-      error: null,
-    })
+    setRecipientSourceMembers([
+      createMember({
+        id: 'member-1',
+        name: 'Alpha',
+        email: 'alpha@example.com',
+        status: 'Active',
+      }),
+      createMember({
+        id: 'member-2',
+        name: 'Beta',
+        email: 'beta@example.com',
+        status: 'Active',
+      }),
+      createMember({
+        id: 'member-3',
+        name: 'Gamma',
+        email: 'gamma@example.com',
+        status: 'Expired',
+      }),
+    ])
     useEmailQuotaMock.mockReturnValue({
       quota: null,
       isLoading: true,
@@ -489,30 +518,26 @@ describe('EmailClient', () => {
   })
 
   it('renders the expired members checkbox and updates the live recipient count', async () => {
-    useMembersMock.mockReturnValue({
-      members: [
-        createMember({
-          id: 'member-1',
-          name: 'Alpha',
-          email: 'alpha@example.com',
-          status: 'Active',
-        }),
-        createMember({
-          id: 'member-2',
-          name: 'Beta',
-          email: 'beta@example.com',
-          status: 'Expired',
-        }),
-        createMember({
-          id: 'member-3',
-          name: 'Gamma',
-          email: 'gamma@example.com',
-          status: 'Suspended',
-        }),
-      ],
-      isLoading: false,
-      error: null,
-    })
+    setRecipientSourceMembers([
+      createMember({
+        id: 'member-1',
+        name: 'Alpha',
+        email: 'alpha@example.com',
+        status: 'Active',
+      }),
+      createMember({
+        id: 'member-2',
+        name: 'Beta',
+        email: 'beta@example.com',
+        status: 'Expired',
+      }),
+      createMember({
+        id: 'member-3',
+        name: 'Gamma',
+        email: 'gamma@example.com',
+        status: 'Suspended',
+      }),
+    ])
 
     await act(async () => {
       root.render(<EmailClient resendDailyLimit={5} />)
@@ -535,33 +560,29 @@ describe('EmailClient', () => {
   })
 
   it('renders status membership type selectors independently and removes the standalone type filter', async () => {
-    useMembersMock.mockReturnValue({
-      members: [
-        createMember({
-          id: 'member-1',
-          name: 'Active General',
-          email: 'active-general@example.com',
-          status: 'Active',
-          memberTypeId: GENERAL_MEMBER_TYPE_ID,
-        }),
-        createMember({
-          id: 'member-2',
-          name: 'Active Student',
-          email: 'active-student@example.com',
-          status: 'Active',
-          memberTypeId: STUDENT_MEMBER_TYPE_ID,
-        }),
-        createMember({
-          id: 'member-3',
-          name: 'Expired Student',
-          email: 'expired-student@example.com',
-          status: 'Expired',
-          memberTypeId: STUDENT_MEMBER_TYPE_ID,
-        }),
-      ],
-      isLoading: false,
-      error: null,
-    })
+    setRecipientSourceMembers([
+      createMember({
+        id: 'member-1',
+        name: 'Active General',
+        email: 'active-general@example.com',
+        status: 'Active',
+        memberTypeId: GENERAL_MEMBER_TYPE_ID,
+      }),
+      createMember({
+        id: 'member-2',
+        name: 'Active Student',
+        email: 'active-student@example.com',
+        status: 'Active',
+        memberTypeId: STUDENT_MEMBER_TYPE_ID,
+      }),
+      createMember({
+        id: 'member-3',
+        name: 'Expired Student',
+        email: 'expired-student@example.com',
+        status: 'Expired',
+        memberTypeId: STUDENT_MEMBER_TYPE_ID,
+      }),
+    ])
 
     await act(async () => {
       root.render(<EmailClient resendDailyLimit={10} />)
@@ -587,30 +608,26 @@ describe('EmailClient', () => {
   })
 
   it('opens a sorted quota-aware recipients preview', async () => {
-    useMembersMock.mockReturnValue({
-      members: [
-        createMember({
-          id: 'member-z',
-          name: 'Maya Zebra',
-          email: 'zebra@example.com',
-          status: 'Active',
-        }),
-        createMember({
-          id: 'member-b',
-          name: 'Avery Brown',
-          email: 'brown@example.com',
-          status: 'Active',
-        }),
-        createMember({
-          id: 'member-a',
-          name: 'Chris Adams',
-          email: 'adams@example.com',
-          status: 'Active',
-        }),
-      ],
-      isLoading: false,
-      error: null,
-    })
+    setRecipientSourceMembers([
+      createMember({
+        id: 'member-z',
+        name: 'Maya Zebra',
+        email: 'zebra@example.com',
+        status: 'Active',
+      }),
+      createMember({
+        id: 'member-b',
+        name: 'Avery Brown',
+        email: 'brown@example.com',
+        status: 'Active',
+      }),
+      createMember({
+        id: 'member-a',
+        name: 'Chris Adams',
+        email: 'adams@example.com',
+        status: 'Active',
+      }),
+    ])
     useEmailQuotaMock.mockReturnValue({
       quota: {
         sent: 98,
@@ -662,30 +679,26 @@ describe('EmailClient', () => {
   it('deselects recipients from the preview and sends the same sorted filtered list', async () => {
     const sentRecipients: Array<{ name: string; email: string }> = []
 
-    useMembersMock.mockReturnValue({
-      members: [
-        createMember({
-          id: 'member-z',
-          name: 'Maya Zebra',
-          email: 'zebra@example.com',
-          status: 'Active',
-        }),
-        createMember({
-          id: 'member-b',
-          name: 'Avery Brown',
-          email: 'brown@example.com',
-          status: 'Active',
-        }),
-        createMember({
-          id: 'member-a',
-          name: 'Chris Adams',
-          email: 'adams@example.com',
-          status: 'Active',
-        }),
-      ],
-      isLoading: false,
-      error: null,
-    })
+    setRecipientSourceMembers([
+      createMember({
+        id: 'member-z',
+        name: 'Maya Zebra',
+        email: 'zebra@example.com',
+        status: 'Active',
+      }),
+      createMember({
+        id: 'member-b',
+        name: 'Avery Brown',
+        email: 'brown@example.com',
+        status: 'Active',
+      }),
+      createMember({
+        id: 'member-a',
+        name: 'Chris Adams',
+        email: 'adams@example.com',
+        status: 'Active',
+      }),
+    ])
     vi.stubGlobal('crypto', {
       randomUUID: vi.fn().mockReturnValue('11111111-1111-4111-8111-111111111111'),
     })

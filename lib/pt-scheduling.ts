@@ -1320,7 +1320,6 @@ export async function fetchPtAssignments(filters: PtAssignmentFilters = {}) {
     `/api/pt/assignments${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`,
     {
       method: 'GET',
-      cache: 'no-store',
     },
   )
   const payload = await readJson(response)
