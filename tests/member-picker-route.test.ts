@@ -162,6 +162,56 @@ describe('GET /api/members/picker', () => {
     expect(client.recorded.cardNos).toEqual(['0102857149'])
   })
 
+  it('excludes empty normalized emails when hasEmail is true', async () => {
+    const client = createMemberPickerClient({
+      memberRows: [
+        {
+          id: 'member-1',
+          employee_no: '000777',
+          name: 'A1 Marcus Brown',
+          email: 'Marcus@Example.com',
+          card_no: '0102857149',
+          status: 'Active',
+          created_at: '2026-03-01T10:00:00Z',
+        },
+        {
+          id: 'member-2',
+          employee_no: '000778',
+          name: 'Empty Email',
+          email: '',
+          card_no: null,
+          status: 'Active',
+          created_at: '2026-03-02T10:00:00Z',
+        },
+        {
+          id: 'member-3',
+          employee_no: '000779',
+          name: 'Whitespace Email',
+          email: '   ',
+          card_no: null,
+          status: 'Active',
+          created_at: '2026-03-03T10:00:00Z',
+        },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client.client)
+
+    const response = await GET(new Request('http://localhost/api/members/picker?hasEmail=true'))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      members: [
+        {
+          id: 'member-1',
+          name: 'Marcus Brown',
+          email: 'marcus@example.com',
+        },
+      ],
+    })
+    expect(client.recorded.not).toEqual([['email', 'is', null]])
+  })
+
   it('returns 400 when the status filter is invalid', async () => {
     const response = await GET(
       new Request('http://localhost/api/members/picker?status=Expiring'),

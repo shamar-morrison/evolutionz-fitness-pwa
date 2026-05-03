@@ -154,5 +154,7 @@ export async function readMemberPickerMembers(
 
   const memberRecords = (data ?? []) as MemberPickerRecord[]
   const cardCodeByCardNo = await loadCardCodeLookup(supabase, memberRecords)
-  return memberRecords.map((record) => mapMemberPickerRecord(record, cardCodeByCardNo))
+  const members = memberRecords.map((record) => mapMemberPickerRecord(record, cardCodeByCardNo))
+
+  return options.hasEmail ? members.filter((member) => member.email !== null) : members
 }

@@ -46,7 +46,6 @@ function getDashboardStatsError(responseBody: unknown) {
 
 export async function fetchDashboardStats(): Promise<DashboardMembershipStats> {
   const response = await fetch('/api/dashboard/stats', {
-    cache: 'no-store',
     method: 'GET',
   })
 
