@@ -151,6 +151,7 @@ export default function MemberDetailPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(memberId) }),
     ])
 
@@ -159,6 +160,7 @@ export default function MemberDetailPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(memberId) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
     ])
@@ -166,6 +168,7 @@ export default function MemberDetailPage() {
   const invalidateDeletedMemberQueries = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.recentMembers }),
@@ -276,7 +279,7 @@ export default function MemberDetailPage() {
         description: `${buildMemberDisplayName(member.name, member.cardCode)}'s Hik slot was returned to the available pool.`,
       })
     } catch (error) {
-      console.error('Failed to releasse Hik slot:', error)
+      console.error('Failed to release Hik slot:', error)
       toast({
         title: 'Slot release failed',
         description:
@@ -391,6 +394,7 @@ export default function MemberDetailPage() {
         queryClient.invalidateQueries({ queryKey: queryKeys.memberPauseRequests.pending }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
       ])
       toast({
         title: 'Request submitted',

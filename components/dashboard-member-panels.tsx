@@ -161,7 +161,7 @@ export function RecentlyAddedMembersCard() {
 }
 
 export function ExpiringThisWeekCard() {
-  const { data: members, isLoading, error } = useExpiringDashboardMembers()
+  const { data: members, isLoading, error } = useExpiringDashboardMembers({ limit: 8 })
 
   return (
     <Card>

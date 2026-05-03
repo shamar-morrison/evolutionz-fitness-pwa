@@ -14,7 +14,6 @@ export async function fetchEmailQuota(): Promise<EmailQuota> {
     '/api/email/quota',
     {
       method: 'GET',
-      cache: 'no-store',
     },
     emailQuotaSchema,
     'Failed to load email quota.',

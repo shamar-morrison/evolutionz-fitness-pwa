@@ -29,7 +29,11 @@ export async function GET() {
       throw new Error(`Failed to load pending approval counts: ${error.message}`)
     }
 
-    return NextResponse.json(normalizePendingApprovalCounts(data))
+    return NextResponse.json(normalizePendingApprovalCounts(data), {
+      headers: {
+        'Cache-Control': 'private, max-age=0, stale-while-revalidate=30',
+      },
+    })
   } catch (error) {
     return NextResponse.json(
       {

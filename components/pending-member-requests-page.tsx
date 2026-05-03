@@ -91,6 +91,7 @@ export function PendingMemberRequestsPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.memberApprovalRequests.pending }),
       queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
       queryClient.invalidateQueries({ queryKey: queryKeys.cards.available }),
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.recentMembers }),

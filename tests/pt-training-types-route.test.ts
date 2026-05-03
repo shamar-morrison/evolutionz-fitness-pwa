@@ -24,6 +24,9 @@ describe('PT training types route', () => {
     const payload = await response.json()
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe(
+      'private, max-age=60, stale-while-revalidate=300',
+    )
     expect(payload).toEqual({
       types: [...PREDEFINED_TRAINING_TYPES],
     })

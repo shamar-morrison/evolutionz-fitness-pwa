@@ -19,7 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
-import { useMembers } from '@/hooks/use-members'
+import { useMemberPicker } from '@/hooks/use-member-picker'
 import { usePermissions } from '@/hooks/use-permissions'
 import { toast } from '@/hooks/use-toast'
 import {
@@ -68,8 +68,9 @@ export function ClassRegistrationDialog({
 }: ClassRegistrationDialogProps) {
   const queryClient = useQueryClient()
   const { requiresApproval } = usePermissions()
-  const { members, isLoading: isMembersLoading, error: membersError } = useMembers({
+  const { members, isLoading: isMembersLoading, error: membersError } = useMemberPicker({
     status: 'Active',
+    enabled: open,
   })
   const [currentStep, setCurrentStep] = useState(1)
   const [registrantType, setRegistrantType] = useState<'member' | 'guest'>('member')
@@ -90,8 +91,6 @@ export function ClassRegistrationDialog({
       members.map((member) => ({
         value: member.id,
         label: member.name,
-        description: `${member.employeeNo} · ${member.type}`,
-        keywords: [member.employeeNo, member.type],
       })),
     [members],
   )

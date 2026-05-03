@@ -93,6 +93,12 @@ function createExpiringDashboardAdminClient({
                   error: memberError,
                 } satisfies QueryResult<Array<Record<string, unknown>>>)
               },
+              then(onfulfilled: (value: QueryResult<Array<Record<string, unknown>>>) => unknown) {
+                return Promise.resolve({
+                  data: memberRows,
+                  error: memberError,
+                } satisfies QueryResult<Array<Record<string, unknown>>>).then(onfulfilled)
+              },
             }
 
             return builder
@@ -140,7 +146,9 @@ describe('GET /api/dashboard/expiring-members', () => {
     const supabase = createExpiringDashboardAdminClient()
     getSupabaseAdminClientMock.mockReturnValue(supabase)
 
-    const response = await GET()
+    const response = await GET(
+      new Request('http://localhost/api/dashboard/expiring-members?limit=8'),
+    )
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({
@@ -172,7 +180,7 @@ describe('GET /api/dashboard/expiring-members', () => {
       }),
     )
 
-    const response = await GET()
+    const response = await GET(new Request('http://localhost/api/dashboard/expiring-members'))
 
     expect(response.status).toBe(500)
     await expect(response.json()).resolves.toEqual({

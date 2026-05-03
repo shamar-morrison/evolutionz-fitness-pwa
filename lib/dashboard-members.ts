@@ -178,8 +178,18 @@ export async function fetchRecentDashboardMembers(): Promise<DashboardMemberList
   return fetchDashboardMembers('/api/dashboard/recent-members')
 }
 
-export async function fetchExpiringDashboardMembers(): Promise<DashboardMemberListItem[]> {
-  return fetchDashboardMembers('/api/dashboard/expiring-members')
+export async function fetchExpiringDashboardMembers(
+  options: { limit?: number } = {},
+): Promise<DashboardMemberListItem[]> {
+  const searchParams = new URLSearchParams()
+
+  if (typeof options.limit === 'number') {
+    searchParams.set('limit', String(options.limit))
+  }
+
+  return fetchDashboardMembers(
+    `/api/dashboard/expiring-members${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`,
+  )
 }
 
 export async function readRecentDashboardMembers(
@@ -203,16 +213,21 @@ export async function readExpiringDashboardMembers(
   supabase: DashboardMembersReadClient,
   startInclusive: string,
   endExclusive: string,
-  limit = 8,
+  limit?: number,
 ) {
-  const { data, error } = await supabase
+  let query = supabase
     .from('members')
     .select(DASHBOARD_MEMBER_SELECT)
     .eq('status', 'Active')
     .gte('end_time', startInclusive)
     .lt('end_time', endExclusive)
     .order('end_time', { ascending: true })
-    .limit(limit)
+
+  if (typeof limit === 'number') {
+    query = query.limit(limit)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     throw new Error(`Failed to read expiring dashboard members: ${error.message}`)

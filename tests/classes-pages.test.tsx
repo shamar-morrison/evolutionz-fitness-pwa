@@ -33,7 +33,7 @@ const {
   useClassRegistrationsMock,
   useClassTrainersMock,
   useClassesMock,
-  useMembersMock,
+  useMemberPickerMock,
   useStaffMock,
 } = vi.hoisted(() => ({
   authState: {
@@ -67,7 +67,7 @@ const {
   useClassRegistrationsMock: vi.fn(),
   useClassTrainersMock: vi.fn(),
   useClassesMock: vi.fn(),
-  useMembersMock: vi.fn(),
+  useMemberPickerMock: vi.fn(),
   useStaffMock: vi.fn(),
 }))
 
@@ -104,8 +104,8 @@ vi.mock('@/hooks/use-classes', () => ({
   useClassTrainers: useClassTrainersMock,
 }))
 
-vi.mock('@/hooks/use-members', () => ({
-  useMembers: useMembersMock,
+vi.mock('@/hooks/use-member-picker', () => ({
+  useMemberPicker: useMemberPickerMock,
 }))
 
 vi.mock('@/hooks/use-staff', () => ({
@@ -651,14 +651,12 @@ describe('classes pages', () => {
       isLoading: false,
       error: null,
     })
-    useMembersMock.mockReturnValue({
+    useMemberPickerMock.mockReturnValue({
       members: [
         {
           id: 'member-1',
-          employeeNo: 'EMP001',
           name: 'Client One',
-          type: 'General',
-          status: 'Active',
+          email: 'client.one@example.com',
         },
       ],
       isLoading: false,

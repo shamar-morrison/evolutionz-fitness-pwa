@@ -153,6 +153,9 @@ describe('settings member types routes', () => {
         }),
       ],
     })
+    expect(response.headers.get('Cache-Control')).toBe(
+      'private, max-age=60, stale-while-revalidate=300',
+    )
     expect(client.orderCalls).toEqual([['created_at', { ascending: true }]])
   })
 

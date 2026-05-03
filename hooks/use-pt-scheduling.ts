@@ -54,6 +54,8 @@ export function usePtAssignments(filters: PtAssignmentFilters = {}) {
   return useQuery({
     queryKey: [...queryKeys.ptScheduling.assignments, filters] as const,
     queryFn: () => fetchPtAssignments(filters),
+    staleTime: TWO_MINUTES_MS,
+    refetchOnWindowFocus: false,
   })
 }
 

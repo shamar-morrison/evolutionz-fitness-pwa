@@ -2,16 +2,26 @@
 
 import { ArrowLeft } from 'lucide-react'
 import { AuthenticatedHomeRedirect } from '@/components/authenticated-home-redirect'
-import { MembersTable } from '@/components/members-table'
 import { RoleGuard } from '@/components/role-guard'
+import { StatusBadge } from '@/components/status-badge'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useMembers } from '@/hooks/use-members'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { useExpiringDashboardMembers } from '@/hooks/use-dashboard-members'
 import { useProgressRouter } from '@/hooks/use-progress-router'
+import { formatAccessDate } from '@/lib/member-access-time'
 
 function ExpiringMembersPageContent() {
   const router = useProgressRouter()
-  const { members: expiringMembers, isLoading, error } = useMembers({ status: 'Expiring' })
+  const { data: expiringMembers, isLoading, error } = useExpiringDashboardMembers()
 
   return (
     <div className="space-y-6">
@@ -51,7 +61,38 @@ function ExpiringMembersPageContent() {
           No memberships expiring in the next 7 days.
         </div>
       ) : (
-        <MembersTable members={expiringMembers} />
+        <div className="overflow-hidden rounded-lg border bg-background">
+          <Table>
+            <TableHeader className="bg-muted/40">
+              <TableRow className="border-b hover:bg-muted/40">
+                <TableHead className="h-14 px-4 text-sm font-semibold">Member</TableHead>
+                <TableHead className="h-14 px-4 text-sm font-semibold">Type</TableHead>
+                <TableHead className="h-14 px-4 text-sm font-semibold">Status</TableHead>
+                <TableHead className="h-14 px-4 text-sm font-semibold">End Date</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {expiringMembers.map((member) => (
+                <TableRow
+                  key={member.id}
+                  onClick={() => router.push(`/members/${member.id}`)}
+                  className="cursor-pointer hover:bg-muted/20"
+                >
+                  <TableCell className="px-4 py-4">
+                    <span className="font-medium">{member.name}</span>
+                  </TableCell>
+                  <TableCell className="px-4 py-4">
+                    <Badge variant="outline">{member.type}</Badge>
+                  </TableCell>
+                  <TableCell className="px-4 py-4">
+                    <StatusBadge status={member.status} />
+                  </TableCell>
+                  <TableCell className="px-4 py-4">{formatAccessDate(member.endTime)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
     </div>
   )

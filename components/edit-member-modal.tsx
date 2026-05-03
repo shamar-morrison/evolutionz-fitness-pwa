@@ -566,6 +566,7 @@ export function EditMemberModal({
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.stats }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.expiringMembers }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.memberPicker.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.members.detail(member.id) }),
       ])
       onSuccess?.()

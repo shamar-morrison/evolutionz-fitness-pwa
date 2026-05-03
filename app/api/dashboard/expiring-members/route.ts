@@ -7,7 +7,21 @@ import { getJamaicaExpiringWindow } from '@/lib/member-access-time'
 import { requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
-export async function GET() {
+function parseLimit(value: string | null) {
+  if (!value || !/^\d+$/u.test(value)) {
+    return undefined
+  }
+
+  const parsedValue = Number(value)
+
+  if (!Number.isInteger(parsedValue) || parsedValue < 1) {
+    return undefined
+  }
+
+  return parsedValue
+}
+
+export async function GET(request: Request) {
   try {
     const authResult = await requireAuthenticatedUser()
 
@@ -17,10 +31,12 @@ export async function GET() {
 
     const supabase = getSupabaseAdminClient() as unknown as DashboardMembersReadClient
     const { startInclusive, endExclusive } = getJamaicaExpiringWindow(new Date())
+    const { searchParams } = new URL(request.url)
     const members = await readExpiringDashboardMembers(
       supabase,
       startInclusive,
       endExclusive,
+      parseLimit(searchParams.get('limit')),
     )
 
     return NextResponse.json({ members })
