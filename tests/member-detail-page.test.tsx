@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import * as React from 'react'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,6 +13,7 @@ const {
   deleteMemberPhotoMock,
   extendMembershipDialogState,
   invalidateQueriesMock,
+  memberCardActionStateState,
   pushMock,
   reactivateMemberMock,
   recoverMemberCardMock,
@@ -49,6 +51,16 @@ const {
         },
   },
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
+  memberCardActionStateState: {
+    value: {
+      showUnassignCard: false,
+      disableUnassignCard: true,
+      showReportCardLost: false,
+      disableReportCardLost: true,
+      showRecoverCard: false,
+      showDisabledCardLabel: false,
+    },
+  },
   pushMock: vi.fn(),
   reactivateMemberMock: vi.fn(),
   recoverMemberCardMock: vi.fn(),
@@ -191,23 +203,73 @@ vi.mock('@/components/status-badge', () => ({
 }))
 
 vi.mock('@/components/ui/alert-dialog', () => ({
-  AlertDialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  AlertDialog: ({
+    children,
+    open,
+  }: {
+    children: React.ReactNode
+    open?: boolean
+  }) => (open === false ? null : <div>{children}</div>),
   AlertDialogAction: ({ children, ...props }: React.ComponentProps<'button'>) => (
     <button type="button" {...props}>
       {children}
     </button>
   ),
-  AlertDialogCancel: ({ children, ...props }: React.ComponentProps<'button'>) => (
-    <button type="button" {...props}>
-      {children}
-    </button>
-  ),
+  AlertDialogCancel: ({
+    children,
+    asChild = false,
+    ...props
+  }: React.ComponentProps<'button'> & { asChild?: boolean }) => {
+    if (asChild && children && typeof children === 'object' && 'props' in children) {
+      return React.cloneElement(children as React.ReactElement, props)
+    }
+
+    return (
+      <button type="button" {...props}>
+        {children}
+      </button>
+    )
+  },
   AlertDialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   AlertDialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
   AlertDialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   AlertDialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   AlertDialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
   AlertDialogTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+vi.mock('@/components/ui/checkbox', () => ({
+  Checkbox: ({
+    checked = false,
+    disabled = false,
+    id,
+    onCheckedChange,
+  }: {
+    checked?: boolean
+    disabled?: boolean
+    id?: string
+    onCheckedChange?: (checked: boolean) => void
+  }) => (
+    <input
+      id={id}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={(event) => onCheckedChange?.(event.currentTarget.checked)}
+    />
+  ),
+}))
+
+vi.mock('@/components/ui/label', () => ({
+  Label: ({
+    children,
+    htmlFor,
+    className,
+  }: React.ComponentProps<'label'>) => (
+    <label htmlFor={htmlFor} className={className}>
+      {children}
+    </label>
+  ),
 }))
 
 vi.mock('@/components/ui/tooltip', () => ({
@@ -228,18 +290,11 @@ vi.mock('@/lib/member-actions', () => ({
 }))
 
 vi.mock('@/lib/member-card', () => ({
-  hasAssignedCard: () => false,
+  hasAssignedCard: (cardNo: string | null) => Boolean(cardNo),
 }))
 
 vi.mock('@/lib/member-card-action-state', () => ({
-  getMemberCardActionState: () => ({
-    showUnassignCard: false,
-    disableUnassignCard: true,
-    showReportCardLost: false,
-    disableReportCardLost: true,
-    showRecoverCard: false,
-    showDisabledCardLabel: false,
-  }),
+  getMemberCardActionState: () => memberCardActionStateState.value,
 }))
 
 vi.mock('@/lib/member-name', () => ({
@@ -322,6 +377,16 @@ function getIconOnlyButton(container: HTMLDivElement) {
   return button
 }
 
+function getCheckboxById(container: HTMLDivElement, id: string) {
+  const checkbox = container.querySelector(`#${id}`)
+
+  if (!(checkbox instanceof HTMLInputElement)) {
+    throw new Error(`Checkbox #${id} not found.`)
+  }
+
+  return checkbox
+}
+
 async function clickButton(container: HTMLDivElement, label: string) {
   await act(async () => {
     getButton(container, label).click()
@@ -379,6 +444,14 @@ describe('Member detail page tabs', () => {
       name: 'Admin User',
       role: 'admin',
       titles: ['Owner'],
+    }
+    memberCardActionStateState.value = {
+      showUnassignCard: false,
+      disableUnassignCard: true,
+      showReportCardLost: false,
+      disableReportCardLost: true,
+      showRecoverCard: false,
+      showDisabledCardLabel: false,
     }
     extendMembershipDialogState.lastProps = null
     useMemberMock.mockReturnValue({
@@ -851,12 +924,24 @@ describe('Member detail page action dialogs', () => {
       titles: ['Owner'],
     }
     extendMembershipDialogState.lastProps = null
+    memberCardActionStateState.value = {
+      showUnassignCard: false,
+      disableUnassignCard: true,
+      showReportCardLost: false,
+      disableReportCardLost: true,
+      showRecoverCard: false,
+      showDisabledCardLabel: false,
+    }
     usePtSessionsMock.mockReturnValue({
       sessions: [],
       isLoading: false,
       error: null,
       refetch: vi.fn(),
     })
+    unassignMemberCardMock.mockReset()
+    unassignMemberCardMock.mockResolvedValue(
+      createMember({ cardNo: null, cardStatus: null, status: 'Suspended' }),
+    )
     suspendMemberMock.mockReset()
     suspendMemberMock.mockResolvedValue(createMember({ status: 'Suspended' }))
     reactivateMemberMock.mockReset()
@@ -913,5 +998,102 @@ describe('Member detail page action dialogs', () => {
 
     expect(reactivateMemberMock).toHaveBeenCalledTimes(1)
     expect(container.textContent).not.toContain('Reactivate member?')
+  })
+
+  it('defaults the unassign dialog to returning the card to the available pool and resets on reopen', async () => {
+    memberCardActionStateState.value = {
+      showUnassignCard: true,
+      disableUnassignCard: false,
+      showReportCardLost: false,
+      disableReportCardLost: true,
+      showRecoverCard: false,
+      showDisabledCardLabel: false,
+    }
+    useMemberMock.mockReturnValue({
+      member: createMember({ cardNo: '0102857149', cardStatus: 'assigned' }),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    await clickButton(container, 'Unassign Card')
+
+    const checkbox = getCheckboxById(container, 'make-card-available-for-reassignment')
+    expect(checkbox.checked).toBe(true)
+    expect(container.textContent).toContain(
+      'This will remove the card from this member and make it available for reassignment.',
+    )
+
+    await act(async () => {
+      checkbox.click()
+    })
+
+    expect(checkbox.checked).toBe(false)
+    expect(container.textContent).toContain(
+      'This will remove the card from this member and permanently disable it. Door access will be immediately revoked.',
+    )
+
+    await clickButton(container, 'Cancel')
+    expect(container.textContent).not.toContain('Unassign card?')
+
+    await clickButton(container, 'Unassign Card')
+
+    const reopenedCheckbox = getCheckboxById(
+      container,
+      'make-card-available-for-reassignment',
+    )
+    expect(reopenedCheckbox.checked).toBe(true)
+    expect(container.textContent).toContain(
+      'This will remove the card from this member and make it available for reassignment.',
+    )
+  })
+
+  it('passes decommission=true when admins opt out of reassignment during unassign', async () => {
+    const assignedMember = createMember({ cardNo: '0102857149', cardStatus: 'assigned' })
+    memberCardActionStateState.value = {
+      showUnassignCard: true,
+      disableUnassignCard: false,
+      showReportCardLost: false,
+      disableReportCardLost: true,
+      showRecoverCard: false,
+      showDisabledCardLabel: false,
+    }
+    useMemberMock.mockReturnValue({
+      member: assignedMember,
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    await clickButton(container, 'Unassign Card')
+
+    await act(async () => {
+      getCheckboxById(container, 'make-card-available-for-reassignment').click()
+    })
+
+    const buttons = Array.from(container.querySelectorAll('button')).filter(
+      (button) => button.textContent?.trim() === 'Unassign Card',
+    )
+    const confirmButton = buttons[buttons.length - 1]
+
+    if (!(confirmButton instanceof HTMLButtonElement)) {
+      throw new Error('Unassign Card confirm button not found.')
+    }
+
+    await act(async () => {
+      confirmButton.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(unassignMemberCardMock).toHaveBeenCalledWith(assignedMember, {
+      decommission: true,
+    })
   })
 })

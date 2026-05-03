@@ -15,6 +15,7 @@ const unassignMemberCardRequestSchema = z.object({
     .string({ required_error: 'Card number is required.' })
     .trim()
     .min(1, 'Card number is required.'),
+  decommission: z.boolean().optional(),
 })
 
 const REVOKE_CARD_TIMEOUT_ERROR = 'Revoke card request timed out after 10 seconds.'
@@ -35,6 +36,7 @@ type UnassignCardAdminClient = MembersReadClient & {
       p_member_id: string
       p_employee_no: string
       p_card_no: string
+      p_decommission: boolean
     },
   ): RpcResult<null>
 }
@@ -86,6 +88,7 @@ export async function POST(
     const { id } = await params
     const requestBody = await request.json()
     const input = unassignMemberCardRequestSchema.parse(requestBody)
+    const decommission = input.decommission ?? false
     const supabase = getSupabaseAdminClient() as unknown as UnassignCardAdminClient
 
     const currentMember = await readMemberWithCardCode(supabase, id)
@@ -116,6 +119,7 @@ export async function POST(
       p_member_id: id,
       p_employee_no: input.employeeNo,
       p_card_no: input.cardNo,
+      p_decommission: decommission,
     })
 
     if (error) {

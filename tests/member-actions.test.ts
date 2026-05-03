@@ -770,6 +770,53 @@ describe('member actions', () => {
     ).rejects.toThrow('No card assigned.')
   })
 
+  it('sends decommission=true when permanently disabling an unassigned card', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse(
+        {
+          ok: true,
+          member: {
+            id: 'member-1',
+            employeeNo: '000611',
+            name: 'Jane Doe',
+            cardNo: null,
+            cardCode: null,
+            cardStatus: null,
+            cardLostAt: null,
+            type: 'General',
+            status: 'Suspended',
+            deviceAccessState: 'ready',
+            gender: null,
+            email: null,
+            phone: null,
+            remark: null,
+            photoUrl: null,
+            beginTime: '2026-03-30T00:00:00.000Z',
+            endTime: '2026-07-15T23:59:59.000Z',
+          },
+        },
+        200,
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await unassignMemberCard(
+      {
+        id: 'member-1',
+        employeeNo: '000611',
+        cardNo: '0102857149',
+      } as const,
+      { decommission: true },
+    )
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      employeeNo: '000611',
+      cardNo: '0102857149',
+      decommission: true,
+    })
+  })
+
   it('reports a member card as lost through the access route', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       createJsonResponse(
