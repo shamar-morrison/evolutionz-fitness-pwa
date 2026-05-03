@@ -31,7 +31,7 @@ type QueryError = {
 type StoredCardRow = {
   card_no: string
   card_code: string | null
-  status: 'available' | 'assigned' | 'suspended_lost' | 'disabled'
+  status: 'available' | 'assigned' | 'suspended_lost' | 'disabled' | 'decommissioned'
   employee_no: string | null
 }
 
@@ -374,7 +374,7 @@ describe('POST /api/access/cards/available', () => {
     })
   })
 
-  it('skips suspended_lost and disabled cards during sync persistence', async () => {
+  it('skips suspended_lost, disabled, and decommissioned cards during sync persistence', async () => {
     const { client, insertedCardPayloads, updatedCardPayloads, cardsTable } =
       createSyncCardsAdminClient({
         pollResults: [
@@ -385,6 +385,7 @@ describe('POST /api/access/cards/available', () => {
               result: [
                 { cardNo: '0105', card_code: 'L5' },
                 { cardNo: '0106', card_code: 'D6' },
+                { cardNo: '0107', card_code: 'X7' },
               ],
               error: null,
             },
@@ -394,6 +395,12 @@ describe('POST /api/access/cards/available', () => {
         existingCards: [
           { card_no: '0105', card_code: 'OLD-L5', status: 'suspended_lost', employee_no: '000105' },
           { card_no: '0106', card_code: 'OLD-D6', status: 'disabled', employee_no: '000106' },
+          {
+            card_no: '0107',
+            card_code: 'OLD-X7',
+            status: 'decommissioned',
+            employee_no: null,
+          },
         ],
       })
 
@@ -415,6 +422,12 @@ describe('POST /api/access/cards/available', () => {
       card_code: 'OLD-D6',
       status: 'disabled',
       employee_no: '000106',
+    })
+    expect(cardsTable.get('0107')).toEqual({
+      card_no: '0107',
+      card_code: 'OLD-X7',
+      status: 'decommissioned',
+      employee_no: null,
     })
     await expect(response.json()).resolves.toEqual({
       ok: true,

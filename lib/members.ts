@@ -15,7 +15,9 @@ const memberSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
   cardNo: z.string().trim().min(1).nullable(),
   cardCode: z.string().trim().min(1).nullable(),
-  cardStatus: z.enum(['available', 'assigned', 'suspended_lost', 'disabled']).nullable(),
+  cardStatus: z
+    .enum(['available', 'assigned', 'suspended_lost', 'disabled', 'decommissioned'])
+    .nullable(),
   cardLostAt: z.string().trim().min(1).nullable(),
   slotPlaceholderName: z.string().trim().min(1).optional(),
   type: z.enum(['General', 'Civil Servant', 'Student/BPO']),

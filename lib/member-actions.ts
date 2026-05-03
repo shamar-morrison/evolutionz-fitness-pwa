@@ -425,6 +425,9 @@ export async function reactivateMember(id: string): Promise<Member> {
 
 export async function unassignMemberCard(
   member: Pick<Member, 'id' | 'employeeNo' | 'cardNo'>,
+  options: {
+    decommission?: boolean
+  } = {},
 ): Promise<Member> {
   if (!hasAssignedCard(member.cardNo)) {
     throw new Error('No card assigned.')
@@ -437,6 +440,11 @@ export async function unassignMemberCard(
       body: {
         employeeNo: member.employeeNo,
         cardNo: member.cardNo,
+        ...(options.decommission !== undefined
+          ? {
+              decommission: options.decommission,
+            }
+          : {}),
       },
       errorMessage: 'Failed to unassign the member card.',
     },

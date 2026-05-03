@@ -143,7 +143,12 @@ function buildCardLookupFromMember(
       string,
       {
         cardCode: string | null
-        status: 'available' | 'assigned' | 'suspended_lost' | 'disabled'
+        status:
+          | 'available'
+          | 'assigned'
+          | 'suspended_lost'
+          | 'disabled'
+          | 'decommissioned'
         lostAt: string | null
       }
     >()

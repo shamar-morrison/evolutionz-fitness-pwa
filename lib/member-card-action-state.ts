@@ -38,7 +38,7 @@ export function getMemberCardActionState({
     }
   }
 
-  if (cardStatus === 'disabled' && cardNo) {
+  if ((cardStatus === 'disabled' || cardStatus === 'decommissioned') && cardNo) {
     return {
       showUnassignCard: false,
       disableUnassignCard: false,

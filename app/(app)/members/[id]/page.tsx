@@ -20,9 +20,20 @@ import { PauseMembershipDialog } from '@/components/pause-membership-dialog'
 import { RecordMemberPaymentDialog } from '@/components/record-member-payment-dialog'
 import { RoleGuard } from '@/components/role-guard'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -120,6 +131,7 @@ export default function MemberDetailPage() {
   const [showRecordPaymentModal, setShowRecordPaymentModal] = useState(false)
   const [showAssignCardModal, setShowAssignCardModal] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
+  const [makeCardAvailableForReassignment, setMakeCardAvailableForReassignment] = useState(true)
   const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [activeDialog, setActiveDialog] = useState<
@@ -186,13 +198,13 @@ export default function MemberDetailPage() {
     }
   }
 
-  const handleUnassignCard = async () => {
+  const handleUnassignCard = async (decommission: boolean) => {
     if (!member) return
 
     setIsActionLoading(true)
 
     try {
-      await unassignMemberCard(member)
+      await unassignMemberCard(member, { decommission })
       setActiveDialog(null)
       void invalidateMemberAndCardQueries()
     } catch (error) {
@@ -279,6 +291,12 @@ export default function MemberDetailPage() {
   useEffect(() => {
     setAvatarPhotoUrl(member?.photoUrl ?? null)
   }, [member?.photoUrl])
+
+  useEffect(() => {
+    if (activeDialog === 'unassign') {
+      setMakeCardAvailableForReassignment(true)
+    }
+  }, [activeDialog])
 
   const handleDeletePhoto = async () => {
     if (!member) return
@@ -433,6 +451,7 @@ export default function MemberDetailPage() {
     role !== 'admin' &&
     showRecordPaymentAction &&
     member.hasRecordedPayment === false
+  const isUnassignDialogOpen = activeDialog === 'unassign'
   const cardActionState = getMemberCardActionState({
     cardNo: member.cardNo,
     cardStatus: member.cardStatus,
@@ -452,6 +471,9 @@ export default function MemberDetailPage() {
         ? 'Member has no active membership.'
         : null
   const activePause = member.activePause ?? null
+  const unassignCardDescription = makeCardAvailableForReassignment
+    ? 'This will remove the card from this member and make it available for reassignment. The member will be suspended. This cannot be undone.'
+    : 'This will remove the card from this member and permanently disable it. Door access will be immediately revoked. The member will be suspended. This cannot be undone.'
 
   return (
     <div className="space-y-6">
@@ -893,18 +915,61 @@ export default function MemberDetailPage() {
         isLoading={isActionLoading}
       />
 
-      <ConfirmDialog
-        open={activeDialog === 'unassign'}
-        onOpenChange={(open) => setActiveDialog(open ? 'unassign' : null)}
-        title="Unassign card?"
-        description="This will remove the card from this member and make it available for reassignment. The member will be suspended. This cannot be undone."
-        confirmLabel="Unassign Card"
-        cancelLabel="Cancel"
-        onConfirm={() => void handleUnassignCard()}
-        onCancel={() => setActiveDialog(null)}
-        isLoading={isActionLoading}
-        variant="destructive"
-      />
+      <AlertDialog
+        open={isUnassignDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && isActionLoading) {
+            return
+          }
+
+          setActiveDialog(open ? 'unassign' : null)
+        }}
+      >
+        <AlertDialogContent isLoading={isActionLoading}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unassign card?</AlertDialogTitle>
+            <AlertDialogDescription>{unassignCardDescription}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="rounded-md border px-4 py-3">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="make-card-available-for-reassignment"
+                checked={makeCardAvailableForReassignment}
+                onCheckedChange={(checked) =>
+                  setMakeCardAvailableForReassignment(checked === true)
+                }
+                disabled={isActionLoading}
+              />
+              <Label
+                htmlFor="make-card-available-for-reassignment"
+                className="leading-5 font-normal"
+              >
+                Make card available for reassignment
+              </Label>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setActiveDialog(null)}
+                disabled={isActionLoading}
+              >
+                Cancel
+              </Button>
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              onClick={() => void handleUnassignCard(!makeCardAvailableForReassignment)}
+              loading={isActionLoading}
+              variant="destructive"
+            >
+              Unassign Card
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ConfirmDialog
         open={activeDialog === 'report-lost'}

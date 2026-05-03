@@ -86,6 +86,7 @@ function createUnassignAdminClient({
     p_member_id: string
     p_employee_no: string
     p_card_no: string
+    p_decommission: boolean
   }> = []
   let detailReadIndex = 0
 
@@ -151,6 +152,7 @@ function createUnassignAdminClient({
         p_member_id: string
         p_employee_no: string
         p_card_no: string
+        p_decommission: boolean
       },
     ) {
       expect(fn).toBe('unassign_member_card')
@@ -209,6 +211,7 @@ describe('POST /api/access/members/[id]/unassign-card', () => {
         p_member_id: 'member-1',
         p_employee_no: '000611',
         p_card_no: '0102857149',
+        p_decommission: false,
       },
     ])
     await expect(response.json()).resolves.toEqual({
@@ -311,6 +314,71 @@ describe('POST /api/access/members/[id]/unassign-card', () => {
     })
   })
 
+  it('passes p_decommission=true when the card should be permanently disabled', async () => {
+    const { client, insertedJobs, rpcCalls } = createUnassignAdminClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/member-1/unassign-card', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          employeeNo: '000611',
+          cardNo: '0102857149',
+          decommission: true,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'revoke_card',
+        payload: {
+          employeeNo: '000611',
+          cardNo: '0102857149',
+        },
+      },
+    ])
+    expect(rpcCalls).toEqual([
+      {
+        p_member_id: 'member-1',
+        p_employee_no: '000611',
+        p_card_no: '0102857149',
+        p_decommission: true,
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      member: {
+        id: 'member-1',
+        employeeNo: '000611',
+        name: 'Jane Doe',
+        cardNo: null,
+        cardCode: null,
+        cardStatus: null,
+        cardLostAt: null,
+        type: 'General',
+        joinedAt: null,
+        memberTypeId: null,
+        status: 'Suspended',
+        deviceAccessState: 'ready',
+        gender: null,
+        email: null,
+        phone: null,
+        remark: null,
+        photoUrl: null,
+        beginTime: '2026-03-30T00:00:00.000Z',
+        endTime: '2026-07-15T23:59:59.000Z',
+      },
+    })
+  })
+
   it('returns 400 when the current card is not in assigned status', async () => {
     const { client, insertedJobs, rpcCalls } = createUnassignAdminClient({
       cardRows: [
@@ -382,6 +450,7 @@ describe('POST /api/access/members/[id]/unassign-card', () => {
         p_member_id: 'member-1',
         p_employee_no: '000611',
         p_card_no: '0102857149',
+        p_decommission: false,
       },
     ])
     await expect(response.json()).resolves.toEqual({

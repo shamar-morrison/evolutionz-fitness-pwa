@@ -4,7 +4,12 @@ export type MemberStatus = 'Active' | 'Expired' | 'Suspended' | 'Paused'
 export type DeviceAccessState = 'ready' | 'released'
 export type MemberGender = 'Male' | 'Female'
 export type StaffGender = 'male' | 'female' | 'other'
-export type CardStatus = 'available' | 'assigned' | 'suspended_lost' | 'disabled'
+export type CardStatus =
+  | 'available'
+  | 'assigned'
+  | 'suspended_lost'
+  | 'disabled'
+  | 'decommissioned'
 export type AvailableAccessSlot = {
   employeeNo: string
   cardNo: string

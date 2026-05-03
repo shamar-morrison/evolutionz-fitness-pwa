@@ -50,6 +50,22 @@ describe('member card action state', () => {
     })
   })
 
+  it('shows a disabled label for decommissioned cards', () => {
+    expect(
+      getMemberCardActionState({
+        cardNo: '0102857149',
+        cardStatus: 'decommissioned',
+      }),
+    ).toEqual({
+      showUnassignCard: false,
+      disableUnassignCard: false,
+      showReportCardLost: false,
+      disableReportCardLost: false,
+      showRecoverCard: false,
+      showDisabledCardLabel: true,
+    })
+  })
+
   it('shows disabled unassign and lost actions when no card is assigned', () => {
     expect(
       getMemberCardActionState({
