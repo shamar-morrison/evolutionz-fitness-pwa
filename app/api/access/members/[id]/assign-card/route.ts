@@ -58,6 +58,27 @@ type QueryResult<T> = PromiseLike<{
   error: QueryError | null
 }>
 
+type AssignCardMemberUpdateValues = {
+  employee_no?: string | null
+  name?: string | null
+  begin_time?: string | null
+  end_time?: string | null
+  status?: string | null
+}
+
+type ProvisionedMemberRollbackSnapshot = {
+  employeeNo: string | null
+  name: string | null
+  beginTime: string | null
+  endTime: string | null
+  status: string | null
+}
+
+type ProvisionedMemberRollbackContext = {
+  generatedEmployeeNo: string
+  previousMember: ProvisionedMemberRollbackSnapshot
+}
+
 type AssignCardAdminClient = MembersReadClient &
   AccessControlJobsClient & {
     from(table: 'members'): {
@@ -67,21 +88,7 @@ type AssignCardAdminClient = MembersReadClient &
         }
       }
       select(columns: 'employee_no'): QueryResult<Array<{ employee_no: string | null }>>
-      update(
-        values:
-          | {
-              begin_time: string
-              end_time: string
-              status: 'Active' | 'Expired'
-            }
-          | {
-              employee_no: string
-              name: string
-              begin_time: string
-              end_time: string
-              status: 'Active' | 'Expired'
-            },
-      ): {
+      update(values: AssignCardMemberUpdateValues): {
         eq(column: 'id', value: string): {
           eq(column: 'employee_no', value: string): {
             select(columns: typeof MEMBER_RECORD_SELECT): {
@@ -417,8 +424,19 @@ function buildRollbackError(
   rollbackResult: AccessControlJobOutcome | null,
   rollbackError: string | null,
 ) {
+  if (rollbackResult?.status === 'done' && rollbackError) {
+    return appendDetail(
+      baseError,
+      `The created Hik user was rolled back, but restoring the member record failed: ${rollbackError}`,
+    )
+  }
+
   if (rollbackResult?.status === 'done') {
     return appendDetail(baseError, 'The created Hik user was rolled back.')
+  }
+
+  if (rollbackResult && rollbackError) {
+    return appendDetail(baseError, `Rollback failed: ${rollbackResult.error} ${rollbackError}`)
   }
 
   if (rollbackResult) {
@@ -430,6 +448,58 @@ function buildRollbackError(
   }
 
   return appendDetail(baseError, 'Rollback failed.')
+}
+
+async function rollbackProvisionedMember(
+  memberId: string,
+  rollbackContext: ProvisionedMemberRollbackContext,
+  supabase: AssignCardAdminClient,
+) {
+  let rollbackResult: AccessControlJobOutcome | null = null
+  const rollbackErrors: string[] = []
+
+  try {
+    rollbackResult = await deleteProvisionedUser(rollbackContext.generatedEmployeeNo, supabase)
+  } catch (deleteError) {
+    rollbackErrors.push(
+      deleteError instanceof Error ? deleteError.message : 'Unexpected rollback error.',
+    )
+  }
+
+  try {
+    const { data: restoredMember, error: restoreError } = await supabase
+      .from('members')
+      .update({
+        employee_no: rollbackContext.previousMember.employeeNo,
+        name: rollbackContext.previousMember.name,
+        begin_time: rollbackContext.previousMember.beginTime,
+        end_time: rollbackContext.previousMember.endTime,
+        status: rollbackContext.previousMember.status,
+      })
+      .eq('id', memberId)
+      .eq('employee_no', rollbackContext.generatedEmployeeNo)
+      .select(MEMBER_RECORD_SELECT)
+      .maybeSingle()
+
+    if (restoreError) {
+      rollbackErrors.push(`Failed to restore member ${memberId}: ${restoreError.message}`)
+    } else if (!restoredMember) {
+      rollbackErrors.push(
+        `Failed to restore member ${memberId}: member row could not be restored after provisioning rollback.`,
+      )
+    }
+  } catch (restoreError) {
+    rollbackErrors.push(
+      restoreError instanceof Error
+        ? restoreError.message
+        : `Failed to restore member ${memberId}: unexpected rollback error.`,
+    )
+  }
+
+  return {
+    rollbackResult,
+    rollbackError: rollbackErrors.length > 0 ? rollbackErrors.join(' ') : null,
+  }
 }
 
 export async function POST(
@@ -478,6 +548,7 @@ export async function POST(
     }
 
     let memberEmployeeNo = currentMember.employeeNo
+    let provisionedMemberRollbackContext: ProvisionedMemberRollbackContext | null = null
     const getCardJob = await getCardAssignment(input.cardNo, supabase)
 
     if (getCardJob.status !== 'done') {
@@ -485,6 +556,31 @@ export async function POST(
     }
 
     const existingCardEmployeeNo = getAssignedEmployeeNoForCard(getCardJob.result, input.cardNo)
+
+    let selectedCardCode: string | null = null
+
+    if (!memberEmployeeNo) {
+      const { data: selectedCard, error: selectedCardError } = await supabase
+        .from('cards')
+        .select('card_no, card_code')
+        .eq('card_no', input.cardNo)
+        .eq('status', 'available')
+        .maybeSingle()
+
+      if (selectedCardError) {
+        throw new Error(`Failed to read selected card ${input.cardNo}: ${selectedCardError.message}`)
+      }
+
+      if (!selectedCard) {
+        return createErrorResponse('Selected card is no longer available.', 400)
+      }
+
+      selectedCardCode = normalizeText(selectedCard.card_code)
+
+      if (!selectedCardCode) {
+        return createErrorResponse('Selected card is missing its synced card code.', 400)
+      }
+    }
 
     if (existingCardEmployeeNo && existingCardEmployeeNo !== memberEmployeeNo) {
       const getUserJob = await getDeviceUser(existingCardEmployeeNo, supabase)
@@ -519,29 +615,8 @@ export async function POST(
     }
 
     if (!memberEmployeeNo) {
-      const { data: selectedCard, error: selectedCardError } = await supabase
-        .from('cards')
-        .select('card_no, card_code')
-        .eq('card_no', input.cardNo)
-        .eq('status', 'available')
-        .maybeSingle()
-
-      if (selectedCardError) {
-        throw new Error(`Failed to read selected card ${input.cardNo}: ${selectedCardError.message}`)
-      }
-
-      if (!selectedCard) {
-        return createErrorResponse('Selected card is no longer available.', 400)
-      }
-
-      const selectedCardCode = normalizeText(selectedCard.card_code)
-
-      if (!selectedCardCode) {
-        return createErrorResponse('Selected card is missing its synced card code.', 400)
-      }
-
       const generatedEmployeeNo = await getNextProvisioningEmployeeNo(new Date(), supabase)
-      const hikMemberName = buildHikMemberName(currentMember.name, selectedCardCode)
+      const hikMemberName = buildHikMemberName(currentMember.name, selectedCardCode ?? '')
       const addUserJob = await createAndWaitForAccessControlJob({
         jobType: 'add_user',
         payload: buildAddUserPayloadWithAccessWindow({
@@ -566,6 +641,17 @@ export async function POST(
           buildAddUserFailureMessage(addUserJob.error),
           addUserJob.httpStatus,
         )
+      }
+
+      provisionedMemberRollbackContext = {
+        generatedEmployeeNo,
+        previousMember: {
+          employeeNo: currentMember.employeeNo,
+          name: currentMember.name,
+          beginTime: currentMember.beginTime,
+          endTime: currentMember.endTime,
+          status: currentMember.status,
+        },
       }
 
       try {
@@ -595,15 +681,11 @@ export async function POST(
 
         memberEmployeeNo = generatedEmployeeNo
       } catch (error) {
-        let rollbackResult: AccessControlJobOutcome | null = null
-        let rollbackError: string | null = null
-
-        try {
-          rollbackResult = await deleteProvisionedUser(generatedEmployeeNo, supabase)
-        } catch (deleteError) {
-          rollbackError =
-            deleteError instanceof Error ? deleteError.message : 'Unexpected rollback error.'
-        }
+        const { rollbackResult, rollbackError } = await rollbackProvisionedMember(
+          id,
+          provisionedMemberRollbackContext,
+          supabase,
+        )
 
         return createErrorResponse(
           buildRollbackError(
@@ -640,12 +722,42 @@ export async function POST(
     })
 
     if (addCardJob.status !== 'done') {
+      if (provisionedMemberRollbackContext) {
+        const { rollbackResult, rollbackError } = await rollbackProvisionedMember(
+          id,
+          provisionedMemberRollbackContext,
+          supabase,
+        )
+
+        return createErrorResponse(
+          buildRollbackError(addCardJob.error, rollbackResult, rollbackError),
+          addCardJob.httpStatus,
+        )
+      }
+
       return createErrorResponse(addCardJob.error, addCardJob.httpStatus)
     }
 
     const addCardFailure = getCompletedAddCardJobFailure(addCardJob.result)
 
     if (addCardFailure) {
+      if (provisionedMemberRollbackContext) {
+        const { rollbackResult, rollbackError } = await rollbackProvisionedMember(
+          id,
+          provisionedMemberRollbackContext,
+          supabase,
+        )
+
+        return createErrorResponse(
+          buildRollbackError(
+            `Failed to issue card ${input.cardNo}: ${addCardFailure}`,
+            rollbackResult,
+            rollbackError,
+          ),
+          502,
+        )
+      }
+
       return createErrorResponse(`Failed to issue card ${input.cardNo}: ${addCardFailure}`, 502)
     }
 
@@ -656,6 +768,23 @@ export async function POST(
     })
 
     if (error) {
+      if (provisionedMemberRollbackContext) {
+        const { rollbackResult, rollbackError } = await rollbackProvisionedMember(
+          id,
+          provisionedMemberRollbackContext,
+          supabase,
+        )
+
+        return createErrorResponse(
+          buildRollbackError(
+            `Failed to assign card ${input.cardNo}: ${error.message}`,
+            rollbackResult,
+            rollbackError,
+          ),
+          500,
+        )
+      }
+
       throw new Error(`Failed to assign card ${input.cardNo}: ${error.message}`)
     }
 
@@ -672,10 +801,40 @@ export async function POST(
       .maybeSingle()
 
     if (updateError) {
+      if (provisionedMemberRollbackContext) {
+        const { rollbackResult, rollbackError } = await rollbackProvisionedMember(
+          id,
+          provisionedMemberRollbackContext,
+          supabase,
+        )
+
+        return createErrorResponse(
+          buildRollbackError(
+            `Failed to update member ${id}: ${updateError.message}`,
+            rollbackResult,
+            rollbackError,
+          ),
+          500,
+        )
+      }
+
       throw new Error(`Failed to update member ${id}: ${updateError.message}`)
     }
 
     if (!updatedRecord) {
+      if (provisionedMemberRollbackContext) {
+        const { rollbackResult, rollbackError } = await rollbackProvisionedMember(
+          id,
+          provisionedMemberRollbackContext,
+          supabase,
+        )
+
+        return createErrorResponse(
+          buildRollbackError('Member not found.', rollbackResult, rollbackError),
+          404,
+        )
+      }
+
       return createErrorResponse('Member not found.', 404)
     }
 

@@ -312,7 +312,10 @@ describe('SettingsPage', () => {
       }
 
       if (url.includes('/api/settings/member-types/') && init?.method === 'PATCH') {
-        const requestBody = JSON.parse(String(init.body)) as { monthly_rate: number }
+        const requestBody = JSON.parse(String(init.body)) as {
+          monthly_rate: number
+          requires_card: boolean
+        }
         const id = url.split('/').at(-1)
 
         memberTypesState = memberTypesState.map((memberType) =>
@@ -320,6 +323,7 @@ describe('SettingsPage', () => {
             ? {
                 ...memberType,
                 monthly_rate: requestBody.monthly_rate,
+                requires_card: requestBody.requires_card,
               }
             : memberType,
         )
@@ -578,6 +582,15 @@ describe('SettingsPage', () => {
         method: 'PATCH',
       }),
     )
+    const patchCall = fetchMock.mock.calls.find(
+      ([url, init]) => url === '/api/settings/member-types/type-1' && init?.method === 'PATCH',
+    )
+
+    expect(patchCall).toBeDefined()
+    expect(JSON.parse(String(patchCall?.[1]?.body))).toEqual({
+      monthly_rate: 13000,
+      requires_card: true,
+    })
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Membership type updated',

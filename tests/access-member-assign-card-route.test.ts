@@ -123,6 +123,8 @@ function createAssignCardAdminClient({
     error: null,
   } satisfies QueryResult<{ card_no: string; card_code: string | null }>,
   provisionMemberUpdateResult,
+  rollbackMemberUpdateResult,
+  finalMemberUpdateResult,
   rpcResult = {
     data: null,
     error: null,
@@ -140,6 +142,8 @@ function createAssignCardAdminClient({
   memberRowsResult?: QueryResult<Array<{ employee_no: string | null }>>
   selectedCardResult?: QueryResult<{ card_no: string; card_code: string | null }>
   provisionMemberUpdateResult?: QueryResult<Record<string, unknown>>
+  rollbackMemberUpdateResult?: QueryResult<Record<string, unknown>>
+  finalMemberUpdateResult?: QueryResult<Record<string, unknown>>
   rpcResult?: QueryResult<null>
 } = {}) {
   const { client: accessControlClient, insertedJobs } = createFakeAccessControlClient({
@@ -164,6 +168,15 @@ function createAssignCardAdminClient({
     end_time: string
     status: 'Active' | 'Expired'
     id: string
+  }> = []
+  const rollbackMemberUpdateCalls: Array<{
+    employee_no: string | null
+    name: string | null
+    begin_time: string | null
+    end_time: string | null
+    status: string | null
+    id: string
+    matched_employee_no: string
   }> = []
   let detailReadIndex = 0
   let cardLookupIndex = 0
@@ -210,6 +223,37 @@ function createAssignCardAdminClient({
 
                 if ('employee_no' in values && 'name' in values) {
                   return {
+                    eq(nextColumn: string, nextValue: string) {
+                      expect(nextColumn).toBe('employee_no')
+
+                      return {
+                        select(columns: string) {
+                          expect(columns).toBe(MEMBER_RECORD_SELECT)
+                          rollbackMemberUpdateCalls.push({
+                            employee_no: (values.employee_no as string | null) ?? null,
+                            name: (values.name as string | null) ?? null,
+                            begin_time: (values.begin_time as string | null) ?? null,
+                            end_time: (values.end_time as string | null) ?? null,
+                            status: (values.status as string | null) ?? null,
+                            id: value,
+                            matched_employee_no: nextValue,
+                          })
+
+                          return {
+                            maybeSingle() {
+                              if (rollbackMemberUpdateResult) {
+                                return Promise.resolve(rollbackMemberUpdateResult)
+                              }
+
+                              return Promise.resolve({
+                                data: { id: value },
+                                error: null,
+                              })
+                            },
+                          }
+                        },
+                      }
+                    },
                     is(nextColumn: string, nextValue: null) {
                       expect(nextColumn).toBe('employee_no')
                       expect(nextValue).toBeNull()
@@ -265,6 +309,10 @@ function createAssignCardAdminClient({
 
                         return {
                           maybeSingle() {
+                            if (finalMemberUpdateResult) {
+                              return Promise.resolve(finalMemberUpdateResult)
+                            }
+
                             const detailRow =
                               detailRows[Math.min(detailReadIndex, detailRows.length - 1)] ?? null
                             detailReadIndex += 1
@@ -352,6 +400,7 @@ function createAssignCardAdminClient({
     insertedJobs,
     memberUpdateCalls,
     provisionMemberUpdateCalls,
+    rollbackMemberUpdateCalls,
     rpcCalls,
   }
 }
@@ -448,6 +497,7 @@ describe('POST /api/access/members/[id]/assign-card', () => {
       insertedJobs,
       memberUpdateCalls,
       provisionMemberUpdateCalls,
+      rollbackMemberUpdateCalls,
       rpcCalls,
     } = createAssignCardAdminClient({
       detailRows: [
@@ -619,6 +669,7 @@ describe('POST /api/access/members/[id]/assign-card', () => {
       insertedJobs,
       memberUpdateCalls,
       provisionMemberUpdateCalls,
+      rollbackMemberUpdateCalls,
       rpcCalls,
     } = createAssignCardAdminClient({
       detailRows: [
@@ -1239,6 +1290,7 @@ describe('POST /api/access/members/[id]/assign-card', () => {
       insertedJobs,
       memberUpdateCalls,
       provisionMemberUpdateCalls,
+      rollbackMemberUpdateCalls,
       rpcCalls,
     } = createAssignCardAdminClient({
       detailRows: [
@@ -1329,6 +1381,7 @@ describe('POST /api/access/members/[id]/assign-card', () => {
       insertedJobs,
       memberUpdateCalls,
       provisionMemberUpdateCalls,
+      rollbackMemberUpdateCalls,
       rpcCalls,
     } = createAssignCardAdminClient({
       detailRows: [
@@ -1413,6 +1466,17 @@ describe('POST /api/access/members/[id]/assign-card', () => {
         id: 'member-1',
       },
     ])
+    expect(rollbackMemberUpdateCalls).toEqual([
+      {
+        employee_no: null,
+        name: 'Jane Doe',
+        begin_time: '2026-03-30T00:00:00.000Z',
+        end_time: '2026-07-15T23:59:59.000Z',
+        status: 'Active',
+        id: 'member-1',
+        matched_employee_no: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+      },
+    ])
     expect(memberUpdateCalls).toEqual([])
     expect(rpcCalls).toEqual([])
     await expect(response.json()).resolves.toEqual({
@@ -1483,6 +1547,78 @@ describe('POST /api/access/members/[id]/assign-card', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Selected card is missing its synced card code.',
+    })
+  })
+
+  it('validates the inventory card before revoking a placeholder-held device card during first-time provisioning', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
+    const { client, insertedJobs, provisionMemberUpdateCalls, rpcCalls } = createAssignCardAdminClient({
+      detailRows: [
+        {
+          id: 'member-1',
+          employee_no: null,
+          name: 'Jane Doe',
+          card_no: null,
+          type: 'General',
+          status: 'Active',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: null,
+          photo_url: null,
+          begin_time: '2026-03-30T00:00:00Z',
+          end_time: '2026-07-15T23:59:59Z',
+          updated_at: '2026-04-01T05:00:00Z',
+        },
+      ],
+      pollResults: [
+        createDoneJobResult({
+          CardInfoSearch: {
+            CardInfo: [
+              {
+                cardNo: '0102857149',
+                employeeNo: '136',
+              },
+            ],
+          },
+        }),
+      ],
+      selectedCardResult: {
+        data: null,
+        error: null,
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/member-1/assign-card', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(validAssignCardRequestBody),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
+      },
+    ])
+    expect(provisionMemberUpdateCalls).toEqual([])
+    expect(rpcCalls).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Selected card is no longer available.',
     })
   })
 
@@ -1721,6 +1857,139 @@ describe('POST /api/access/members/[id]/assign-card', () => {
     })
   })
 
+  it('rolls back a newly provisioned Hik user when add_card fails after first-time provisioning', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
+    const {
+      client,
+      insertedJobs,
+      memberUpdateCalls,
+      provisionMemberUpdateCalls,
+      rollbackMemberUpdateCalls,
+      rpcCalls,
+    } = createAssignCardAdminClient({
+      detailRows: [
+        {
+          id: 'member-1',
+          employee_no: null,
+          name: 'Jane Doe',
+          card_no: null,
+          type: 'General',
+          status: 'Active',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: null,
+          photo_url: null,
+          begin_time: '2026-03-30T00:00:00Z',
+          end_time: '2026-07-15T23:59:59Z',
+          updated_at: '2026-04-01T05:00:00Z',
+        },
+        {
+          id: 'member-1',
+          employee_no: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+          name: 'A18 Jane Doe',
+          card_no: null,
+          type: 'General',
+          status: 'Active',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: null,
+          photo_url: null,
+          begin_time: '2026-04-01T00:00:00Z',
+          end_time: '2026-08-31T23:59:59Z',
+          updated_at: '2026-04-01T05:03:00Z',
+        },
+      ],
+      pollResults: [
+        createDoneJobResult({
+          CardInfoSearch: {
+            CardInfo: [],
+          },
+        }),
+        createDoneJobResult(),
+        createFailedJobResult('Add card job failed.'),
+        createDoneJobResult(),
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/member-1/assign-card', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(validAssignCardRequestBody),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(502)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'add_user',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+          name: 'A18 Jane Doe',
+          userType: 'normal',
+          beginTime: '2026-04-01T00:00:00',
+          endTime: '2026-08-31T23:59:59',
+        },
+      },
+      {
+        type: 'add_card',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'delete_user',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+        },
+      },
+    ])
+    expect(provisionMemberUpdateCalls).toEqual([
+      {
+        employee_no: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+        name: 'A18 Jane Doe',
+        begin_time: '2026-04-01T00:00:00',
+        end_time: '2026-08-31T23:59:59',
+        status: 'Active',
+        id: 'member-1',
+      },
+    ])
+    expect(rollbackMemberUpdateCalls).toEqual([
+      {
+        employee_no: null,
+        name: 'Jane Doe',
+        begin_time: '2026-03-30T00:00:00.000Z',
+        end_time: '2026-07-15T23:59:59.000Z',
+        status: 'Active',
+        id: 'member-1',
+        matched_employee_no: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+      },
+    ])
+    expect(memberUpdateCalls).toEqual([])
+    expect(rpcCalls).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Add card job failed. The created Hik user was rolled back.',
+    })
+  })
+
   it('returns 502 when add_card completes with a Hik failure response', async () => {
     const { client, insertedJobs, rpcCalls } = createAssignCardAdminClient({
       pollResults: [
@@ -1777,6 +2046,151 @@ describe('POST /api/access/members/[id]/assign-card', () => {
     })
   })
 
+  it('rolls back a newly provisioned Hik user when assign_member_card fails after first-time provisioning', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
+    const {
+      client,
+      insertedJobs,
+      memberUpdateCalls,
+      provisionMemberUpdateCalls,
+      rollbackMemberUpdateCalls,
+      rpcCalls,
+    } = createAssignCardAdminClient({
+      detailRows: [
+        {
+          id: 'member-1',
+          employee_no: null,
+          name: 'Jane Doe',
+          card_no: null,
+          type: 'General',
+          status: 'Active',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: null,
+          photo_url: null,
+          begin_time: '2026-03-30T00:00:00Z',
+          end_time: '2026-07-15T23:59:59Z',
+          updated_at: '2026-04-01T05:00:00Z',
+        },
+        {
+          id: 'member-1',
+          employee_no: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+          name: 'A18 Jane Doe',
+          card_no: null,
+          type: 'General',
+          status: 'Active',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: null,
+          photo_url: null,
+          begin_time: '2026-04-01T00:00:00Z',
+          end_time: '2026-08-31T23:59:59Z',
+          updated_at: '2026-04-01T05:03:00Z',
+        },
+      ],
+      pollResults: [
+        createDoneJobResult({
+          CardInfoSearch: {
+            CardInfo: [],
+          },
+        }),
+        createDoneJobResult(),
+        createDoneJobResult(),
+        createDoneJobResult(),
+      ],
+      rpcResult: {
+        data: null,
+        error: {
+          message: 'transaction exploded',
+        },
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/member-1/assign-card', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(validAssignCardRequestBody),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(500)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'add_user',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+          name: 'A18 Jane Doe',
+          userType: 'normal',
+          beginTime: '2026-04-01T00:00:00',
+          endTime: '2026-08-31T23:59:59',
+        },
+      },
+      {
+        type: 'add_card',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'delete_user',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+        },
+      },
+    ])
+    expect(provisionMemberUpdateCalls).toEqual([
+      {
+        employee_no: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+        name: 'A18 Jane Doe',
+        begin_time: '2026-04-01T00:00:00',
+        end_time: '2026-08-31T23:59:59',
+        status: 'Active',
+        id: 'member-1',
+      },
+    ])
+    expect(rollbackMemberUpdateCalls).toEqual([
+      {
+        employee_no: null,
+        name: 'Jane Doe',
+        begin_time: '2026-03-30T00:00:00.000Z',
+        end_time: '2026-07-15T23:59:59.000Z',
+        status: 'Active',
+        id: 'member-1',
+        matched_employee_no: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+      },
+    ])
+    expect(memberUpdateCalls).toEqual([])
+    expect(rpcCalls).toEqual([
+      {
+        p_member_id: 'member-1',
+        p_employee_no: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+        p_card_no: '0102857149',
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Failed to assign card 0102857149: transaction exploded. The created Hik user was rolled back.',
+    })
+  })
+
   it('returns 500 when the assign_member_card RPC fails after device success', async () => {
     const { client, memberUpdateCalls, rpcCalls } = createAssignCardAdminClient({
       rpcResult: {
@@ -1813,6 +2227,147 @@ describe('POST /api/access/members/[id]/assign-card', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Failed to assign card 0102857149: transaction exploded',
+    })
+  })
+
+  it('rolls back a newly provisioned Hik user when the final member update fails after card assignment', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
+    const {
+      client,
+      insertedJobs,
+      provisionMemberUpdateCalls,
+      rollbackMemberUpdateCalls,
+      rpcCalls,
+    } = createAssignCardAdminClient({
+      detailRows: [
+        {
+          id: 'member-1',
+          employee_no: null,
+          name: 'Jane Doe',
+          card_no: null,
+          type: 'General',
+          status: 'Active',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: null,
+          photo_url: null,
+          begin_time: '2026-03-30T00:00:00Z',
+          end_time: '2026-07-15T23:59:59Z',
+          updated_at: '2026-04-01T05:00:00Z',
+        },
+        {
+          id: 'member-1',
+          employee_no: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+          name: 'A18 Jane Doe',
+          card_no: null,
+          type: 'General',
+          status: 'Active',
+          gender: null,
+          email: null,
+          phone: null,
+          remark: null,
+          photo_url: null,
+          begin_time: '2026-04-01T00:00:00Z',
+          end_time: '2026-08-31T23:59:59Z',
+          updated_at: '2026-04-01T05:03:00Z',
+        },
+      ],
+      pollResults: [
+        createDoneJobResult({
+          CardInfoSearch: {
+            CardInfo: [],
+          },
+        }),
+        createDoneJobResult(),
+        createDoneJobResult(),
+        createDoneJobResult(),
+      ],
+      finalMemberUpdateResult: {
+        data: null,
+        error: { message: 'final update exploded' },
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/access/members/member-1/assign-card', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(validAssignCardRequestBody),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(500)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'get_card',
+        payload: {
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'add_user',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+          name: 'A18 Jane Doe',
+          userType: 'normal',
+          beginTime: '2026-04-01T00:00:00',
+          endTime: '2026-08-31T23:59:59',
+        },
+      },
+      {
+        type: 'add_card',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+          cardNo: '0102857149',
+        },
+      },
+      {
+        type: 'delete_user',
+        payload: {
+          employeeNo: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+        },
+      },
+    ])
+    expect(provisionMemberUpdateCalls).toEqual([
+      {
+        employee_no: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+        name: 'A18 Jane Doe',
+        begin_time: '2026-04-01T00:00:00',
+        end_time: '2026-08-31T23:59:59',
+        status: 'Active',
+        id: 'member-1',
+      },
+    ])
+    expect(rollbackMemberUpdateCalls).toEqual([
+      {
+        employee_no: null,
+        name: 'Jane Doe',
+        begin_time: '2026-03-30T00:00:00.000Z',
+        end_time: '2026-07-15T23:59:59.000Z',
+        status: 'Active',
+        id: 'member-1',
+        matched_employee_no: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+      },
+    ])
+    expect(rpcCalls).toEqual([
+      {
+        p_member_id: 'member-1',
+        p_employee_no: EXPECTED_INCREMENTED_EMPLOYEE_NO,
+        p_card_no: '0102857149',
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Failed to update member member-1: final update exploded. The created Hik user was rolled back.',
     })
   })
 

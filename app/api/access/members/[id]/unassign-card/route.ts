@@ -98,8 +98,15 @@ export async function POST(
       return createErrorResponse('Member not found.', 404)
     }
 
-    if (!memberRequiresCard(currentMember) || !currentMember.employeeNo) {
+    if (!memberRequiresCard(currentMember)) {
       return createErrorResponse('This membership type does not support access cards.', 400)
+    }
+
+    if (!currentMember.employeeNo) {
+      return createErrorResponse(
+        'Member requires an access card but employeeNo is missing from the member record.',
+        400,
+      )
     }
 
     if (currentMember.employeeNo !== input.employeeNo) {

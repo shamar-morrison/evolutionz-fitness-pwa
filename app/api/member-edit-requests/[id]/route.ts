@@ -299,6 +299,14 @@ export async function PATCH(
       }
     }
 
+    if (
+      !shouldUpdateAccessWindow &&
+      !nextRequiresCard &&
+      findMatchingMemberDuration(currentMember.beginTime, currentMember.endTime) !== '1_day'
+    ) {
+      return createErrorResponse('Day pass memberships must use a 1-day access window.', 400)
+    }
+
     const accessWindowChanged =
       shouldUpdateAccessWindow &&
       nextBeginTime !== null &&
@@ -410,7 +418,7 @@ export async function PATCH(
       return NextResponse.json({ ok: true })
     }
 
-    if (!memberRequiresCard(currentMember) || !currentMember.employeeNo) {
+    if (!nextRequiresCard || !currentMember.employeeNo) {
       return NextResponse.json({ ok: true })
     }
 

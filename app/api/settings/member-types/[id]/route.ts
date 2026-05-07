@@ -22,8 +22,13 @@ function createErrorResponse(error: string, status: number) {
 }
 
 function getMemberTypeValidationError(error: ZodError) {
+  const hasUnrecognizedFieldError = error.issues.some((issue) => issue.path.length === 0)
   const hasMonthlyRateError = error.issues.some((issue) => issue.path[0] === 'monthly_rate')
   const hasRequiresCardError = error.issues.some((issue) => issue.path[0] === 'requires_card')
+
+  if (hasUnrecognizedFieldError) {
+    return 'Request contains unrecognized fields.'
+  }
 
   if (hasMonthlyRateError && hasRequiresCardError) {
     return 'monthly_rate must be a positive number and requires_card must be a boolean.'

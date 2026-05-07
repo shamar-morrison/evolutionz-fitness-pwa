@@ -319,7 +319,7 @@ export async function executeDirectMemberEdit(
     }
   }
 
-  if (!memberRequiresCard(currentMember) || !currentMember.employeeNo) {
+  if (!nextRequiresCard || !currentMember.employeeNo) {
     return {
       ok: true,
       member,

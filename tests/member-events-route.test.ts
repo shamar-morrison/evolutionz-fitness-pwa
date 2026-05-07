@@ -465,6 +465,28 @@ describe('GET /api/members/[id]/events', () => {
     })
   })
 
+  it('returns an empty result without queueing jobs for a cardless member with no employee number', async () => {
+    const { client, insertedJobs } = createMemberEventsAdminClient({
+      memberRow: {
+        employee_no: null,
+        memberType: { requires_card: false },
+      },
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(new Request('http://localhost/api/members/member-1/events'), {
+      params: Promise.resolve({ id: 'member-1' }),
+    })
+
+    expect(insertedJobs).toEqual([])
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      events: [],
+      totalMatches: 0,
+    })
+  })
+
   it('returns 400 when page or limit are invalid', async () => {
     const response = await GET(new Request('http://localhost/api/members/member-1/events?page=-1&limit=abc'), {
       params: Promise.resolve({ id: 'member-1' }),

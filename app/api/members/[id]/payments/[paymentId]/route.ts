@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { CARD_ACCESS_TO_CARDLESS_ERROR } from '@/lib/member-type-utils'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -106,7 +107,7 @@ export async function DELETE(
     )
 
     if (deleteError) {
-      if (deleteError.message === 'Cannot switch a member with card access to a cardless membership type.') {
+      if (deleteError.message === CARD_ACCESS_TO_CARDLESS_ERROR) {
         return createErrorResponse(deleteError.message, 400)
       }
 

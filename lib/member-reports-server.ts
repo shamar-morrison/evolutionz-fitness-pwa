@@ -1,6 +1,7 @@
 import { getJamaicaDateValue, getDateRangeBoundsInJamaica } from '@/lib/pt-scheduling'
 import { parseDateInputValue } from '@/lib/member-access-time'
 import { createEmptyMemberReportRevenueBreakdown, type MemberReportRevenueBreakdown } from '@/lib/member-reports'
+import { MEMBER_TYPE_VALUES } from '@/lib/member-type-utils'
 import type { MemberStatus, MemberType } from '@/types'
 
 export type MemberReportsAdminClient = {
@@ -44,8 +45,6 @@ type MemberRevenueSource = {
   memberTypeId: string | null
 }
 
-const MEMBER_TYPE_ORDER: MemberType[] = ['General', 'Civil Servant', 'Student/BPO', 'Day Pass']
-
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -81,8 +80,8 @@ function normalizeAmount(value: unknown) {
 }
 
 function compareMemberTypeLabels(left: string, right: string) {
-  const leftIndex = MEMBER_TYPE_ORDER.indexOf(left as MemberType)
-  const rightIndex = MEMBER_TYPE_ORDER.indexOf(right as MemberType)
+  const leftIndex = MEMBER_TYPE_VALUES.indexOf(left as MemberType)
+  const rightIndex = MEMBER_TYPE_VALUES.indexOf(right as MemberType)
 
   if (leftIndex !== -1 && rightIndex !== -1) {
     return leftIndex - rightIndex

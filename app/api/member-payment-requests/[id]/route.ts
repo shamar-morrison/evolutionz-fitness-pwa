@@ -4,6 +4,7 @@ import {
   MEMBER_PAYMENT_REQUEST_SELECT,
   type MemberPaymentRequestRecord,
 } from '@/lib/member-payment-request-records'
+import { CARD_ACCESS_TO_CARDLESS_ERROR } from '@/lib/member-type-utils'
 import { archiveResolvedRequestNotifications } from '@/lib/pt-notifications-server'
 import { getBaseRpcErrorStatus } from '@/lib/rpc-error-status'
 import { requireAdminUser } from '@/lib/server-auth'
@@ -103,7 +104,7 @@ function getApprovalRpcErrorStatus(message: string) {
 
   if (
     message === 'Membership type is required to approve this payment request.' ||
-    message === 'Cannot switch a member with card access to a cardless membership type.'
+    message === CARD_ACCESS_TO_CARDLESS_ERROR
   ) {
     return 400
   }

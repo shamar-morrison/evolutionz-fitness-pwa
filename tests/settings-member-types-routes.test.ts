@@ -117,6 +117,80 @@ function createMemberTypePatchClient(options: {
   }
 }
 
+function createMemberTypesCrudClient(
+  initialRows: MemberTypeRecord[] = [createMemberType()],
+) {
+  let rows = [...initialRows]
+  const orderCalls: Array<[string, { ascending: boolean }]> = []
+  const updateValues: Array<Record<string, unknown>> = []
+
+  return {
+    orderCalls,
+    updateValues,
+    client: {
+      from(table: string) {
+        expect(table).toBe('member_types')
+
+        return {
+          select(columns: string) {
+            expect(columns).toBe('*')
+
+            return {
+              order(column: string, orderOptions: { ascending: boolean }) {
+                orderCalls.push([column, orderOptions])
+
+                return Promise.resolve({
+                  data: rows,
+                  error: null,
+                })
+              },
+            }
+          },
+          update(values: Record<string, unknown>) {
+            updateValues.push(values)
+
+            return {
+              eq(column: string, value: string) {
+                expect(column).toBe('id')
+
+                return {
+                  select(columns: string) {
+                    expect(columns).toBe('*')
+
+                    return {
+                      maybeSingle() {
+                        const nextRow = rows.find((row) => row.id === value) ?? null
+
+                        if (!nextRow) {
+                          return Promise.resolve({
+                            data: null,
+                            error: null,
+                          })
+                        }
+
+                        const updatedRow = {
+                          ...nextRow,
+                          ...values,
+                        } as MemberTypeRecord
+                        rows = rows.map((row) => (row.id === value ? updatedRow : row))
+
+                        return Promise.resolve({
+                          data: updatedRow,
+                          error: null,
+                        })
+                      },
+                    }
+                  },
+                }
+              },
+            }
+          },
+        }
+      },
+    },
+  }
+}
+
 describe('settings member types routes', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -298,6 +372,75 @@ describe('settings member types routes', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Membership type not found.',
+    })
+  })
+
+  it('toggles requires_card and returns the updated value on a follow-up read', async () => {
+    const client = createMemberTypesCrudClient([
+      createMemberType(),
+      createMemberType({
+        id: 'type-2',
+        name: 'Day Pass',
+        monthly_rate: 2000,
+        requires_card: true,
+      }),
+    ])
+    getSupabaseAdminClientMock.mockReturnValue(client.client)
+
+    const patchResponse = await patchMemberType(
+      new Request('http://localhost/api/settings/member-types/type-2', {
+        method: 'PATCH',
+        body: JSON.stringify({ monthly_rate: 2000, requires_card: false }),
+      }),
+      {
+        params: Promise.resolve({ id: 'type-2' }),
+      },
+    )
+
+    expect(patchResponse.status).toBe(200)
+    await expect(patchResponse.json()).resolves.toEqual({
+      ok: true,
+      memberType: createMemberType({
+        id: 'type-2',
+        name: 'Day Pass',
+        monthly_rate: 2000,
+        requires_card: false,
+      }),
+    })
+    expect(client.updateValues).toEqual([{ monthly_rate: 2000, requires_card: false }])
+
+    const getResponse = await getMemberTypes()
+
+    expect(getResponse.status).toBe(200)
+    await expect(getResponse.json()).resolves.toEqual({
+      ok: true,
+      memberTypes: [
+        createMemberType(),
+        createMemberType({
+          id: 'type-2',
+          name: 'Day Pass',
+          monthly_rate: 2000,
+          requires_card: false,
+        }),
+      ],
+    })
+  })
+
+  it('rejects unrecognized request fields', async () => {
+    const response = await patchMemberType(
+      new Request('http://localhost/api/settings/member-types/type-1', {
+        method: 'PATCH',
+        body: JSON.stringify({ monthly_rate: 13000, unexpected: true }),
+      }),
+      {
+        params: Promise.resolve({ id: 'type-1' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Request contains unrecognized fields.',
     })
   })
 })

@@ -313,10 +313,13 @@ export function EditMemberModal({
     () => memberTypes.find((memberType) => memberType.id === formData.memberTypeId) ?? null,
     [formData.memberTypeId, memberTypes],
   )
-  const allowedDurations =
-    selectedMemberType !== null
-      ? getAllowedDurationsForMemberType(selectedMemberType)
-      : getAllowedDurationsForMember(member)
+  const allowedDurations = useMemo(
+    () =>
+      selectedMemberType !== null
+        ? getAllowedDurationsForMemberType(selectedMemberType)
+        : getAllowedDurationsForMember(member),
+    [member, selectedMemberType],
+  )
   const cardlessTypeSelectionBlocked =
     selectedMemberType !== null &&
     selectedMemberType.id !== member.memberTypeId &&

@@ -545,8 +545,10 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     const submissionContext = {
       beginTime: calculatedBeginTime,
       endTime: calculatedEndTime,
-      ...(selectedInventoryCard?.cardNo ? { cardNo: selectedInventoryCard.cardNo } : {}),
-      ...(selectedCardCode ? { cardCode: selectedCardCode } : {}),
+      ...(requiresAccessCard && selectedInventoryCard?.cardNo
+        ? { cardNo: selectedInventoryCard.cardNo }
+        : {}),
+      ...(requiresAccessCard && selectedCardCode ? { cardCode: selectedCardCode } : {}),
     } satisfies MemberSubmissionContext
 
     if (needsMemberApproval) {

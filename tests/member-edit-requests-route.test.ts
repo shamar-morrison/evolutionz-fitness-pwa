@@ -49,6 +49,7 @@ import type { MemberTypeRecord } from '@/types'
 
 const MEMBER_TYPE_ID_GENERAL = '11111111-1111-4111-8111-111111111111'
 const MEMBER_TYPE_ID_CIVIL_SERVANT = '22222222-2222-4222-8222-222222222222'
+const MEMBER_TYPE_ID_DAY_PASS = '44444444-4444-4444-8444-444444444444'
 const MEMBER_ID = '33333333-3333-4333-8333-333333333333'
 
 function createMemberTypeRecord(overrides: Partial<MemberTypeRecord> = {}): MemberTypeRecord {
@@ -56,6 +57,7 @@ function createMemberTypeRecord(overrides: Partial<MemberTypeRecord> = {}): Memb
     id: overrides.id ?? MEMBER_TYPE_ID_GENERAL,
     name: overrides.name ?? 'General',
     monthly_rate: overrides.monthly_rate ?? 12000,
+    requires_card: overrides.requires_card ?? true,
     is_active: overrides.is_active ?? true,
     created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
   }
@@ -1052,6 +1054,74 @@ describe('member edit request routes', () => {
     ])
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ ok: true })
+  })
+
+  it('rejects cardless approvals that keep a non-1-day access window', async () => {
+    const existingRequestRow = createEditRequestRecord({
+      proposed_name: null,
+      proposed_member_type_id: MEMBER_TYPE_ID_DAY_PASS,
+      proposed_start_date: null,
+      proposed_start_time: null,
+      proposed_duration: null,
+    })
+    const { client, insertedJobs, memberUpdates, requestUpdates } = createEditRequestsClient({
+      existingRequestRow,
+      currentMemberRow: {
+        id: MEMBER_ID,
+        employee_no: null,
+        name: 'Jane Doe',
+        card_no: null,
+        type: 'General',
+        member_type_id: MEMBER_TYPE_ID_GENERAL,
+        status: 'Active',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '555-0100',
+        remark: null,
+        photo_url: null,
+        begin_time: '2026-04-01T00:00:00Z',
+        end_time: '2026-04-30T23:59:59Z',
+        updated_at: '2026-04-01T00:00:00.000Z',
+      },
+      memberTypeRow: createMemberTypeRecord({
+        id: MEMBER_TYPE_ID_DAY_PASS,
+        name: 'Day Pass',
+        monthly_rate: 2000,
+        requires_card: false,
+      }),
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-edit-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'approve',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    expect(insertedJobs).toEqual([])
+    expect(memberUpdates).toEqual([])
+    expect(requestUpdates).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Day pass memberships must use a 1-day access window.',
+    })
   })
 
   it('preserves suspension when approving an access window update for a suspended member', async () => {

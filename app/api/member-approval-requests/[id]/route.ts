@@ -316,10 +316,13 @@ export async function PATCH(
       }
 
       selectedCardNo = selectedCard.card_no
+      const existingRequestCardNo = normalizeOptionalText(existingRequest.card_no)
       selectedCardCode =
         typeof selectedCard.card_code === 'string' && selectedCard.card_code.trim()
           ? selectedCard.card_code.trim()
-          : normalizeOptionalText(existingRequest.card_code)
+          : selectedCard.card_no === existingRequestCardNo
+            ? normalizeOptionalText(existingRequest.card_code)
+            : null
 
       if (!selectedCardCode) {
         return createErrorResponse('Selected card is missing its synced card code.', 400)

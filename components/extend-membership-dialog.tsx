@@ -44,7 +44,7 @@ export function ExtendMembershipDialog({
   const queryClient = useQueryClient()
   const [duration, setDuration] = useState<MemberDurationValue | ''>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const allowedDurations = getAllowedDurationsForMember(member)
+  const allowedDurations = useMemo(() => getAllowedDurationsForMember(member), [member])
 
   useEffect(() => {
     if (!open) {

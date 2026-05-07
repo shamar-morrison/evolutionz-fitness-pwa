@@ -9,6 +9,10 @@ export const MEMBER_TYPE_VALUES = [
   DAY_PASS_MEMBER_TYPE,
 ] as const satisfies readonly MemberType[]
 export const CARDLESS_MEMBER_DURATION_VALUES = ['1_day'] as const satisfies readonly MemberDurationValue[]
+export const CARD_ACCESS_TO_CARDLESS_ERROR =
+  'Cannot switch a member with card access to a cardless membership type.'
+const CARDLESS_MEMBER_TYPE_CHANGE_ERROR =
+  'Cardless member types can only be assigned after card access has been fully removed from the member.'
 
 type MemberTypeRequiresCardLike = Pick<MemberTypeRecord, 'requires_card'> | null | undefined
 type MemberRequiresCardLike = Pick<Member, 'requiresCard'> | null | undefined
@@ -59,7 +63,7 @@ export function getCardlessMemberTypeChangeError(
   }
 
   if (member?.cardNo || member?.employeeNo) {
-    return 'Day pass member types can only be assigned after card access has been fully removed from the member.'
+    return CARDLESS_MEMBER_TYPE_CHANGE_ERROR
   }
 
   return null

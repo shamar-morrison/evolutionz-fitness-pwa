@@ -73,6 +73,7 @@ function createMemberTypeRecord(
     id: overrides.id ?? MEMBER_TYPE_ID_GENERAL,
     name: overrides.name ?? 'General',
     monthly_rate: overrides.monthly_rate ?? 12000,
+    requires_card: overrides.requires_card ?? true,
     is_active: overrides.is_active ?? true,
     created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
   }
@@ -911,6 +912,64 @@ describe('member approval request routes', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'This request has already been reviewed.',
+    })
+  })
+
+  it('returns 400 when a newly selected card is missing its synced card code', async () => {
+    const existingRequest = createRequestRecord({
+      card_no: '0100000001',
+      card_code: 'A00',
+      member_type_id: MEMBER_TYPE_ID_GENERAL,
+      memberType: { name: 'General' },
+    })
+    const { client, approvalClaimUpdates, approvalFinalizeUpdates } =
+      createMemberApprovalRequestsClient({
+        existingRequestRow: existingRequest,
+        memberTypeRow: createMemberTypeRecord({
+          id: MEMBER_TYPE_ID_GENERAL,
+          name: 'General',
+          monthly_rate: 12000,
+        }),
+        selectedCardRow: {
+          card_no: '0102857149',
+          card_code: '   ',
+        },
+      })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+    provisionMemberAccessMock.mockResolvedValue({
+      ok: true,
+      member: createApprovedMember(),
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'approved',
+          selected_card_no: '0102857149',
+          review_note: 'Approved after verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(approvalClaimUpdates).toEqual([])
+    expect(approvalFinalizeUpdates).toEqual([])
+    expect(provisionMemberAccessMock).not.toHaveBeenCalled()
+    expect(archiveResolvedRequestNotificationsMock).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Selected card is missing its synced card code.',
     })
   })
 

@@ -369,6 +369,66 @@ describe('POST /api/members', () => {
     })
   })
 
+  it('uses createCardlessMemberAccess for cardless member types', async () => {
+    const { client } = createMembersRouteClient({
+      memberTypeRow: {
+        id: MEMBER_TYPE_ID_GENERAL,
+        name: 'Day Pass',
+        monthly_rate: 2000,
+        requires_card: false,
+        is_active: true,
+        created_at: '2026-04-01T00:00:00.000Z',
+      },
+    })
+    const cardlessMember = createMember({
+      employeeNo: null,
+      cardNo: null,
+      cardCode: null,
+      cardStatus: null,
+      type: 'Day Pass',
+      status: 'Active',
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    createCardlessMemberAccessMock.mockResolvedValue({
+      ok: true,
+      member: cardlessMember,
+    })
+    mockAdminUser()
+
+    const response = await POST(
+      new Request('http://localhost/api/members', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...VALID_MEMBER_REQUEST,
+          type: 'Day Pass',
+          cardNo: undefined,
+          cardCode: undefined,
+        }),
+      }),
+    )
+
+    expect(createCardlessMemberAccessMock).toHaveBeenCalledWith({
+      name: 'Jane Doe',
+      type: 'Day Pass',
+      memberTypeId: MEMBER_TYPE_ID_GENERAL,
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
+      remark: 'Prefers mornings',
+      beginTime: '2026-04-01T00:00:00',
+      endTime: '2026-05-01T23:59:59',
+    })
+    expect(provisionMemberAccessMock).not.toHaveBeenCalled()
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      member: cardlessMember,
+    })
+  })
+
   it('returns success with a warning when joined_at update fails after member creation', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const { client, joinedAtUpdates } = createMembersRouteClient({

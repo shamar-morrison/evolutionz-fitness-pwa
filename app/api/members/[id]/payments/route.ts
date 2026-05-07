@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { findMatchingMemberDuration } from '@/lib/member-access-time'
 import {
   mapMemberPaymentRecord,
   MEMBER_PAYMENT_RECORD_SELECT,
@@ -328,6 +329,13 @@ export async function POST(
 
       if (cardlessMemberTypeChangeError) {
         return createErrorResponse(cardlessMemberTypeChangeError, 400)
+      }
+
+      if (
+        nextMemberType.requires_card === false &&
+        findMatchingMemberDuration(existingMember.begin_time, existingMember.end_time) !== '1_day'
+      ) {
+        return createErrorResponse('Day pass memberships must use a 1-day access window.', 400)
       }
 
       const updateValues = await buildMemberTypeUpdateValues(
