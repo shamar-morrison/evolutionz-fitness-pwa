@@ -146,6 +146,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     cardCode: overrides.cardCode ?? 'EF-01',
     cardStatus: overrides.cardStatus ?? 'assigned',
     cardLostAt: overrides.cardLostAt ?? null,
+    requiresCard: overrides.requiresCard ?? true,
     type: overrides.type ?? 'General',
     memberTypeId: overrides.memberTypeId ?? null,
     status: overrides.status ?? 'Active',
@@ -166,6 +167,7 @@ function createMemberType(overrides: Partial<MemberTypeRecord> = {}): MemberType
     id: overrides.id ?? 'type-1',
     name: overrides.name ?? 'General',
     monthly_rate: overrides.monthly_rate ?? 12000,
+    requires_card: overrides.requires_card ?? true,
     is_active: overrides.is_active ?? true,
     created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
   }
@@ -631,5 +633,110 @@ describe('EditMemberModal UI', () => {
     })
 
     expect(container.textContent).toContain('Failed to load membership types.')
+  })
+
+  it('locks day pass duration in edit mode without showing redundant helper text', async () => {
+    useMemberTypesMock.mockReturnValue({
+      memberTypes: [
+        createMemberType({
+          id: 'type-day-pass',
+          name: 'Day Pass',
+          requires_card: false,
+        }),
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(
+        <EditMemberModal
+          member={createMember({
+            type: 'Day Pass',
+            memberTypeId: 'type-day-pass',
+            requiresCard: false,
+            cardNo: null,
+            cardCode: null,
+            cardStatus: null,
+            employeeNo: null,
+            beginTime: '2026-04-02T00:00:00.000Z',
+            endTime: '2026-04-02T23:59:59.000Z',
+          })}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+    await flushAsyncWork()
+
+    const durationLabel = container.querySelector('label[for="edit-duration"]')
+
+    if (!(durationLabel instanceof HTMLLabelElement)) {
+      throw new Error('Edit duration label not found.')
+    }
+
+    const durationField = durationLabel.parentElement
+
+    if (!(durationField instanceof HTMLDivElement)) {
+      throw new Error('Edit duration field not found.')
+    }
+
+    expect(durationField.textContent).toContain('1 Day')
+    expect(durationField.textContent).not.toContain('2 Weeks')
+    expect(container.textContent).not.toContain('Day pass memberships always last exactly 1 day.')
+  })
+
+  it('locks day pass duration in approval mode without showing redundant helper text', async () => {
+    useMemberTypesMock.mockReturnValue({
+      memberTypes: [
+        createMemberType({
+          id: 'type-day-pass',
+          name: 'Day Pass',
+          requires_card: false,
+        }),
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(
+        <EditMemberModal
+          member={createMember({
+            type: 'Day Pass',
+            memberTypeId: 'type-day-pass',
+            requiresCard: false,
+            cardNo: null,
+            cardCode: null,
+            cardStatus: null,
+            employeeNo: null,
+            beginTime: '2026-04-02T00:00:00.000Z',
+            endTime: '2026-04-02T23:59:59.000Z',
+          })}
+          open
+          onOpenChange={onOpenChangeMock}
+          requiresApproval
+        />,
+      )
+    })
+    await flushAsyncWork()
+
+    const durationLabel = container.querySelector('label[for="edit-duration"]')
+
+    if (!(durationLabel instanceof HTMLLabelElement)) {
+      throw new Error('Edit duration label not found.')
+    }
+
+    const durationField = durationLabel.parentElement
+
+    if (!(durationField instanceof HTMLDivElement)) {
+      throw new Error('Edit duration field not found.')
+    }
+
+    expect(durationField.textContent).toContain('1 Day')
+    expect(durationField.textContent).not.toContain('2 Weeks')
+    expect(container.textContent).not.toContain('Day pass memberships always last exactly 1 day.')
   })
 })

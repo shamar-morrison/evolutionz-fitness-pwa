@@ -20,10 +20,14 @@ import {
 } from '@/lib/member-edit-request-records'
 import { buildAddUserPayloadWithAccessWindow } from '@/lib/member-job'
 import { buildHikMemberName } from '@/lib/member-name'
+import {
+  getCardlessMemberTypeChangeError,
+  memberRequiresCard,
+} from '@/lib/member-type-utils'
 import { resolveMemberStatusForAccessWindowUpdate } from '@/lib/member-status'
 import { archiveResolvedRequestNotifications } from '@/lib/pt-notifications-server'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
-import { type MemberTypesReadClient } from '@/lib/member-types-server'
+import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
 import { readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -255,6 +259,27 @@ export async function PATCH(
       return createErrorResponse('Member not found.', 404)
     }
 
+    let nextRequiresCard = memberRequiresCard(currentMember)
+
+    if (existingRequest.proposed_member_type_id !== null) {
+      const nextMemberType = await readMemberTypeById(supabase, existingRequest.proposed_member_type_id)
+
+      if (!nextMemberType) {
+        return createErrorResponse('Membership type not found.', 404)
+      }
+
+      const cardlessMemberTypeChangeError = getCardlessMemberTypeChangeError(
+        nextMemberType,
+        currentMember,
+      )
+
+      if (cardlessMemberTypeChangeError) {
+        return createErrorResponse(cardlessMemberTypeChangeError, 400)
+      }
+
+      nextRequiresCard = nextMemberType.requires_card !== false
+    }
+
     const shouldUpdateAccessWindow = hasAccessWindowProposal(existingRequest)
     let nextBeginTime: string | null = null
     let nextEndTime: string | null = null
@@ -268,6 +293,10 @@ export async function PATCH(
 
       nextBeginTime = accessWindowResult.beginTime
       nextEndTime = accessWindowResult.endTime
+
+      if (!nextRequiresCard && findMatchingMemberDuration(nextBeginTime, nextEndTime) !== '1_day') {
+        return createErrorResponse('Day pass memberships must use a 1-day access window.', 400)
+      }
     }
 
     const accessWindowChanged =
@@ -378,6 +407,10 @@ export async function PATCH(
     }
 
     if (!accessWindowChanged) {
+      return NextResponse.json({ ok: true })
+    }
+
+    if (!memberRequiresCard(currentMember) || !currentMember.employeeNo) {
       return NextResponse.json({ ok: true })
     }
 

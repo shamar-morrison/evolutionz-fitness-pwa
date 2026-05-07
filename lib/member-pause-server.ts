@@ -11,6 +11,7 @@ import {
   MEMBER_PAUSE_ACTIVE_ERROR,
   MEMBER_PAUSE_INACTIVE_ERROR,
 } from '@/lib/member-pause'
+import { memberRequiresCard } from '@/lib/member-type-utils'
 import { readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
 import { getBaseRpcErrorStatus } from '@/lib/rpc-error-status'
 
@@ -128,7 +129,13 @@ export async function maybeQueuePauseRevokeCard(
   member: Awaited<ReturnType<typeof readMemberWithCardCode>>,
   supabase: MemberPauseServerClient,
 ): Promise<AccessControlJobOutcome | null> {
-  if (!member?.cardNo || member.cardStatus !== 'assigned') {
+  if (
+    !member ||
+    !memberRequiresCard(member) ||
+    !member.employeeNo ||
+    !member.cardNo ||
+    member.cardStatus !== 'assigned'
+  ) {
     return null
   }
 
@@ -154,7 +161,13 @@ export async function maybeQueuePauseAddCard(
   member: Awaited<ReturnType<typeof readMemberWithCardCode>>,
   supabase: MemberPauseServerClient,
 ): Promise<AccessControlJobOutcome | null> {
-  if (!member?.cardNo || member.cardStatus !== 'assigned') {
+  if (
+    !member ||
+    !memberRequiresCard(member) ||
+    !member.employeeNo ||
+    !member.cardNo ||
+    member.cardStatus !== 'assigned'
+  ) {
     return null
   }
 

@@ -38,8 +38,8 @@ export type MemberApprovalRequestRecord = {
   joined_at: string | null
   begin_time: string
   end_time: string
-  card_no: string
-  card_code: string
+  card_no: string | null
+  card_code: string | null
   member_type_id: string
   photo_url: string | null
   submitted_by: string
@@ -146,8 +146,8 @@ export function mapMemberApprovalRequestRecord(
     joinedAt: normalizeDate(record.joined_at),
     beginTime: normalizeTimestamp(record.begin_time) ?? record.begin_time,
     endTime: normalizeTimestamp(record.end_time) ?? record.end_time,
-    cardNo: normalizeText(record.card_no),
-    cardCode: normalizeText(record.card_code),
+    cardNo: normalizeNullableText(record.card_no),
+    cardCode: normalizeNullableText(record.card_code),
     memberTypeId: normalizeText(record.member_type_id),
     memberTypeName:
       normalizeText(record.memberType?.name) || normalizeText(record.member_type_id),

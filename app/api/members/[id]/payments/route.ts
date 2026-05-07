@@ -6,8 +6,9 @@ import {
   type MemberPaymentRecord,
 } from '@/lib/member-payment-records'
 import { MEMBER_PAYMENTS_PAGE_SIZE } from '@/lib/member-payments'
+import { getCardlessMemberTypeChangeError } from '@/lib/member-type-utils'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
-import { type MemberTypesReadClient } from '@/lib/member-types-server'
+import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import { paymentMethodSchema } from '@/lib/validation-schemas'
@@ -99,7 +100,7 @@ type MemberPaymentsGetRouteClient = {
 
 type MemberPaymentsRouteClient = MemberTypesReadClient & {
   from(table: 'members'): {
-    select(columns: 'id, type, member_type_id, email, begin_time, end_time'): {
+    select(columns: 'id, type, member_type_id, email, begin_time, end_time, card_no, employee_no'): {
       eq(column: 'id', value: string): {
         maybeSingle(): QueryResult<{
           id: string
@@ -108,6 +109,8 @@ type MemberPaymentsRouteClient = MemberTypesReadClient & {
           email: string | null
           begin_time: string | null
           end_time: string | null
+          card_no: string | null
+          employee_no: string | null
         }>
       }
     }
@@ -289,7 +292,7 @@ export async function POST(
     const input = createMemberPaymentSchema.parse(requestBody)
     const { data: existingMember, error: existingMemberError } = await supabase
       .from('members')
-      .select('id, type, member_type_id, email, begin_time, end_time')
+      .select('id, type, member_type_id, email, begin_time, end_time, card_no, employee_no')
       .eq('id', id)
       .maybeSingle()
 
@@ -312,18 +315,33 @@ export async function POST(
       input.payment_type === 'membership' &&
       existingMember.member_type_id !== input.member_type_id
     ) {
+      const nextMemberType = await readMemberTypeById(supabase, input.member_type_id)
+
+      if (!nextMemberType) {
+        return createErrorResponse('Membership type not found.', 404)
+      }
+
+      const cardlessMemberTypeChangeError = getCardlessMemberTypeChangeError(nextMemberType, {
+        cardNo: existingMember.card_no,
+        employeeNo: existingMember.employee_no,
+      })
+
+      if (cardlessMemberTypeChangeError) {
+        return createErrorResponse(cardlessMemberTypeChangeError, 400)
+      }
+
       const updateValues = await buildMemberTypeUpdateValues(
         supabase,
         input.member_type_id,
         existingMember.type,
       )
       const nextMemberTypeId = updateValues.member_type_id ?? input.member_type_id
-      const nextMemberType = updateValues.type ?? existingMember.type
+      const nextMemberTypeName = updateValues.type ?? existingMember.type
       const { error: updateError } = await supabase
         .from('members')
         .update({
           member_type_id: nextMemberTypeId,
-          type: nextMemberType,
+          type: nextMemberTypeName,
         })
         .eq('id', id)
         .select('id')

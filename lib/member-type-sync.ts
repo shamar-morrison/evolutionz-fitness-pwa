@@ -1,4 +1,5 @@
 import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
+import { isMemberType } from '@/lib/member-type-utils'
 import type { MemberType } from '@/types'
 
 export async function readMemberTypeNameById(
@@ -11,7 +12,11 @@ export async function readMemberTypeNameById(
     throw new Error('Membership type not found.')
   }
 
-  return memberType.name as MemberType
+  if (!isMemberType(memberType.name)) {
+    throw new Error('Membership type is not supported.')
+  }
+
+  return memberType.name
 }
 
 export async function buildMemberTypeUpdateValues(

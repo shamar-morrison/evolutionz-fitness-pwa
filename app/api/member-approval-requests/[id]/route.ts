@@ -11,8 +11,12 @@ import {
   moveMemberPhotoObject,
   type MemberPhotoStorageClient,
 } from '@/lib/member-photo-storage'
-import { provisionMemberAccess } from '@/lib/member-provisioning-server'
+import {
+  createCardlessMemberAccess,
+  provisionMemberAccess,
+} from '@/lib/member-provisioning-server'
 import { archiveResolvedRequestNotifications } from '@/lib/pt-notifications-server'
+import { isMemberType, memberTypeRequiresCard } from '@/lib/member-type-utils'
 import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -33,7 +37,7 @@ const denyMemberApprovalRequestSchema = z
 const approveMemberApprovalRequestSchema = z
   .object({
     status: z.literal('approved'),
-    selected_card_no: z.string().trim().min(1, 'Card number is required.'),
+    selected_card_no: z.string().trim().min(1).nullable().optional(),
     review_note: z.string().trim().min(1).nullable().optional(),
   })
   .strict()
@@ -42,8 +46,6 @@ const reviewMemberApprovalRequestSchema = z.union([
   approveMemberApprovalRequestSchema,
   denyMemberApprovalRequestSchema,
 ])
-const provisionableMemberTypeSchema = z.enum(['General', 'Civil Servant', 'Student/BPO'])
-
 type QueryError = {
   message: string
 }
@@ -64,8 +66,8 @@ type MemberApprovalRequestStatusUpdateValues = {
 }
 
 type MemberApprovalRequestFinalizeValues = {
-  card_no: string
-  card_code: string
+  card_no: string | null
+  card_code: string | null
   member_type_id: string
   member_id: string
   photo_url: string | null
@@ -137,11 +139,6 @@ function createErrorResponse(error: string, status: number) {
 function normalizeOptionalText(value: string | null | undefined) {
   const normalizedValue = typeof value === 'string' ? value.trim() : ''
   return normalizedValue || null
-}
-
-function resolveProvisionableMemberType(name: string): MemberType | null {
-  const parsedMemberType = provisionableMemberTypeSchema.safeParse(name)
-  return parsedMemberType.success ? parsedMemberType.data : null
 }
 
 async function archiveMemberCreateRequestNotifications(
@@ -289,27 +286,44 @@ export async function PATCH(
       return createErrorResponse('Membership type not found.', 404)
     }
 
-    const provisionableMemberType = resolveProvisionableMemberType(memberType.name)
-
-    if (!provisionableMemberType) {
+    if (!isMemberType(memberType.name)) {
       return createErrorResponse('Membership type is not supported for provisioning.', 400)
     }
 
-    const { data: selectedCard, error: selectedCardError } = await supabase
-      .from('cards')
-      .select('card_no, card_code')
-      .eq('card_no', input.selected_card_no)
-      .eq('status', 'available')
-      .maybeSingle()
+    let selectedCardNo: string | null = null
+    let selectedCardCode: string | null = null
 
-    if (selectedCardError) {
-      throw new Error(
-        `Failed to read selected card ${input.selected_card_no}: ${selectedCardError.message}`,
-      )
-    }
+    if (memberTypeRequiresCard(memberType)) {
+      if (!input.selected_card_no?.trim()) {
+        return createErrorResponse('Card number is required.', 400)
+      }
 
-    if (!selectedCard) {
-      return createErrorResponse('Selected card is no longer available.', 400)
+      const { data: selectedCard, error: selectedCardError } = await supabase
+        .from('cards')
+        .select('card_no, card_code')
+        .eq('card_no', input.selected_card_no)
+        .eq('status', 'available')
+        .maybeSingle()
+
+      if (selectedCardError) {
+        throw new Error(
+          `Failed to read selected card ${input.selected_card_no}: ${selectedCardError.message}`,
+        )
+      }
+
+      if (!selectedCard) {
+        return createErrorResponse('Selected card is no longer available.', 400)
+      }
+
+      selectedCardNo = selectedCard.card_no
+      selectedCardCode =
+        typeof selectedCard.card_code === 'string' && selectedCard.card_code.trim()
+          ? selectedCard.card_code.trim()
+          : normalizeOptionalText(existingRequest.card_code)
+
+      if (!selectedCardCode) {
+        return createErrorResponse('Selected card is missing its synced card code.', 400)
+      }
     }
 
     const beginTime = getAccessDateTimeValue(existingRequest.begin_time)
@@ -320,10 +334,6 @@ export async function PATCH(
     }
 
     const reviewNote = normalizeOptionalText(input.review_note)
-    const cardCode =
-      typeof selectedCard.card_code === 'string' && selectedCard.card_code.trim()
-        ? selectedCard.card_code.trim()
-        : existingRequest.card_code
 
     const { data: approvedClaims, error: approvedClaimError } = await supabase
       .from('member_approval_requests')
@@ -348,19 +358,31 @@ export async function PATCH(
       return createErrorResponse('This request has already been reviewed.', 400)
     }
 
-    const provisionResult = await provisionMemberAccess({
-      name: existingRequest.name,
-      type: provisionableMemberType,
-      memberTypeId: memberType.id,
-      gender: existingRequest.gender ?? null,
-      email: normalizeOptionalText(existingRequest.email),
-      phone: normalizeOptionalText(existingRequest.phone),
-      remark: normalizeOptionalText(existingRequest.remark),
-      beginTime,
-      endTime,
-      cardNo: selectedCard.card_no,
-      cardCode,
-    })
+    const provisionResult = memberTypeRequiresCard(memberType)
+      ? await provisionMemberAccess({
+          name: existingRequest.name,
+          type: memberType.name,
+          memberTypeId: memberType.id,
+          gender: existingRequest.gender ?? null,
+          email: normalizeOptionalText(existingRequest.email),
+          phone: normalizeOptionalText(existingRequest.phone),
+          remark: normalizeOptionalText(existingRequest.remark),
+          beginTime,
+          endTime,
+          cardNo: selectedCardNo ?? '',
+          cardCode: selectedCardCode ?? '',
+        })
+      : await createCardlessMemberAccess({
+          name: existingRequest.name,
+          type: memberType.name,
+          memberTypeId: memberType.id,
+          gender: existingRequest.gender ?? null,
+          email: normalizeOptionalText(existingRequest.email),
+          phone: normalizeOptionalText(existingRequest.phone),
+          remark: normalizeOptionalText(existingRequest.remark),
+          beginTime,
+          endTime,
+        })
 
     if (!provisionResult.ok) {
       return createErrorResponse(provisionResult.error, provisionResult.status)
@@ -395,8 +417,8 @@ export async function PATCH(
     const { data: approvedRequest, error: approvedRequestError } = await supabase
       .from('member_approval_requests')
       .update({
-        card_no: selectedCard.card_no,
-        card_code: cardCode,
+        card_no: selectedCardNo,
+        card_code: selectedCardCode,
         member_type_id: memberType.id,
         member_id: provisionResult.member.id,
         photo_url: approvedPhotoPath ? null : existingRequest.photo_url,

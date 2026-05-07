@@ -31,6 +31,7 @@ function createMemberType(overrides: Partial<MemberTypeRecord> = {}): MemberType
     id: overrides.id ?? 'type-1',
     name: overrides.name ?? 'General',
     monthly_rate: overrides.monthly_rate ?? 12000,
+    requires_card: overrides.requires_card ?? true,
     is_active: overrides.is_active ?? true,
     created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
   }

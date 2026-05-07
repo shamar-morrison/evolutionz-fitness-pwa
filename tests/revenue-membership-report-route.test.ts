@@ -323,6 +323,11 @@ describe('GET /api/reports/revenue/membership', () => {
         totalRevenue: 9000,
         paymentCount: 1,
       },
+      {
+        memberTypeName: 'Day Pass',
+        totalRevenue: 0,
+        paymentCount: 0,
+      },
     ])
     expect(body.totalsByPaymentMethod).toEqual([
       {
@@ -376,6 +381,11 @@ describe('GET /api/reports/revenue/membership', () => {
       },
       {
         memberTypeName: 'Student/BPO',
+        totalRevenue: 0,
+        paymentCount: 0,
+      },
+      {
+        memberTypeName: 'Day Pass',
         totalRevenue: 0,
         paymentCount: 0,
       },

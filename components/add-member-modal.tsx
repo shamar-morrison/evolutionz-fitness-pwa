@@ -44,6 +44,11 @@ import {
   formatDateInputValue,
 } from '@/lib/member-access-time'
 import { buildMemberDisplayName, hasUsableCardCode } from '@/lib/member-name'
+import {
+  getAllowedDurationsForMemberType,
+  isMemberType,
+  memberTypeRequiresCard,
+} from '@/lib/member-type-utils'
 import { queryKeys } from '@/lib/query-keys'
 import type { MemberType } from '@/types'
 
@@ -58,12 +63,8 @@ type SubmissionStep = 'idle' | 'submitting_request' | 'creating_member'
 type MemberSubmissionContext = {
   beginTime: string
   endTime: string
-  cardNo: string
-  cardCode: string
-}
-
-function isProvisionableMemberType(value: string): value is MemberType {
-  return value === 'General' || value === 'Civil Servant' || value === 'Student/BPO'
+  cardNo?: string | null
+  cardCode?: string | null
 }
 
 function revokePreviewUrl(previewUrl: string | null | undefined) {
@@ -127,6 +128,8 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     () => memberTypes.find((memberType) => memberType.id === formData.memberTypeId) ?? null,
     [formData.memberTypeId, memberTypes],
   )
+  const requiresAccessCard = memberTypeRequiresCard(selectedMemberType)
+  const allowedDurations = getAllowedDurationsForMemberType(selectedMemberType)
   const needsMemberApproval = role !== 'admin' && requiresApproval('members.create')
   const membershipTypeInfoContent = needsMemberApproval
     ? 'Select the membership type that will be used if the request is approved.'
@@ -165,6 +168,23 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     }
   }, [photoFile])
 
+  useEffect(() => {
+    if (allowedDurations?.length !== 1) {
+      return
+    }
+
+    const [onlyDuration] = allowedDurations
+
+    setFormData((currentFormData) =>
+      currentFormData.duration === onlyDuration
+        ? currentFormData
+        : {
+            ...currentFormData,
+            duration: onlyDuration,
+          },
+    )
+  }, [allowedDurations])
+
   const resetModalState = () => {
     setSubmissionStep('idle')
     setManuallyAddedCard(null)
@@ -184,7 +204,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
   }
 
   const validateBasicStep = () => {
-    if (!selectedInventoryCard?.cardNo) {
+    if (requiresAccessCard && !selectedInventoryCard?.cardNo) {
       toast({
         title: 'Select a card',
         description: 'Choose an available access card before creating the member.',
@@ -193,21 +213,12 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       return false
     }
 
-    const selectedCardCode = selectedInventoryCard.cardCode ?? ''
+    const selectedCardCode = selectedInventoryCard?.cardCode ?? ''
 
-    if (!hasUsableCardCode(selectedCardCode)) {
+    if (requiresAccessCard && !hasUsableCardCode(selectedCardCode)) {
       toast({
         title: 'Card code required',
         description: 'This card is missing its synced card code. Re-sync the imported cards and try again.',
-        variant: 'destructive',
-      })
-      return false
-    }
-
-    if (!formData.name.trim()) {
-      toast({
-        title: 'Full name required',
-        description: 'Enter the member’s full name before saving.',
         variant: 'destructive',
       })
       return false
@@ -217,6 +228,15 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       toast({
         title: 'Membership type required',
         description: 'Select a membership type before saving.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
+    if (!formData.name.trim()) {
+      toast({
+        title: 'Full name required',
+        description: 'Enter the member’s full name before saving.',
         variant: 'destructive',
       })
       return false
@@ -429,7 +449,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       return
     }
 
-    if (!isProvisionableMemberType(selectedMemberType.name)) {
+    if (!isMemberType(selectedMemberType.name)) {
       toast({
         title: 'Unsupported membership type',
         description: 'The selected membership type cannot be used for direct member creation.',
@@ -452,8 +472,8 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
         ...(formData.joinedDate ? { joinedAt: formData.joinedDate } : {}),
         beginTime,
         endTime,
-        cardNo,
-        cardCode,
+        ...(cardNo ? { cardNo } : {}),
+        ...(cardCode ? { cardCode } : {}),
       })
 
       if (photoFile) {
@@ -508,21 +528,25 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
       return
     }
 
-    if (!selectedInventoryCard?.cardNo || !calculatedBeginTime || !calculatedEndTime) {
+    if (!calculatedBeginTime || !calculatedEndTime) {
       return
     }
 
-    const selectedCardCode = selectedInventoryCard.cardCode ?? ''
+    if (requiresAccessCard && !selectedInventoryCard?.cardNo) {
+      return
+    }
 
-    if (!hasUsableCardCode(selectedCardCode)) {
+    const selectedCardCode = selectedInventoryCard?.cardCode ?? ''
+
+    if (requiresAccessCard && !hasUsableCardCode(selectedCardCode)) {
       return
     }
 
     const submissionContext = {
       beginTime: calculatedBeginTime,
       endTime: calculatedEndTime,
-      cardNo: selectedInventoryCard.cardNo,
-      cardCode: selectedCardCode,
+      ...(selectedInventoryCard?.cardNo ? { cardNo: selectedInventoryCard.cardNo } : {}),
+      ...(selectedCardCode ? { cardCode: selectedCardCode } : {}),
     } satisfies MemberSubmissionContext
 
     if (needsMemberApproval) {
@@ -552,6 +576,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           availableCards={availableCards}
           canAddCard={role === 'admin'}
           selectedInventoryCard={selectedInventoryCard}
+          selectedMemberType={selectedMemberType}
           isCardsLoading={isCardsLoading}
           cardsError={cardsError}
           hasNoAvailableCards={hasNoAvailableCards}
@@ -576,6 +601,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
           formData={formData}
           setFormData={setFormData}
           isSubmitting={isSubmitting}
+          allowedDurations={allowedDurations}
           minimumStartDate={minimumStartDate}
           calculatedEndTime={calculatedEndTime}
           isStartDatePickerOpen={isStartDatePickerOpen}
@@ -585,11 +611,13 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
     },
     {
       title: 'Add New Member',
-      description:
+        description:
         submissionStep === 'submitting_request'
           ? 'Submitting the member request for admin approval.'
           : submissionStep === 'creating_member'
-            ? 'Creating the member and assigning the selected access card.'
+            ? requiresAccessCard
+              ? 'Creating the member and assigning the selected access card.'
+              : 'Creating the day pass member without assigning an access card.'
             : needsMemberApproval
               ? 'Add an optional photo and notes, then submit the request.'
               : 'Add an optional photo and notes, then create the member.',
@@ -623,8 +651,7 @@ export function AddMemberModal({ open, onOpenChange, onSuccess }: AddMemberModal
             submitLoadingLabel={submitLoadingLabel}
             submitDisabled={
               isSubmitting ||
-              !selectedInventoryCard ||
-              !hasSelectedCardCode ||
+              (requiresAccessCard && (!selectedInventoryCard || !hasSelectedCardCode)) ||
               isCardsLoading ||
               isMemberTypesLoading ||
               !formData.memberTypeId ||

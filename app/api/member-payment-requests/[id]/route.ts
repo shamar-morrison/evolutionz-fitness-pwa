@@ -101,7 +101,10 @@ function getApprovalRpcErrorStatus(message: string) {
     return 404
   }
 
-  if (message === 'Membership type is required to approve this payment request.') {
+  if (
+    message === 'Membership type is required to approve this payment request.' ||
+    message === 'Cannot switch a member with card access to a cardless membership type.'
+  ) {
     return 400
   }
 

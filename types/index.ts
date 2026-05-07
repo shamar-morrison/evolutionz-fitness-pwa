@@ -1,5 +1,5 @@
 // Member Types
-export type MemberType = 'General' | 'Civil Servant' | 'Student/BPO'
+export type MemberType = 'General' | 'Civil Servant' | 'Student/BPO' | 'Day Pass'
 export type MemberStatus = 'Active' | 'Expired' | 'Suspended' | 'Paused'
 export type DeviceAccessState = 'ready' | 'released'
 export type MemberGender = 'Male' | 'Female'
@@ -50,6 +50,7 @@ export type MemberTypeRecord = {
   id: string
   name: string
   monthly_rate: number
+  requires_card?: boolean
   is_active: boolean
   created_at: string
 }
@@ -142,8 +143,8 @@ export type MemberApprovalRequest = {
   joinedAt: string | null
   beginTime: string
   endTime: string
-  cardNo: string
-  cardCode: string
+  cardNo: string | null
+  cardCode: string | null
   memberTypeId: string
   memberTypeName: string
   photoUrl: string | null
@@ -279,12 +280,13 @@ export type MemberActivePause = {
 
 export type Member = {
   id: string
-  employeeNo: string
+  employeeNo: string | null
   name: string
   cardNo: string | null
   cardCode: string | null
   cardStatus: CardStatus | null
   cardLostAt: string | null
+  requiresCard?: boolean | null
   slotPlaceholderName?: string
   type: MemberType
   memberTypeId: string | null
@@ -304,11 +306,15 @@ export type Member = {
 
 export type MemberRecord = {
   id: string
-  employee_no: string
+  employee_no: string | null
   name: string
   card_no: string | null
   type: MemberType
   member_type_id: string | null
+  memberType?: {
+    name: string | null
+    requires_card: boolean | null
+  } | null
   status: MemberStatus
   gender: MemberGender | null
   email: string | null

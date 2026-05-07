@@ -141,6 +141,7 @@ export const REVENUE_REPORT_MEMBER_TYPE_ORDER = [
   'General',
   'Civil Servant',
   'Student/BPO',
+  'Day Pass',
 ] as const
 
 export const REVENUE_REPORT_PAYMENT_METHOD_ORDER: MemberPaymentMethod[] = [

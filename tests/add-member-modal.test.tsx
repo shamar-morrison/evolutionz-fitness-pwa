@@ -322,6 +322,7 @@ function createMemberType(overrides: Partial<MemberTypeRecord> = {}): MemberType
     id: overrides.id ?? 'type-1',
     name: overrides.name ?? 'General',
     monthly_rate: overrides.monthly_rate ?? 12000,
+    requires_card: overrides.requires_card ?? true,
     is_active: overrides.is_active ?? true,
     created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
   }
@@ -1050,6 +1051,38 @@ describe('AddMemberModal', () => {
     await flushAsyncWork()
 
     expect(container.textContent).toContain('Failed to load membership types.')
+  })
+
+  it('locks day pass access to one day without showing redundant helper text', async () => {
+    mockMemberTypes([
+      createMemberType(),
+      createMemberType({
+        id: 'type-day-pass',
+        name: 'Day Pass',
+        requires_card: false,
+      }),
+    ])
+
+    await act(async () => {
+      root.render(<AddMemberModal open onOpenChange={onOpenChangeMock} />)
+    })
+    await flushAsyncWork()
+
+    await fillRequiredBasicStep(container, { membershipType: 'Day Pass' })
+    await clickButton(container, 'Next')
+
+    const durationTrigger = container.querySelector('#member-duration')
+
+    if (!(durationTrigger instanceof HTMLButtonElement)) {
+      throw new Error('Step 2 duration trigger not found.')
+    }
+
+    expect(durationTrigger.textContent).toContain('1_day')
+    expect(container.textContent).not.toContain('Day pass memberships always last exactly 1 day.')
+
+    await clickButton(container, 'Next')
+
+    expect(container.textContent).toContain('Step 3 of 3')
   })
 
   it('blocks Step 1 progression when gender is missing', async () => {

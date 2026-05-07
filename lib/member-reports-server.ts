@@ -44,7 +44,7 @@ type MemberRevenueSource = {
   memberTypeId: string | null
 }
 
-const MEMBER_TYPE_ORDER: MemberType[] = ['General', 'Civil Servant', 'Student/BPO']
+const MEMBER_TYPE_ORDER: MemberType[] = ['General', 'Civil Servant', 'Student/BPO', 'Day Pass']
 
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''

@@ -6,12 +6,13 @@ import {
   type AccessControlJobOutcome,
 } from '@/lib/access-control-jobs'
 import { hasAssignedCard } from '@/lib/member-card'
+import { memberRequiresCard } from '@/lib/member-type-utils'
 import { MEMBER_RECORD_SELECT, readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const suspendMemberRequestSchema = z.object({
-  employeeNo: z.string().trim().min(1, 'Employee number is required.'),
+  employeeNo: z.string().trim().min(1).nullable().optional(),
   cardNo: z.string().trim().min(1).nullable().optional(),
 })
 
@@ -110,11 +111,13 @@ export async function POST(
     }
 
     if (
+      memberRequiresCard(currentMember) &&
+      currentMember.employeeNo &&
       hasAssignedCard(input.cardNo) &&
       currentMember.cardNo === input.cardNo &&
       currentMember.cardStatus === 'assigned'
     ) {
-      const revokeJob = await revokeAssignedCard(input.employeeNo, input.cardNo, supabase)
+      const revokeJob = await revokeAssignedCard(currentMember.employeeNo, input.cardNo, supabase)
 
       if (revokeJob.status !== 'done') {
         return createErrorResponse(revokeJob.error, revokeJob.httpStatus)

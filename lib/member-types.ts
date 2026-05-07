@@ -7,6 +7,7 @@ const memberTypeRecordSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1),
   monthly_rate: z.number().finite(),
+  requires_card: z.boolean().optional().default(true),
   is_active: z.boolean(),
   created_at: z.string().trim().min(1),
 })
@@ -19,8 +20,9 @@ const memberTypeResponseSchema = z.object({
   memberType: memberTypeRecordSchema,
 })
 
-export type UpdateMemberTypeRateInput = {
+export type UpdateMemberTypeInput = {
   monthly_rate: number
+  requires_card: boolean
 }
 
 export function formatMemberTypeRate(monthlyRate: number) {
@@ -40,9 +42,9 @@ export async function fetchMemberTypes(): Promise<MemberTypeRecord[]> {
   return responseBody.memberTypes
 }
 
-export async function updateMemberTypeRate(
+export async function updateMemberType(
   id: string,
-  input: UpdateMemberTypeRateInput,
+  input: UpdateMemberTypeInput,
 ): Promise<MemberTypeRecord> {
   const responseBody = await apiFetch(
     `/api/settings/member-types/${id}`,
@@ -54,7 +56,7 @@ export async function updateMemberTypeRate(
       body: JSON.stringify(input),
     },
     memberTypeResponseSchema,
-    'Failed to update the membership type rate.',
+    'Failed to update the membership type.',
   )
 
   return responseBody.memberType

@@ -7,11 +7,16 @@ import {
   buildAddUserPayloadWithAccessWindow,
 } from '@/lib/member-job'
 import {
+  findMatchingMemberDuration,
   getAccessDateTimeValue,
   parseDateInputValue,
   parseLocalDateTime,
 } from '@/lib/member-access-time'
 import { buildHikMemberName } from '@/lib/member-name'
+import {
+  getCardlessMemberTypeChangeError,
+  memberRequiresCard,
+} from '@/lib/member-type-utils'
 import {
   mapMemberRecordToMemberWithCardCode,
   MEMBER_RECORD_SELECT,
@@ -20,6 +25,7 @@ import {
 } from '@/lib/members'
 import { resolveMemberStatusForAccessWindowUpdate } from '@/lib/member-status'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
+import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
 import type { Member, MemberGender, MemberRecord } from '@/types'
 
 export const UPDATE_MEMBER_WARNING = 'Member updated but device sync failed. Please try again.'
@@ -74,6 +80,7 @@ type DirectMemberUpdateValues = {
 }
 
 export type DirectMemberEditClient = MembersReadClient &
+  MemberTypesReadClient &
   AccessControlJobsClient & {
     from(table: 'members'): {
       update(values: DirectMemberUpdateValues): {
@@ -216,6 +223,46 @@ export async function executeDirectMemberEdit(
     input.beginTime,
     input.endTime,
   )
+  let nextRequiresCard = memberRequiresCard(currentMember)
+
+  if (
+    input.member_type_id &&
+    input.member_type_id !== currentMember.memberTypeId
+  ) {
+    const nextMemberType = await readMemberTypeById(client, input.member_type_id)
+
+    if (!nextMemberType) {
+      return {
+        ok: false,
+        error: 'Membership type not found.',
+        status: 404,
+      }
+    }
+
+    const cardlessMemberTypeChangeError = getCardlessMemberTypeChangeError(
+      nextMemberType,
+      currentMember,
+    )
+
+    if (cardlessMemberTypeChangeError) {
+      return {
+        ok: false,
+        error: cardlessMemberTypeChangeError,
+        status: 400,
+      }
+    }
+
+    nextRequiresCard = nextMemberType.requires_card !== false
+  }
+
+  if (!nextRequiresCard && findMatchingMemberDuration(input.beginTime, input.endTime) !== '1_day') {
+    return {
+      ok: false,
+      error: 'Day pass memberships must use a 1-day access window.',
+      status: 400,
+    }
+  }
+
   const memberTypeUpdateValues = await buildMemberTypeUpdateValues(
     client,
     input.member_type_id,
@@ -266,6 +313,13 @@ export async function executeDirectMemberEdit(
   )
 
   if (!accessWindowChanged) {
+    return {
+      ok: true,
+      member,
+    }
+  }
+
+  if (!memberRequiresCard(currentMember) || !currentMember.employeeNo) {
     return {
       ok: true,
       member,

@@ -38,11 +38,14 @@ function createPaymentsRouteClient({
     email: 'member@example.com',
     begin_time: '2026-04-01T00:00:00.000Z',
     end_time: '2026-04-30T23:59:59.000Z',
+    card_no: '0102857149',
+    employee_no: '000611',
   },
   memberTypeRow = {
     id: MEMBER_TYPE_ID_CIVIL_SERVANT,
     name: 'Civil Servant',
     monthly_rate: 7500,
+    requires_card: true,
     is_active: true,
     created_at: '2026-04-01T00:00:00.000Z',
   },
@@ -77,6 +80,8 @@ function createPaymentsRouteClient({
     email: string | null
     begin_time: string | null
     end_time: string | null
+    card_no: string | null
+    employee_no: string | null
   } | null
   memberTypeRow?: Record<string, unknown> | null
   cardFeeSettingsRow?: Record<string, unknown> | null
@@ -93,7 +98,9 @@ function createPaymentsRouteClient({
         if (table === 'members') {
           return {
             select(columns: string) {
-              expect(columns).toBe('id, type, member_type_id, email, begin_time, end_time')
+              expect(columns).toBe(
+                'id, type, member_type_id, email, begin_time, end_time, card_no, employee_no',
+              )
 
               return {
                 eq(column: string, value: string) {
@@ -471,6 +478,8 @@ describe('POST /api/members/[id]/payments', () => {
         email: 'member@example.com',
         begin_time: '2026-04-01T00:00:00.000Z',
         end_time: '2026-04-30T23:59:59.000Z',
+        card_no: '0102857149',
+        employee_no: '000611',
       },
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -649,6 +658,8 @@ describe('POST /api/members/[id]/payments', () => {
         email: null,
         begin_time: '2026-04-01T00:00:00.000Z',
         end_time: '2026-04-30T23:59:59.000Z',
+        card_no: '0102857149',
+        employee_no: '000611',
       },
     })
     getSupabaseAdminClientMock.mockReturnValue(client)

@@ -10,6 +10,7 @@ import {
   parseDateInputValue,
   parseLocalDateTime,
 } from '@/lib/member-access-time'
+import { isMemberType, memberTypeRequiresCard } from '@/lib/member-type-utils'
 import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
 import { notifyAdminsOfRequest } from '@/lib/notify-admins-of-request'
 import { requireAdminUser, requireAuthenticatedProfile } from '@/lib/server-auth'
@@ -38,8 +39,8 @@ const createMemberApprovalRequestSchema = z
       .string()
       .trim()
       .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/, 'End time must be valid.'),
-    cardNo: z.string().trim().min(1, 'Card number is required.'),
-    cardCode: z.string().trim().min(1, 'Card code is required.'),
+    cardNo: z.string().trim().min(1).nullable().optional(),
+    cardCode: z.string().trim().min(1).nullable().optional(),
   })
   .strict()
 
@@ -76,8 +77,8 @@ type MemberApprovalRequestRouteClient = MemberTypesReadClient & {
         joined_at: string | null
         begin_time: string
         end_time: string
-        card_no: string
-        card_code: string
+        card_no: string | null
+        card_code: string | null
         submitted_by: string
       }): {
         select(columns: string): {
@@ -201,28 +202,47 @@ export async function POST(request: Request) {
       return createErrorResponse('Membership type not found.', 404)
     }
 
-    const { data: selectedCard, error: selectedCardError } = await supabase
-      .from('cards')
-      .select('card_no, card_code')
-      .eq('card_no', input.cardNo.trim())
-      .eq('status', 'available')
-      .maybeSingle()
-
-    if (selectedCardError) {
-      throw new Error(`Failed to read selected card ${input.cardNo}: ${selectedCardError.message}`)
+    if (!isMemberType(memberType.name)) {
+      return createErrorResponse('Membership type is not supported for member requests.', 400)
     }
 
-    if (!selectedCard) {
-      return createErrorResponse('Selected card is no longer available.', 400)
-    }
+    let normalizedCardNo: string | null = null
+    let normalizedCardCode: string | null = null
 
-    const normalizedCardCode =
-      typeof selectedCard.card_code === 'string' && selectedCard.card_code.trim()
-        ? selectedCard.card_code.trim()
-        : input.cardCode.trim()
+    if (memberTypeRequiresCard(memberType)) {
+      if (!input.cardNo?.trim() || !input.cardCode?.trim()) {
+        return createErrorResponse(
+          'Card number and card code are required for this membership type.',
+          400,
+        )
+      }
 
-    if (!normalizedCardCode) {
-      return createErrorResponse('Selected card is missing its synced card code.', 400)
+      const { data: selectedCard, error: selectedCardError } = await supabase
+        .from('cards')
+        .select('card_no, card_code')
+        .eq('card_no', input.cardNo.trim())
+        .eq('status', 'available')
+        .maybeSingle()
+
+      if (selectedCardError) {
+        throw new Error(
+          `Failed to read selected card ${input.cardNo}: ${selectedCardError.message}`,
+        )
+      }
+
+      if (!selectedCard) {
+        return createErrorResponse('Selected card is no longer available.', 400)
+      }
+
+      normalizedCardNo = selectedCard.card_no
+      normalizedCardCode =
+        typeof selectedCard.card_code === 'string' && selectedCard.card_code.trim()
+          ? selectedCard.card_code.trim()
+          : input.cardCode.trim()
+
+      if (!normalizedCardCode) {
+        return createErrorResponse('Selected card is missing its synced card code.', 400)
+      }
     }
 
     const { data, error } = await supabase
@@ -237,7 +257,7 @@ export async function POST(request: Request) {
         joined_at: input.joined_at ?? null,
         begin_time: input.beginTime,
         end_time: input.endTime,
-        card_no: input.cardNo.trim(),
+        card_no: normalizedCardNo,
         card_code: normalizedCardCode,
         submitted_by: authResult.profile.id,
       })

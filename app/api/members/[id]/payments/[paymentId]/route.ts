@@ -106,6 +106,10 @@ export async function DELETE(
     )
 
     if (deleteError) {
+      if (deleteError.message === 'Cannot switch a member with card access to a cardless membership type.') {
+        return createErrorResponse(deleteError.message, 400)
+      }
+
       throw new Error(`Failed to delete member payment ${paymentId}: ${deleteError.message}`)
     }
 

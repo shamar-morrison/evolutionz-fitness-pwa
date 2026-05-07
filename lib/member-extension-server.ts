@@ -17,6 +17,7 @@ import {
   type MembersReadClient,
 } from '@/lib/members'
 import { resolveMemberStatusForAccessWindowUpdate } from '@/lib/member-status'
+import { memberRequiresCard } from '@/lib/member-type-utils'
 import type { Member, MemberRecord } from '@/types'
 
 export const MEMBER_EXTENSION_SYNC_WARNING =
@@ -30,6 +31,8 @@ const MEMBER_EXTENSION_DURATION_ERROR =
   'Duration must match a supported membership option.'
 const MEMBER_EXTENSION_END_TIME_ERROR =
   'The member’s current end date could not be extended.'
+const CARDLESS_MEMBER_EXTENSION_DURATION_ERROR =
+  'Day pass memberships can only be extended by 1 day.'
 
 type QueryResult<T> = PromiseLike<{
   data: T | null
@@ -111,6 +114,14 @@ export async function prepareMemberExtension(
     }
   }
 
+  if (!memberRequiresCard(member) && durationDays !== 1) {
+    return {
+      ok: false,
+      error: CARDLESS_MEMBER_EXTENSION_DURATION_ERROR,
+      status: 400,
+    }
+  }
+
   const newEndTime = buildExtendedMemberEndTimeValue(member.endTime, durationDays)
 
   if (!newEndTime) {
@@ -134,6 +145,13 @@ export async function syncPreparedMemberExtensionAccessWindow(
   { member, newEndTime }: PreparedMemberExtension,
   client: AccessControlJobsClient,
 ): Promise<AppliedMemberExtensionResult> {
+  if (!memberRequiresCard(member) || !member.employeeNo) {
+    return {
+      ok: true,
+      newEndTime,
+    }
+  }
+
   const beginTime = getAccessDateTimeValue(member.beginTime)
 
   if (!beginTime) {

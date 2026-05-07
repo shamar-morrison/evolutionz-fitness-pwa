@@ -17,7 +17,7 @@ const memberPickerResponseSchema = z.object({
 
 type MemberPickerRecord = {
   id: string
-  employee_no: string
+  employee_no: string | null
   name: string
   email: string | null
   card_no: string | null
@@ -85,7 +85,9 @@ function mapMemberPickerRecord(
   const employeeNo = normalizeText(record.employee_no)
   const cardNo = getAssignedCardNo(record.card_no)
   const cardCode = cardNo ? cardCodeByCardNo.get(cardNo)?.cardCode ?? null : null
-  const cleanName = getCleanMemberName(normalizeText(record.name) || employeeNo, cardCode) || employeeNo
+  const fallbackName = employeeNo || normalizeText(record.id)
+  const cleanName =
+    getCleanMemberName(normalizeText(record.name) || fallbackName, cardCode) || fallbackName
 
   return {
     id: normalizeText(record.id),

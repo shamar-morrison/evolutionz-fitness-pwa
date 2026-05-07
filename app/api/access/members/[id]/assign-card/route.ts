@@ -13,6 +13,7 @@ import {
   readMemberWithCardCode,
   type MembersReadClient,
 } from '@/lib/members'
+import { memberRequiresCard } from '@/lib/member-type-utils'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -324,6 +325,14 @@ export async function POST(
 
     if (!currentMember) {
       return createErrorResponse('Member not found.', 404)
+    }
+
+    if (!memberRequiresCard(currentMember)) {
+      return createErrorResponse('This membership type does not support access cards.', 400)
+    }
+
+    if (!currentMember.employeeNo) {
+      return createErrorResponse('This member is missing a Hik person ID.', 400)
     }
 
     if (currentMember.status === 'Suspended' || currentMember.status === 'Paused') {

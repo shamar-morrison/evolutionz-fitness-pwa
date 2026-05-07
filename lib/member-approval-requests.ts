@@ -12,8 +12,8 @@ const memberApprovalRequestSchema = z.object({
   joinedAt: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
   beginTime: z.string().trim().min(1),
   endTime: z.string().trim().min(1),
-  cardNo: z.string().trim().min(1),
-  cardCode: z.string().trim().min(1),
+  cardNo: z.string().trim().min(1).nullable(),
+  cardCode: z.string().trim().min(1).nullable(),
   memberTypeId: z.string().trim().min(1),
   memberTypeName: z.string().trim().min(1),
   photoUrl: z.string().trim().nullable(),
@@ -50,8 +50,8 @@ export type CreateMemberApprovalRequestInput = {
   joined_at?: string | null
   beginTime: string
   endTime: string
-  cardNo: string
-  cardCode: string
+  cardNo?: string | null
+  cardCode?: string | null
   member_type_id: string
 }
 
@@ -62,7 +62,7 @@ export type ReviewMemberApprovalRequestInput =
     }
   | {
       status: 'approved'
-      selected_card_no: string
+      selected_card_no?: string | null
       review_note?: string | null
     }
 

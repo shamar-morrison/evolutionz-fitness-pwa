@@ -29,6 +29,7 @@ import {
   type MemberDurationValue,
 } from '@/lib/member-access-time'
 import { hasUsableCardCode } from '@/lib/member-name'
+import { memberTypeRequiresCard } from '@/lib/member-type-utils'
 import type { AvailableAccessCard, MemberGender, MemberTypeRecord } from '@/types'
 
 export type MemberFormState = {
@@ -67,9 +68,11 @@ type MemberBasicFieldsProps = SharedMemberFieldsProps & {
   onRefreshCards: () => void
   onAddCard: () => void
   selectedInventoryCard: AvailableAccessCard | null
+  selectedMemberType: MemberTypeRecord | null
 }
 
 type MemberAccessFieldsProps = SharedMemberFieldsProps & {
+  allowedDurations?: readonly MemberDurationValue[] | null
   calculatedEndTime: string | null
   isStartDatePickerOpen: boolean
   minimumStartDate: string
@@ -124,97 +127,107 @@ export function MemberBasicFields({
   onAddCard,
   onRefreshCards,
   selectedInventoryCard,
+  selectedMemberType,
   setFormData,
 }: MemberBasicFieldsProps) {
+  const requiresAccessCard = memberTypeRequiresCard(selectedMemberType)
   const selectedCardCode = selectedInventoryCard?.cardCode ?? ''
   const hasSelectedCardCode = hasUsableCardCode(selectedCardCode)
 
   return (
     <div className="grid gap-4 py-2">
-      <div className="grid gap-2">
-        <div className="flex items-center justify-between gap-2">
-          <Label htmlFor={`${idPrefix}-card-number`}>Available Access Card</Label>
-          <div className="flex items-center gap-1">
-            {canAddCard ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 text-xs"
-                onClick={onAddCard}
-                disabled={isSubmitting}
-              >
-                <CreditCard className="h-3.5 w-3.5" />
-                Add Access Card
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={onRefreshCards}
-              disabled={isSubmitting || isCardsLoading}
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Refresh
-            </Button>
-          </div>
-        </div>
-        <Select
-          value={formData.selectedInventoryCardNo}
-          onValueChange={(value) =>
-            setFormData((currentFormData) => ({
-              ...currentFormData,
-              selectedInventoryCardNo: value,
-            }))
-          }
-          disabled={isSubmitting || isCardsLoading || availableCards.length === 0}
-        >
-          <SelectTrigger id={`${idPrefix}-card-number`}>
-            <SelectValue
-              placeholder={
-                isCardsLoading
-                  ? 'Loading cards...'
-                  : hasNoAvailableCards
-                    ? 'No cards available'
-                    : 'Select an access card'
+      {requiresAccessCard ? (
+        <>
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor={`${idPrefix}-card-number`}>Available Access Card</Label>
+              <div className="flex items-center gap-1">
+                {canAddCard ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={onAddCard}
+                    disabled={isSubmitting}
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    Add Access Card
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={onRefreshCards}
+                  disabled={isSubmitting || isCardsLoading}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+            <Select
+              value={formData.selectedInventoryCardNo}
+              onValueChange={(value) =>
+                setFormData((currentFormData) => ({
+                  ...currentFormData,
+                  selectedInventoryCardNo: value,
+                }))
               }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {availableCards.map((card) => (
-              <SelectItem key={card.cardNo} value={card.cardNo}>
-                {formatAvailableAccessCardLabel(card)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {isCardsLoading ? (
-          <p className="text-xs text-muted-foreground">Fetching available unassigned cards.</p>
-        ) : cardsError ? (
-          <p className="text-xs text-destructive">{cardsError}</p>
-        ) : hasNoAvailableCards ? (
-          <p className="text-xs text-muted-foreground">
-            No unassigned cards are currently available.
-          </p>
-        ) : selectedInventoryCard && !hasSelectedCardCode ? (
-          <p className="text-xs text-destructive">
-            This card is missing its synced card code and cannot be assigned until the next successful sync.
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {availableCards.length} unassigned card{availableCards.length === 1 ? '' : 's'} available.
-          </p>
-        )}
-      </div>
+              disabled={isSubmitting || isCardsLoading || availableCards.length === 0}
+            >
+              <SelectTrigger id={`${idPrefix}-card-number`}>
+                <SelectValue
+                  placeholder={
+                    isCardsLoading
+                      ? 'Loading cards...'
+                      : hasNoAvailableCards
+                        ? 'No cards available'
+                        : 'Select an access card'
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {availableCards.map((card) => (
+                  <SelectItem key={card.cardNo} value={card.cardNo}>
+                    {formatAvailableAccessCardLabel(card)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {isCardsLoading ? (
+              <p className="text-xs text-muted-foreground">Fetching available unassigned cards.</p>
+            ) : cardsError ? (
+              <p className="text-xs text-destructive">{cardsError}</p>
+            ) : hasNoAvailableCards ? (
+              <p className="text-xs text-muted-foreground">
+                No unassigned cards are currently available.
+              </p>
+            ) : selectedInventoryCard && !hasSelectedCardCode ? (
+              <p className="text-xs text-destructive">
+                This card is missing its synced card code and cannot be assigned until the next successful sync.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {availableCards.length} unassigned card{availableCards.length === 1 ? '' : 's'} available.
+              </p>
+            )}
+          </div>
 
-      <div className="h-px bg-border" />
+          <div className="h-px bg-border" />
+        </>
+      ) : (
+        <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+          Members with this type will not be assigned an access card.
+        </div>
+      )}
 
       <div className="grid gap-2">
         <Label htmlFor={`${idPrefix}-name`}>Full Name</Label>
         <div className="flex overflow-hidden rounded-md border border-input bg-background">
-          {hasSelectedCardCode ? (
+          {requiresAccessCard && hasSelectedCardCode ? (
             <span className="flex items-center border-r border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
               {selectedCardCode.trim()}
             </span>
@@ -229,17 +242,19 @@ export function MemberBasicFields({
               }))
             }
             placeholder={
-              hasSelectedCardCode
-                ? 'Enter member name'
-                : 'Select a card with a synced card code'
+              requiresAccessCard && !hasSelectedCardCode
+                ? 'Select a card with a synced card code'
+                : 'Enter member name'
             }
             className="border-0 shadow-none focus-visible:ring-0"
-            disabled={!hasSelectedCardCode}
+            disabled={requiresAccessCard && !hasSelectedCardCode}
             required
           />
         </div>
         <p className="text-xs text-muted-foreground">
-          The card code prefix is shown here for staff and sent to Hik automatically.
+          {requiresAccessCard
+            ? 'The card code prefix is shown here for staff and sent to Hik automatically.'
+            : 'Day pass members keep their profile without being assigned a card.'}
         </p>
       </div>
 
@@ -249,8 +264,9 @@ export function MemberBasicFields({
           <div className="grid grid-cols-2 gap-2">
             {MEMBER_GENDERS.map((gender) => (
               <Button
-                key={gender}
                 type="button"
+                size="sm"
+                key={gender}
                 variant={formData.gender === gender ? 'default' : 'outline'}
                 onClick={() =>
                   setFormData((currentFormData) => ({
@@ -359,6 +375,7 @@ export function MemberBasicFields({
 }
 
 export function MemberAccessFields({
+  allowedDurations,
   calculatedEndTime,
   formData,
   idPrefix,
@@ -443,6 +460,7 @@ export function MemberAccessFields({
               }))
             }
             disabled={isSubmitting}
+            allowedDurations={allowedDurations ?? undefined}
           />
         </div>
       </div>

@@ -2,16 +2,17 @@ import { z } from 'zod'
 import { getAssignedCardNo } from '@/lib/member-card'
 import { parseDateInputValue } from '@/lib/member-access-time'
 import { getCleanMemberName } from '@/lib/member-name'
+import { MEMBER_TYPE_VALUES } from '@/lib/member-type-utils'
 import type { Card, CardRecord, Member, MemberRecord } from '@/types'
 
 export const MEMBER_RECORD_SELECT =
-  'id, employee_no, name, card_no, type, member_type_id, status, gender, email, phone, remark, photo_url, joined_at, begin_time, end_time, updated_at'
+  'id, employee_no, name, card_no, type, member_type_id, status, gender, email, phone, remark, photo_url, joined_at, begin_time, end_time, updated_at, memberType:member_types(name, requires_card)'
 
 type CardLookupEntry = Pick<Card, 'cardCode' | 'status' | 'lostAt'>
 
 const memberSchema = z.object({
   id: z.string().trim().min(1, 'Member id is required.'),
-  employeeNo: z.string().trim().min(1, 'Employee number is required.'),
+  employeeNo: z.string().trim().min(1).nullable(),
   name: z.string().trim().min(1, 'Name is required.'),
   cardNo: z.string().trim().min(1).nullable(),
   cardCode: z.string().trim().min(1).nullable(),
@@ -19,8 +20,9 @@ const memberSchema = z.object({
     .enum(['available', 'assigned', 'suspended_lost', 'disabled', 'decommissioned'])
     .nullable(),
   cardLostAt: z.string().trim().min(1).nullable(),
+  requiresCard: z.boolean().nullable().optional(),
   slotPlaceholderName: z.string().trim().min(1).optional(),
-  type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
+  type: z.enum(MEMBER_TYPE_VALUES),
   memberTypeId: z.string().trim().min(1).nullable().default(null),
   status: z.enum(['Active', 'Expired', 'Suspended', 'Paused']),
   deviceAccessState: z.enum(['ready', 'released']),
@@ -163,19 +165,25 @@ export function mapMemberRecordToMemberWithCardCode(
   record: MemberRecord,
   cardByCardNo: Map<string, CardLookupEntry> = new Map(),
 ): Member {
-  const employeeNo = normalizeText(record.employee_no)
+  const employeeNo = normalizeNullableText(record.employee_no)
   const cardNo = getAssignedCardNo(record.card_no)
   const card = cardNo ? cardByCardNo.get(cardNo) ?? null : null
   const cardCode = card?.cardCode ?? null
+  const fallbackName = employeeNo || normalizeText(record.id)
+  const cleanName =
+    getCleanMemberName(normalizeText(record.name) || fallbackName, cardCode) || fallbackName
+  const requiresCard =
+    typeof record.memberType?.requires_card === 'boolean' ? record.memberType.requires_card : null
 
   return {
     id: normalizeText(record.id),
     employeeNo,
-    name: getCleanMemberName(normalizeText(record.name) || employeeNo, cardCode) || employeeNo,
+    name: cleanName,
     cardNo,
     cardCode,
     cardStatus: card?.status ?? null,
     cardLostAt: card?.lostAt ?? null,
+    ...(requiresCard === null ? {} : { requiresCard }),
     type: record.type,
     memberTypeId: normalizeNullableText(record.member_type_id),
     status: record.status,
