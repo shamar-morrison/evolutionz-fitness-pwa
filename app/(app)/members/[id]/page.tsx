@@ -255,7 +255,7 @@ export default function MemberDetailPage() {
       setActiveDialog(null)
       void invalidateMemberQueries()
     } catch (error) {
-      console.error('Failed to recover member card:', error)
+      console.error('Failed to recoverr member card:', error)
       toast({
         title: 'Card recovery failed',
         description:
