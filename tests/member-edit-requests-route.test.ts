@@ -1124,6 +1124,85 @@ describe('member edit request routes', () => {
     })
   })
 
+  it('approves cardless day pass updates with a 1-day access window and skips device sync', async () => {
+    const existingRequestRow = createEditRequestRecord({
+      proposed_name: null,
+      proposed_member_type_id: MEMBER_TYPE_ID_DAY_PASS,
+      proposed_start_date: '2026-06-05',
+      proposed_start_time: '08:30:00',
+      proposed_duration: '1 Day',
+    })
+    const { client, insertedJobs, memberUpdates, requestUpdates } = createEditRequestsClient({
+      existingRequestRow,
+      currentMemberRow: {
+        id: MEMBER_ID,
+        employee_no: null,
+        name: 'Jane Doe',
+        card_no: null,
+        type: 'General',
+        member_type_id: MEMBER_TYPE_ID_GENERAL,
+        status: 'Active',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '555-0100',
+        remark: null,
+        photo_url: null,
+        begin_time: '2026-04-01T00:00:00Z',
+        end_time: '2026-04-30T23:59:59Z',
+        updated_at: '2026-04-01T00:00:00.000Z',
+      },
+      memberTypeRow: createMemberTypeRecord({
+        id: MEMBER_TYPE_ID_DAY_PASS,
+        name: 'Day Pass',
+        monthly_rate: 2000,
+        requires_card: false,
+      }),
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-edit-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'approve',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(requestUpdates).toEqual([
+      {
+        status: 'approved',
+        reviewed_by: 'admin-1',
+        reviewed_at: expect.any(String),
+      },
+    ])
+    expect(memberUpdates).toEqual([
+      {
+        member_type_id: MEMBER_TYPE_ID_DAY_PASS,
+        type: 'Day Pass',
+        begin_time: '2026-06-05T08:30:00',
+        end_time: '2026-06-05T23:59:59',
+        status: 'Active',
+      },
+    ])
+    expect(insertedJobs).toEqual([])
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true })
+  })
+
   it('preserves suspension when approving an access window update for a suspended member', async () => {
     const existingRequestRow = createEditRequestRecord({
       proposed_start_date: '2026-04-05',
