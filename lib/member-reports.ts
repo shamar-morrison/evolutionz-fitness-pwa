@@ -5,6 +5,7 @@ import {
   parseDateInputValue,
 } from '@/lib/member-access-time'
 import { getThisMonthRange, getThisWeekRange, getThisYearRange } from '@/lib/date-utils'
+import { MEMBER_TYPE_VALUES } from '@/lib/member-type-utils'
 import { formatJmdCurrency } from '@/lib/pt-scheduling'
 
 const errorResponseSchema = z.object({
@@ -15,7 +16,7 @@ const errorResponseSchema = z.object({
 const memberSignupReportRowSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1),
-  type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
+  type: z.enum(MEMBER_TYPE_VALUES),
   status: z.enum(['Active', 'Expired', 'Suspended', 'Paused']),
   joinedAt: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
 })
@@ -23,7 +24,7 @@ const memberSignupReportRowSchema = z.object({
 const memberExpiredReportRowSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1),
-  type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
+  type: z.enum(MEMBER_TYPE_VALUES),
   status: z.enum(['Active', 'Expired', 'Suspended', 'Paused']),
   expiryDate: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
 })

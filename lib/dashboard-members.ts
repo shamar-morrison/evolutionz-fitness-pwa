@@ -2,11 +2,12 @@ import { z } from 'zod'
 import { getAssignedCardNo } from '@/lib/member-card'
 import { getCleanMemberName } from '@/lib/member-name'
 import { buildCardCodeByCardNo } from '@/lib/members'
+import { MEMBER_TYPE_VALUES } from '@/lib/member-type-utils'
 import type { CardRecord, DashboardMemberListItem } from '@/types'
 
 type DashboardMemberRecord = {
   id: string
-  employee_no: string
+  employee_no: string | null
   name: string
   card_no: string | null
   type: DashboardMemberListItem['type']
@@ -29,7 +30,7 @@ export const DASHBOARD_MEMBER_SELECT =
 const dashboardMemberSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1),
-  type: z.enum(['General', 'Civil Servant', 'Student/BPO']),
+  type: z.enum(MEMBER_TYPE_VALUES),
   status: z.enum(['Active', 'Expired', 'Suspended', 'Paused']),
   endTime: z.string().trim().min(1).nullable(),
 })
@@ -101,10 +102,11 @@ function mapDashboardMemberRecordToListItem(
   const employeeNo = normalizeText(record.employee_no)
   const cardNo = getAssignedCardNo(record.card_no)
   const cardCode = cardNo ? cardCodeByCardNo.get(cardNo)?.cardCode ?? null : null
+  const fallbackName = employeeNo || normalizeText(record.id)
 
   return {
     id: normalizeText(record.id),
-    name: getCleanMemberName(normalizeText(record.name) || employeeNo, cardCode) || employeeNo,
+    name: getCleanMemberName(normalizeText(record.name) || fallbackName, cardCode) || fallbackName,
     type: record.type,
     status: record.status,
     endTime: normalizeTimestampValue(record.end_time, {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MEMBER_RECORD_SELECT } from '@/lib/members'
 import { createFakeAccessControlClient } from '@/tests/support/access-control-client'
 import { resetServerAuthMocks } from '@/tests/support/server-auth'
+import type { MemberTypeRecord } from '@/types'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -22,6 +23,9 @@ vi.mock('@/lib/server-auth', async () => {
 
 import { PATCH } from '@/app/api/members/[id]/edit/route'
 
+const MEMBER_TYPE_ID_GENERAL = '11111111-1111-4111-8111-111111111111'
+const MEMBER_TYPE_ID_DAY_PASS = '44444444-4444-4444-8444-444444444444'
+
 type QueryResult<T> = {
   data: T | null
   error: { message: string } | null
@@ -29,6 +33,14 @@ type QueryResult<T> = {
 
 function createEditAdminClient({
   pollResults,
+  memberTypeRow = {
+    id: MEMBER_TYPE_ID_GENERAL,
+    name: 'General',
+    monthly_rate: 12000,
+    requires_card: true,
+    is_active: true,
+    created_at: '2026-04-01T00:00:00.000Z',
+  } satisfies MemberTypeRecord,
   currentMemberRow = {
     id: 'member-1',
     employee_no: '000611',
@@ -78,6 +90,7 @@ function createEditAdminClient({
     result: unknown
     error: string | null
   }>>
+  memberTypeRow?: MemberTypeRecord | null
   currentMemberRow?: Record<string, unknown> | null
   updatedMemberRow?: Record<string, unknown> | null
   cardRows?: Array<Record<string, unknown>>
@@ -93,6 +106,29 @@ function createEditAdminClient({
     from(table: string) {
       if (table === 'access_control_jobs') {
         return accessControlClient.from('access_control_jobs')
+      }
+
+      if (table === 'member_types') {
+        return {
+          select(columns: string) {
+            expect(columns).toBe('*')
+
+            return {
+              eq(column: string, value: string) {
+                expect(column).toBe('id')
+
+                return {
+                  maybeSingle() {
+                    return Promise.resolve({
+                      data: memberTypeRow && memberTypeRow.id === value ? memberTypeRow : null,
+                      error: null,
+                    })
+                  },
+                }
+              },
+            }
+          },
+        }
       }
 
       if (table === 'members') {
@@ -310,6 +346,115 @@ describe('PATCH /api/members/[id]/edit', () => {
         remark: 'Original remark',
         begin_time: '2026-03-30T08:00:00',
         end_time: '2026-05-29T23:59:59',
+        status: 'Active',
+      },
+    ])
+  })
+
+  it('uses nextRequiresCard when deciding whether to sync the edited access window', async () => {
+    const { client, insertedJobs, memberUpdates } = createEditAdminClient({
+      memberTypeRow: {
+        id: MEMBER_TYPE_ID_GENERAL,
+        name: 'General',
+        monthly_rate: 12000,
+        requires_card: true,
+        is_active: true,
+        created_at: '2026-04-01T00:00:00.000Z',
+      },
+      currentMemberRow: {
+        id: 'member-1',
+        employee_no: '000611',
+        name: 'Jane Doe',
+        card_no: null,
+        type: 'Day Pass',
+        member_type_id: MEMBER_TYPE_ID_DAY_PASS,
+        status: 'Active',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Original remark',
+        photo_url: null,
+        begin_time: '2026-03-30T00:00:00Z',
+        end_time: '2026-03-30T23:59:59Z',
+        updated_at: '2026-03-30T14:15:16Z',
+        memberType: {
+          name: 'Day Pass',
+          requires_card: false,
+        },
+      },
+      updatedMemberRow: {
+        id: 'member-1',
+        employee_no: '000611',
+        name: 'Jane Doe',
+        card_no: null,
+        type: 'General',
+        member_type_id: MEMBER_TYPE_ID_GENERAL,
+        status: 'Active',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Original remark',
+        photo_url: null,
+        begin_time: '2026-03-31T00:00:00Z',
+        end_time: '2026-05-30T23:59:59Z',
+        balance: 0,
+        created_at: '2026-03-30T14:15:16Z',
+        updated_at: '2026-03-30T14:15:16Z',
+        memberType: {
+          name: 'General',
+          requires_card: true,
+        },
+      },
+      cardRows: [],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await PATCH(
+      new Request('http://localhost/api/members/member-1/edit', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Jane Doe',
+          member_type_id: MEMBER_TYPE_ID_GENERAL,
+          gender: 'Female',
+          email: 'jane@example.com',
+          phone: '876-555-1212',
+          remark: 'Original remark',
+          beginTime: '2026-03-31T00:00:00',
+          endTime: '2026-05-30T23:59:59',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'add_user',
+        payload: {
+          employeeNo: '000611',
+          name: 'Jane Doe',
+          userType: 'normal',
+          beginTime: '2026-03-31T00:00:00',
+          endTime: '2026-05-30T23:59:59',
+        },
+      },
+    ])
+    expect(memberUpdates).toEqual([
+      {
+        name: 'Jane Doe',
+        member_type_id: MEMBER_TYPE_ID_GENERAL,
+        type: 'General',
+        gender: 'Female',
+        email: 'jane@example.com',
+        phone: '876-555-1212',
+        remark: 'Original remark',
+        begin_time: '2026-03-31T00:00:00',
+        end_time: '2026-05-30T23:59:59',
         status: 'Active',
       },
     ])

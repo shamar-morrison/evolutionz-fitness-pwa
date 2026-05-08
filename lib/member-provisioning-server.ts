@@ -76,6 +76,11 @@ export type ProvisionMemberAccessInput = {
   cardCode: string
 }
 
+export type CreateCardlessMemberAccessInput = Omit<
+  ProvisionMemberAccessInput,
+  'cardNo' | 'cardCode'
+>
+
 export type ProvisionMemberAccessResult =
   | {
       ok: true
@@ -91,9 +96,9 @@ export type ProvisioningAdminClient = AccessControlJobsClient & {
   from(table: 'members'): {
     select(columns: string): QueryResult<EmployeeNoRow[]>
     insert(values: {
-      employee_no: string
+      employee_no: string | null
       name: string
-      card_no: string
+      card_no: string | null
       type: MemberType
       member_type_id: string | null
       status: 'Active'
@@ -397,7 +402,7 @@ async function restoreCardInSupabase(cardNo: string, supabase: ProvisioningAdmin
 
 async function insertMemberRecordInSupabase(
   input: {
-    employeeNo: string
+    employeeNo: string | null
     name: string
     type: MemberType
     memberTypeId: string | null
@@ -407,8 +412,8 @@ async function insertMemberRecordInSupabase(
     remark: string | null
     beginTime: string
     endTime: string
-    cardNo: string
-    cardCode: string
+    cardNo: string | null
+    cardCode: string | null
   },
   supabase: ProvisioningAdminClient,
 ) {
@@ -416,7 +421,7 @@ async function insertMemberRecordInSupabase(
     .from('members')
     .insert({
       employee_no: input.employeeNo,
-      name: buildHikMemberName(input.name, input.cardCode),
+      name: input.cardCode ? buildHikMemberName(input.name, input.cardCode) : input.name.trim(),
       card_no: input.cardNo,
       type: input.type,
       member_type_id: input.memberTypeId,
@@ -441,6 +446,61 @@ async function insertMemberRecordInSupabase(
   }
 
   return data
+}
+
+export async function createCardlessMemberAccess(
+  input: CreateCardlessMemberAccessInput,
+  client?: ProvisioningAdminClient,
+): Promise<ProvisionMemberAccessResult> {
+  const now = new Date()
+  const supabase = client ?? (getSupabaseAdminClient() as unknown as ProvisioningAdminClient)
+  const validatedAccessWindow = validateProvisioningAccessWindow(
+    input.beginTime,
+    input.endTime,
+    now,
+  )
+
+  if (!validatedAccessWindow.ok) {
+    return {
+      ok: false,
+      error: validatedAccessWindow.error,
+      status: 400,
+    }
+  }
+
+  try {
+    const memberRecord = await insertMemberRecordInSupabase(
+      {
+        employeeNo: null,
+        name: input.name,
+        type: input.type,
+        memberTypeId: input.memberTypeId ?? null,
+        gender: input.gender ?? null,
+        email: input.email ?? null,
+        phone: input.phone ?? null,
+        remark: input.remark ?? null,
+        beginTime: validatedAccessWindow.value.beginTime,
+        endTime: validatedAccessWindow.value.endTime,
+        cardNo: null,
+        cardCode: null,
+      },
+      supabase,
+    )
+
+    return {
+      ok: true,
+      member: mapMemberRecordToMemberWithCardCode(memberRecord),
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to persist the member record.',
+      status: 500,
+    }
+  }
 }
 
 async function getNextProvisioningEmployeeNo(now: Date, supabase: ProvisioningAdminClient) {

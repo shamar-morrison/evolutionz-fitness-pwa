@@ -7,6 +7,7 @@ import {
 
 const {
   archiveResolvedRequestNotificationsMock,
+  createCardlessMemberAccessMock,
   getSupabaseAdminClientMock,
   insertNotificationsMock,
   moveMemberPhotoObjectMock,
@@ -14,6 +15,7 @@ const {
   readAdminNotificationRecipientsMock,
 } = vi.hoisted(() => ({
   archiveResolvedRequestNotificationsMock: vi.fn().mockResolvedValue(undefined),
+  createCardlessMemberAccessMock: vi.fn(),
   getSupabaseAdminClientMock: vi.fn(),
   insertNotificationsMock: vi.fn().mockResolvedValue(undefined),
   moveMemberPhotoObjectMock: vi.fn(),
@@ -41,6 +43,7 @@ vi.mock('@/lib/server-auth', async () => {
 })
 
 vi.mock('@/lib/member-provisioning-server', () => ({
+  createCardlessMemberAccess: createCardlessMemberAccessMock,
   provisionMemberAccess: provisionMemberAccessMock,
 }))
 
@@ -65,6 +68,7 @@ import type { Member, MemberTypeRecord } from '@/types'
 
 const MEMBER_TYPE_ID_GENERAL = '11111111-1111-4111-8111-111111111111'
 const MEMBER_TYPE_ID_CIVIL_SERVANT = '22222222-2222-4222-8222-222222222222'
+const MEMBER_TYPE_ID_DAY_PASS = '44444444-4444-4444-8444-444444444444'
 
 function createMemberTypeRecord(
   overrides: Partial<MemberTypeRecord> = {},
@@ -73,6 +77,7 @@ function createMemberTypeRecord(
     id: overrides.id ?? MEMBER_TYPE_ID_GENERAL,
     name: overrides.name ?? 'General',
     monthly_rate: overrides.monthly_rate ?? 12000,
+    requires_card: overrides.requires_card ?? true,
     is_active: overrides.is_active ?? true,
     created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
   }
@@ -421,6 +426,7 @@ describe('member approval request routes', () => {
     insertNotificationsMock.mockReset()
     insertNotificationsMock.mockResolvedValue(undefined)
     moveMemberPhotoObjectMock.mockReset()
+    createCardlessMemberAccessMock.mockReset()
     provisionMemberAccessMock.mockReset()
     readAdminNotificationRecipientsMock.mockReset()
     readAdminNotificationRecipientsMock.mockResolvedValue([])
@@ -853,6 +859,123 @@ describe('member approval request routes', () => {
     })
   })
 
+  it('approves a pending cardless member approval request without a selected card', async () => {
+    const existingRequest = createRequestRecord({
+      member_type_id: MEMBER_TYPE_ID_DAY_PASS,
+      card_no: null,
+      card_code: null,
+      memberType: { name: 'Day Pass' },
+    })
+    const finalizedApprovedRequest = createRequestRecord({
+      status: 'approved',
+      member_type_id: MEMBER_TYPE_ID_DAY_PASS,
+      card_no: null,
+      card_code: null,
+      member_id: 'member-77',
+      reviewed_by: 'admin-1',
+      reviewed_at: '2026-04-09T15:00:00.000Z',
+      review_note: 'Approved after verification.',
+      memberType: { name: 'Day Pass' },
+      reviewedByProfile: { name: 'Admin User' },
+    })
+    const {
+      client,
+      approvalClaimUpdates,
+      approvalFinalizeUpdates,
+      operations,
+    } = createMemberApprovalRequestsClient({
+      existingRequestRow: existingRequest,
+      finalizedApprovedRequestRow: finalizedApprovedRequest,
+      memberTypeRow: createMemberTypeRecord({
+        id: MEMBER_TYPE_ID_DAY_PASS,
+        name: 'Day Pass',
+        monthly_rate: 2000,
+        requires_card: false,
+      }),
+    })
+    const cardlessMember = createApprovedMember({
+      employeeNo: null,
+      cardNo: null,
+      cardCode: null,
+      cardStatus: null,
+      type: 'Day Pass',
+      memberTypeId: MEMBER_TYPE_ID_DAY_PASS,
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+    createCardlessMemberAccessMock.mockResolvedValue({
+      ok: true,
+      member: cardlessMember,
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'approved',
+          review_note: 'Approved after verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(createCardlessMemberAccessMock).toHaveBeenCalledWith({
+      name: 'Jane Doe',
+      type: 'Day Pass',
+      memberTypeId: MEMBER_TYPE_ID_DAY_PASS,
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1111',
+      remark: 'Wants mornings only',
+      beginTime: '2026-04-09T14:00:00',
+      endTime: '2026-05-09T04:59:59',
+    })
+    expect(provisionMemberAccessMock).not.toHaveBeenCalled()
+    expect(approvalClaimUpdates).toEqual([
+      expect.objectContaining({
+        status: 'approved',
+        reviewed_by: 'admin-1',
+        reviewed_at: expect.any(String),
+        review_note: 'Approved after verification.',
+        updated_at: expect.any(String),
+      }),
+    ])
+    expect(approvalFinalizeUpdates).toEqual([
+      expect.objectContaining({
+        card_no: null,
+        card_code: null,
+        member_type_id: MEMBER_TYPE_ID_DAY_PASS,
+        member_id: 'member-77',
+        photo_url: null,
+        updated_at: expect.any(String),
+      }),
+    ])
+    expect(operations).toEqual(['approval-claim', 'approval-finalize'])
+    expect(archiveResolvedRequestNotificationsMock).toHaveBeenCalledWith(client, {
+      requestId: 'request-1',
+      type: 'member_create_request',
+      archivedAt: expect.any(String),
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      request: expect.objectContaining({
+        id: 'request-1',
+        status: 'approved',
+        memberId: 'member-77',
+        memberTypeId: MEMBER_TYPE_ID_DAY_PASS,
+      }),
+    })
+  })
+
   it('returns 400 when an approve race finds the request already reviewed', async () => {
     const existingRequest = createRequestRecord({
       member_type_id: MEMBER_TYPE_ID_CIVIL_SERVANT,
@@ -911,6 +1034,64 @@ describe('member approval request routes', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'This request has already been reviewed.',
+    })
+  })
+
+  it('returns 400 when a newly selected card is missing its synced card code', async () => {
+    const existingRequest = createRequestRecord({
+      card_no: '0100000001',
+      card_code: 'A00',
+      member_type_id: MEMBER_TYPE_ID_GENERAL,
+      memberType: { name: 'General' },
+    })
+    const { client, approvalClaimUpdates, approvalFinalizeUpdates } =
+      createMemberApprovalRequestsClient({
+        existingRequestRow: existingRequest,
+        memberTypeRow: createMemberTypeRecord({
+          id: MEMBER_TYPE_ID_GENERAL,
+          name: 'General',
+          monthly_rate: 12000,
+        }),
+        selectedCardRow: {
+          card_no: '0102857149',
+          card_code: '   ',
+        },
+      })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      profile: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    })
+    provisionMemberAccessMock.mockResolvedValue({
+      ok: true,
+      member: createApprovedMember(),
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/member-approval-requests/request-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'approved',
+          selected_card_no: '0102857149',
+          review_note: 'Approved after verification.',
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: 'request-1' }),
+      },
+    )
+
+    expect(approvalClaimUpdates).toEqual([])
+    expect(approvalFinalizeUpdates).toEqual([])
+    expect(provisionMemberAccessMock).not.toHaveBeenCalled()
+    expect(archiveResolvedRequestNotificationsMock).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Selected card is missing its synced card code.',
     })
   })
 

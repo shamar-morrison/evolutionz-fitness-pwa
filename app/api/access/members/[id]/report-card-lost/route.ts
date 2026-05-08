@@ -4,6 +4,7 @@ import {
   type AccessControlJobsClient,
   createAndWaitForAccessControlJob,
 } from '@/lib/access-control-jobs'
+import { memberRequiresCard } from '@/lib/member-type-utils'
 import { MEMBER_RECORD_SELECT, readMemberWithCardCode, type MembersReadClient } from '@/lib/members'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -45,6 +46,10 @@ export async function POST(
 
     if (!currentMember) {
       return createErrorResponse('Member not found.', 404)
+    }
+
+    if (!memberRequiresCard(currentMember) || !currentMember.employeeNo) {
+      return createErrorResponse('This membership type does not support access cards.', 400)
     }
 
     if (currentMember.employeeNo !== input.employeeNo) {

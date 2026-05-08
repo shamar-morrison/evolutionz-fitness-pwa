@@ -6,13 +6,21 @@ import {
   type AccessControlJobOutcome,
 } from '@/lib/access-control-jobs'
 import { parseLocalDateTime } from '@/lib/member-access-time'
-import { DEFAULT_PLACEHOLDER_SLOT_PATTERN, buildAddCardPayload } from '@/lib/member-job'
+import { buildHikMemberName } from '@/lib/member-name'
+import {
+  DEFAULT_PLACEHOLDER_SLOT_PATTERN,
+  buildAddCardPayload,
+  buildAddUserPayloadWithAccessWindow,
+  generateEmployeeNo,
+  getNextShortEmployeeNo,
+} from '@/lib/member-job'
 import { resolveMembershipLifecycleStatus } from '@/lib/member-status'
 import {
   MEMBER_RECORD_SELECT,
   readMemberWithCardCode,
   type MembersReadClient,
 } from '@/lib/members'
+import { memberRequiresCard } from '@/lib/member-type-utils'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -32,10 +40,14 @@ const assignMemberCardRequestSchema = z.object({
 })
 
 const defaultPlaceholderSlotPattern = new RegExp(DEFAULT_PLACEHOLDER_SLOT_PATTERN)
+const CREATE_USER_TIMEOUT_ERROR = 'Create member request timed out after 10 seconds.'
 const GET_CARD_TIMEOUT_ERROR = 'Check card request timed out after 10 seconds.'
 const GET_USER_TIMEOUT_ERROR = 'Get user request timed out after 10 seconds.'
 const REVOKE_CARD_TIMEOUT_ERROR = 'Release card request timed out after 10 seconds.'
 const ISSUE_CARD_TIMEOUT_ERROR = 'Issue card request timed out after 10 seconds.'
+const DELETE_USER_TIMEOUT_ERROR = 'Delete member request timed out after 10 seconds.'
+const ILLEGAL_PERSON_ID_ERROR = 'The Hik device rejected the generated person ID. Please try again.'
+const USER_CREATION_FAILED_PREFIX = 'Failed to create the Hik user before card assignment:'
 
 type QueryError = {
   message: string
@@ -46,8 +58,63 @@ type QueryResult<T> = PromiseLike<{
   error: QueryError | null
 }>
 
+type AssignCardMemberUpdateValues = {
+  employee_no?: string | null
+  name?: string | null
+  begin_time?: string | null
+  end_time?: string | null
+  status?: string | null
+}
+
+type ProvisionedMemberRollbackSnapshot = {
+  employeeNo: string | null
+  name: string | null
+  beginTime: string | null
+  endTime: string | null
+  status: string | null
+}
+
+type ProvisionedMemberRollbackContext = {
+  generatedEmployeeNo: string
+  previousMember: ProvisionedMemberRollbackSnapshot
+}
+
 type AssignCardAdminClient = MembersReadClient &
   AccessControlJobsClient & {
+    from(table: 'members'): {
+      select(columns: typeof MEMBER_RECORD_SELECT): {
+        eq(column: 'id', value: string): {
+          maybeSingle(): QueryResult<Record<string, unknown>>
+        }
+      }
+      select(columns: 'employee_no'): QueryResult<Array<{ employee_no: string | null }>>
+      update(values: AssignCardMemberUpdateValues): {
+        eq(column: 'id', value: string): {
+          eq(column: 'employee_no', value: string): {
+            select(columns: typeof MEMBER_RECORD_SELECT): {
+              maybeSingle(): QueryResult<Record<string, unknown>>
+            }
+          }
+          is(column: 'employee_no', value: null): {
+            select(columns: typeof MEMBER_RECORD_SELECT): {
+              maybeSingle(): QueryResult<Record<string, unknown>>
+            }
+          }
+        }
+      }
+    }
+    from(table: 'cards'): {
+      select(columns: 'card_no, card_code'): {
+        eq(column: 'card_no', value: string): {
+          eq(column: 'status', value: 'available'): {
+            maybeSingle(): QueryResult<{
+              card_no: string
+              card_code: string | null
+            }>
+          }
+        }
+      }
+    }
     rpc(
       fn: 'assign_member_card',
       args: {
@@ -233,6 +300,26 @@ function getCompletedAddCardJobFailure(result: unknown) {
   return `Device reported unsuccessful card assignment response (${details.join(', ')}).`
 }
 
+function normalizeProvisioningErrorMessage(error: string) {
+  if (/illegalEmployeeNo/i.test(error)) {
+    console.error('[access] Hik rejected generated person ID:', error)
+    return ILLEGAL_PERSON_ID_ERROR
+  }
+
+  return error
+}
+
+function buildAddUserFailureMessage(error: string) {
+  const normalizedError = normalizeProvisioningErrorMessage(error)
+  const stepSpecificMessage = `${USER_CREATION_FAILED_PREFIX} ${normalizedError}`
+
+  return `${stepSpecificMessage} Card assignment was not attempted because Hik user creation failed first.`
+}
+
+function appendDetail(message: string, detail: string) {
+  return /[.!?]$/.test(message) ? `${message} ${detail}` : `${message}. ${detail}`
+}
+
 async function getCardAssignment(
   cardNo: string,
   supabase: AccessControlJobsClient,
@@ -275,6 +362,27 @@ async function getDeviceUser(
   })
 }
 
+async function deleteProvisionedUser(
+  employeeNo: string,
+  supabase: AccessControlJobsClient,
+): Promise<AccessControlJobOutcome> {
+  return createAndWaitForAccessControlJob({
+    jobType: 'delete_user',
+    payload: {
+      employeeNo,
+    },
+    messages: {
+      createErrorPrefix: 'Failed to create delete user job',
+      missingJobIdMessage: 'Failed to create delete user job: missing job id in response',
+      readErrorPrefix: (jobId) => `Failed to read delete user job ${jobId}`,
+      missingJobMessage: (jobId) => `Delete user job ${jobId} was not found after creation.`,
+      failedJobMessage: 'Delete user job failed.',
+      timeoutMessage: DELETE_USER_TIMEOUT_ERROR,
+    },
+    supabase,
+  })
+}
+
 async function revokeAssignedCard(
   employeeNo: string,
   cardNo: string,
@@ -296,6 +404,102 @@ async function revokeAssignedCard(
     },
     supabase,
   })
+}
+
+async function getNextProvisioningEmployeeNo(now: Date, supabase: AssignCardAdminClient) {
+  const { data, error } = await supabase.from('members').select('employee_no')
+
+  if (error) {
+    throw new Error(`Failed to load existing employee numbers: ${error.message}`)
+  }
+
+  return getNextShortEmployeeNo(
+    (data ?? []).map((row) => row.employee_no ?? ''),
+    generateEmployeeNo(now),
+  )
+}
+
+function buildRollbackError(
+  baseError: string,
+  rollbackResult: AccessControlJobOutcome | null,
+  rollbackError: string | null,
+) {
+  if (rollbackResult?.status === 'done' && rollbackError) {
+    return appendDetail(
+      baseError,
+      `The created Hik user was rolled back, but restoring the member record failed: ${rollbackError}`,
+    )
+  }
+
+  if (rollbackResult?.status === 'done') {
+    return appendDetail(baseError, 'The created Hik user was rolled back.')
+  }
+
+  if (rollbackResult && rollbackError) {
+    return appendDetail(baseError, `Rollback failed: ${rollbackResult.error} ${rollbackError}`)
+  }
+
+  if (rollbackResult) {
+    return appendDetail(baseError, `Rollback failed: ${rollbackResult.error}`)
+  }
+
+  if (rollbackError) {
+    return appendDetail(baseError, `Rollback failed: ${rollbackError}`)
+  }
+
+  return appendDetail(baseError, 'Rollback failed.')
+}
+
+async function rollbackProvisionedMember(
+  memberId: string,
+  rollbackContext: ProvisionedMemberRollbackContext,
+  supabase: AssignCardAdminClient,
+) {
+  let rollbackResult: AccessControlJobOutcome | null = null
+  const rollbackErrors: string[] = []
+
+  try {
+    rollbackResult = await deleteProvisionedUser(rollbackContext.generatedEmployeeNo, supabase)
+  } catch (deleteError) {
+    rollbackErrors.push(
+      deleteError instanceof Error ? deleteError.message : 'Unexpected rollback error.',
+    )
+  }
+
+  try {
+    const { data: restoredMember, error: restoreError } = await supabase
+      .from('members')
+      .update({
+        employee_no: rollbackContext.previousMember.employeeNo,
+        name: rollbackContext.previousMember.name,
+        begin_time: rollbackContext.previousMember.beginTime,
+        end_time: rollbackContext.previousMember.endTime,
+        status: rollbackContext.previousMember.status,
+      })
+      .eq('id', memberId)
+      .eq('employee_no', rollbackContext.generatedEmployeeNo)
+      .select(MEMBER_RECORD_SELECT)
+      .maybeSingle()
+
+    if (restoreError) {
+      rollbackErrors.push(`Failed to restore member ${memberId}: ${restoreError.message}`)
+    } else if (!restoredMember) {
+      rollbackErrors.push(
+        `Failed to restore member ${memberId}: member row could not be restored after provisioning rollback.`,
+      )
+    }
+  } catch (restoreError) {
+    rollbackErrors.push(
+      restoreError instanceof Error
+        ? restoreError.message
+        : `Failed to restore member ${memberId}: unexpected rollback error.`,
+    )
+  }
+
+  return {
+    rollbackResult,
+    rollbackError: rollbackErrors.length > 0 ? rollbackErrors.join(' ') : null,
+  }
 }
 
 export async function POST(
@@ -326,6 +530,10 @@ export async function POST(
       return createErrorResponse('Member not found.', 404)
     }
 
+    if (!memberRequiresCard(currentMember)) {
+      return createErrorResponse('This membership type does not support access cards.', 400)
+    }
+
     if (currentMember.status === 'Suspended' || currentMember.status === 'Paused') {
       return createErrorResponse(
         currentMember.status === 'Paused'
@@ -339,7 +547,8 @@ export async function POST(
       return createErrorResponse('This member already has a card assigned.', 400)
     }
 
-    const memberEmployeeNo = currentMember.employeeNo
+    let memberEmployeeNo = currentMember.employeeNo
+    let provisionedMemberRollbackContext: ProvisionedMemberRollbackContext | null = null
     const getCardJob = await getCardAssignment(input.cardNo, supabase)
 
     if (getCardJob.status !== 'done') {
@@ -347,6 +556,31 @@ export async function POST(
     }
 
     const existingCardEmployeeNo = getAssignedEmployeeNoForCard(getCardJob.result, input.cardNo)
+
+    let selectedCardCode: string | null = null
+
+    if (!memberEmployeeNo) {
+      const { data: selectedCard, error: selectedCardError } = await supabase
+        .from('cards')
+        .select('card_no, card_code')
+        .eq('card_no', input.cardNo)
+        .eq('status', 'available')
+        .maybeSingle()
+
+      if (selectedCardError) {
+        throw new Error(`Failed to read selected card ${input.cardNo}: ${selectedCardError.message}`)
+      }
+
+      if (!selectedCard) {
+        return createErrorResponse('Selected card is no longer available.', 400)
+      }
+
+      selectedCardCode = normalizeText(selectedCard.card_code)
+
+      if (!selectedCardCode) {
+        return createErrorResponse('Selected card is missing its synced card code.', 400)
+      }
+    }
 
     if (existingCardEmployeeNo && existingCardEmployeeNo !== memberEmployeeNo) {
       const getUserJob = await getDeviceUser(existingCardEmployeeNo, supabase)
@@ -380,6 +614,96 @@ export async function POST(
       await new Promise((resolve) => setTimeout(resolve, 2000))
     }
 
+    if (!memberEmployeeNo) {
+      const generatedEmployeeNo = await getNextProvisioningEmployeeNo(new Date(), supabase)
+      const hikMemberName = buildHikMemberName(currentMember.name, selectedCardCode ?? '')
+      const addUserJob = await createAndWaitForAccessControlJob({
+        jobType: 'add_user',
+        payload: buildAddUserPayloadWithAccessWindow({
+          employeeNo: generatedEmployeeNo,
+          name: hikMemberName,
+          beginTime: input.beginTime,
+          endTime: input.endTime,
+        }),
+        messages: {
+          createErrorPrefix: 'Failed to create add user job',
+          missingJobIdMessage: 'Failed to create add user job: missing job id in response',
+          readErrorPrefix: (jobId) => `Failed to read add user job ${jobId}`,
+          missingJobMessage: (jobId) => `Add user job ${jobId} was not found after creation.`,
+          failedJobMessage: 'Add user job failed.',
+          timeoutMessage: CREATE_USER_TIMEOUT_ERROR,
+        },
+        supabase,
+      })
+
+      if (addUserJob.status !== 'done') {
+        return createErrorResponse(
+          buildAddUserFailureMessage(addUserJob.error),
+          addUserJob.httpStatus,
+        )
+      }
+
+      provisionedMemberRollbackContext = {
+        generatedEmployeeNo,
+        previousMember: {
+          employeeNo: currentMember.employeeNo,
+          name: currentMember.name,
+          beginTime: currentMember.beginTime,
+          endTime: currentMember.endTime,
+          status: currentMember.status,
+        },
+      }
+
+      try {
+        const { data: provisionedRecord, error: provisionUpdateError } = await supabase
+          .from('members')
+          .update({
+            employee_no: generatedEmployeeNo,
+            name: hikMemberName,
+            begin_time: input.beginTime,
+            end_time: input.endTime,
+            status: resolveMembershipLifecycleStatus(input.endTime),
+          })
+          .eq('id', id)
+          .is('employee_no', null)
+          .select(MEMBER_RECORD_SELECT)
+          .maybeSingle()
+
+        if (provisionUpdateError) {
+          throw new Error(`Failed to update member ${id}: ${provisionUpdateError.message}`)
+        }
+
+        if (!provisionedRecord) {
+          throw new Error(
+            `Failed to update member ${id}: member row is no longer eligible for first-time Hik provisioning.`,
+          )
+        }
+
+        memberEmployeeNo = generatedEmployeeNo
+      } catch (error) {
+        const { rollbackResult, rollbackError } = await rollbackProvisionedMember(
+          id,
+          provisionedMemberRollbackContext,
+          supabase,
+        )
+
+        return createErrorResponse(
+          buildRollbackError(
+            error instanceof Error
+              ? error.message
+              : `Failed to update member ${id}: unexpected persistence error.`,
+            rollbackResult,
+            rollbackError,
+          ),
+          500,
+        )
+      }
+    }
+
+    if (!memberEmployeeNo) {
+      throw new Error('Failed to provision a Hik person ID for this member.')
+    }
+
     const addCardJob = await createAndWaitForAccessControlJob({
       jobType: 'add_card',
       payload: buildAddCardPayload({
@@ -398,12 +722,42 @@ export async function POST(
     })
 
     if (addCardJob.status !== 'done') {
+      if (provisionedMemberRollbackContext) {
+        const { rollbackResult, rollbackError } = await rollbackProvisionedMember(
+          id,
+          provisionedMemberRollbackContext,
+          supabase,
+        )
+
+        return createErrorResponse(
+          buildRollbackError(addCardJob.error, rollbackResult, rollbackError),
+          addCardJob.httpStatus,
+        )
+      }
+
       return createErrorResponse(addCardJob.error, addCardJob.httpStatus)
     }
 
     const addCardFailure = getCompletedAddCardJobFailure(addCardJob.result)
 
     if (addCardFailure) {
+      if (provisionedMemberRollbackContext) {
+        const { rollbackResult, rollbackError } = await rollbackProvisionedMember(
+          id,
+          provisionedMemberRollbackContext,
+          supabase,
+        )
+
+        return createErrorResponse(
+          buildRollbackError(
+            `Failed to issue card ${input.cardNo}: ${addCardFailure}`,
+            rollbackResult,
+            rollbackError,
+          ),
+          502,
+        )
+      }
+
       return createErrorResponse(`Failed to issue card ${input.cardNo}: ${addCardFailure}`, 502)
     }
 
@@ -414,6 +768,23 @@ export async function POST(
     })
 
     if (error) {
+      if (provisionedMemberRollbackContext) {
+        const { rollbackResult, rollbackError } = await rollbackProvisionedMember(
+          id,
+          provisionedMemberRollbackContext,
+          supabase,
+        )
+
+        return createErrorResponse(
+          buildRollbackError(
+            `Failed to assign card ${input.cardNo}: ${error.message}`,
+            rollbackResult,
+            rollbackError,
+          ),
+          500,
+        )
+      }
+
       throw new Error(`Failed to assign card ${input.cardNo}: ${error.message}`)
     }
 
@@ -430,10 +801,40 @@ export async function POST(
       .maybeSingle()
 
     if (updateError) {
+      if (provisionedMemberRollbackContext) {
+        const { rollbackResult, rollbackError } = await rollbackProvisionedMember(
+          id,
+          provisionedMemberRollbackContext,
+          supabase,
+        )
+
+        return createErrorResponse(
+          buildRollbackError(
+            `Failed to update member ${id}: ${updateError.message}`,
+            rollbackResult,
+            rollbackError,
+          ),
+          500,
+        )
+      }
+
       throw new Error(`Failed to update member ${id}: ${updateError.message}`)
     }
 
     if (!updatedRecord) {
+      if (provisionedMemberRollbackContext) {
+        const { rollbackResult, rollbackError } = await rollbackProvisionedMember(
+          id,
+          provisionedMemberRollbackContext,
+          supabase,
+        )
+
+        return createErrorResponse(
+          buildRollbackError('Member not found.', rollbackResult, rollbackError),
+          404,
+        )
+      }
+
       return createErrorResponse('Member not found.', 404)
     }
 

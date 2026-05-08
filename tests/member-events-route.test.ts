@@ -26,12 +26,17 @@ type FakeAccessControlClientOptions = NonNullable<
 >
 
 function createMemberEventsAdminClient({
-  memberRow = { employee_no: '000611' },
+  memberRow = { employee_no: '000611', memberType: { requires_card: true } },
   memberError = null,
   insertResult,
   pollResults,
 }: {
-  memberRow?: { employee_no: string | null } | null
+  memberRow?:
+    | {
+        employee_no: string | null
+        memberType?: { requires_card: boolean | null } | Array<{ requires_card: boolean | null }> | null
+      }
+    | null
   memberError?: { message: string } | null
   insertResult?: FakeAccessControlClientOptions['insertResult']
   pollResults?: FakeAccessControlClientOptions['pollResults']
@@ -48,7 +53,7 @@ function createMemberEventsAdminClient({
         if (table === 'members') {
           return {
             select(columns: string) {
-              expect(columns).toBe('employee_no')
+              expect(columns).toBe('employee_no, memberType:member_types(requires_card)')
 
               return {
                 eq(column: string, value: string) {
@@ -91,7 +96,7 @@ describe('GET /api/members/[id]/events', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
 
     const { client, insertedJobs } = createMemberEventsAdminClient({
-      memberRow: { employee_no: ' 000611 ' },
+      memberRow: { employee_no: ' 000611 ', memberType: { requires_card: true } },
       pollResults: [
         {
           data: {
@@ -457,6 +462,28 @@ describe('GET /api/members/[id]/events', () => {
     expect(response.status).toBe(404)
     await expect(response.json()).resolves.toEqual({
       error: 'Member not found.',
+    })
+  })
+
+  it('returns an empty result without queueing jobs for a cardless member with no employee number', async () => {
+    const { client, insertedJobs } = createMemberEventsAdminClient({
+      memberRow: {
+        employee_no: null,
+        memberType: { requires_card: false },
+      },
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(new Request('http://localhost/api/members/member-1/events'), {
+      params: Promise.resolve({ id: 'member-1' }),
+    })
+
+    expect(insertedJobs).toEqual([])
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      events: [],
+      totalMatches: 0,
     })
   })
 

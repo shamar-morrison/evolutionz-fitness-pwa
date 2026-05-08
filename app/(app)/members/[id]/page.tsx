@@ -61,6 +61,7 @@ import { useBackLink } from '@/hooks/use-back-link'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import { isRouteAllowed } from '@/lib/route-config'
+import { isCardlessMember } from '@/lib/member-type-utils'
 import { isFrontDeskStaff } from '@/lib/staff'
 import { isMemberExtensionEligible } from '@/lib/member-extension'
 import {
@@ -254,7 +255,7 @@ export default function MemberDetailPage() {
       setActiveDialog(null)
       void invalidateMemberQueries()
     } catch (error) {
-      console.error('Failed to recover member card:', error)
+      console.error('Failed to recoverr member card:', error)
       toast({
         title: 'Card recovery failed',
         description:
@@ -440,13 +441,14 @@ export default function MemberDetailPage() {
   if (!member) return null
 
   const memberDisplayName = buildMemberDisplayName(member.name, member.cardCode)
+  const isDayPassMember = isCardlessMember(member)
   const memberHasAssignedCard = hasAssignedCard(member.cardNo)
   const canEditMember = can('members.edit')
   const canPauseMembership = can('members.pauseMembership')
   const canViewAllPtSchedules = can('pt.viewAllSchedules')
   const showEditMemberAction = canEditMember
   const showExtendMembershipAction = can('members.extendMembership')
-  const showPauseMembershipAction = canPauseMembership
+  const showPauseMembershipAction = canPauseMembership && !isDayPassMember
   const showDirectMemberPhotoActions = canEditMember && !isFrontDesk
   const showRecordPaymentAction = can('members.recordPayment')
   const showPtAttendance = canViewAllPtSchedules || isFrontDesk
@@ -542,11 +544,11 @@ export default function MemberDetailPage() {
               ) : null}
             </div>
             <h2 className="mt-4 text-xl font-bold text-center">{memberDisplayName}</h2>
-            {!isFrontDesk ? (
-              <Badge variant="outline" className="mt-2">
-                {member.type}
-              </Badge>
-            ) : null}
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              {!isFrontDesk || isDayPassMember ? (
+                <Badge variant="outline">{member.type}</Badge>
+              ) : null}
+            </div>
 
             <div className="mt-6 w-full space-y-3">
               {showRecordPaymentAction ? (
@@ -645,7 +647,7 @@ export default function MemberDetailPage() {
                   ) : null}
                 </Tooltip>
 
-                {!memberHasAssignedCard && member.status !== 'Suspended' && member.status !== 'Paused' ? (
+                {!isDayPassMember && !memberHasAssignedCard && member.status !== 'Suspended' && member.status !== 'Paused' ? (
                   <Button
                     variant="outline"
                     className="w-full"
@@ -657,7 +659,7 @@ export default function MemberDetailPage() {
                   </Button>
                 ) : null}
 
-                {cardActionState.showUnassignCard ? (
+                {!isDayPassMember && cardActionState.showUnassignCard ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="block w-full">
@@ -676,7 +678,7 @@ export default function MemberDetailPage() {
                   </Tooltip>
                 ) : null}
 
-                {cardActionState.showReportCardLost ? (
+                {!isDayPassMember && cardActionState.showReportCardLost ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="block w-full">
@@ -697,7 +699,7 @@ export default function MemberDetailPage() {
                   </Tooltip>
                 ) : null}
 
-                {cardActionState.showRecoverCard ? (
+                {!isDayPassMember && cardActionState.showRecoverCard ? (
                   <Button
                     className="w-full bg-green-600 text-white hover:bg-green-700"
                     onClick={() => setActiveDialog('recover-card')}
@@ -708,13 +710,13 @@ export default function MemberDetailPage() {
                   </Button>
                 ) : null}
 
-                {cardActionState.showDisabledCardLabel ? (
+                {!isDayPassMember && cardActionState.showDisabledCardLabel ? (
                   <div className="w-full rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
                     Card permanently disabled
                   </div>
                 ) : null}
 
-                {member.slotPlaceholderName ? (
+                {!isDayPassMember && member.slotPlaceholderName ? (
                   <Button
                     variant="destructive"
                     className="w-full"
@@ -736,9 +738,11 @@ export default function MemberDetailPage() {
               <TabsTrigger value="info" className="px-3 py-1.5">
                 Info
               </TabsTrigger>
-              <TabsTrigger value="checkin" className="px-3 py-1.5">
-                Check-in History
-              </TabsTrigger>
+              {!isDayPassMember ? (
+                <TabsTrigger value="checkin" className="px-3 py-1.5">
+                  Check-in History
+                </TabsTrigger>
+              ) : null}
               {showPtAttendance ? (
                 <TabsTrigger value="pt-attendance" className="px-3 py-1.5">
                   PT Attendance
@@ -762,11 +766,15 @@ export default function MemberDetailPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Card ID</p>
-                    <p className="font-mono font-medium">{member.cardNo ?? 'Unassigned'}</p>
+                    <p className="font-mono font-medium">
+                      {member.cardNo ?? (isDayPassMember ? 'Not required' : 'Unassigned')}
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Hik Person ID</p>
-                    <p className="font-mono font-medium">{member.employeeNo}</p>
+                    <p className="font-mono font-medium">
+                      {member.employeeNo ?? (isDayPassMember ? 'Not required' : 'Not assigned')}
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Placeholder Slot</p>
@@ -868,9 +876,11 @@ export default function MemberDetailPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="checkin">
-            <CheckInHistory memberId={memberId} />
-          </TabsContent>
+          {!isDayPassMember ? (
+            <TabsContent value="checkin">
+              <CheckInHistory memberId={memberId} />
+            </TabsContent>
+          ) : null}
 
           {showPtAttendance ? (
             <TabsContent value="pt-attendance">

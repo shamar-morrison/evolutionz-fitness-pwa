@@ -9,10 +9,12 @@ import {
 const {
   getSupabaseAdminClientMock,
   provisionMemberAccessMock,
+  createCardlessMemberAccessMock,
   readMemberWithCardCodeMock,
 } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
   provisionMemberAccessMock: vi.fn(),
+  createCardlessMemberAccessMock: vi.fn(),
   readMemberWithCardCodeMock: vi.fn(),
 }))
 
@@ -22,6 +24,7 @@ vi.mock('@/lib/supabase-admin', () => ({
 
 vi.mock('@/lib/member-provisioning-server', () => ({
   provisionMemberAccess: provisionMemberAccessMock,
+  createCardlessMemberAccess: createCardlessMemberAccessMock,
 }))
 
 vi.mock('@/lib/members', async () => {
@@ -87,6 +90,14 @@ function createMember(overrides: Partial<Record<string, unknown>> = {}) {
 
 function createMembersRouteClient(options: {
   joinedAtUpdateError?: { message: string } | null
+  memberTypeRow?: {
+    id: string
+    name: string
+    requires_card?: boolean
+    monthly_rate?: number
+    is_active?: boolean
+    created_at?: string
+  } | null
 } = {}) {
   const joinedAtUpdates: Array<{ memberId: string; joinedAt: string | null }> = []
 
@@ -94,6 +105,38 @@ function createMembersRouteClient(options: {
     joinedAtUpdates,
     client: {
       from(table: string) {
+        if (table === 'member_types') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('*')
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('id')
+                  expect(value).toBe(MEMBER_TYPE_ID_GENERAL)
+
+                  return {
+                    maybeSingle() {
+                      return Promise.resolve({
+                        data:
+                          options.memberTypeRow ?? {
+                            id: MEMBER_TYPE_ID_GENERAL,
+                            name: 'General',
+                            monthly_rate: 12000,
+                            requires_card: true,
+                            is_active: true,
+                            created_at: '2026-04-01T00:00:00.000Z',
+                          },
+                        error: null,
+                      })
+                    },
+                  }
+                },
+              }
+            },
+          }
+        }
+
         if (table !== 'members') {
           throw new Error(`Unexpected table: ${table}`)
         }
@@ -137,6 +180,7 @@ describe('POST /api/members', () => {
     vi.restoreAllMocks()
     getSupabaseAdminClientMock.mockReset()
     provisionMemberAccessMock.mockReset()
+    createCardlessMemberAccessMock.mockReset()
     readMemberWithCardCodeMock.mockReset()
     resetServerAuthMocks()
   })
@@ -322,6 +366,66 @@ describe('POST /api/members', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Failed to issue card 0102857149: Add card job failed.',
+    })
+  })
+
+  it('uses createCardlessMemberAccess for cardless member types', async () => {
+    const { client } = createMembersRouteClient({
+      memberTypeRow: {
+        id: MEMBER_TYPE_ID_GENERAL,
+        name: 'Day Pass',
+        monthly_rate: 2000,
+        requires_card: false,
+        is_active: true,
+        created_at: '2026-04-01T00:00:00.000Z',
+      },
+    })
+    const cardlessMember = createMember({
+      employeeNo: null,
+      cardNo: null,
+      cardCode: null,
+      cardStatus: null,
+      type: 'Day Pass',
+      status: 'Active',
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    createCardlessMemberAccessMock.mockResolvedValue({
+      ok: true,
+      member: cardlessMember,
+    })
+    mockAdminUser()
+
+    const response = await POST(
+      new Request('http://localhost/api/members', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...VALID_MEMBER_REQUEST,
+          type: 'Day Pass',
+          cardNo: undefined,
+          cardCode: undefined,
+        }),
+      }),
+    )
+
+    expect(createCardlessMemberAccessMock).toHaveBeenCalledWith({
+      name: 'Jane Doe',
+      type: 'Day Pass',
+      memberTypeId: MEMBER_TYPE_ID_GENERAL,
+      gender: 'Female',
+      email: 'jane@example.com',
+      phone: '876-555-1212',
+      remark: 'Prefers mornings',
+      beginTime: '2026-04-01T00:00:00',
+      endTime: '2026-05-01T23:59:59',
+    })
+    expect(provisionMemberAccessMock).not.toHaveBeenCalled()
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      member: cardlessMember,
     })
   })
 

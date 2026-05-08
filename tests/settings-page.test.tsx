@@ -85,6 +85,7 @@ function createMemberType(overrides: Partial<MemberTypeRecord> = {}): MemberType
     id: overrides.id ?? 'type-1',
     name: overrides.name ?? 'General',
     monthly_rate: overrides.monthly_rate ?? 12000,
+    requires_card: overrides.requires_card ?? true,
     is_active: overrides.is_active ?? true,
     created_at: overrides.created_at ?? '2026-04-01T00:00:00.000Z',
   }
@@ -250,6 +251,14 @@ describe('SettingsPage', () => {
   beforeEach(() => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
       true
+    vi.stubGlobal(
+      'ResizeObserver',
+      class ResizeObserver {
+        disconnect() {}
+        observe() {}
+        unobserve() {}
+      },
+    )
     currentRoleState.role = 'admin'
     pushNotificationsState.isSupported = false
     pushNotificationsState.permission = 'default'
@@ -303,7 +312,10 @@ describe('SettingsPage', () => {
       }
 
       if (url.includes('/api/settings/member-types/') && init?.method === 'PATCH') {
-        const requestBody = JSON.parse(String(init.body)) as { monthly_rate: number }
+        const requestBody = JSON.parse(String(init.body)) as {
+          monthly_rate: number
+          requires_card: boolean
+        }
         const id = url.split('/').at(-1)
 
         memberTypesState = memberTypesState.map((memberType) =>
@@ -311,6 +323,7 @@ describe('SettingsPage', () => {
             ? {
                 ...memberType,
                 monthly_rate: requestBody.monthly_rate,
+                requires_card: requestBody.requires_card,
               }
             : memberType,
         )
@@ -549,7 +562,7 @@ describe('SettingsPage', () => {
       expect(container.textContent).toContain('General')
     })
 
-    await clickButtonByLabel(container, 'Edit Rate')
+    await clickButtonByLabel(container, 'Edit', 0)
 
     const rateInput = container.querySelector('#member-type-monthly-rate')
 
@@ -569,10 +582,21 @@ describe('SettingsPage', () => {
         method: 'PATCH',
       }),
     )
-    expect(toastMock).toHaveBeenCalledWith({
-      title: 'Rate updated',
-      description: 'General now uses JMD $13,000.',
+    const patchCall = fetchMock.mock.calls.find(
+      ([url, init]) => url === '/api/settings/member-types/type-1' && init?.method === 'PATCH',
+    )
+
+    expect(patchCall).toBeDefined()
+    expect(JSON.parse(String(patchCall?.[1]?.body))).toEqual({
+      monthly_rate: 13000,
+      requires_card: true,
     })
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Membership type updated',
+        description: 'General now uses JMD $13,000 and requires an access card.',
+      }),
+    )
   })
 
   it('updates the card fee amount and refreshes the section', async () => {
@@ -588,7 +612,7 @@ describe('SettingsPage', () => {
       expect(container.textContent).toContain('Card fee amount')
     })
 
-    await clickButtonByLabel(container, 'Edit')
+    await clickButtonByLabel(container, 'Edit', 3)
 
     const amountInput = container.querySelector('#card-fee-amount')
 
@@ -627,7 +651,7 @@ describe('SettingsPage', () => {
       expect(container.textContent).toContain('Card fee amount')
     })
 
-    await clickButtonByLabel(container, 'Edit')
+    await clickButtonByLabel(container, 'Edit', 3)
 
     const amountInput = container.querySelector('#card-fee-amount')
 
@@ -666,7 +690,7 @@ describe('SettingsPage', () => {
       expect(container.textContent).toContain('Weight Loss Club')
     })
 
-    await clickButtonByLabel(container, 'Edit', 1)
+    await clickButtonByLabel(container, 'Edit', 4)
 
     const monthlyFeeInput = container.querySelector('#class-settings-monthly-fee')
     const perSessionFeeInput = container.querySelector('#class-settings-per-session-fee')
@@ -718,7 +742,7 @@ describe('SettingsPage', () => {
       expect(container.textContent).toContain('Weight Loss Club')
     })
 
-    await clickButtonByLabel(container, 'Edit', 1)
+    await clickButtonByLabel(container, 'Edit', 4)
 
     expect(container.textContent).toContain('Edit Class Settings')
     expect(container.textContent).toContain('Class name')

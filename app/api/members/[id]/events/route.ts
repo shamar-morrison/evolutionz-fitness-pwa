@@ -4,6 +4,7 @@ import {
   type AccessControlJobsClient,
 } from '@/lib/access-control-jobs'
 import { MEMBER_EVENTS_PAGE_SIZE, normalizeBridgeMemberEvents } from '@/lib/member-events'
+import { memberTypeRequiresCard } from '@/lib/member-type-utils'
 import { requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -93,7 +94,7 @@ export async function GET(
     const accessControlClient = supabase as unknown as AccessControlJobsClient
     const { data: member, error: memberError } = await supabase
       .from('members')
-      .select('employee_no')
+      .select('employee_no, memberType:member_types(requires_card)')
       .eq('id', id)
       .maybeSingle()
 
@@ -112,9 +113,13 @@ export async function GET(
 
     const employeeNo =
       typeof member.employee_no === 'string' ? member.employee_no.trim() : ''
+    const memberType = Array.isArray(member.memberType) ? member.memberType[0] ?? null : member.memberType
 
-    if (!employeeNo) {
-      throw new Error(`Member ${id} is missing an employee number.`)
+    if (!memberTypeRequiresCard(memberType) || !employeeNo) {
+      return NextResponse.json({
+        events: [],
+        totalMatches: 0,
+      })
     }
 
     const searchID = Date.now().toString()

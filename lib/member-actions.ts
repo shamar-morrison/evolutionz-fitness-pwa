@@ -21,8 +21,8 @@ export type AddMemberData = {
   joinedAt?: string | null
   beginTime: string
   endTime: string
-  cardNo: string
-  cardCode: string
+  cardNo?: string | null
+  cardCode?: string | null
 }
 
 type AccessControlJobSuccessResponse = {
@@ -249,7 +249,7 @@ export async function addMember(
   data: AddMemberData,
   options: AddMemberOptions = {},
 ): Promise<AddMemberResult> {
-  const normalizedCardNo = normalizeCardNo(data.cardNo)
+  const normalizedCardNo = data.cardNo ? normalizeCardNo(data.cardNo) : null
   options.onStepChange?.('provisioning_member')
 
   try {
@@ -264,8 +264,8 @@ export async function addMember(
       ...(data.joinedAt ? { joined_at: data.joinedAt } : {}),
       beginTime: data.beginTime,
       endTime: data.endTime,
-      cardNo: normalizedCardNo,
-      cardCode: data.cardCode,
+      ...(normalizedCardNo ? { cardNo: normalizedCardNo } : {}),
+      ...(data.cardCode ? { cardCode: data.cardCode } : {}),
     }
     return await requestMemberMutation('/api/members', {
       method: 'POST',
@@ -286,6 +286,10 @@ export async function addMember(
 export async function releaseMemberSlot(member: Member): Promise<Member> {
   if (!member.slotPlaceholderName) {
     throw new Error('This member does not have a reusable Hik slot recorded.')
+  }
+
+  if (!member.employeeNo) {
+    throw new Error('This member is missing a Hik person ID.')
   }
 
   try {

@@ -30,6 +30,7 @@ import { toast } from '@/hooks/use-toast'
 import { reviewMemberApprovalRequest } from '@/lib/member-approval-requests'
 import { formatAccessDate, formatDateInputDisplay } from '@/lib/member-access-time'
 import { formatAvailableAccessCardLabel } from '@/lib/available-cards'
+import { DAY_PASS_MEMBER_TYPE } from '@/lib/member-type-utils'
 import { queryKeys } from '@/lib/query-keys'
 import type { MemberApprovalRequest } from '@/types'
 
@@ -49,9 +50,13 @@ export function PendingMemberRequestsPage() {
     error: cardsError,
   } = useAvailableCards({ enabled: Boolean(selectedRequest) })
 
+  const selectedRequestRequiresCard = selectedRequest?.memberTypeName !== DAY_PASS_MEMBER_TYPE
   const isSubmitting = submittingAction !== null
-  const isApproveDisabled = isSubmitting || isCardsLoading || Boolean(cardsError)
-  const isApproveLoading = submittingAction === 'approved' || isCardsLoading
+  const isApproveDisabled =
+    isSubmitting ||
+    (selectedRequestRequiresCard && (isCardsLoading || Boolean(cardsError)))
+  const isApproveLoading =
+    submittingAction === 'approved' || (selectedRequestRequiresCard && isCardsLoading)
   const selectedAvailableCard = useMemo(
     () => availableCards.find((card) => card.cardNo === selectedCardNo) ?? null,
     [availableCards, selectedCardNo],
@@ -62,7 +67,7 @@ export function PendingMemberRequestsPage() {
       return
     }
 
-    if (availableCards.some((card) => card.cardNo === selectedRequest.cardNo)) {
+    if (selectedRequest.cardNo && availableCards.some((card) => card.cardNo === selectedRequest.cardNo)) {
       setSelectedCardNo(selectedRequest.cardNo)
     }
   }, [availableCards, selectedCardNo, selectedRequest])
@@ -75,7 +80,7 @@ export function PendingMemberRequestsPage() {
   }
 
   const handleOpenReview = (request: MemberApprovalRequest) => {
-    const defaultCardNo = availableCards.some((card) => card.cardNo === request.cardNo)
+    const defaultCardNo = request.cardNo && availableCards.some((card) => card.cardNo === request.cardNo)
       ? request.cardNo
       : ''
 
@@ -117,7 +122,7 @@ export function PendingMemberRequestsPage() {
       return
     }
 
-    if (!selectedCardNo) {
+    if (selectedRequestRequiresCard && !selectedCardNo) {
       toast({
         title: 'Card required',
         description: 'Select an available card before approving the request.',
@@ -131,7 +136,7 @@ export function PendingMemberRequestsPage() {
     try {
       const { warning } = await reviewMemberApprovalRequest(selectedRequest.id, {
         status: 'approved',
-        selected_card_no: selectedCardNo,
+        ...(selectedCardNo ? { selected_card_no: selectedCardNo } : {}),
         review_note: reviewNote.trim() || null,
       })
       await invalidateQueries()
@@ -237,7 +242,10 @@ export function PendingMemberRequestsPage() {
                       Submitted by {request.submittedByName ?? 'Unknown staff member'}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {request.memberTypeName} · Card {request.cardCode} / {request.cardNo}
+                      {request.memberTypeName}
+                      {request.cardNo || request.cardCode
+                        ? ` · Card ${request.cardCode ?? 'Not synced'} / ${request.cardNo ?? 'Not assigned'}`
+                        : ' · No access card required'}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {formatAccessDate(request.beginTime, 'long')} to {formatAccessDate(request.endTime, 'long')}
@@ -277,7 +285,9 @@ export function PendingMemberRequestsPage() {
           <DialogHeader>
             <DialogTitle>Review Member Request</DialogTitle>
             <DialogDescription>
-              Confirm the request details and select the final card.
+              {selectedRequestRequiresCard
+                ? 'Confirm the request details and select the final card.'
+                : 'Confirm the request details and approve the day pass member.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -292,7 +302,11 @@ export function PendingMemberRequestsPage() {
                 <ReadOnlyField label="Submitted type" value={selectedRequest.memberTypeName} />
                 <ReadOnlyField
                   label="Submitted card"
-                  value={`${selectedRequest.cardCode} / ${selectedRequest.cardNo}`}
+                  value={
+                    selectedRequestRequiresCard
+                      ? `${selectedRequest.cardCode ?? 'Not synced'} / ${selectedRequest.cardNo ?? 'Not assigned'}`
+                      : 'No access card required'
+                  }
                 />
                 <ReadOnlyField
                   label="Join date"
@@ -302,39 +316,45 @@ export function PendingMemberRequestsPage() {
                 <ReadOnlyField label="End date" value={formatAccessDate(selectedRequest.endTime, 'long')} />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="member-request-card">Available Access Card</Label>
-                <Select
-                  value={selectedCardNo || EMPTY_CARD_VALUE}
-                  onValueChange={(value) => setSelectedCardNo(value === EMPTY_CARD_VALUE ? '' : value)}
-                  disabled={isSubmitting || isCardsLoading}
-                >
-                  <SelectTrigger id="member-request-card">
-                    <SelectValue
-                      placeholder={isCardsLoading ? 'Loading cards...' : 'Select an access card'}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={EMPTY_CARD_VALUE}>Select an access card</SelectItem>
-                    {availableCards.map((card) => (
-                      <SelectItem key={card.cardNo} value={card.cardNo}>
-                        {formatAvailableAccessCardLabel(card)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {cardsError ? (
-                  <p className="text-xs text-destructive">{cardsError}</p>
-                ) : selectedRequest.cardNo !== selectedCardNo && !selectedAvailableCard ? (
-                  <p className="text-xs text-muted-foreground">
-                    The submitted card is no longer available. Select another card before approving.
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Choose the card that should be provisioned when the request is approved.
-                  </p>
-                )}
-              </div>
+              {selectedRequestRequiresCard ? (
+                <div className="space-y-2">
+                  <Label htmlFor="member-request-card">Available Access Card</Label>
+                  <Select
+                    value={selectedCardNo || EMPTY_CARD_VALUE}
+                    onValueChange={(value) => setSelectedCardNo(value === EMPTY_CARD_VALUE ? '' : value)}
+                    disabled={isSubmitting || isCardsLoading}
+                  >
+                    <SelectTrigger id="member-request-card">
+                      <SelectValue
+                        placeholder={isCardsLoading ? 'Loading cards...' : 'Select an access card'}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={EMPTY_CARD_VALUE}>Select an access card</SelectItem>
+                      {availableCards.map((card) => (
+                        <SelectItem key={card.cardNo} value={card.cardNo}>
+                          {formatAvailableAccessCardLabel(card)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {cardsError ? (
+                    <p className="text-xs text-destructive">{cardsError}</p>
+                  ) : selectedRequest.cardNo !== selectedCardNo && !selectedAvailableCard ? (
+                    <p className="text-xs text-muted-foreground">
+                      The submitted card is no longer available. Select another card before approving.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Choose the card that should be provisioned when the request is approved.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+                  This request will be approved without assigning an access card.
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="member-request-review-note">Review Note</Label>

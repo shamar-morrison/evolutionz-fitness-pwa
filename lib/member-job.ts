@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { buildHikMemberName } from '@/lib/member-name'
+import { MEMBER_TYPE_VALUES } from '@/lib/member-type-utils'
 import type {
   AvailableAccessSlot,
   DeviceAccessState,
@@ -8,7 +9,6 @@ import type {
   MemberType,
 } from '@/types'
 
-const memberTypeValues = ['General', 'Civil Servant', 'Student/BPO'] as const
 const memberGenderValues = ['Male', 'Female'] as const
 export const DEFAULT_PLACEHOLDER_SLOT_PATTERN = '^[A-Z]\\d{1,2}$'
 const placeholderSlotNamePattern = new RegExp(DEFAULT_PLACEHOLDER_SLOT_PATTERN)
@@ -42,7 +42,7 @@ export const availableAccessSlotSchema = z.object({
 
 export const addMemberRequestSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
-  type: z.enum(memberTypeValues),
+  type: z.enum(MEMBER_TYPE_VALUES),
   gender: memberGenderSchema.optional(),
   email: z.string().trim().email('Email must be valid.').optional(),
   phone: memberOptionalTextSchema,
@@ -61,7 +61,7 @@ export const addMemberUserJobRequestSchema = z.object({
 
 export const provisionMemberAccessRequestSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
-  type: z.enum(memberTypeValues),
+  type: z.enum(MEMBER_TYPE_VALUES),
   member_type_id: z.string().trim().uuid('Membership type is required.'),
   gender: memberGenderSchema,
   email: z.string().trim().min(1, 'Email is required.').email('Email must be valid.'),

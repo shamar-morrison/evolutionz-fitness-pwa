@@ -26,6 +26,7 @@ import { syncMembersFromDevice } from '@/lib/hik-sync'
 import { syncAvailableAccessCards } from '@/lib/available-cards'
 import { config } from '@/lib/config'
 import { replaceCurrentUrl } from '@/lib/client-history'
+import { isMemberType, MEMBER_TYPE_VALUES } from '@/lib/member-type-utils'
 import {
   isMembersListStatusFilter,
   MEMBERS_LIST_STATUS_OPTIONS,
@@ -36,7 +37,7 @@ import { isFrontDeskStaff } from '@/lib/staff'
 import { RefreshCw, Search, UserPlus } from 'lucide-react'
 import type { MemberType } from '@/types'
 
-const typeOptions: (MemberType | 'All')[] = ['All', 'General', 'Civil Servant', 'Student/BPO']
+const typeOptions: (MemberType | 'All')[] = ['All', ...MEMBER_TYPE_VALUES]
 
 function MembersPageLoading() {
   return (
@@ -70,7 +71,7 @@ function MembersPageLoading() {
 }
 
 function isValidType(value: string | null): value is MemberType {
-  return value === 'General' || value === 'Civil Servant' || value === 'Student/BPO'
+  return isMemberType(value)
 }
 
 function MembersPageContent() {

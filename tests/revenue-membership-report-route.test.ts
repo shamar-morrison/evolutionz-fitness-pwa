@@ -323,6 +323,11 @@ describe('GET /api/reports/revenue/membership', () => {
         totalRevenue: 9000,
         paymentCount: 1,
       },
+      {
+        memberTypeName: 'Day Pass',
+        totalRevenue: 0,
+        paymentCount: 0,
+      },
     ])
     expect(body.totalsByPaymentMethod).toEqual([
       {
@@ -344,6 +349,63 @@ describe('GET /api/reports/revenue/membership', () => {
         paymentMethod: 'point_of_sale',
         totalRevenue: 0,
         paymentCount: 0,
+      },
+    ])
+  })
+
+  it('includes non-zero Day Pass payments in the Day Pass totals bucket', async () => {
+    const { client } = createSupabaseMembershipRevenueClient({
+      member_payments: [
+        {
+          id: 'payment-day-pass',
+          member_id: 'member-1',
+          member_type_id: 'type-day-pass',
+          payment_type: 'membership',
+          payment_method: 'cash',
+          amount_paid: 2000,
+          payment_date: '2026-04-15',
+          notes: null,
+        },
+      ],
+      members: [
+        { id: 'member-1', name: 'Member One' },
+      ],
+      member_types: [
+        { id: 'type-day-pass', name: 'Day Pass' },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(
+      new Request('http://localhost/api/reports/revenue/membership?from=2026-04-01&to=2026-04-30'),
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.summary).toEqual({
+      totalRevenue: 2000,
+      totalPayments: 1,
+    })
+    expect(body.totalsByMemberType).toEqual([
+      {
+        memberTypeName: 'General',
+        totalRevenue: 0,
+        paymentCount: 0,
+      },
+      {
+        memberTypeName: 'Civil Servant',
+        totalRevenue: 0,
+        paymentCount: 0,
+      },
+      {
+        memberTypeName: 'Student/BPO',
+        totalRevenue: 0,
+        paymentCount: 0,
+      },
+      {
+        memberTypeName: 'Day Pass',
+        totalRevenue: 2000,
+        paymentCount: 1,
       },
     ])
   })
@@ -376,6 +438,11 @@ describe('GET /api/reports/revenue/membership', () => {
       },
       {
         memberTypeName: 'Student/BPO',
+        totalRevenue: 0,
+        paymentCount: 0,
+      },
+      {
+        memberTypeName: 'Day Pass',
         totalRevenue: 0,
         paymentCount: 0,
       },

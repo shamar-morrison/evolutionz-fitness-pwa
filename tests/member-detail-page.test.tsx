@@ -316,6 +316,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     cardCode: overrides.cardCode ?? 'C-001',
     cardStatus: overrides.cardStatus ?? null,
     cardLostAt: overrides.cardLostAt ?? null,
+    requiresCard: overrides.requiresCard ?? true,
     slotPlaceholderName: overrides.slotPlaceholderName,
     type: overrides.type ?? 'General',
     memberTypeId: overrides.memberTypeId ?? null,
@@ -424,6 +425,16 @@ function getActiveTabPanel(container: HTMLDivElement) {
 
 function normalizeTextContent(container: HTMLElement) {
   return container.textContent?.replace(/\s+/gu, ' ').trim() ?? ''
+}
+
+function getHeaderBadgeRow(container: HTMLDivElement) {
+  const badgeRow = container.querySelector('h2 + div')
+
+  if (!(badgeRow instanceof HTMLDivElement)) {
+    throw new Error('Header badge row not found.')
+  }
+
+  return badgeRow
 }
 
 describe('Member detail page tabs', () => {
@@ -696,6 +707,57 @@ describe('Member detail page tabs', () => {
 
     expect(extendMembershipDialogState.lastProps?.requiresApproval).toBe(true)
     expect(container.textContent).toContain('Submit for Approval')
+  })
+
+  it('shows a single day pass type badge and hides pause membership for day pass members', async () => {
+    useMemberMock.mockReturnValue({
+      member: createMember({
+        type: 'Day Pass',
+        requiresCard: false,
+        cardNo: null,
+        cardCode: null,
+        employeeNo: null,
+      }),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    const headerBadgeRow = getHeaderBadgeRow(container)
+
+    expect(headerBadgeRow.textContent?.trim()).toBe('Day Pass')
+    expect(headerBadgeRow.textContent).not.toContain('Day Pass Member')
+    expect(container.textContent).not.toContain('Pause Membership')
+  })
+
+  it('shows the day pass type badge to front desk staff without exposing all type badges', async () => {
+    currentRoleState.role = 'staff'
+    currentProfileState.profile = {
+      id: 'assistant-1',
+      name: 'Avery Assistant',
+      role: 'staff',
+      titles: ['Administrative Assistant'],
+    }
+    useMemberMock.mockReturnValue({
+      member: createMember({
+        type: 'Day Pass',
+        requiresCard: false,
+        cardNo: null,
+        cardCode: null,
+        employeeNo: null,
+      }),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    expect(getHeaderBadgeRow(container).textContent?.trim()).toBe('Day Pass')
   })
 
   it('routes the header back button to the shared members list for administrative assistants', async () => {

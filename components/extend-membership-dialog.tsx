@@ -23,6 +23,7 @@ import {
   getMemberExtensionDurationDays,
 } from '@/lib/member-extension'
 import { formatAccessDate } from '@/lib/member-access-time'
+import { getAllowedDurationsForMember } from '@/lib/member-type-utils'
 import { queryKeys } from '@/lib/query-keys'
 import type { Member } from '@/types'
 import type { MemberDurationValue } from '@/lib/member-access-time'
@@ -43,6 +44,7 @@ export function ExtendMembershipDialog({
   const queryClient = useQueryClient()
   const [duration, setDuration] = useState<MemberDurationValue | ''>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const allowedDurations = useMemo(() => getAllowedDurationsForMember(member), [member])
 
   useEffect(() => {
     if (!open) {
@@ -50,6 +52,14 @@ export function ExtendMembershipDialog({
       setIsSubmitting(false)
     }
   }, [open])
+
+  useEffect(() => {
+    if (allowedDurations?.length !== 1 || !open) {
+      return
+    }
+
+    setDuration(allowedDurations[0])
+  }, [allowedDurations, open])
 
   const projectedEndTime = useMemo(() => {
     if (!duration) {
@@ -147,7 +157,13 @@ export function ExtendMembershipDialog({
               value={duration}
               onValueChange={setDuration}
               disabled={isSubmitting}
+              allowedDurations={allowedDurations ?? undefined}
             />
+            {allowedDurations?.length === 1 ? (
+              <p className="text-xs text-muted-foreground">
+                Day pass memberships can only be extended by 1 day.
+              </p>
+            ) : null}
           </div>
 
           <div className="rounded-lg border bg-muted/30 px-4 py-3">

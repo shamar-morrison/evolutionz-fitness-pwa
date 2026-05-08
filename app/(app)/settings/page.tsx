@@ -22,6 +22,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   Table,
   TableBody,
@@ -52,7 +53,8 @@ import {
   normalizeMembershipExpiryEmailDayOffsets,
   updateMembershipExpiryEmailSettings,
 } from '@/lib/membership-expiry-email-settings'
-import { formatMemberTypeRate, updateMemberTypeRate } from '@/lib/member-types'
+import { formatMemberTypeRate, updateMemberType } from '@/lib/member-types'
+import { memberTypeRequiresCard as getMemberTypeRequiresCard } from '@/lib/member-type-utils'
 import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
 import type {
@@ -461,6 +463,7 @@ function SettingsPageContent() {
   } = useMembershipExpiryEmailSettings()
   const [editingMemberType, setEditingMemberType] = useState<MemberTypeRecord | null>(null)
   const [monthlyRateInput, setMonthlyRateInput] = useState('')
+  const [memberTypeRequiresCardInput, setMemberTypeRequiresCardInput] = useState(true)
   const [isSavingMemberType, setIsSavingMemberType] = useState(false)
   const [editingCardFeeSettings, setEditingCardFeeSettings] = useState<CardFeeSettings | null>(null)
   const [cardFeeAmountInput, setCardFeeAmountInput] = useState('')
@@ -517,12 +520,14 @@ function SettingsPageContent() {
   const handleEditClick = (memberType: MemberTypeRecord) => {
     setEditingMemberType(memberType)
     setMonthlyRateInput(String(memberType.monthly_rate))
+    setMemberTypeRequiresCardInput(memberType.requires_card !== false)
   }
 
   const handleMemberTypeDialogOpenChange = (open: boolean) => {
     if (!open && !isSavingMemberType) {
       setEditingMemberType(null)
       setMonthlyRateInput('')
+      setMemberTypeRequiresCardInput(true)
     }
   }
 
@@ -579,19 +584,21 @@ function SettingsPageContent() {
     setIsSavingMemberType(true)
 
     try {
-      await updateMemberTypeRate(editingMemberType.id, {
+      await updateMemberType(editingMemberType.id, {
         monthly_rate: parsedRate,
+        requires_card: memberTypeRequiresCardInput,
       })
 
       await queryClient.invalidateQueries({ queryKey: queryKeys.memberTypes.all })
 
       toast({
-        title: 'Rate updated',
-        description: `${editingMemberType.name} now uses ${formatMemberTypeRate(parsedRate)}.`,
+        title: 'Membership type updated',
+        description: `${editingMemberType.name} now uses ${formatMemberTypeRate(parsedRate)} and ${memberTypeRequiresCardInput ? 'requires an access card' : 'does not require an access card'}.`,
       })
 
       setEditingMemberType(null)
       setMonthlyRateInput('')
+      setMemberTypeRequiresCardInput(true)
     } catch (saveError) {
       toast({
         title: 'Update failed',
@@ -817,8 +824,8 @@ function SettingsPageContent() {
         <CardHeader className="pt-6">
           <CardTitle className="text-lg tracking-tight">Membership Types</CardTitle>
           <CardDescription>
-            Configure monthly rates for each membership type. Rates apply to new payments going
-            forward.
+            Configure monthly rates for each membership type. Access-card requirements apply to
+            new payments and approvals going forward.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0">
@@ -846,6 +853,7 @@ function SettingsPageContent() {
                 <TableRow>
                   <TableHead>Type name</TableHead>
                   <TableHead>Monthly rate</TableHead>
+                  <TableHead>Access card</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -854,6 +862,7 @@ function SettingsPageContent() {
                   <TableRow key={memberType.id}>
                     <TableCell className="font-medium">{memberType.name}</TableCell>
                     <TableCell>{formatMemberTypeRate(memberType.monthly_rate)}</TableCell>
+                    <TableCell>{getMemberTypeRequiresCard(memberType) ? 'Required' : 'Not required'}</TableCell>
                     <TableCell>
                       <div className="flex justify-end">
                         <Button
@@ -862,7 +871,7 @@ function SettingsPageContent() {
                           variant="outline"
                           onClick={() => handleEditClick(memberType)}
                         >
-                          Edit Rate
+                          Edit
                         </Button>
                       </div>
                     </TableCell>
@@ -1020,8 +1029,8 @@ function SettingsPageContent() {
         <DialogContent className="sm:max-w-md" isLoading={isSavingMemberType}>
           <form className="space-y-4" onSubmit={(event) => void handleSave(event)}>
             <DialogHeader>
-              <DialogTitle>{editingMemberType?.name ?? 'Edit Rate'}</DialogTitle>
-              <DialogDescription>Update the monthly rate in JMD.</DialogDescription>
+              <DialogTitle>{editingMemberType?.name ?? 'Edit Membership Type'}</DialogTitle>
+              <DialogDescription>Update the monthly rate and access-card requirement.</DialogDescription>
             </DialogHeader>
 
             <div className="space-y-2">
@@ -1035,6 +1044,28 @@ function SettingsPageContent() {
                 value={monthlyRateInput}
                 onChange={(event) => setMonthlyRateInput(event.target.value)}
               />
+            </div>
+
+            <div className="space-y-3 rounded-lg border px-4 py-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="member-type-requires-card">Requires access card</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Control whether approved members of this type must be assigned a physical card.
+                  </p>
+                </div>
+                <Switch
+                  id="member-type-requires-card"
+                  checked={memberTypeRequiresCardInput}
+                  onCheckedChange={setMemberTypeRequiresCardInput}
+                  disabled={isSavingMemberType}
+                />
+              </div>
+              {!memberTypeRequiresCardInput ? (
+                <p className="text-xs text-muted-foreground">
+                  Members with this type will not be assigned an access card.
+                </p>
+              ) : null}
             </div>
 
             <DialogFooter>

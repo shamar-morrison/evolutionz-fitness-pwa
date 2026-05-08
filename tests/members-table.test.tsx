@@ -97,6 +97,7 @@ function createMember(overrides: Partial<Member> = {}): Member {
     cardCode: overrides.cardCode ?? null,
     cardStatus: overrides.cardStatus ?? null,
     cardLostAt: overrides.cardLostAt ?? null,
+    requiresCard: overrides.requiresCard ?? true,
     slotPlaceholderName: overrides.slotPlaceholderName,
     type: overrides.type ?? 'General',
     memberTypeId: overrides.memberTypeId ?? null,
@@ -248,6 +249,25 @@ describe('MembersTable', () => {
       'Charlie',
       'Kilo',
     ])
+  })
+
+  it('renders a single day pass badge in the type column for cardless members', async () => {
+    await renderTable([
+      createMember({
+        id: 'member-day-pass',
+        name: 'Day Pass Member',
+        type: 'Day Pass',
+        requiresCard: false,
+      }),
+    ])
+
+    const typeCell = container.querySelector('tbody tr td:nth-child(3)')
+
+    if (!(typeCell instanceof HTMLTableCellElement)) {
+      throw new Error('Type cell not found.')
+    }
+
+    expect(typeCell.textContent?.match(/Day Pass/gu)).toHaveLength(1)
   })
 
   it('writes sort params to the URL and resets back to page 1 when the sort changes', async () => {

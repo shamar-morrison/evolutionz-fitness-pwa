@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { provisionMemberAccessRequestSchema } from '@/lib/member-job'
 import { parseDateInputValue } from '@/lib/member-access-time'
-import { provisionMemberAccess } from '@/lib/member-provisioning-server'
+import { isMemberType, memberTypeRequiresCard } from '@/lib/member-type-utils'
+import {
+  createCardlessMemberAccess,
+  provisionMemberAccess,
+} from '@/lib/member-provisioning-server'
+import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
 import { readMemberWithCardCode, readMembersWithCardCodes, type MembersReadClient } from '@/lib/members'
 import { requireAdminUser, requireAuthenticatedUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
@@ -10,8 +14,25 @@ import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 export const MEMBER_JOIN_DATE_WARNING =
   'Member was created successfully, but the join date could not be fully saved. Please verify the member details manually.'
 
-const createMemberSchema = provisionMemberAccessRequestSchema
-  .extend({
+const createMemberSchema = z
+  .object({
+    name: z.string().trim().min(1, 'Name is required.'),
+    type: z.string().trim().min(1).optional(),
+    member_type_id: z.string().trim().uuid('Membership type is required.'),
+    gender: z.enum(['Male', 'Female']),
+    email: z.string().trim().min(1, 'Email is required.').email('Email must be valid.'),
+    phone: z.string().trim().min(1, 'Phone is required.'),
+    remark: z.string().trim().min(1).optional(),
+    beginTime: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/, 'Begin time must be valid.'),
+    endTime: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/, 'End time must be valid.'),
+    cardNo: z.string().trim().min(1).nullable().optional(),
+    cardCode: z.string().trim().min(1).nullable().optional(),
     joined_at: z
       .string()
       .trim()
@@ -21,7 +42,7 @@ const createMemberSchema = provisionMemberAccessRequestSchema
   })
   .strict()
 
-type MembersRouteClient = MembersReadClient & {
+type MembersRouteClient = MembersReadClient & MemberTypesReadClient & {
   from(table: 'members'): {
     update(values: {
       joined_at: string | null
@@ -77,19 +98,63 @@ export async function POST(request: Request) {
     const requestBody = await request.json()
     const input = createMemberSchema.parse(requestBody)
     const supabase = getSupabaseAdminClient() as unknown as MembersRouteClient
-    const result = await provisionMemberAccess({
-      name: input.name,
-      type: input.type,
-      memberTypeId: input.member_type_id ?? null,
-      gender: input.gender ?? null,
-      email: input.email ?? null,
-      phone: input.phone ?? null,
-      remark: input.remark ?? null,
-      beginTime: input.beginTime,
-      endTime: input.endTime,
-      cardNo: input.cardNo,
-      cardCode: input.cardCode,
-    })
+    const memberType = await readMemberTypeById(supabase, input.member_type_id)
+
+    if (!memberType) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Membership type not found.',
+        },
+        { status: 404 },
+      )
+    }
+
+    if (!isMemberType(memberType.name)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Membership type is not supported for member creation.',
+        },
+        { status: 400 },
+      )
+    }
+
+    if (memberTypeRequiresCard(memberType) && (!input.cardNo?.trim() || !input.cardCode?.trim())) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Card number and card code are required for this membership type.',
+        },
+        { status: 400 },
+      )
+    }
+
+    const result = memberTypeRequiresCard(memberType)
+      ? await provisionMemberAccess({
+          name: input.name,
+          type: memberType.name,
+          memberTypeId: memberType.id,
+          gender: input.gender ?? null,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          remark: input.remark ?? null,
+          beginTime: input.beginTime,
+          endTime: input.endTime,
+          cardNo: input.cardNo?.trim() ?? '',
+          cardCode: input.cardCode?.trim() ?? '',
+        })
+      : await createCardlessMemberAccess({
+          name: input.name,
+          type: memberType.name,
+          memberTypeId: memberType.id,
+          gender: input.gender ?? null,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          remark: input.remark ?? null,
+          beginTime: input.beginTime,
+          endTime: input.endTime,
+        })
 
     if (!result.ok) {
       return NextResponse.json(

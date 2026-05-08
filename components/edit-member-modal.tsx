@@ -54,6 +54,11 @@ import {
 import { updateMember, uploadMemberPhoto, type UpdateMemberData } from '@/lib/member-actions'
 import type { FileWithPreview } from '@/hooks/use-file-upload'
 import { buildMemberDisplayName, getCleanMemberName } from '@/lib/member-name'
+import {
+  getAllowedDurationsForMember,
+  getAllowedDurationsForMemberType,
+  isCardlessMemberType,
+} from '@/lib/member-type-utils'
 import { queryKeys } from '@/lib/query-keys'
 import { toast } from '@/hooks/use-toast'
 import type { Member, MemberGender } from '@/types'
@@ -304,6 +309,22 @@ export function EditMemberModal({
   const [photoFile, setPhotoFile] = useState<FileWithPreview | null>(null)
   const initialFormState = useMemo(() => createInitialFormState(member), [member])
   const [formData, setFormData] = useState<EditMemberFormState>(initialFormState)
+  const selectedMemberType = useMemo(
+    () => memberTypes.find((memberType) => memberType.id === formData.memberTypeId) ?? null,
+    [formData.memberTypeId, memberTypes],
+  )
+  const allowedDurations = useMemo(
+    () =>
+      selectedMemberType !== null
+        ? getAllowedDurationsForMemberType(selectedMemberType)
+        : getAllowedDurationsForMember(member),
+    [member, selectedMemberType],
+  )
+  const cardlessTypeSelectionBlocked =
+    selectedMemberType !== null &&
+    selectedMemberType.id !== member.memberTypeId &&
+    isCardlessMemberType(selectedMemberType) &&
+    Boolean(member.cardNo || member.employeeNo)
 
   useEffect(() => {
     setFormData(initialFormState)
@@ -311,6 +332,23 @@ export function EditMemberModal({
     setIsStartDatePickerOpen(false)
     setPhotoFile(null)
   }, [initialFormState, open])
+
+  useEffect(() => {
+    if (allowedDurations?.length !== 1) {
+      return
+    }
+
+    const [onlyDuration] = allowedDurations
+
+    setFormData((currentFormData) =>
+      currentFormData.duration === onlyDuration
+        ? currentFormData
+        : {
+            ...currentFormData,
+            duration: onlyDuration,
+          },
+    )
+  }, [allowedDurations])
 
   const selectedStartDate = useMemo(
     () => parseDateInputValue(formData.startDate),
@@ -372,7 +410,7 @@ export function EditMemberModal({
     [formData.email],
   )
   const isFormValid = useMemo(() => {
-    if (!formData.name.trim() || !isEmailValid) {
+    if (!formData.name.trim() || !isEmailValid || cardlessTypeSelectionBlocked) {
       return false
     }
 
@@ -398,6 +436,7 @@ export function EditMemberModal({
     hasAccessWindowChanged,
     isEmailValid,
     isRequestMode,
+    cardlessTypeSelectionBlocked,
     submittedBeginTime,
     submittedEndTime,
   ])
@@ -431,6 +470,16 @@ export function EditMemberModal({
       toast({
         title: 'Invalid email',
         description: 'Enter a valid email address or leave the field blank.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (cardlessTypeSelectionBlocked) {
+      toast({
+        title: 'Cardless type unavailable',
+        description:
+          'Remove the member’s current card access before switching them to a day pass membership type.',
         variant: 'destructive',
       })
       return
@@ -811,9 +860,16 @@ export function EditMemberModal({
                     }))
                   }
                   disabled={isSubmitting}
+                  allowedDurations={allowedDurations ?? undefined}
                 />
               </div>
             </div>
+
+            {cardlessTypeSelectionBlocked ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                Remove the member’s current card access before switching them to a day pass membership type.
+              </div>
+            ) : null}
 
             {/* Row 5: End Date summary — full width */}
             <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 px-4 py-3">

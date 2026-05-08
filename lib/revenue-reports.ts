@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { addDaysToDateValue, getClassDayOfWeekFromDateValue } from '@/lib/classes'
 import { getJamaicaDateInputValue } from '@/lib/member-access-time'
+import { MEMBER_TYPE_VALUES } from '@/lib/member-type-utils'
 import {
   formatJmdCurrency,
   getCurrentMonthDateRangeInJamaica,
@@ -137,11 +138,7 @@ export const REVENUE_PERIOD_OPTIONS: Array<{
   { label: 'Custom Range', value: 'custom' },
 ]
 
-export const REVENUE_REPORT_MEMBER_TYPE_ORDER = [
-  'General',
-  'Civil Servant',
-  'Student/BPO',
-] as const
+export const REVENUE_REPORT_MEMBER_TYPE_ORDER = MEMBER_TYPE_VALUES
 
 export const REVENUE_REPORT_PAYMENT_METHOD_ORDER: MemberPaymentMethod[] = [
   'cash',
