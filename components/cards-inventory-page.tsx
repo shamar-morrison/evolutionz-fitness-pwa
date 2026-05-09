@@ -285,7 +285,11 @@ export function CardsInventoryPage() {
 
       <ConfirmDialog
         open={selectedCard !== null}
-        title="Decommission card?"
+        title={
+          selectedCard
+            ? `Decommission card ${selectedCard.cardCode ?? selectedCard.cardNo}?`
+            : 'Decommission card?'
+        }
         description="This card will be permanently marked as decommissioned and cannot be assigned to any member."
         confirmLabel="Decommission"
         variant="destructive"

@@ -495,7 +495,7 @@ describe('CardsInventoryPage', () => {
       await Promise.resolve()
     })
 
-    expect(container.textContent).toContain('Decommission card?')
+    expect(container.textContent).toContain('Decommission card A18?')
     expect(container.textContent).toContain(
       'This card will be permanently marked as decommissioned and cannot be assigned to any member.',
     )
