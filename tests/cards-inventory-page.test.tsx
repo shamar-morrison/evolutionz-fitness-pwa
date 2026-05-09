@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import * as React from 'react'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -32,6 +33,57 @@ vi.mock('@/hooks/use-card-inventory', () => ({
 vi.mock('@/hooks/use-toast', () => ({
   toast: toastMock,
 }))
+
+vi.mock('@/components/ui/select', async () => {
+  const React = await vi.importActual<typeof import('react')>('react')
+  const SelectContext = React.createContext<
+    | {
+        value?: string
+        onValueChange?: (value: string) => void
+      }
+    | undefined
+  >(undefined)
+
+  return {
+    Select: ({
+      children,
+      onValueChange,
+      value,
+    }: {
+      children: React.ReactNode
+      onValueChange?: (value: string) => void
+      value?: string
+    }) => (
+      <SelectContext.Provider value={{ value, onValueChange }}>
+        {children}
+      </SelectContext.Provider>
+    ),
+    SelectContent: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+    SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => {
+      const context = React.useContext(SelectContext)
+
+      return (
+        <button
+          type="button"
+          data-select-item-value={value}
+          onClick={() => context?.onValueChange?.(value)}
+        >
+          {children}
+        </button>
+      )
+    },
+    SelectTrigger: ({ children, className }: React.ComponentProps<'button'>) => (
+      <button type="button" className={className}>
+        {children}
+      </button>
+    ),
+    SelectValue: () => {
+      const context = React.useContext(SelectContext)
+
+      return <span>{context?.value ?? ''}</span>
+    },
+  }
+})
 
 vi.mock('@/lib/card-inventory', async () => {
   const actual = await vi.importActual<typeof import('@/lib/card-inventory')>(
@@ -119,6 +171,14 @@ vi.mock('@/components/confirm-dialog', () => ({
 
 import { CardsInventoryPage } from '@/components/cards-inventory-page'
 
+function createCard(index: number) {
+  return {
+    cardNo: `CARD-${String(index).padStart(2, '0')}`,
+    cardCode: `CODE-${String(index).padStart(2, '0')}`,
+    createdAt: `2026-05-${String(index).padStart(2, '0')}T10:00:00.000Z`,
+  }
+}
+
 describe('CardsInventoryPage', () => {
   let container: HTMLDivElement
   let root: Root
@@ -181,7 +241,7 @@ describe('CardsInventoryPage', () => {
 
   function getSearchInput() {
     const input = container.querySelector(
-      'input[placeholder="Search by card number or card code…"]',
+      'input[placeholder="Search by card number or card code..."]',
     )
 
     if (!(input instanceof HTMLInputElement)) {
@@ -189,6 +249,12 @@ describe('CardsInventoryPage', () => {
     }
 
     return input
+  }
+
+  function getVisibleCardNumbers() {
+    return Array.from(container.querySelectorAll('tbody tr td:first-child')).map(
+      (cell) => cell.textContent?.trim() ?? '',
+    )
   }
 
   async function setSearchValue(value: string) {
@@ -209,17 +275,26 @@ describe('CardsInventoryPage', () => {
     })
   }
 
-  it('renders available card rows', async () => {
+  it('renders the members-style header, standalone search, and card rows', async () => {
     await renderPage()
 
-    expect(container.textContent).toContain('Cards')
-    expect(container.textContent).toContain('Available Cards')
-    expect(getSearchInput().placeholder).toBe('Search by card number or card code…')
+    expect(container.querySelector('h1')?.textContent).toBe('Available Cards')
+    expect(container.textContent).toContain(
+      'These cards can be assigned to members and manually decommissioned if needed.',
+    )
+    expect(
+      Array.from(container.querySelectorAll('h1, h2, h3')).filter(
+        (heading) => heading.textContent === 'Available Cards',
+      ),
+    ).toHaveLength(1)
+    expect(getSearchInput().placeholder).toBe('Search by card number or card code...')
+    expect(container.querySelector('table')).not.toBeNull()
     expect(container.textContent).toContain('0102857149')
     expect(container.textContent).toContain('A18')
     expect(container.textContent).toContain('Card Number')
     expect(container.textContent).toContain('Card Code')
     expect(container.textContent).toContain('Date Added')
+    expect(container.textContent).toContain('Page 1 of 1')
   })
 
   it('filters available cards by partial card number or card code and clears the filter', async () => {
@@ -232,7 +307,7 @@ describe('CardsInventoryPage', () => {
         },
         {
           cardNo: '0104620061',
-          cardCode: 'Ef-42',
+          cardCode: 'EF-42',
           createdAt: '2026-05-02T10:00:00.000Z',
         },
       ],
@@ -247,21 +322,21 @@ describe('CardsInventoryPage', () => {
 
     expect(container.textContent).toContain('0102857149')
     expect(container.textContent).not.toContain('0104620061')
-    expect(container.textContent).not.toContain('Ef-42')
+    expect(container.textContent).not.toContain('EF-42')
 
     await setSearchValue('ef')
 
     expect(container.textContent).not.toContain('0102857149')
     expect(container.textContent).not.toContain('A18')
     expect(container.textContent).toContain('0104620061')
-    expect(container.textContent).toContain('Ef-42')
+    expect(container.textContent).toContain('EF-42')
 
     await setSearchValue('')
 
     expect(container.textContent).toContain('0102857149')
     expect(container.textContent).toContain('A18')
     expect(container.textContent).toContain('0104620061')
-    expect(container.textContent).toContain('Ef-42')
+    expect(container.textContent).toContain('EF-42')
   })
 
   it('shows a filtered empty state when no cards match the search', async () => {
@@ -274,7 +349,7 @@ describe('CardsInventoryPage', () => {
     expect(container.textContent).not.toContain('No available cards.')
   })
 
-  it('shows the empty state when no cards are available', async () => {
+  it('shows a table-shell empty state when no cards are available', async () => {
     useCardInventoryMock.mockReturnValue({
       cards: [],
       isLoading: false,
@@ -284,7 +359,101 @@ describe('CardsInventoryPage', () => {
 
     await renderPage()
 
+    expect(container.querySelector('table')).not.toBeNull()
     expect(container.textContent).toContain('No available cards.')
+    expect(container.textContent).not.toContain(
+      'Add a card to make it available for member assignment.',
+    )
+  })
+
+  it('adds pagination and updates visible rows when the page changes', async () => {
+    useCardInventoryMock.mockReturnValue({
+      cards: Array.from({ length: 11 }, (_, index) => createCard(index + 1)),
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await renderPage()
+
+    expect(container.textContent).toContain('11 Rows')
+    expect(container.textContent).toContain('Page 1 of 2')
+    expect(getVisibleCardNumbers()).toEqual([
+      'CARD-01',
+      'CARD-02',
+      'CARD-03',
+      'CARD-04',
+      'CARD-05',
+      'CARD-06',
+      'CARD-07',
+      'CARD-08',
+      'CARD-09',
+      'CARD-10',
+    ])
+
+    const nextPageButton = container.querySelector('button[aria-label="Go to next page"]')
+
+    if (!(nextPageButton instanceof HTMLButtonElement)) {
+      throw new Error('Next page button not found.')
+    }
+
+    await act(async () => {
+      nextPageButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.textContent).toContain('Page 2 of 2')
+    expect(getVisibleCardNumbers()).toEqual(['CARD-11'])
+  })
+
+  it('changes rows per page and resets pagination when search narrows the results', async () => {
+    useCardInventoryMock.mockReturnValue({
+      cards: Array.from({ length: 11 }, (_, index) => createCard(index + 1)),
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await renderPage()
+
+    await act(async () => {
+      const rowsPerPageOption = container.querySelector('button[data-select-item-value="25"]')
+
+      if (!(rowsPerPageOption instanceof HTMLButtonElement)) {
+        throw new Error('Rows-per-page option not found.')
+      }
+
+      rowsPerPageOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.textContent).toContain('Page 1 of 1')
+    expect(getVisibleCardNumbers()).toEqual([
+      'CARD-01',
+      'CARD-02',
+      'CARD-03',
+      'CARD-04',
+      'CARD-05',
+      'CARD-06',
+      'CARD-07',
+      'CARD-08',
+      'CARD-09',
+      'CARD-10',
+      'CARD-11',
+    ])
+
+    await act(async () => {
+      const nextPageButton = container.querySelector('button[aria-label="Go to next page"]')
+
+      if (!(nextPageButton instanceof HTMLButtonElement)) {
+        throw new Error('Next page button not found.')
+      }
+
+      nextPageButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await setSearchValue('card-01')
+
+    expect(container.textContent).toContain('Page 1 of 1')
+    expect(getVisibleCardNumbers()).toEqual(['CARD-01'])
   })
 
   it('opens the add card modal and uses the inventory create action', async () => {
