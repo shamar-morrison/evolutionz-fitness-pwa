@@ -169,6 +169,67 @@ describe('PATCH /api/cards/[cardNo]/decommission', () => {
     },
   )
 
+  it('returns 500 when reading the existing card fails', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    getSupabaseAdminClientMock.mockReturnValue(
+      createCardsDecommissionAdminClient({
+        existingCardError: {
+          message: 'select exploded',
+        },
+      }).client,
+    )
+
+    const response = await PATCH(new Request('http://localhost/api/cards/0102857149/decommission'), {
+      params: Promise.resolve({ cardNo: '0102857149' }),
+    })
+
+    expect(response.status).toBe(500)
+    expect(consoleErrorSpy).toHaveBeenCalledOnce()
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to read card before decommissioning:', {
+      normalizedCardNo: '0102857149',
+      error: {
+        message: 'select exploded',
+      },
+    })
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Failed to decommission card',
+    })
+  })
+
+  it('returns 500 when decommissioning the card fails', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    getSupabaseAdminClientMock.mockReturnValue(
+      createCardsDecommissionAdminClient({
+        updateResult: {
+          data: null,
+          error: {
+            message: 'update exploded',
+          },
+        },
+      }).client,
+    )
+
+    const response = await PATCH(new Request('http://localhost/api/cards/0102857149/decommission'), {
+      params: Promise.resolve({ cardNo: '0102857149' }),
+    })
+
+    expect(response.status).toBe(500)
+    expect(consoleErrorSpy).toHaveBeenCalledOnce()
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to decommission card:', {
+      normalizedCardNo: '0102857149',
+      error: {
+        message: 'update exploded',
+      },
+    })
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Failed to decommission card',
+    })
+  })
+
   it('passes through auth failures', async () => {
     mockUnauthorized()
 

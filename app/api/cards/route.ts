@@ -25,6 +25,8 @@ type CardsInventoryAdminClient = {
   from(table: string): unknown
 }
 
+const READ_CARDS_ERROR = 'Failed to read cards'
+
 export async function GET() {
   try {
     const authResult = await requireAdminUser()
@@ -42,7 +44,8 @@ export async function GET() {
       .order('card_no', { ascending: true })
 
     if (error) {
-      throw new Error(`Failed to read cards: ${error.message}`)
+      console.error('Failed to read cards:', error)
+      return createErrorResponse(READ_CARDS_ERROR, 500)
     }
 
     return NextResponse.json({
@@ -66,10 +69,8 @@ export async function GET() {
       }),
     })
   } catch (error) {
-    return createErrorResponse(
-      error instanceof Error ? error.message : 'Unexpected server error while reading cards.',
-      500,
-    )
+    console.error('Unexpected server error while reading cards:', error)
+    return createErrorResponse(READ_CARDS_ERROR, 500)
   }
 }
 

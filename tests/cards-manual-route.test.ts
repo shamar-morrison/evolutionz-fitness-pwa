@@ -197,6 +197,8 @@ describe('POST /api/cards/manual', () => {
   })
 
   it('returns 500 when the insert fails unexpectedly', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
     getSupabaseAdminClientMock.mockReturnValue(
       createManualCardsAdminClient({
         result: {
@@ -222,9 +224,13 @@ describe('POST /api/cards/manual', () => {
     )
 
     expect(response.status).toBe(500)
+    expect(consoleErrorSpy).toHaveBeenCalledOnce()
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to create manual card:', {
+      message: 'insert exploded',
+    })
     await expect(response.json()).resolves.toEqual({
       ok: false,
-      error: 'Failed to create manual card: insert exploded',
+      error: 'Internal server error',
     })
   })
 })

@@ -34,10 +34,14 @@ type CardsDecommissionAdminClient = {
   from(table: string): unknown
 }
 
+const DECOMMISSION_CARD_ERROR = 'Failed to decommission card'
+
 export async function PATCH(
   _request: Request,
   { params }: { params: Promise<{ cardNo: string }> },
 ) {
+  let normalizedCardNo = ''
+
   try {
     const authResult = await requireAdminUser()
 
@@ -46,7 +50,7 @@ export async function PATCH(
     }
 
     const { cardNo } = await params
-    const normalizedCardNo = cardNo.trim()
+    normalizedCardNo = cardNo.trim()
 
     if (!normalizedCardNo) {
       return createErrorResponse('Card number is required.', 400)
@@ -60,7 +64,11 @@ export async function PATCH(
       .maybeSingle()
 
     if (existingCardError) {
-      throw new Error(`Failed to read card ${normalizedCardNo}: ${existingCardError.message}`)
+      console.error('Failed to read card before decommissioning:', {
+        normalizedCardNo,
+        error: existingCardError,
+      })
+      return createErrorResponse(DECOMMISSION_CARD_ERROR, 500)
     }
 
     if (!existingCard) {
@@ -80,7 +88,11 @@ export async function PATCH(
       .maybeSingle()
 
     if (updateError) {
-      throw new Error(`Failed to decommission card ${normalizedCardNo}: ${updateError.message}`)
+      console.error('Failed to decommission card:', {
+        normalizedCardNo,
+        error: updateError,
+      })
+      return createErrorResponse(DECOMMISSION_CARD_ERROR, 500)
     }
 
     if (!updatedCard) {
@@ -89,11 +101,10 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    return createErrorResponse(
-      error instanceof Error
-        ? error.message
-        : 'Unexpected server error while decommissioning the access card.',
-      500,
-    )
+    console.error('Unexpected error while decommissioning card:', {
+      normalizedCardNo,
+      error,
+    })
+    return createErrorResponse(DECOMMISSION_CARD_ERROR, 500)
   }
 }

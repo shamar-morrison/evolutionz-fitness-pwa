@@ -194,6 +194,8 @@ describe('/api/cards', () => {
     })
 
     it('returns 500 when reading cards fails', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
       getSupabaseAdminClientMock.mockReturnValue(
         createCardsInventoryAdminClient({
           error: { message: 'select exploded' },
@@ -203,9 +205,13 @@ describe('/api/cards', () => {
       const response = await GET()
 
       expect(response.status).toBe(500)
+      expect(consoleErrorSpy).toHaveBeenCalledOnce()
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to read cards:', {
+        message: 'select exploded',
+      })
       await expect(response.json()).resolves.toEqual({
         ok: false,
-        error: 'Failed to read cards: select exploded',
+        error: 'Failed to read cards',
       })
     })
   })
@@ -301,6 +307,24 @@ describe('/api/cards', () => {
       })
       expect(body.error).toContain('Card number is required.')
       expect(body.error).toContain('Card code is required.')
+    })
+
+    it('returns 400 for malformed JSON', async () => {
+      const response = await POST(
+        new Request('http://localhost/api/cards', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: '{invalid-json',
+        }),
+      )
+
+      expect(response.status).toBe(400)
+      await expect(response.json()).resolves.toEqual({
+        ok: false,
+        error: 'Invalid JSON body.',
+      })
     })
 
     it('passes through auth failures', async () => {

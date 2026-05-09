@@ -35,6 +35,8 @@ type CardsCreateAdminClient = {
   from(table: string): unknown
 }
 
+const INTERNAL_SERVER_ERROR = 'Internal server error'
+
 export function createErrorResponse(error: string, status: number) {
   return NextResponse.json(
     {
@@ -83,14 +85,16 @@ export async function handleCreateCardPost(request: Request) {
         return createErrorResponse('A card with this number already exists.', 409)
       }
 
-      throw new Error(`Failed to create manual card: ${error.message}`)
+      console.error('Failed to create manual card:', error)
+      throw new Error(INTERNAL_SERVER_ERROR)
     }
 
     const cardNo = typeof data?.card_no === 'string' ? data.card_no.trim() : ''
     const cardCode = typeof data?.card_code === 'string' ? data.card_code.trim() : ''
 
     if (!cardNo || !cardCode) {
-      throw new Error('Failed to create manual card: missing inserted row.')
+      console.error('Failed to create manual card: missing inserted row.', { data })
+      throw new Error(INTERNAL_SERVER_ERROR)
     }
 
     return NextResponse.json(
@@ -112,11 +116,10 @@ export async function handleCreateCardPost(request: Request) {
       return createErrorResponse(error.message, 400)
     }
 
-    return createErrorResponse(
-      error instanceof Error
-        ? error.message
-        : 'Unexpected server error while creating the access card.',
-      500,
-    )
+    if (!(error instanceof Error && error.message === INTERNAL_SERVER_ERROR)) {
+      console.error('Unexpected server error while creating the access card:', error)
+    }
+
+    return createErrorResponse(INTERNAL_SERVER_ERROR, 500)
   }
 }
