@@ -1,7 +1,7 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { CreditCard, Plus } from 'lucide-react'
+import { CreditCard, Plus, Search } from 'lucide-react'
 import { useState } from 'react'
 import { AddAccessCardModal } from '@/components/add-access-card-modal'
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -19,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -77,7 +78,19 @@ export function CardsInventoryPage() {
   const [isAddCardModalOpen, setIsAddCardModalOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState<CardInventoryItem | null>(null)
   const [isDecommissioning, setIsDecommissioning] = useState(false)
+  const [search, setSearch] = useState('')
   const { cards, isLoading, error } = useCardInventory()
+  const normalizedSearch = search.trim().toLowerCase()
+  const filteredCards = normalizedSearch
+    ? cards.filter((card) => {
+        const normalizedCardNo = card.cardNo.toLowerCase()
+        const normalizedCardCode = (card.cardCode ?? '').toLowerCase()
+
+        return (
+          normalizedCardNo.includes(normalizedSearch) || normalizedCardCode.includes(normalizedSearch)
+        )
+      })
+    : cards
 
   const handleAddCardSuccess = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.cards.inventory })
@@ -162,7 +175,16 @@ export function CardsInventoryPage() {
                 These cards can be assigned to members and manually decommissioned if needed.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="relative max-w-sm">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by card number or card code…"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  className="pl-9"
+                />
+              </div>
               <Table size="compact">
                 <TableHeader>
                   <TableRow>
@@ -173,22 +195,30 @@ export function CardsInventoryPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {cards.map((card) => (
-                    <TableRow key={card.cardNo}>
-                      <TableCell className="font-medium">{card.cardNo}</TableCell>
-                      <TableCell>{card.cardCode ?? '—'}</TableCell>
-                      <TableCell>{formatCreatedAt(card.createdAt)}</TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setSelectedCard(card)}
-                        >
-                          Decommission
-                        </Button>
+                  {filteredCards.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                        No cards match your search.
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    filteredCards.map((card) => (
+                      <TableRow key={card.cardNo}>
+                        <TableCell className="font-medium">{card.cardNo}</TableCell>
+                        <TableCell>{card.cardCode ?? '—'}</TableCell>
+                        <TableCell>{formatCreatedAt(card.createdAt)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setSelectedCard(card)}
+                          >
+                            Decommission
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>

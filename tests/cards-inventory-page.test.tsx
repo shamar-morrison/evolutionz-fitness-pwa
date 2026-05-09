@@ -179,16 +179,99 @@ describe('CardsInventoryPage', () => {
     return button
   }
 
+  function getSearchInput() {
+    const input = container.querySelector(
+      'input[placeholder="Search by card number or card code…"]',
+    )
+
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error('Search input not found.')
+    }
+
+    return input
+  }
+
+  async function setSearchValue(value: string) {
+    const input = getSearchInput()
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
+    const setValue = descriptor?.set
+
+    if (!setValue) {
+      throw new Error('HTMLInputElement value setter is unavailable.')
+    }
+
+    await act(async () => {
+      setValue.call(input, value)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
+
   it('renders available card rows', async () => {
     await renderPage()
 
     expect(container.textContent).toContain('Cards')
     expect(container.textContent).toContain('Available Cards')
+    expect(getSearchInput().placeholder).toBe('Search by card number or card code…')
     expect(container.textContent).toContain('0102857149')
     expect(container.textContent).toContain('A18')
     expect(container.textContent).toContain('Card Number')
     expect(container.textContent).toContain('Card Code')
     expect(container.textContent).toContain('Date Added')
+  })
+
+  it('filters available cards by partial card number or card code and clears the filter', async () => {
+    useCardInventoryMock.mockReturnValue({
+      cards: [
+        {
+          cardNo: '0102857149',
+          cardCode: 'A18',
+          createdAt: '2026-05-01T10:00:00.000Z',
+        },
+        {
+          cardNo: '0104620061',
+          cardCode: 'Ef-42',
+          createdAt: '2026-05-02T10:00:00.000Z',
+        },
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await renderPage()
+
+    await setSearchValue('571')
+
+    expect(container.textContent).toContain('0102857149')
+    expect(container.textContent).not.toContain('0104620061')
+    expect(container.textContent).not.toContain('Ef-42')
+
+    await setSearchValue('ef')
+
+    expect(container.textContent).not.toContain('0102857149')
+    expect(container.textContent).not.toContain('A18')
+    expect(container.textContent).toContain('0104620061')
+    expect(container.textContent).toContain('Ef-42')
+
+    await setSearchValue('')
+
+    expect(container.textContent).toContain('0102857149')
+    expect(container.textContent).toContain('A18')
+    expect(container.textContent).toContain('0104620061')
+    expect(container.textContent).toContain('Ef-42')
+  })
+
+  it('shows a filtered empty state when no cards match the search', async () => {
+    await renderPage()
+
+    await setSearchValue('missing-card')
+
+    expect(container.textContent).toContain('Available Cards')
+    expect(container.textContent).toContain('No cards match your search.')
+    expect(container.textContent).not.toContain('No available cards.')
   })
 
   it('shows the empty state when no cards are available', async () => {
