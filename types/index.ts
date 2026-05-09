@@ -25,6 +25,11 @@ export type AvailableAccessCard = {
   cardNo: string
   cardCode: string | null
 }
+export type CardInventoryItem = {
+  cardNo: string
+  cardCode: string | null
+  createdAt: string
+}
 
 export type DoorHistoryEvent = {
   cardNo: string

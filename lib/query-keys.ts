@@ -129,6 +129,7 @@ export const queryKeys = {
   },
   cards: {
     available: ['cards', 'available'] as const,
+    inventory: ['cards', 'inventory'] as const,
     manualCreate: ['cards', 'manual-create'] as const,
   },
   doorHistory: {

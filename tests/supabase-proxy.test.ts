@@ -230,6 +230,23 @@ describe('updateSession', () => {
     expect(response.headers.get('location')).toBe('http://localhost/trainer/schedule')
   })
 
+  it('redirects trainers away from /cards to /trainer/schedule', async () => {
+    mockSupabaseUser({
+      id: 'trainer-2',
+      email: 'trainer@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'trainer-2',
+      role: 'staff',
+      titles: ['Trainer'],
+    })
+
+    const response = await updateSession(createRequest('/cards'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/trainer/schedule')
+  })
+
   it('redirects administrative assistants away from trainer routes to /members', async () => {
     mockSupabaseUser({
       id: 'assistant-1',
