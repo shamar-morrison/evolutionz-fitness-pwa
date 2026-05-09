@@ -40,6 +40,7 @@ describe('route config helpers', () => {
     ).toBe(true)
 
     expect(isRouteAllowed('/members', 'staff', ['Trainer'])).toBe(false)
+    expect(isRouteAllowed('/cards', 'staff', ['Trainer'])).toBe(false)
     expect(isRouteAllowed('/dashboard', 'staff', ['Trainer'])).toBe(false)
     expect(isRouteAllowed('/reports/pt-payments', 'staff', ['Trainer'])).toBe(false)
     expect(isRouteAllowed('/reports/class-payments', 'staff', ['Trainer'])).toBe(false)
@@ -60,6 +61,7 @@ describe('route config helpers', () => {
     ).toBe(true)
 
     expect(isRouteAllowed('/dashboard', 'staff', ['Administrative Assistant'])).toBe(false)
+    expect(isRouteAllowed('/cards', 'staff', ['Administrative Assistant'])).toBe(false)
     expect(isRouteAllowed('/staff', 'staff', ['Administrative Assistant'])).toBe(false)
     expect(isRouteAllowed('/reports/pt-payments', 'staff', ['Administrative Assistant'])).toBe(
       false,
@@ -175,6 +177,7 @@ describe('route config helpers', () => {
     expect(routeConfig['/reports/revenue']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/door-history']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/email']?.allowedRoles).toEqual(['admin'])
+    expect(routeConfig['/cards']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/settings']?.allowedRoles).toEqual(['admin'])
   })
 })

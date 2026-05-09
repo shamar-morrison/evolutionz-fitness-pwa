@@ -240,6 +240,7 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('Trainer')
     expect(container.textContent).toContain('Log out')
     expect(container.textContent).not.toContain('Members')
+    expect(container.textContent).not.toContain('Cards')
     expect(container.textContent).not.toContain('Door History')
     expect(container.textContent).not.toContain('Unlock Door')
     expect(container.textContent).not.toContain('Reports')
@@ -280,6 +281,7 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('Members')
     expect(container.textContent).toContain('Classes')
     expect(container.textContent).toContain('Front desk workspace')
+    expect(container.textContent).not.toContain('Cards')
     expect(container.textContent).not.toContain('My Schedule')
     expect(container.textContent).not.toContain('My Clients')
     expect(container.textContent).not.toContain('My Requests')
@@ -360,6 +362,7 @@ describe('Sidebar', () => {
     })
 
     expect(container.textContent).toContain('Dashboard')
+    expect(container.textContent).toContain('Cards')
     expect(container.textContent).toContain('Send Email')
     expect(container.textContent).toContain('Classes')
     expect(container.textContent).toContain('Reports')
@@ -379,6 +382,10 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('Settings')
     expect(container.textContent).toContain('Unlock Door')
     expect(container.textContent).toContain('Log out')
+
+    const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
+
+    expect(links).toContain('/cards')
 
     const badges = Array.from(container.querySelectorAll('[data-sidebar="menu-badge"]')).map(
       (badge) => badge.textContent?.trim(),

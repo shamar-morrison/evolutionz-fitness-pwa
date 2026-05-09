@@ -25,6 +25,7 @@ type AddAccessCardModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: (card: AvailableAccessCard) => void
+  createCardAction?: (input: { cardNo: string; cardCode: string }) => Promise<AvailableAccessCard>
 }
 
 type AddAccessCardFormState = {
@@ -43,6 +44,7 @@ export function AddAccessCardModal({
   open,
   onOpenChange,
   onSuccess,
+  createCardAction = createManualAccessCard,
 }: AddAccessCardModalProps) {
   const queryClient = useQueryClient()
   const [formData, setFormData] = useState<AddAccessCardFormState>(createInitialFormState)
@@ -92,7 +94,7 @@ export function AddAccessCardModal({
     setIsSubmitting(true)
 
     try {
-      const createdCard = await createManualAccessCard({
+      const createdCard = await createCardAction({
         cardNo,
         cardCode,
       })

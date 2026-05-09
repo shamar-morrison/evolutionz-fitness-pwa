@@ -37,6 +37,9 @@ export const routeConfig: Record<string, RouteConfig> = {
   '/staff': {
     allowedRoles: ['admin'],
   },
+  '/cards': {
+    allowedRoles: ['admin'],
+  },
   '/staff/[id]': {
     allowedRoles: ['admin'],
   },
