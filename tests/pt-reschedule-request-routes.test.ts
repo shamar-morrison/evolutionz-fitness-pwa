@@ -167,6 +167,7 @@ function createPostClient(
   options: {
     pendingReschedule?: boolean
     pendingStatusChange?: boolean
+    conflictSession?: boolean
   } = {},
 ) {
   const insertValues: Array<Record<string, unknown>> = []
@@ -175,6 +176,48 @@ function createPostClient(
     insertValues,
     client: {
       from(table: string) {
+        if (table === 'pt_sessions') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('id')
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('assignment_id')
+                  expect(value).toBe('assignment-1')
+
+                  return {
+                    eq(nextColumn: string, nextValue: string) {
+                      expect(nextColumn).toBe('scheduled_at')
+                      expect(nextValue).toBe(requestProposedAt)
+
+                      return {
+                        neq(thirdColumn: string, thirdValue: string) {
+                          expect(thirdColumn).toBe('id')
+                          expect(thirdValue).toBe('session-1')
+
+                          return {
+                            limit(limitValue: number) {
+                              expect(limitValue).toBe(1)
+
+                              return {
+                                maybeSingle: vi.fn().mockResolvedValue({
+                                  data: options.conflictSession ? { id: 'session-conflict' } : null,
+                                  error: null,
+                                }),
+                              }
+                            },
+                          }
+                        },
+                      }
+                    },
+                  }
+                },
+              }
+            },
+          }
+        }
+
         if (table === 'pt_session_update_requests') {
           return {
             select(columns: string) {
@@ -265,7 +308,11 @@ function createPostClient(
   }
 }
 
-function createPatchClient() {
+function createPatchClient(
+  options: {
+    conflictSession?: boolean
+  } = {},
+) {
   const updates: Array<{ table: string; values: Record<string, unknown> }> = []
   const changeInserts: Array<Record<string, unknown>> = []
 
@@ -276,6 +323,43 @@ function createPatchClient() {
       from(table: string) {
         if (table === 'pt_sessions') {
           return {
+            select(columns: string) {
+              expect(columns).toBe('id')
+
+              return {
+                eq(column: string, value: string) {
+                  expect(column).toBe('assignment_id')
+                  expect(value).toBe('assignment-1')
+
+                  return {
+                    eq(nextColumn: string, nextValue: string) {
+                      expect(nextColumn).toBe('scheduled_at')
+                      expect(nextValue).toBe(approvedProposedAt)
+
+                      return {
+                        neq(thirdColumn: string, thirdValue: string) {
+                          expect(thirdColumn).toBe('id')
+                          expect(thirdValue).toBe('session-1')
+
+                          return {
+                            limit(limitValue: number) {
+                              expect(limitValue).toBe(1)
+
+                              return {
+                                maybeSingle: vi.fn().mockResolvedValue({
+                                  data: options.conflictSession ? { id: 'session-conflict' } : null,
+                                  error: null,
+                                }),
+                              }
+                            },
+                          }
+                        },
+                      }
+                    },
+                  }
+                },
+              }
+            },
             update(values: Record<string, unknown>) {
               updates.push({ table, values })
 
@@ -674,6 +758,74 @@ describe('PT reschedule request routes', () => {
       requestId: 'request-1',
       type: 'reschedule_request',
       archivedAt: expect.any(String),
+    })
+  })
+
+  it('rejects a trainer reschedule request with 409 status if a session already exists for the same assignment at the proposed time', async () => {
+    const { client, insertValues } = createPostClient({ conflictSession: true })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    buildJamaicaScheduledAtFromLocalInputMock.mockReturnValue(requestProposedAt)
+    readPtSessionRowByIdMock.mockResolvedValue(createSessionRow())
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'trainer-1',
+        name: 'Jordan Trainer',
+        role: 'staff',
+        titles: ['Trainer'],
+      },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/sessions/session-1/reschedule-request', {
+        method: 'POST',
+        body: JSON.stringify({
+          proposedAt: createRequestProposedAtInput,
+          note: 'Need to move it later.',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'session-1' }) },
+    )
+
+    expect(response.status).toBe(409)
+    expect(insertValues).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'A session is already scheduled for this assignment at the proposed time. Please choose a different time.',
+    })
+  })
+
+  it('rejects a reschedule request approval with 409 status if a session already exists for the same assignment at the proposed time', async () => {
+    const { client, updates } = createPatchClient({ conflictSession: true })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    buildJamaicaScheduledAtFromLocalInputMock.mockReturnValue(approvedProposedAt)
+    readPtRescheduleRequestRowByIdMock.mockResolvedValue(createRescheduleRow())
+    readPtSessionRowByIdMock.mockResolvedValue(createSessionRow())
+    mockAdminUser({
+      profile: {
+        id: 'admin-1',
+        role: 'admin',
+      },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/reschedule-requests/request-1', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'approved',
+          proposedAt: approvedProposedAtInput,
+          reviewNote: 'Approved with a slightly later slot.',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'request-1' }) },
+    )
+
+    expect(response.status).toBe(409)
+    expect(updates).toEqual([])
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'A session is already scheduled for this assignment at the proposed time. Please choose a different time.',
     })
   })
 })

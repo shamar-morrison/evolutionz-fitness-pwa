@@ -85,6 +85,26 @@ export async function PATCH(
         return createErrorResponse('Approved date and time must be in the future.', 400)
       }
 
+      const { data: conflictSession, error: conflictError } = await supabase
+        .from('pt_sessions')
+        .select('id')
+        .eq('assignment_id', session.assignment_id)
+        .eq('scheduled_at', approvedAt)
+        .neq('id', session.id)
+        .limit(1)
+        .maybeSingle()
+
+      if (conflictError) {
+        throw new Error(`Failed to check for conflicting PT sessions: ${conflictError.message}`)
+      }
+
+      if (conflictSession) {
+        return createErrorResponse(
+          'A session is already scheduled for this assignment at the proposed time. Please choose a different time.',
+          409,
+        )
+      }
+
       const { error: updateSessionError } = await supabase
         .from('pt_sessions')
         .update({

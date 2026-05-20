@@ -124,6 +124,26 @@ export async function POST(
       return createErrorResponse('A pending request already exists for this session.', 400)
     }
 
+    const { data: conflictSession, error: conflictError } = await supabase
+      .from('pt_sessions')
+      .select('id')
+      .eq('assignment_id', session.assignment_id)
+      .eq('scheduled_at', proposedAt)
+      .neq('id', session.id)
+      .limit(1)
+      .maybeSingle()
+
+    if (conflictError) {
+      throw new Error(`Failed to check for conflicting PT sessions: ${conflictError.message}`)
+    }
+
+    if (conflictSession) {
+      return createErrorResponse(
+        'A session is already scheduled for this assignment at the proposed time. Please choose a different time.',
+        409,
+      )
+    }
+
     const { data: insertedRequest, error: insertError } = await supabase
       .from('pt_reschedule_requests')
       .insert({
