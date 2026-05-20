@@ -105,7 +105,7 @@ function TrainerCommissionContent() {
         <>
           {/* Summary Cards */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Card className="relative overflow-hidden border bg-gradient-to-br from-card to-muted/20 py-2">
+            <Card className="relative overflow-hidden border bg-gradient-to-br from-card to-muted/20 py-2 gap-3">
               <CardHeader className="flex flex-row items-center justify-between pb-2 px-6">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   Active Assignments
@@ -119,8 +119,8 @@ function TrainerCommissionContent() {
                 </p>
               </CardContent>
             </Card>
-
-            <Card className="relative overflow-hidden border bg-gradient-to-br from-card to-muted/20 py-2">
+ 
+            <Card className="relative overflow-hidden border bg-gradient-to-br from-card to-muted/20 py-2 gap-3">
               <CardHeader className="flex flex-row items-center justify-between pb-2 px-6">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   Total Monthly Earnings
@@ -136,17 +136,17 @@ function TrainerCommissionContent() {
                 </p>
               </CardContent>
             </Card>
-
-            <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 col-span-1 md:col-span-2 lg:col-span-1 flex flex-col justify-between py-2">
+ 
+            <Card className="relative overflow-hidden border bg-gradient-to-br from-card to-muted/20 col-span-1 md:col-span-2 lg:col-span-1 flex flex-col justify-between py-2 gap-3">
               <CardHeader className="flex flex-row items-center justify-between pb-2 px-6">
-                <CardTitle className="text-sm font-medium text-primary">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
                   Payout Schedule
                 </CardTitle>
-                <CalendarDays className="h-4 w-4 text-primary" />
+                <CalendarDays className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent className="flex-1 flex flex-col justify-center px-6">
                 <div className="flex items-center">
-                  <Badge variant="default" className="bg-primary text-primary-foreground font-semibold px-3 py-1 text-sm shadow-sm">
+                  <Badge variant="secondary" className="font-semibold px-3 py-1 text-sm shadow-sm">
                     Paid on the 28th of each month
                   </Badge>
                 </div>
@@ -154,48 +154,43 @@ function TrainerCommissionContent() {
             </Card>
           </div>
 
+          {/* Breakdown Table Header & Subtitle */}
+          <div className="space-y-1 mt-6">
+            <h2 className="text-xl font-semibold tracking-tight text-foreground">Commission Breakdown</h2>
+            <p className="text-sm text-muted-foreground">
+              Individual earnings breakdown per active client assignment.
+            </p>
+          </div>
+
           {/* Breakdown Table */}
-          <Card className="border shadow-sm">
-            <CardHeader className="border-b bg-muted/10 px-6 py-4">
-              <div className="flex items-center gap-2">
-                <ClipboardList className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <CardTitle className="text-lg text-foreground">Commission Breakdown</CardTitle>
-                  <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                    Individual earnings breakdown per active client assignment.
-                  </CardDescription>
-                </div>
+          <div className="overflow-hidden rounded-lg border bg-background mt-4">
+            {assignments.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                No active client assignments found. Commission is calculated based on active client assignments.
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              {assignments.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">
-                  No active client assignments found. Commission is calculated based on active client assignments.
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="px-6 py-3 font-semibold text-muted-foreground">Client Name</TableHead>
-                      <TableHead className="px-6 py-3 text-right font-semibold text-muted-foreground">Commission Rate</TableHead>
+            ) : (
+              <Table>
+                <TableHeader className="bg-muted/40">
+                  <TableRow className="border-b hover:bg-muted/40">
+                    <TableHead className="h-14 px-4 text-sm font-semibold">Client Name</TableHead>
+                    <TableHead className="h-14 px-4 text-right text-sm font-semibold">Commission Rate</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {assignments.map((assignment) => (
+                    <TableRow key={assignment.id} className="hover:bg-muted/20">
+                      <TableCell className="px-4 py-4 font-medium text-foreground">
+                        {assignment.memberName}
+                      </TableCell>
+                      <TableCell className="px-4 py-4 text-right font-semibold text-foreground">
+                        {currencyFormatter.format(assignment.commissionRate)}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {assignments.map((assignment) => (
-                      <TableRow key={assignment.id} className="hover:bg-muted/30">
-                        <TableCell className="px-6 py-4 font-medium text-foreground">
-                          {assignment.memberName}
-                        </TableCell>
-                        <TableCell className="px-6 py-4 text-right font-semibold text-primary">
-                          {currencyFormatter.format(assignment.commissionRate)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
         </>
       )}
     </div>
