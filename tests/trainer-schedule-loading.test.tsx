@@ -291,7 +291,18 @@ describe('Trainer schedule loading feedback', () => {
       await Promise.resolve()
     })
 
-    expect(markPtSessionMock).toHaveBeenCalledWith('session-1', { requestedStatus: 'completed' })
+    const submitButton = getButtonWithin(container, 'Submit')
+
+    await act(async () => {
+      submitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(markPtSessionMock).toHaveBeenCalledWith('session-1', {
+      requestedStatus: 'completed',
+      note: null,
+      notes: null,
+    })
     expect(firstCard.getAttribute('data-session-loading')).toBe('true')
     expect(firstCard.getAttribute('aria-busy')).toBe('true')
     expect(secondCard.getAttribute('data-session-loading')).toBe('false')
@@ -361,7 +372,7 @@ describe('Trainer schedule loading feedback', () => {
 
     const reasonField = getTextareaByPlaceholder(
       container,
-      'Provide a reason for cancelling this session',
+      'Add a note about this session…',
     )
 
     await act(async () => {
@@ -378,6 +389,7 @@ describe('Trainer schedule loading feedback', () => {
     expect(markPtSessionMock).toHaveBeenCalledWith('session-1', {
       requestedStatus: 'cancelled',
       note: 'Member is unwell today.',
+      notes: 'Member is unwell today.',
     })
     expect(container.querySelector('[data-is-loading="true"]')).not.toBeNull()
     expect(submitButton.getAttribute('data-loading')).toBe('true')

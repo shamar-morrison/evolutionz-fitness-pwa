@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { EllipsisVertical } from 'lucide-react'
 import { MemberAvatar } from '@/components/member-avatar'
 import { PaginationControls } from '@/components/pagination-controls'
-import { RescheduleDateTimePicker } from '@/components/reschedule-date-time-picker'
+import { Input } from '@/components/ui/input'
 import { StaffOnly } from '@/components/staff-only'
 import { TrainerAssignmentScheduleDialog } from '@/components/trainer-assignment-schedule-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -46,6 +46,7 @@ import {
   markPtSession,
   type PtSession,
   type TrainerClient,
+  JAMAICA_OFFSET,
 } from '@/lib/pt-scheduling'
 import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
@@ -67,7 +68,7 @@ function sortDescending(left: PtSession, right: PtSession) {
 }
 
 function getTodayDateValue() {
-  return getJamaicaDateValue(new Date().toISOString())
+  return getJamaicaDateValue(new Date().toISOString()) ?? ''
 }
 
 function getEmptyStateLabel(tab: TrainerScheduleTab) {
@@ -119,17 +120,31 @@ function ScheduleContent() {
   const [pastPage, setPastPage] = useState(0)
   const [selectedAssignment, setSelectedAssignment] = useState<TrainerClient | null>(null)
   const [selectedRescheduleSession, setSelectedRescheduleSession] = useState<PtSession | null>(null)
-  const [selectedCancellationSession, setSelectedCancellationSession] = useState<PtSession | null>(
-    null,
-  )
-  const [rescheduleDateTime, setRescheduleDateTime] = useState('')
-  const [rescheduleValidationMessage, setRescheduleValidationMessage] = useState<string | null>(
-    null,
-  )
+  const [selectedMarkSession, setSelectedMarkSession] = useState<{
+    session: PtSession
+    action: 'completed' | 'missed' | 'cancelled'
+  } | null>(null)
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [rescheduleTime, setRescheduleTime] = useState('')
   const [rescheduleNote, setRescheduleNote] = useState('')
-  const [cancellationReason, setCancellationReason] = useState('')
+  const rescheduleValidationMessage = useMemo(() => {
+    if (!rescheduleDate || !rescheduleTime) {
+      return 'Select a future date and time.'
+    }
+
+    const proposedTimeMs = new Date(`${rescheduleDate}T${rescheduleTime}${JAMAICA_OFFSET}`).getTime()
+
+    if (Number.isNaN(proposedTimeMs)) {
+      return 'Proposed date and time must be valid.'
+    }
+
+    return proposedTimeMs > Date.now()
+      ? null
+      : 'Proposed date and time must be in the future.'
+  }, [rescheduleDate, rescheduleTime])
+  const [sessionNotes, setSessionNotes] = useState('')
   const [isSubmittingReschedule, setIsSubmittingReschedule] = useState(false)
-  const [isSubmittingCancellation, setIsSubmittingCancellation] = useState(false)
+  const [isSubmittingMark, setIsSubmittingMark] = useState(false)
   const [pendingActionBySessionId, setPendingActionBySessionId] = useState<
     Partial<Record<string, SessionPendingAction>>
   >({})
@@ -271,25 +286,39 @@ function ScheduleContent() {
     }
   }
 
-  const handleMarkSession = async (
-    session: PtSession,
-    requestedStatus: 'completed' | 'missed',
-  ) => {
+  const handleSubmitMark = async () => {
+    if (!selectedMarkSession) {
+      return
+    }
+
+    const { session, action } = selectedMarkSession
+    const sessionId = session.id
+    setIsSubmittingMark(true)
+
     try {
-      const result = await runSessionAction(session.id, requestedStatus, async () => {
-        const nextResult = await markPtSession(session.id, { requestedStatus })
+      const note = sessionNotes.trim()
+      const result = await runSessionAction(sessionId, action, async () => {
+        const nextResult = await markPtSession(sessionId, {
+          requestedStatus: action,
+          notes: note || null,
+          note: note || null,
+        })
         await invalidateTrainerWorkspaceQueries()
         return nextResult
       })
 
       if ('pending' in result && result.pending) {
+        setSelectedMarkSession(null)
+        setSessionNotes('')
         toast({
           title: 'Request submitted — pending admin approval.',
         })
       } else {
+        setSelectedMarkSession(null)
+        setSessionNotes('')
         toast({
           title: 'Session updated',
-          description: `The session was marked ${requestedStatus}.`,
+          description: `The session was marked ${action}.`,
         })
       }
     } catch (error) {
@@ -299,23 +328,22 @@ function ScheduleContent() {
           error instanceof Error ? error.message : 'Failed to update the session.',
         variant: 'destructive',
       })
+    } finally {
+      setIsSubmittingMark(false)
     }
   }
 
   const handleOpenReschedule = (session: PtSession) => {
     setSelectedRescheduleSession(session)
-    setRescheduleDateTime(formatPtSessionDateTimeInputValue(session.scheduledAt))
-    setRescheduleValidationMessage(null)
+    const initialDateTime = formatPtSessionDateTimeInputValue(session.scheduledAt)
+    const [d = '', t = ''] = initialDateTime.split('T')
+    setRescheduleDate(d)
+    setRescheduleTime(t)
     setRescheduleNote('')
   }
 
-  const handleOpenCancellation = (session: PtSession) => {
-    setSelectedCancellationSession(session)
-    setCancellationReason('')
-  }
-
   const handleSubmitReschedule = async () => {
-    if (!selectedRescheduleSession || !rescheduleDateTime || rescheduleValidationMessage) {
+    if (!selectedRescheduleSession || !rescheduleDate || !rescheduleTime || rescheduleValidationMessage) {
       return
     }
 
@@ -323,9 +351,10 @@ function ScheduleContent() {
     setIsSubmittingReschedule(true)
 
     try {
+      const proposedAt = `${rescheduleDate}T${rescheduleTime}`
       await runSessionAction(sessionId, 'reschedule', async () => {
         await createPtRescheduleRequest(sessionId, {
-          proposedAt: rescheduleDateTime,
+          proposedAt,
           note: rescheduleNote.trim() || null,
         })
         await invalidateTrainerWorkspaceQueries()
@@ -343,52 +372,6 @@ function ScheduleContent() {
       })
     } finally {
       setIsSubmittingReschedule(false)
-    }
-  }
-
-  const handleSubmitCancellation = async () => {
-    const note = cancellationReason.trim()
-
-    if (!selectedCancellationSession || !note) {
-      return
-    }
-
-    const sessionId = selectedCancellationSession.id
-    setIsSubmittingCancellation(true)
-
-    try {
-      const result = await runSessionAction(sessionId, 'cancelled', async () => {
-        const nextResult = await markPtSession(sessionId, {
-          requestedStatus: 'cancelled',
-          note,
-        })
-        await invalidateTrainerWorkspaceQueries()
-        return nextResult
-      })
-
-      if ('pending' in result && result.pending) {
-        setSelectedCancellationSession(null)
-        setCancellationReason('')
-        toast({
-          title: 'Request submitted — pending admin approval.',
-        })
-      } else {
-        setSelectedCancellationSession(null)
-        setCancellationReason('')
-        toast({
-          title: 'Session updated',
-          description: 'The session was marked cancelled.',
-        })
-      }
-    } catch (error) {
-      toast({
-        title: 'Unable to mark session',
-        description:
-          error instanceof Error ? error.message : 'Failed to update the session.',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsSubmittingCancellation(false)
     }
   }
 
@@ -564,19 +547,34 @@ function ScheduleContent() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
                                 disabled={isSessionPending}
-                                onClick={() => void handleMarkSession(session, 'completed')}
+                                onClick={() =>
+                                  setSelectedMarkSession({
+                                    session,
+                                    action: 'completed',
+                                  })
+                                }
                               >
                                 Completed
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 disabled={isSessionPending}
-                                onClick={() => void handleMarkSession(session, 'missed')}
+                                onClick={() =>
+                                  setSelectedMarkSession({
+                                    session,
+                                    action: 'missed',
+                                  })
+                                }
                               >
                                 Missed
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 disabled={isSessionPending}
-                                onClick={() => handleOpenCancellation(session)}
+                                onClick={() =>
+                                  setSelectedMarkSession({
+                                    session,
+                                    action: 'cancelled',
+                                  })
+                                }
                               >
                                 Cancelled
                               </DropdownMenuItem>
@@ -630,7 +628,6 @@ function ScheduleContent() {
         onOpenChange={(open) => {
           if (!open) {
             setSelectedRescheduleSession(null)
-            setRescheduleValidationMessage(null)
           }
         }}
       >
@@ -644,16 +641,33 @@ function ScheduleContent() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="trainer-reschedule-at">Proposed time</Label>
-              <RescheduleDateTimePicker
-                key={selectedRescheduleSession?.id ?? 'trainer-reschedule'}
-                id="trainer-reschedule-at"
-                value={rescheduleDateTime}
-                onValueChange={setRescheduleDateTime}
-                onValidationChange={setRescheduleValidationMessage}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="trainer-reschedule-date">Date</Label>
+                <Input
+                  id="trainer-reschedule-date"
+                  type="date"
+                  value={rescheduleDate}
+                  min={getTodayDateValue()}
+                  onChange={(event) => setRescheduleDate(event.target.value)}
+                  disabled={isSubmittingReschedule}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="trainer-reschedule-time">Time</Label>
+                <Input
+                  id="trainer-reschedule-time"
+                  type="time"
+                  value={rescheduleTime}
+                  onChange={(event) => setRescheduleTime(event.target.value)}
+                  disabled={isSubmittingReschedule}
+                />
+              </div>
             </div>
+
+            {rescheduleValidationMessage ? (
+              <p className="text-sm text-destructive">{rescheduleValidationMessage}</p>
+            ) : null}
 
             <div className="space-y-2">
               <Label htmlFor="trainer-reschedule-note">Note</Label>
@@ -680,7 +694,8 @@ function ScheduleContent() {
               onClick={() => void handleSubmitReschedule()}
               disabled={
                 isSubmittingReschedule ||
-                !rescheduleDateTime ||
+                !rescheduleDate ||
+                !rescheduleTime ||
                 Boolean(rescheduleValidationMessage)
               }
               loading={isSubmittingReschedule}
@@ -692,39 +707,50 @@ function ScheduleContent() {
       </Dialog>
 
       <Dialog
-        open={Boolean(selectedCancellationSession)}
+        open={Boolean(selectedMarkSession)}
         onOpenChange={(open) => {
           if (!open) {
-            setSelectedCancellationSession(null)
+            setSelectedMarkSession(null)
+            setSessionNotes('')
           }
         }}
       >
-        <DialogContent isLoading={isSubmittingCancellation}>
+        <DialogContent isLoading={isSubmittingMark}>
           <DialogHeader>
-            <DialogTitle>Cancel Session</DialogTitle>
+            <DialogTitle>
+              {selectedMarkSession?.action === 'completed'
+                ? 'Complete Session'
+                : selectedMarkSession?.action === 'missed'
+                  ? 'Mark Session as Missed'
+                  : 'Cancel Session'}
+            </DialogTitle>
             <DialogDescription>
-              Submit a cancellation request for admin approval.
+              {selectedMarkSession?.action === 'completed'
+                ? 'Confirm that this PT session has been successfully completed.'
+                : selectedMarkSession?.action === 'missed'
+                  ? 'Confirm that the client missed this scheduled session.'
+                  : 'Submit a cancellation request for admin approval.'}
             </DialogDescription>
           </DialogHeader>
 
-          {selectedCancellationSession ? (
+          {selectedMarkSession ? (
             <div className="space-y-4">
               <ReadOnlyField
                 label="Member"
-                value={selectedCancellationSession.memberName ?? 'Unknown member'}
+                value={selectedMarkSession.session.memberName ?? 'Unknown member'}
               />
               <ReadOnlyField
                 label="Session"
-                value={formatPtSessionDateTime(selectedCancellationSession.scheduledAt)}
+                value={formatPtSessionDateTime(selectedMarkSession.session.scheduledAt)}
               />
 
               <div className="space-y-2">
-                <Label htmlFor="trainer-cancellation-reason">Reason</Label>
+                <Label htmlFor="trainer-session-notes">Notes (optional)</Label>
                 <Textarea
-                  id="trainer-cancellation-reason"
-                  value={cancellationReason}
-                  onChange={(event) => setCancellationReason(event.target.value)}
-                  placeholder="Provide a reason for cancelling this session"
+                  id="trainer-session-notes"
+                  value={sessionNotes}
+                  onChange={(event) => setSessionNotes(event.target.value)}
+                  placeholder="Add a note about this session…"
                 />
               </div>
             </div>
@@ -734,18 +760,21 @@ function ScheduleContent() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setSelectedCancellationSession(null)}
-              disabled={isSubmittingCancellation}
+              onClick={() => {
+                setSelectedMarkSession(null)
+                setSessionNotes('')
+              }}
+              disabled={isSubmittingMark}
             >
               Cancel
             </Button>
             <Button
               type="button"
-              onClick={() => void handleSubmitCancellation()}
-              disabled={isSubmittingCancellation || !cancellationReason.trim()}
-              loading={isSubmittingCancellation}
+              onClick={() => void handleSubmitMark()}
+              disabled={isSubmittingMark}
+              loading={isSubmittingMark}
             >
-              {isSubmittingCancellation ? 'Submitting...' : 'Submit'}
+              {isSubmittingMark ? 'Submitting...' : 'Submit'}
             </Button>
           </DialogFooter>
         </DialogContent>
