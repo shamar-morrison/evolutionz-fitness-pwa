@@ -29,6 +29,7 @@ describe('route config helpers', () => {
     expect(isRouteAllowed('/trainer/schedule', 'staff', ['Trainer'])).toBe(true)
     expect(isRouteAllowed('/trainer/clients', 'staff', ['Trainer'])).toBe(true)
     expect(isRouteAllowed('/trainer/requests', 'staff', ['Trainer'])).toBe(true)
+    expect(isRouteAllowed('/trainer/commission', 'staff', ['Trainer'])).toBe(true)
     expect(isRouteAllowed('/classes', 'staff', ['Trainer'])).toBe(true)
     expect(isRouteAllowed('/classes/123', 'staff', ['Trainer'])).toBe(true)
     expect(
@@ -75,11 +76,13 @@ describe('route config helpers', () => {
       false,
     )
     expect(isRouteAllowed('/trainer/clients', 'staff', ['Administrative Assistant'])).toBe(false)
+    expect(isRouteAllowed('/trainer/commission', 'staff', ['Administrative Assistant'])).toBe(false)
   })
 
   it('denies unknown titles on staff-restricted routes', () => {
     expect(isRouteAllowed('/members', 'staff', ['Mystery Role'])).toBe(false)
     expect(isRouteAllowed('/trainer/schedule', 'staff', ['Mystery Role'])).toBe(false)
+    expect(isRouteAllowed('/trainer/commission', 'staff', ['Mystery Role'])).toBe(false)
     expect(isRouteAllowed('/classes', 'staff', ['Mystery Role'])).toBe(false)
   })
 

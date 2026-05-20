@@ -83,6 +83,7 @@ export type TrainerClient = {
   memberId: string
   status: 'active' | 'inactive'
   ptFee: number | null
+  commissionOverride: number | null
   sessionsPerWeek: number
   scheduledSessions: AssignmentScheduleDay[]
   scheduledDays: DayOfWeek[]
@@ -247,6 +248,7 @@ export type CreatePtAssignmentData = {
   trainerId: string
   memberId: string
   ptFee?: number | null
+  commissionOverride?: number | null
   sessionsPerWeek: number
   scheduledSessions: ScheduledSessionInput[]
   trainingPlan?: AssignmentTrainingPlanInput[]
@@ -256,6 +258,7 @@ export type CreatePtAssignmentData = {
 export type UpdatePtAssignmentData = {
   status?: TrainerClientStatus
   ptFee?: number | null
+  commissionOverride?: number | null
   sessionsPerWeek?: number
   scheduledSessions?: ScheduledSessionInput[]
   trainingPlan?: AssignmentTrainingPlanInput[]
@@ -338,6 +341,7 @@ const trainerClientSchema = z.object({
   memberId: z.string().trim().min(1),
   status: z.enum(PT_ASSIGNMENT_STATUSES),
   ptFee: z.number().int().nonnegative().nullable(),
+  commissionOverride: z.number().int().nonnegative().nullable(),
   sessionsPerWeek: z.number().int().min(1).max(MAX_PT_SESSIONS_PER_WEEK),
   scheduledSessions: z
     .array(

@@ -155,7 +155,7 @@ vi.mock('@/lib/pt-scheduling', async () => {
 })
 
 import { PtAssignmentDialog } from '@/components/pt-assignment-dialog'
-import type { TrainerClient } from '@/lib/pt-scheduling'
+import { TRAINER_PAYOUT_PER_CLIENT_JMD, type TrainerClient } from '@/lib/pt-scheduling'
 import type { Profile } from '@/types'
 
 function createTrainer(overrides: Partial<Profile> = {}): Profile {
@@ -187,6 +187,7 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     memberId: overrides.memberId ?? '22222222-2222-2222-2222-222222222222',
     status: overrides.status ?? 'active',
     ptFee: Object.prototype.hasOwnProperty.call(overrides, 'ptFee') ? (overrides.ptFee ?? null) : 14000,
+    commissionOverride: Object.prototype.hasOwnProperty.call(overrides, 'commissionOverride') ? (overrides.commissionOverride ?? null) : null,
     sessionsPerWeek: overrides.sessionsPerWeek ?? 1,
     scheduledSessions:
       overrides.scheduledSessions ??
@@ -414,6 +415,7 @@ describe('PtAssignmentDialog', () => {
       trainerId: '11111111-1111-1111-1111-111111111111',
       memberId: '22222222-2222-2222-2222-222222222222',
       ptFee: 15000,
+      commissionOverride: TRAINER_PAYOUT_PER_CLIENT_JMD,
       sessionsPerWeek: 3,
       scheduledSessions: [
         {
@@ -485,6 +487,7 @@ describe('PtAssignmentDialog', () => {
     expect(updatePtAssignmentMock).toHaveBeenCalledWith('assignment-inactive', {
       status: 'active',
       ptFee: 15000,
+      commissionOverride: TRAINER_PAYOUT_PER_CLIENT_JMD,
       sessionsPerWeek: 3,
       scheduledSessions: [
         {
@@ -555,6 +558,7 @@ describe('PtAssignmentDialog', () => {
       trainerId: '11111111-1111-1111-1111-111111111111',
       memberId: '22222222-2222-2222-2222-222222222222',
       ptFee: 15000,
+      commissionOverride: TRAINER_PAYOUT_PER_CLIENT_JMD,
       sessionsPerWeek: 3,
       scheduledSessions: [
         {
@@ -618,6 +622,7 @@ describe('PtAssignmentDialog', () => {
       trainerId: '11111111-1111-1111-1111-111111111111',
       memberId: '22222222-2222-2222-2222-222222222222',
       ptFee: null,
+      commissionOverride: TRAINER_PAYOUT_PER_CLIENT_JMD,
       sessionsPerWeek: 3,
       scheduledSessions: [
         {
@@ -707,6 +712,7 @@ describe('PtAssignmentDialog', () => {
       trainerId: '11111111-1111-1111-1111-111111111111',
       memberId: '22222222-2222-2222-2222-222222222222',
       ptFee: 15000,
+      commissionOverride: TRAINER_PAYOUT_PER_CLIENT_JMD,
       sessionsPerWeek: 3,
       scheduledSessions: [
         {
@@ -821,6 +827,7 @@ describe('PtAssignmentDialog', () => {
 
     expect(updatePtAssignmentMock).toHaveBeenCalledWith('assignment-1', {
       ptFee: null,
+      commissionOverride: null,
       sessionsPerWeek: 1,
       scheduledSessions: [
         {
@@ -1093,6 +1100,7 @@ describe('PtAssignmentDialog', () => {
       trainerId: '11111111-1111-1111-1111-111111111111',
       memberId: '22222222-2222-2222-2222-222222222222',
       ptFee: 15000,
+      commissionOverride: TRAINER_PAYOUT_PER_CLIENT_JMD,
       sessionsPerWeek: 3,
       scheduledSessions: [
         {

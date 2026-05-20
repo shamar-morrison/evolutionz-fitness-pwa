@@ -112,6 +112,10 @@ export const routeConfig: Record<string, RouteConfig> = {
     allowedRoles: ['admin', 'staff'],
     allowedTitles: ['Trainer'],
   },
+  '/trainer/commission': {
+    allowedRoles: ['admin', 'staff'],
+    allowedTitles: ['Trainer'],
+  },
 }
 
 const uuidSegmentPattern =

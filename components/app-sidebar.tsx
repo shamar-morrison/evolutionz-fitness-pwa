@@ -157,6 +157,7 @@ const trainerNavItems: NavItem[] = [
   { href: '/trainer/clients', label: 'My Clients', icon: Users },
   { href: '/members', label: 'Members', icon: Users },
   { href: '/trainer/requests', label: 'My Requests', icon: ClipboardList },
+  { href: '/trainer/commission', label: 'My Commission', icon: BanknoteIcon },
 ]
 
 const frontDeskNavItems: NavItem[] = [

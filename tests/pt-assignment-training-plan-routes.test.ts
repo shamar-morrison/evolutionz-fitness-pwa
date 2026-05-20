@@ -401,6 +401,7 @@ describe('PT assignment training plan routes', () => {
       trainer_id: '11111111-1111-1111-1111-111111111111',
       member_id: '22222222-2222-2222-2222-222222222222',
       pt_fee: 15000,
+      commission_override: null,
       sessions_per_week: 3,
       scheduled_days: ['Monday', 'Wednesday', 'Friday'],
       session_time: '07:00:00',

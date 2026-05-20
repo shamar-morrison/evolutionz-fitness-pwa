@@ -46,6 +46,7 @@ import {
   DELETE,
   PATCH,
 } from '@/app/api/pt/assignments/[id]/route'
+import { TRAINER_PAYOUT_PER_CLIENT_JMD } from '@/lib/pt-scheduling'
 
 type QueryResult<T> = {
   data: T | null
@@ -440,6 +441,7 @@ describe('PT assignment routes', () => {
       trainer_id: '11111111-1111-1111-1111-111111111111',
       member_id: '22222222-2222-2222-2222-222222222222',
       pt_fee: 15000,
+      commission_override: null,
       sessions_per_week: 3,
       scheduled_days: ['Monday', 'Wednesday', 'Friday'],
       session_time: '07:00:00',
@@ -484,6 +486,7 @@ describe('PT assignment routes', () => {
       trainer_id: '11111111-1111-1111-1111-111111111111',
       member_id: '22222222-2222-2222-2222-222222222222',
       pt_fee: null,
+      commission_override: null,
       sessions_per_week: 3,
       scheduled_days: ['Monday', 'Wednesday', 'Friday'],
       session_time: '07:00:00',
@@ -528,6 +531,53 @@ describe('PT assignment routes', () => {
       trainer_id: '11111111-1111-1111-1111-111111111111',
       member_id: '22222222-2222-2222-2222-222222222222',
       pt_fee: null,
+      commission_override: null,
+      sessions_per_week: 3,
+      scheduled_days: ['Monday', 'Wednesday', 'Friday'],
+      session_time: '07:00:00',
+      notes: null,
+    })
+  })
+
+  it('POST accepts custom commissionOverride and stores it', async () => {
+    const { client, insertValues } = createPostClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readStaffProfileMock.mockResolvedValue({
+      id: '11111111-1111-1111-1111-111111111111',
+      titles: ['Trainer'],
+    })
+    hasStaffTitleMock.mockReturnValue(true)
+    readTrainerClientByIdMock.mockResolvedValue(buildAssignment({ commissionOverride: TRAINER_PAYOUT_PER_CLIENT_JMD }))
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/assignments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          trainerId: '11111111-1111-1111-1111-111111111111',
+          memberId: '22222222-2222-2222-2222-222222222222',
+          ptFee: 15000,
+          commissionOverride: TRAINER_PAYOUT_PER_CLIENT_JMD,
+          sessionsPerWeek: 3,
+          scheduledSessions: [
+            { day: 'Monday', sessionTime: '07:00' },
+            { day: 'Wednesday', sessionTime: '07:00' },
+            { day: 'Friday', sessionTime: '07:00' },
+          ],
+        }),
+      }),
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(201)
+    expect(payload.ok).toBe(true)
+    expect(insertValues[0]).toEqual({
+      trainer_id: '11111111-1111-1111-1111-111111111111',
+      member_id: '22222222-2222-2222-2222-222222222222',
+      pt_fee: 15000,
+      commission_override: TRAINER_PAYOUT_PER_CLIENT_JMD,
       sessions_per_week: 3,
       scheduled_days: ['Monday', 'Wednesday', 'Friday'],
       session_time: '07:00:00',
