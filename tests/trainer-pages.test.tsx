@@ -388,6 +388,29 @@ async function setInputValue(input: HTMLInputElement | HTMLSelectElement, value:
   })
 }
 
+const fireEvent = {
+  change: async (
+    element: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+    event: { target: { value: string } }
+  ) => {
+    await act(async () => {
+      const descriptor = Object.getOwnPropertyDescriptor(
+        Object.getPrototypeOf(element),
+        'value',
+      )
+      const setValue = descriptor?.set
+
+      if (!setValue) {
+        throw new Error('Input value setter is unavailable.')
+      }
+
+      setValue.call(element, event.target.value)
+      element.dispatchEvent(new Event('input', { bubbles: true }))
+      element.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  }
+}
+
 function getInputByAriaLabel(container: HTMLDivElement, label: string) {
   const input = container.querySelector(`input[aria-label="${label}"]`)
 
@@ -605,42 +628,59 @@ describe('Trainer pages', () => {
     })
   })
 
-  it('shows a readable formatted selection in the custom reschedule picker', async () => {
+  it('shows pre-populated date and time in the reschedule picker derived from the session scheduled time', async () => {
     await act(async () => {
       root.render(<TrainerSchedulePage />)
     })
 
     await clickButton(container, 'Request Reschedule')
 
-    expect(container.textContent).toContain('April 12, 2099 at 5:00 AM')
-    expect(getButtonByAriaLabel(container, 'Select Apr 5 2026').disabled).toBe(true)
+    const dateInput = container.querySelector('#trainer-reschedule-date')
+    const timeInput = container.querySelector('#trainer-reschedule-time')
+
+    expect(dateInput).toBeInstanceOf(HTMLInputElement)
+    expect(timeInput).toBeInstanceOf(HTMLInputElement)
+    expect((dateInput as HTMLInputElement).value).toBe('2099-04-12')
+    expect((timeInput as HTMLInputElement).value).toBe('05:00')
   })
 
-  it('blocks submitting a same-day past time from the custom reschedule picker', async () => {
+  it('blocks submitting a same-day past time from the reschedule picker', async () => {
     await act(async () => {
       root.render(<TrainerSchedulePage />)
     })
 
     await clickButton(container, 'Request Reschedule')
-    await clickButtonByAriaLabel(container, 'Select Apr 6 2026')
-    await clickButtonByAriaLabel(container, 'Hour 9')
+
+    const dateInput = container.querySelector('#trainer-reschedule-date')
+    const timeInput = container.querySelector('#trainer-reschedule-time')
+
+    expect(dateInput).toBeInstanceOf(HTMLInputElement)
+    expect(timeInput).toBeInstanceOf(HTMLInputElement)
+
+    await fireEvent.change(dateInput as HTMLInputElement, { target: { value: '2026-04-06' } })
+    await fireEvent.change(timeInput as HTMLInputElement, { target: { value: '09:00' } })
 
     expect(container.textContent).toContain('Proposed date and time must be in the future.')
     expect(getButton(container, 'Send Request').disabled).toBe(true)
-    expect(getButtonByAriaLabel(container, 'Minute 05').disabled).toBe(true)
     expect(createPtRescheduleRequestMock).not.toHaveBeenCalled()
   })
 
-  it('submits a future selection from the custom reschedule picker using the existing payload shape', async () => {
+  it('submits a future selection from the reschedule picker using the existing payload shape', async () => {
     await act(async () => {
       root.render(<TrainerSchedulePage />)
     })
 
     await clickButton(container, 'Request Reschedule')
-    await clickButtonByAriaLabel(container, 'Select Apr 13 2099')
-    await clickButtonByAriaLabel(container, 'Hour 11')
-    await clickButtonByAriaLabel(container, 'Minute 15')
-    await clickButton(container, 'PM')
+
+    const dateInput = container.querySelector('#trainer-reschedule-date')
+    const timeInput = container.querySelector('#trainer-reschedule-time')
+
+    expect(dateInput).toBeInstanceOf(HTMLInputElement)
+    expect(timeInput).toBeInstanceOf(HTMLInputElement)
+
+    await fireEvent.change(dateInput as HTMLInputElement, { target: { value: '2099-04-13' } })
+    await fireEvent.change(timeInput as HTMLInputElement, { target: { value: '23:15' } })
+
     await clickButton(container, 'Send Request')
 
     expect(createPtRescheduleRequestMock).toHaveBeenCalledWith('session-1', {
