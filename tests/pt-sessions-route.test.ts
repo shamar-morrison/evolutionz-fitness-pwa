@@ -203,7 +203,7 @@ function createHydratedPtSessionsClient() {
         if (table === 'members') {
           return {
             select(columns: string) {
-              if (columns === 'id, name, photo_url') {
+              if (columns === 'id, name, photo_url, card_no') {
                 return {
                   in(column: string, values: string[]) {
                     expect(column).toBe('id')
@@ -215,6 +215,7 @@ function createHydratedPtSessionsClient() {
                           id: 'member-1',
                           name: 'Client One',
                           photo_url: null,
+                          card_no: 'card-1',
                         },
                       ],
                       error: null,
@@ -223,7 +224,7 @@ function createHydratedPtSessionsClient() {
                 }
               }
 
-              expect(columns).toBe('id, name')
+              expect(columns).toBe('id, name, card_no')
 
               return {
                 in(column: string, values: string[]) {
@@ -235,6 +236,32 @@ function createHydratedPtSessionsClient() {
                       {
                         id: 'member-1',
                         name: 'Client One',
+                        card_no: 'card-1',
+                      },
+                    ],
+                    error: null,
+                  })
+                },
+              }
+            },
+          }
+        }
+
+        if (table === 'cards') {
+          return {
+            select(columns: string) {
+              expect(columns).toBe('card_no, card_code')
+
+              return {
+                in(column: string, values: string[]) {
+                  expect(column).toBe('card_no')
+                  expect(values).toEqual(['card-1'])
+
+                  return Promise.resolve({
+                    data: [
+                      {
+                        card_no: 'card-1',
+                        card_code: '1234',
                       },
                     ],
                     error: null,
