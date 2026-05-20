@@ -15,6 +15,7 @@ const markPtSessionSchema = z
     requestedStatus: z.enum(['completed', 'missed', 'cancelled']).optional(),
     status: z.enum(['completed', 'missed', 'cancelled']).optional(),
     note: z.string().trim().nullable().optional(),
+    notes: z.string().trim().nullable().optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -130,12 +131,15 @@ export async function POST(
       )
     }
 
+    const noteText = normalizeOptionalNotes(input.notes ?? input.note)
+
     if (authResult.profile.role === 'admin') {
       const reviewTimestamp = new Date().toISOString()
       const { error: updateError } = await supabase
         .from('pt_sessions')
         .update({
           status: requestedStatus,
+          notes: noteText,
           updated_at: reviewTimestamp,
         })
         .eq('id', session.id)
@@ -180,7 +184,7 @@ export async function POST(
         session_id: session.id,
         requested_by: authResult.profile.id,
         requested_status: requestedStatus,
-        note: normalizeOptionalNotes(input.note),
+        note: noteText,
       })
       .select('id')
       .maybeSingle()

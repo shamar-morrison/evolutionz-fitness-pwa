@@ -561,7 +561,7 @@ describe('Trainer pages', () => {
     expect(container.textContent).not.toContain('Edit Schedule')
   })
 
-  it('opens the cancellation modal, requires a reason, and submits a pending cancellation request', async () => {
+  it('opens the cancellation modal, accepts optional note, and submits a pending cancellation request', async () => {
     await act(async () => {
       root.render(<TrainerSchedulePage />)
     })
@@ -573,11 +573,11 @@ describe('Trainer pages', () => {
 
     const submitButton = getButton(container, 'Submit')
 
-    expect(submitButton.disabled).toBe(true)
+    expect(submitButton.disabled).toBe(false)
 
     const reasonField = getTextareaByPlaceholder(
       container,
-      'Provide a reason for cancelling this session',
+      'Add a note about this session…',
     )
     await setTextareaValue(reasonField, 'Member is unwell today.')
 
@@ -587,6 +587,7 @@ describe('Trainer pages', () => {
 
     expect(markPtSessionMock).toHaveBeenCalledWith('session-1', {
       requestedStatus: 'cancelled',
+      notes: 'Member is unwell today.',
       note: 'Member is unwell today.',
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({

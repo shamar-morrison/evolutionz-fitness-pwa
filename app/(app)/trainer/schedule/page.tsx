@@ -119,17 +119,18 @@ function ScheduleContent() {
   const [pastPage, setPastPage] = useState(0)
   const [selectedAssignment, setSelectedAssignment] = useState<TrainerClient | null>(null)
   const [selectedRescheduleSession, setSelectedRescheduleSession] = useState<PtSession | null>(null)
-  const [selectedCancellationSession, setSelectedCancellationSession] = useState<PtSession | null>(
-    null,
-  )
+  const [selectedMarkSession, setSelectedMarkSession] = useState<{
+    session: PtSession
+    action: 'completed' | 'missed' | 'cancelled'
+  } | null>(null)
   const [rescheduleDateTime, setRescheduleDateTime] = useState('')
   const [rescheduleValidationMessage, setRescheduleValidationMessage] = useState<string | null>(
     null,
   )
   const [rescheduleNote, setRescheduleNote] = useState('')
-  const [cancellationReason, setCancellationReason] = useState('')
+  const [sessionNotes, setSessionNotes] = useState('')
   const [isSubmittingReschedule, setIsSubmittingReschedule] = useState(false)
-  const [isSubmittingCancellation, setIsSubmittingCancellation] = useState(false)
+  const [isSubmittingMark, setIsSubmittingMark] = useState(false)
   const [pendingActionBySessionId, setPendingActionBySessionId] = useState<
     Partial<Record<string, SessionPendingAction>>
   >({})
@@ -271,25 +272,39 @@ function ScheduleContent() {
     }
   }
 
-  const handleMarkSession = async (
-    session: PtSession,
-    requestedStatus: 'completed' | 'missed',
-  ) => {
+  const handleSubmitMark = async () => {
+    if (!selectedMarkSession) {
+      return
+    }
+
+    const { session, action } = selectedMarkSession
+    const sessionId = session.id
+    setIsSubmittingMark(true)
+
     try {
-      const result = await runSessionAction(session.id, requestedStatus, async () => {
-        const nextResult = await markPtSession(session.id, { requestedStatus })
+      const note = sessionNotes.trim()
+      const result = await runSessionAction(sessionId, action, async () => {
+        const nextResult = await markPtSession(sessionId, {
+          requestedStatus: action,
+          notes: note || null,
+          note: note || null,
+        })
         await invalidateTrainerWorkspaceQueries()
         return nextResult
       })
 
       if ('pending' in result && result.pending) {
+        setSelectedMarkSession(null)
+        setSessionNotes('')
         toast({
           title: 'Request submitted — pending admin approval.',
         })
       } else {
+        setSelectedMarkSession(null)
+        setSessionNotes('')
         toast({
           title: 'Session updated',
-          description: `The session was marked ${requestedStatus}.`,
+          description: `The session was marked ${action}.`,
         })
       }
     } catch (error) {
@@ -299,6 +314,8 @@ function ScheduleContent() {
           error instanceof Error ? error.message : 'Failed to update the session.',
         variant: 'destructive',
       })
+    } finally {
+      setIsSubmittingMark(false)
     }
   }
 
@@ -307,11 +324,6 @@ function ScheduleContent() {
     setRescheduleDateTime(formatPtSessionDateTimeInputValue(session.scheduledAt))
     setRescheduleValidationMessage(null)
     setRescheduleNote('')
-  }
-
-  const handleOpenCancellation = (session: PtSession) => {
-    setSelectedCancellationSession(session)
-    setCancellationReason('')
   }
 
   const handleSubmitReschedule = async () => {
@@ -343,52 +355,6 @@ function ScheduleContent() {
       })
     } finally {
       setIsSubmittingReschedule(false)
-    }
-  }
-
-  const handleSubmitCancellation = async () => {
-    const note = cancellationReason.trim()
-
-    if (!selectedCancellationSession || !note) {
-      return
-    }
-
-    const sessionId = selectedCancellationSession.id
-    setIsSubmittingCancellation(true)
-
-    try {
-      const result = await runSessionAction(sessionId, 'cancelled', async () => {
-        const nextResult = await markPtSession(sessionId, {
-          requestedStatus: 'cancelled',
-          note,
-        })
-        await invalidateTrainerWorkspaceQueries()
-        return nextResult
-      })
-
-      if ('pending' in result && result.pending) {
-        setSelectedCancellationSession(null)
-        setCancellationReason('')
-        toast({
-          title: 'Request submitted — pending admin approval.',
-        })
-      } else {
-        setSelectedCancellationSession(null)
-        setCancellationReason('')
-        toast({
-          title: 'Session updated',
-          description: 'The session was marked cancelled.',
-        })
-      }
-    } catch (error) {
-      toast({
-        title: 'Unable to mark session',
-        description:
-          error instanceof Error ? error.message : 'Failed to update the session.',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsSubmittingCancellation(false)
     }
   }
 
@@ -564,19 +530,34 @@ function ScheduleContent() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
                                 disabled={isSessionPending}
-                                onClick={() => void handleMarkSession(session, 'completed')}
+                                onClick={() =>
+                                  setSelectedMarkSession({
+                                    session,
+                                    action: 'completed',
+                                  })
+                                }
                               >
                                 Completed
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 disabled={isSessionPending}
-                                onClick={() => void handleMarkSession(session, 'missed')}
+                                onClick={() =>
+                                  setSelectedMarkSession({
+                                    session,
+                                    action: 'missed',
+                                  })
+                                }
                               >
                                 Missed
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 disabled={isSessionPending}
-                                onClick={() => handleOpenCancellation(session)}
+                                onClick={() =>
+                                  setSelectedMarkSession({
+                                    session,
+                                    action: 'cancelled',
+                                  })
+                                }
                               >
                                 Cancelled
                               </DropdownMenuItem>
@@ -692,39 +673,50 @@ function ScheduleContent() {
       </Dialog>
 
       <Dialog
-        open={Boolean(selectedCancellationSession)}
+        open={Boolean(selectedMarkSession)}
         onOpenChange={(open) => {
           if (!open) {
-            setSelectedCancellationSession(null)
+            setSelectedMarkSession(null)
+            setSessionNotes('')
           }
         }}
       >
-        <DialogContent isLoading={isSubmittingCancellation}>
+        <DialogContent isLoading={isSubmittingMark}>
           <DialogHeader>
-            <DialogTitle>Cancel Session</DialogTitle>
+            <DialogTitle>
+              {selectedMarkSession?.action === 'completed'
+                ? 'Complete Session'
+                : selectedMarkSession?.action === 'missed'
+                  ? 'Mark Session as Missed'
+                  : 'Cancel Session'}
+            </DialogTitle>
             <DialogDescription>
-              Submit a cancellation request for admin approval.
+              {selectedMarkSession?.action === 'completed'
+                ? 'Confirm that this PT session has been successfully completed.'
+                : selectedMarkSession?.action === 'missed'
+                  ? 'Confirm that the client missed this scheduled session.'
+                  : 'Submit a cancellation request for admin approval.'}
             </DialogDescription>
           </DialogHeader>
 
-          {selectedCancellationSession ? (
+          {selectedMarkSession ? (
             <div className="space-y-4">
               <ReadOnlyField
                 label="Member"
-                value={selectedCancellationSession.memberName ?? 'Unknown member'}
+                value={selectedMarkSession.session.memberName ?? 'Unknown member'}
               />
               <ReadOnlyField
                 label="Session"
-                value={formatPtSessionDateTime(selectedCancellationSession.scheduledAt)}
+                value={formatPtSessionDateTime(selectedMarkSession.session.scheduledAt)}
               />
 
               <div className="space-y-2">
-                <Label htmlFor="trainer-cancellation-reason">Reason</Label>
+                <Label htmlFor="trainer-session-notes">Notes (optional)</Label>
                 <Textarea
-                  id="trainer-cancellation-reason"
-                  value={cancellationReason}
-                  onChange={(event) => setCancellationReason(event.target.value)}
-                  placeholder="Provide a reason for cancelling this session"
+                  id="trainer-session-notes"
+                  value={sessionNotes}
+                  onChange={(event) => setSessionNotes(event.target.value)}
+                  placeholder="Add a note about this session…"
                 />
               </div>
             </div>
@@ -734,18 +726,21 @@ function ScheduleContent() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setSelectedCancellationSession(null)}
-              disabled={isSubmittingCancellation}
+              onClick={() => {
+                setSelectedMarkSession(null)
+                setSessionNotes('')
+              }}
+              disabled={isSubmittingMark}
             >
               Cancel
             </Button>
             <Button
               type="button"
-              onClick={() => void handleSubmitCancellation()}
-              disabled={isSubmittingCancellation || !cancellationReason.trim()}
-              loading={isSubmittingCancellation}
+              onClick={() => void handleSubmitMark()}
+              disabled={isSubmittingMark}
+              loading={isSubmittingMark}
             >
-              {isSubmittingCancellation ? 'Submitting...' : 'Submit'}
+              {isSubmittingMark ? 'Submitting...' : 'Submit'}
             </Button>
           </DialogFooter>
         </DialogContent>

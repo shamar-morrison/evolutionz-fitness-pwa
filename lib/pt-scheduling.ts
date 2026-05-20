@@ -307,11 +307,13 @@ export type MarkPtSessionData =
       requestedStatus: SessionUpdateRequestedStatus
       status?: SessionUpdateRequestedStatus
       note?: string | null
+      notes?: string | null
     }
   | {
       status: SessionUpdateRequestedStatus
       requestedStatus?: SessionUpdateRequestedStatus
       note?: string | null
+      notes?: string | null
     }
 
 export type ApprovalRequestFilters = {

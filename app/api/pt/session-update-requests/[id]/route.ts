@@ -75,6 +75,7 @@ export async function PATCH(
         .from('pt_sessions')
         .update({
           status: existingRequest.requested_status,
+          notes: existingRequest.note,
           updated_at: reviewTimestamp,
         })
         .eq('id', session.id)
