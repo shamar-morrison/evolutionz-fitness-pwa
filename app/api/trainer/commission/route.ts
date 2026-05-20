@@ -48,8 +48,13 @@ export async function GET() {
       assignments: mappedAssignments,
     })
   } catch (error) {
+    if (error instanceof Error) {
+      console.error(error)
+    } else {
+      console.error('Unexpected server error while loading trainer commission.', error)
+    }
     return createErrorResponse(
-      error instanceof Error ? error.message : 'Unexpected server error while loading trainer commission.',
+      'Unexpected server error while loading trainer commission.',
       500,
     )
   }

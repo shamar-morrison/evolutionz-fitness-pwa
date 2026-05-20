@@ -30,12 +30,11 @@ vi.mock('@/lib/pt-scheduling-server', () => ({
 }))
 
 import { GET } from '@/app/api/trainer/commission/route'
+import { TRAINER_PAYOUT_PER_CLIENT_JMD } from '@/lib/pt-scheduling'
 
 describe('GET /api/trainer/commission', () => {
   afterEach(() => {
     vi.restoreAllMocks()
-    getSupabaseAdminClientMock.mockReset()
-    readTrainerClientsMock.mockReset()
     resetServerAuthMocks()
   })
 
@@ -83,7 +82,7 @@ describe('GET /api/trainer/commission', () => {
         {
           id: 'assignment-2',
           memberName: 'Jane Smith',
-          commissionRate: 10500,
+          commissionRate: TRAINER_PAYOUT_PER_CLIENT_JMD,
         },
       ],
     })

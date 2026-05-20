@@ -50,7 +50,7 @@ type PtAssignmentDialogProps = {
 type FormState = {
   trainerId: string
   ptFee: string
-  commissionOverride: string
+  commissionOverride: string | null
   notes: string
 } & AssignmentScheduleFormState
 
@@ -60,7 +60,7 @@ function createInitialFormState(assignment?: TrainerClient | null): FormState {
     ...buildAssignmentScheduleFormState(assignment),
     ptFee: assignment ? (assignment.ptFee === null ? '' : String(assignment.ptFee)) : '',
     commissionOverride: assignment
-      ? (assignment.commissionOverride === null || assignment.commissionOverride === undefined ? String(TRAINER_PAYOUT_PER_CLIENT_JMD) : String(assignment.commissionOverride))
+      ? (assignment.commissionOverride === null || assignment.commissionOverride === undefined ? null : String(assignment.commissionOverride))
       : String(TRAINER_PAYOUT_PER_CLIENT_JMD),
     notes: assignment?.notes ?? '',
   }
@@ -73,7 +73,7 @@ function normalizeFormState(formState: FormState) {
     trainerId: formState.trainerId,
     ...scheduleForm,
     ptFee: formState.ptFee.trim(),
-    commissionOverride: formState.commissionOverride.trim(),
+    commissionOverride: formState.commissionOverride === null ? null : formState.commissionOverride.trim(),
     notes: formState.notes.trim(),
   }
 }
@@ -185,7 +185,7 @@ export function PtAssignmentDialog({
       ptFee = parsedPtFee
     }
 
-    const normalizedCommissionOverride = formData.commissionOverride.trim()
+    const normalizedCommissionOverride = formData.commissionOverride === null ? '' : formData.commissionOverride.trim()
     let commissionOverride: number | null = null
 
     if (normalizedCommissionOverride !== '') {
@@ -355,7 +355,7 @@ export function PtAssignmentDialog({
               type="number"
               min={0}
               step={1}
-              value={formData.commissionOverride}
+              value={formData.commissionOverride ?? ''}
               onChange={(event) =>
                 setFormData((current) => ({
                   ...current,
