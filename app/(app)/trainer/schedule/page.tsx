@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { EllipsisVertical } from 'lucide-react'
 import { MemberAvatar } from '@/components/member-avatar'
 import { PaginationControls } from '@/components/pagination-controls'
-import { RescheduleDateTimePicker } from '@/components/reschedule-date-time-picker'
+import { Input } from '@/components/ui/input'
 import { StaffOnly } from '@/components/staff-only'
 import { TrainerAssignmentScheduleDialog } from '@/components/trainer-assignment-schedule-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -46,6 +46,7 @@ import {
   markPtSession,
   type PtSession,
   type TrainerClient,
+  JAMAICA_OFFSET,
 } from '@/lib/pt-scheduling'
 import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
@@ -67,7 +68,7 @@ function sortDescending(left: PtSession, right: PtSession) {
 }
 
 function getTodayDateValue() {
-  return getJamaicaDateValue(new Date().toISOString())
+  return getJamaicaDateValue(new Date().toISOString()) ?? ''
 }
 
 function getEmptyStateLabel(tab: TrainerScheduleTab) {
@@ -123,11 +124,24 @@ function ScheduleContent() {
     session: PtSession
     action: 'completed' | 'missed' | 'cancelled'
   } | null>(null)
-  const [rescheduleDateTime, setRescheduleDateTime] = useState('')
-  const [rescheduleValidationMessage, setRescheduleValidationMessage] = useState<string | null>(
-    null,
-  )
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [rescheduleTime, setRescheduleTime] = useState('')
   const [rescheduleNote, setRescheduleNote] = useState('')
+  const rescheduleValidationMessage = useMemo(() => {
+    if (!rescheduleDate || !rescheduleTime) {
+      return 'Select a future date and time.'
+    }
+
+    const proposedTimeMs = new Date(`${rescheduleDate}T${rescheduleTime}${JAMAICA_OFFSET}`).getTime()
+
+    if (Number.isNaN(proposedTimeMs)) {
+      return 'Proposed date and time must be valid.'
+    }
+
+    return proposedTimeMs > Date.now()
+      ? null
+      : 'Proposed date and time must be in the future.'
+  }, [rescheduleDate, rescheduleTime])
   const [sessionNotes, setSessionNotes] = useState('')
   const [isSubmittingReschedule, setIsSubmittingReschedule] = useState(false)
   const [isSubmittingMark, setIsSubmittingMark] = useState(false)
@@ -321,13 +335,15 @@ function ScheduleContent() {
 
   const handleOpenReschedule = (session: PtSession) => {
     setSelectedRescheduleSession(session)
-    setRescheduleDateTime(formatPtSessionDateTimeInputValue(session.scheduledAt))
-    setRescheduleValidationMessage(null)
+    const initialDateTime = formatPtSessionDateTimeInputValue(session.scheduledAt)
+    const [d = '', t = ''] = initialDateTime.split('T')
+    setRescheduleDate(d)
+    setRescheduleTime(t)
     setRescheduleNote('')
   }
 
   const handleSubmitReschedule = async () => {
-    if (!selectedRescheduleSession || !rescheduleDateTime || rescheduleValidationMessage) {
+    if (!selectedRescheduleSession || !rescheduleDate || !rescheduleTime || rescheduleValidationMessage) {
       return
     }
 
@@ -335,9 +351,10 @@ function ScheduleContent() {
     setIsSubmittingReschedule(true)
 
     try {
+      const proposedAt = `${rescheduleDate}T${rescheduleTime}`
       await runSessionAction(sessionId, 'reschedule', async () => {
         await createPtRescheduleRequest(sessionId, {
-          proposedAt: rescheduleDateTime,
+          proposedAt,
           note: rescheduleNote.trim() || null,
         })
         await invalidateTrainerWorkspaceQueries()
@@ -611,7 +628,6 @@ function ScheduleContent() {
         onOpenChange={(open) => {
           if (!open) {
             setSelectedRescheduleSession(null)
-            setRescheduleValidationMessage(null)
           }
         }}
       >
@@ -625,16 +641,33 @@ function ScheduleContent() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="trainer-reschedule-at">Proposed time</Label>
-              <RescheduleDateTimePicker
-                key={selectedRescheduleSession?.id ?? 'trainer-reschedule'}
-                id="trainer-reschedule-at"
-                value={rescheduleDateTime}
-                onValueChange={setRescheduleDateTime}
-                onValidationChange={setRescheduleValidationMessage}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="trainer-reschedule-date">Date</Label>
+                <Input
+                  id="trainer-reschedule-date"
+                  type="date"
+                  value={rescheduleDate}
+                  min={getTodayDateValue()}
+                  onChange={(event) => setRescheduleDate(event.target.value)}
+                  disabled={isSubmittingReschedule}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="trainer-reschedule-time">Time</Label>
+                <Input
+                  id="trainer-reschedule-time"
+                  type="time"
+                  value={rescheduleTime}
+                  onChange={(event) => setRescheduleTime(event.target.value)}
+                  disabled={isSubmittingReschedule}
+                />
+              </div>
             </div>
+
+            {rescheduleValidationMessage ? (
+              <p className="text-sm text-destructive">{rescheduleValidationMessage}</p>
+            ) : null}
 
             <div className="space-y-2">
               <Label htmlFor="trainer-reschedule-note">Note</Label>
@@ -661,7 +694,8 @@ function ScheduleContent() {
               onClick={() => void handleSubmitReschedule()}
               disabled={
                 isSubmittingReschedule ||
-                !rescheduleDateTime ||
+                !rescheduleDate ||
+                !rescheduleTime ||
                 Boolean(rescheduleValidationMessage)
               }
               loading={isSubmittingReschedule}
