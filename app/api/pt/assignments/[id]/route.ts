@@ -23,6 +23,7 @@ const updateAssignmentSchema = z
   .object({
     status: z.enum(PT_ASSIGNMENT_STATUSES).optional(),
     ptFee: z.number().int().min(0, 'PT fee must be zero or greater.').nullable().optional(),
+    commissionOverride: z.number().int().min(0, 'Commission override must be zero or greater.').nullable().optional(),
     sessionsPerWeek: z.number().int().min(1).max(MAX_PT_SESSIONS_PER_WEEK).optional(),
     scheduledSessions: z
       .array(
@@ -170,6 +171,7 @@ export async function PATCH(
       sessionTime,
     }))
     const hasPtFeeUpdate = Object.prototype.hasOwnProperty.call(input, 'ptFee')
+    const hasCommissionOverrideUpdate = Object.prototype.hasOwnProperty.call(input, 'commissionOverride')
     const nextSessionsPerWeek = input.sessionsPerWeek ?? existingAssignmentRow.sessions_per_week
     const nextScheduledSessions = input.scheduledSessions ?? existingScheduledSessions
     const nextTrainingPlan =
@@ -205,13 +207,13 @@ export async function PATCH(
 
     if (nextStatus === 'active') {
       const { data: activeAssignment, error: activeAssignmentError } = await supabase
-        .from('trainer_clients')
-        .select('id')
-        .eq('member_id', existingAssignmentRow.member_id)
-        .eq('status', 'active')
-        .neq('id', id)
-        .limit(1)
-        .maybeSingle()
+          .from('trainer_clients')
+          .select('id')
+          .eq('member_id', existingAssignmentRow.member_id)
+          .eq('status', 'active')
+          .neq('id', id)
+          .limit(1)
+          .maybeSingle()
 
       if (activeAssignmentError) {
         throw new Error(`Failed to validate active PT assignments: ${activeAssignmentError.message}`)
@@ -238,6 +240,10 @@ export async function PATCH(
       updateValues.pt_fee = input.ptFee ?? null
     }
 
+    if (hasCommissionOverrideUpdate) {
+      updateValues.commission_override = input.commissionOverride ?? null
+    }
+
     if (typeof input.sessionsPerWeek === 'number' && !shouldReplaceSchedule) {
       updateValues.sessions_per_week = input.sessionsPerWeek
     }
@@ -255,6 +261,7 @@ export async function PATCH(
         updates: {
           ...(input.status ? { status: input.status } : {}),
           ...(hasPtFeeUpdate ? { ptFee: input.ptFee ?? null } : {}),
+          ...(hasCommissionOverrideUpdate ? { commissionOverride: input.commissionOverride ?? null } : {}),
           ...(typeof normalizedNotes !== 'undefined' ? { notes: normalizedNotes } : {}),
         },
       })

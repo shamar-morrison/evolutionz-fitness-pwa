@@ -29,6 +29,7 @@ import {
   createPtAssignment,
   DEFAULT_PT_SESSION_TIME,
   updatePtAssignment,
+  TRAINER_PAYOUT_PER_CLIENT_JMD,
   type TrainerClient,
 } from '@/lib/pt-scheduling'
 import type { Profile } from '@/types'
@@ -49,6 +50,7 @@ type PtAssignmentDialogProps = {
 type FormState = {
   trainerId: string
   ptFee: string
+  commissionOverride: string
   notes: string
 } & AssignmentScheduleFormState
 
@@ -57,6 +59,9 @@ function createInitialFormState(assignment?: TrainerClient | null): FormState {
     trainerId: assignment?.trainerId ?? '',
     ...buildAssignmentScheduleFormState(assignment),
     ptFee: assignment ? (assignment.ptFee === null ? '' : String(assignment.ptFee)) : '',
+    commissionOverride: assignment
+      ? (assignment.commissionOverride === null || assignment.commissionOverride === undefined ? String(TRAINER_PAYOUT_PER_CLIENT_JMD) : String(assignment.commissionOverride))
+      : String(TRAINER_PAYOUT_PER_CLIENT_JMD),
     notes: assignment?.notes ?? '',
   }
 }
@@ -68,6 +73,7 @@ function normalizeFormState(formState: FormState) {
     trainerId: formState.trainerId,
     ...scheduleForm,
     ptFee: formState.ptFee.trim(),
+    commissionOverride: formState.commissionOverride.trim(),
     notes: formState.notes.trim(),
   }
 }
@@ -179,11 +185,30 @@ export function PtAssignmentDialog({
       ptFee = parsedPtFee
     }
 
+    const normalizedCommissionOverride = formData.commissionOverride.trim()
+    let commissionOverride: number | null = null
+
+    if (normalizedCommissionOverride !== '') {
+      const parsedCommissionOverride = Number(normalizedCommissionOverride)
+
+      if (!Number.isInteger(parsedCommissionOverride) || parsedCommissionOverride < 0) {
+        toast({
+          title: 'Invalid trainer commission',
+          description: 'Enter a whole-number trainer commission in JMD.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      commissionOverride = parsedCommissionOverride
+    }
+
     setIsSubmitting(true)
 
     try {
       const assignmentPayload = {
         ptFee,
+        commissionOverride,
         sessionsPerWeek: scheduleFormPayload.sessionsPerWeek,
         scheduledSessions: scheduleFormPayload.scheduledSessions,
         trainingPlan: scheduleFormPayload.trainingPlan,
@@ -317,6 +342,24 @@ export function PtAssignmentDialog({
                 setFormData((current) => ({
                   ...current,
                   ptFee: event.target.value,
+                }))
+              }
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor={`${mode}-commission-override`}>Trainer Commission (JMD)</Label>
+            <Input
+              id={`${mode}-commission-override`}
+              type="number"
+              min={0}
+              step={1}
+              value={formData.commissionOverride}
+              onChange={(event) =>
+                setFormData((current) => ({
+                  ...current,
+                  commissionOverride: event.target.value,
                 }))
               }
               disabled={isSubmitting}

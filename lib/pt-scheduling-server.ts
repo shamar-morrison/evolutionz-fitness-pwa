@@ -3,6 +3,7 @@ import {
   type MemberPhotoStorageClient,
 } from '@/lib/member-photo-storage'
 import { normalizeTimeInputValue } from '@/lib/member-access-time'
+import { getCleanMemberName } from '@/lib/member-name'
 import {
   type ApprovalRequestStatus,
   buildAssignmentSchedule,
@@ -33,7 +34,7 @@ import {
 } from '@/lib/pt-scheduling'
 
 const TRAINER_CLIENT_SELECT =
-  'id, trainer_id, member_id, status, pt_fee, sessions_per_week, scheduled_days, session_time, notes, created_at, updated_at'
+  'id, trainer_id, member_id, status, pt_fee, commission_override, sessions_per_week, scheduled_days, session_time, notes, created_at, updated_at'
 const PT_PAYMENT_ASSIGNMENT_SELECT = 'id, trainer_id, member_id, pt_fee, created_at'
 const TRAINING_PLAN_DAY_SELECT =
   'id, assignment_id, day_of_week, session_time, training_type_name, created_at, updated_at'
@@ -58,6 +59,7 @@ type TrainerClientRow = {
   member_id: string
   status: TrainerClientStatus
   pt_fee: number | null
+  commission_override: number | null
   sessions_per_week: number
   scheduled_days: string[] | null
   session_time: string
@@ -136,12 +138,14 @@ type TrainerSummaryRow = {
 type MemberNameRow = {
   id: string
   name: string
+  card_no: string | null
 }
 
 type MemberSummaryRow = {
   id: string
   name: string
   photo_url: string | null
+  card_no: string | null
 }
 
 type RequestSessionRow = {
@@ -300,6 +304,7 @@ export async function updatePtAssignmentWithSchedule(
     updates: {
       status?: TrainerClientStatus
       ptFee?: number | null
+      commissionOverride?: number | null
       notes?: string | null
     }
   },
@@ -316,6 +321,10 @@ export async function updatePtAssignmentWithSchedule(
 
   if ('ptFee' in params.updates) {
     rpcUpdates.ptFee = params.updates.ptFee ?? null
+  }
+
+  if ('commissionOverride' in params.updates) {
+    rpcUpdates.commissionOverride = params.updates.commissionOverride ?? null
   }
 
   if ('notes' in params.updates) {
@@ -397,7 +406,7 @@ async function loadMemberSummaries(
 
   const { data, error } = await supabase
     .from('members')
-    .select('id, name, photo_url')
+    .select('id, name, photo_url, card_no')
     .in('id', ids)
 
   if (error) {
@@ -405,16 +414,45 @@ async function loadMemberSummaries(
   }
 
   const members = (data ?? []) as MemberSummaryRow[]
+
+  // Load card code mapping
+  const cardNos = members
+    .map((member) => member.card_no ? member.card_no.trim() : null)
+    .filter((cardNo): cardNo is string => Boolean(cardNo))
+
+  const cardCodeByCardNo = new Map<string, string>()
+  if (cardNos.length > 0) {
+    const { data: cards, error: cardsError } = await supabase
+      .from('cards')
+      .select('card_no, card_code')
+      .in('card_no', cardNos)
+    if (!cardsError && cards) {
+      for (const card of cards) {
+        const cardNo = typeof card.card_no === 'string' ? card.card_no.trim() : ''
+        const cardCode = typeof card.card_code === 'string' ? card.card_code.trim() : ''
+        if (cardNo && cardCode) {
+          cardCodeByCardNo.set(cardNo, cardCode)
+        }
+      }
+    }
+  }
+
   const hydratedMembers = members.map((member) => {
+    const cardNo = member.card_no ? member.card_no.trim() : null
+    const cardCode = cardNo ? cardCodeByCardNo.get(cardNo) : null
+    const cleanName = getCleanMemberName(member.name, cardCode)
+
     if (!member.photo_url) {
       return {
         ...member,
+        name: cleanName,
         photo_url: null,
       }
     }
 
     return {
       ...member,
+      name: cleanName,
       photo_url: getMemberPhotoPublicUrl(supabase, member.photo_url),
     }
   })
@@ -432,14 +470,49 @@ async function loadMemberNames(
 
   const { data, error } = await supabase
     .from('members')
-    .select('id, name')
+    .select('id, name, card_no')
     .in('id', ids)
 
   if (error) {
     throw new Error(`Failed to read PT member names: ${error.message}`)
   }
 
-  return new Map(((data ?? []) as MemberNameRow[]).map((member) => [member.id, member]))
+  const members = (data ?? []) as MemberNameRow[]
+
+  // Load card code mapping
+  const cardNos = members
+    .map((member) => member.card_no ? member.card_no.trim() : null)
+    .filter((cardNo): cardNo is string => Boolean(cardNo))
+
+  const cardCodeByCardNo = new Map<string, string>()
+  if (cardNos.length > 0) {
+    const { data: cards, error: cardsError } = await supabase
+      .from('cards')
+      .select('card_no, card_code')
+      .in('card_no', cardNos)
+    if (!cardsError && cards) {
+      for (const card of cards) {
+        const cardNo = typeof card.card_no === 'string' ? card.card_no.trim() : ''
+        const cardCode = typeof card.card_code === 'string' ? card.card_code.trim() : ''
+        if (cardNo && cardCode) {
+          cardCodeByCardNo.set(cardNo, cardCode)
+        }
+      }
+    }
+  }
+
+  const hydratedMembers = members.map((member) => {
+    const cardNo = member.card_no ? member.card_no.trim() : null
+    const cardCode = cardNo ? cardCodeByCardNo.get(cardNo) : null
+    const cleanName = getCleanMemberName(member.name, cardCode)
+
+    return {
+      ...member,
+      name: cleanName,
+    }
+  })
+
+  return new Map(hydratedMembers.map((member) => [member.id, member]))
 }
 
 async function hydrateTrainerClients(
@@ -471,6 +544,7 @@ async function hydrateTrainerClients(
         memberId: row.member_id,
         status: row.status,
         ptFee: row.pt_fee,
+        commissionOverride: row.commission_override,
         sessionsPerWeek: row.sessions_per_week,
         scheduledSessions,
         scheduledDays: scheduledSessions.map((entry) => entry.day),
