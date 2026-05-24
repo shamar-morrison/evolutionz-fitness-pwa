@@ -70,7 +70,6 @@ export type MedicalAssignmentFilters = {
 export type CreateMedicalAssignmentData = {
   memberId: string
   staffId: string
-  followUpDate?: string | null
 }
 
 export type AddMedicalVisitNoteData = {
@@ -182,7 +181,6 @@ export async function createMedicalAssignment(
     body: JSON.stringify({
       memberId: data.memberId,
       staffId: data.staffId,
-      followUpDate: data.followUpDate ?? null,
     }),
   })
   const responseBody = response.ok

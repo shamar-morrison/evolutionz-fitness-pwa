@@ -347,7 +347,59 @@ describe('medical assignments route', () => {
       archivedAt: null,
       created_at: '2026-05-23T00:00:00.000Z',
     })
-    readMedicalAssignmentByIdMock.mockResolvedValue(buildAssignment())
+    readMedicalAssignmentByIdMock.mockResolvedValue(buildAssignment({ followUpDate: null }))
+
+    const response = await POST(
+      new Request('http://localhost/api/medical/assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: MEMBER_ID,
+          staffId: MEDICAL_ID,
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(201)
+    expect(insertValues).toEqual([
+      {
+        member_id: MEMBER_ID,
+        staff_id: MEDICAL_ID,
+        status: 'active',
+        follow_up_date: null,
+        created_by: ADMIN_ID,
+      },
+    ])
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      assignment: buildAssignment({ followUpDate: null }),
+    })
+  })
+
+  it('ignores stale follow-up dates in POST requests', async () => {
+    const { client, insertValues } = createPostClient()
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      user: { id: ADMIN_ID },
+      profile: { id: ADMIN_ID, role: 'admin', titles: ['Owner'] },
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: MEDICAL_ID,
+      name: 'Morgan Medical',
+      email: 'medical@evolutionzfitness.com',
+      role: 'staff',
+      titles: ['Medical/Consultant'],
+      isSuspended: false,
+      phone: null,
+      gender: null,
+      remark: null,
+      specialties: [],
+      photoUrl: null,
+      archivedAt: null,
+      created_at: '2026-05-23T00:00:00.000Z',
+    })
+    readMedicalAssignmentByIdMock.mockResolvedValue(buildAssignment({ followUpDate: null }))
 
     const response = await POST(
       new Request('http://localhost/api/medical/assignments', {
@@ -367,13 +419,13 @@ describe('medical assignments route', () => {
         member_id: MEMBER_ID,
         staff_id: MEDICAL_ID,
         status: 'active',
-        follow_up_date: '2026-05-30',
+        follow_up_date: null,
         created_by: ADMIN_ID,
       },
     ])
     await expect(response.json()).resolves.toEqual({
       ok: true,
-      assignment: buildAssignment(),
+      assignment: buildAssignment({ followUpDate: null }),
     })
   })
 

@@ -10,12 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useMedicalAssignments } from '@/hooks/use-medical'
@@ -59,7 +57,6 @@ export function MemberMedicalSection({ memberId }: MemberMedicalSectionProps) {
   const { staff, isLoading: isStaffLoading } = useStaff()
   const [showAssignDialog, setShowAssignDialog] = useState(false)
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null)
-  const [followUpDate, setFollowUpDate] = useState('')
   const [assignmentToClose, setAssignmentToClose] = useState<{
     id: string
     staffName: string
@@ -89,7 +86,6 @@ export function MemberMedicalSection({ memberId }: MemberMedicalSectionProps) {
 
   const resetAssignDialog = () => {
     setSelectedStaffId(null)
-    setFollowUpDate('')
     setIsSubmitting(false)
     setShowAssignDialog(false)
   }
@@ -110,7 +106,6 @@ export function MemberMedicalSection({ memberId }: MemberMedicalSectionProps) {
       const assignment = await createMedicalAssignment({
         memberId,
         staffId: selectedStaffId,
-        followUpDate: followUpDate || null,
       })
       await invalidateMedicalQueries(queryClient, assignment.id)
       resetAssignDialog()
@@ -274,9 +269,6 @@ export function MemberMedicalSection({ memberId }: MemberMedicalSectionProps) {
         <DialogContent className="sm:max-w-[520px]" isLoading={isSubmitting}>
           <DialogHeader>
             <DialogTitle>Assign to Medical Staff</DialogTitle>
-            <DialogDescription>
-              Choose a Medical/Consultant staff member and optionally set a follow-up date.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4">
@@ -290,17 +282,6 @@ export function MemberMedicalSection({ memberId }: MemberMedicalSectionProps) {
                 searchPlaceholder="Search staff"
                 emptyMessage="No medical staff available."
                 disabled={isSubmitting || medicalStaffOptions.length === 0}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="medical-follow-up-date">Follow-up Date</Label>
-              <Input
-                id="medical-follow-up-date"
-                type="date"
-                value={followUpDate}
-                onChange={(event) => setFollowUpDate(event.target.value)}
-                disabled={isSubmitting}
               />
             </div>
           </div>

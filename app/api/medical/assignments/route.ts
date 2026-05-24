@@ -20,14 +20,7 @@ const createAssignmentSchema = z
   .object({
     memberId: z.string().uuid(),
     staffId: z.string().uuid(),
-    followUpDate: z
-      .string()
-      .trim()
-      .regex(/^\d{4}-\d{2}-\d{2}$/u, 'Follow-up date must use YYYY-MM-DD format.')
-      .nullable()
-      .optional(),
   })
-  .strict()
 
 function createErrorResponse(error: string, status: number) {
   return NextResponse.json(
@@ -147,7 +140,7 @@ export async function POST(request: Request) {
         member_id: input.memberId,
         staff_id: input.staffId,
         status: 'active',
-        follow_up_date: input.followUpDate ?? null,
+        follow_up_date: null,
         created_by: authResult.profile.id,
       })
       .select('id')
