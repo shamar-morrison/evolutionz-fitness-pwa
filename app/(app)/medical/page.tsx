@@ -173,7 +173,7 @@ export default function MedicalWorkspacePage() {
           ) : (
             completedAssignments.map((assignment) => (
               <Card key={assignment.id}>
-                <CardContent className="flex flex-col gap-3 p-6 lg:flex-row lg:items-center lg:justify-between">
+                <CardContent className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-1">
                     <p className="font-medium">{assignment.memberName}</p>
                     {isAdmin ? (
