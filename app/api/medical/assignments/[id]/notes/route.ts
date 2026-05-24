@@ -3,6 +3,7 @@ import { z } from 'zod'
 import {
   canAccessMedicalAssignment,
   MEDICAL_VISIT_NOTE_SELECT,
+  mapMedicalVisitNoteRecord,
   readAuthorizedMedicalProfile,
   readMedicalAssignmentRowById,
   readMedicalVisitNotes,
@@ -163,8 +164,9 @@ export async function POST(
       }
     }
 
-    const notes = await readMedicalVisitNotes(supabase, id)
-    const note = notes[0] ?? null
+    const note = data
+      ? mapMedicalVisitNoteRecord(data as Parameters<typeof mapMedicalVisitNoteRecord>[0])
+      : null
 
     if (!note) {
       throw new Error('Failed to load the created visit note.')
@@ -182,7 +184,7 @@ export async function POST(
       return createErrorResponse('Invalid JSON body.', 400)
     }
 
-    if (error instanceof Error && error.name === 'ZodError') {
+    if (error instanceof z.ZodError) {
       return createErrorResponse(error.message, 400)
     }
 

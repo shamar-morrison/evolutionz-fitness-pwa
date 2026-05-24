@@ -69,15 +69,25 @@ export async function PATCH(
       )
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('medical_assignments')
       .update({
         follow_up_date: input.followUpDate,
       })
       .eq('id', id)
+      .eq('status', 'active')
+      .select('id')
+      .maybeSingle()
 
     if (error) {
       throw new Error(`Failed to update the follow-up date: ${error.message}`)
+    }
+
+    if (!data?.id) {
+      return createErrorResponse(
+        'Medical assignment changed before the follow-up date could be updated.',
+        409,
+      )
     }
 
     const assignment = await readMedicalAssignmentById(supabase, id)

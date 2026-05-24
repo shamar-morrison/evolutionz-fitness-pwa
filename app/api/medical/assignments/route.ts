@@ -32,6 +32,18 @@ function createErrorResponse(error: string, status: number) {
   )
 }
 
+function isActiveMedicalAssignmentConflict(error: {
+  code?: string | null
+  details?: string | null
+  message?: string | null
+}) {
+  return (
+    error.code === '23505' ||
+    error.message?.includes('medical_assignments_member_staff_active_idx') === true ||
+    error.details?.includes('medical_assignments_member_staff_active_idx') === true
+  )
+}
+
 export async function GET(request: Request) {
   try {
     const authResult = await readAuthorizedMedicalProfile()
@@ -147,6 +159,13 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (error) {
+      if (isActiveMedicalAssignmentConflict(error)) {
+        return createErrorResponse(
+          'This staff member already has an active medical assignment for the selected client.',
+          400,
+        )
+      }
+
       throw new Error(`Failed to create the medical assignment: ${error.message}`)
     }
 

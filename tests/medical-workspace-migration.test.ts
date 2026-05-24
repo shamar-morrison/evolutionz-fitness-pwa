@@ -2,9 +2,13 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const migrationPath = resolve(
+const workspaceMigrationPath = resolve(
   process.cwd(),
   'supabase/migrations/20260523_add_medical_workspace.sql',
+)
+const completionConstraintMigrationPath = resolve(
+  process.cwd(),
+  'supabase/migrations/20260524_add_medical_assignment_completion_consistency.sql',
 )
 
 function normalizeSql(sql: string) {
@@ -13,7 +17,7 @@ function normalizeSql(sql: string) {
 
 describe('medical workspace migration', () => {
   it('renames the legacy Medical title and creates the new tables', () => {
-    const normalizedSql = normalizeSql(readFileSync(migrationPath, 'utf8'))
+    const normalizedSql = normalizeSql(readFileSync(workspaceMigrationPath, 'utf8'))
 
     expect(normalizedSql).toContain("when title_value.title = 'medical' then 'medical/consultant'")
     expect(normalizedSql).toContain('create table public.medical_assignments')
@@ -23,7 +27,7 @@ describe('medical workspace migration', () => {
   })
 
   it('adds indexes, RLS policies, and updated_at triggers for medical tables', () => {
-    const normalizedSql = normalizeSql(readFileSync(migrationPath, 'utf8'))
+    const normalizedSql = normalizeSql(readFileSync(workspaceMigrationPath, 'utf8'))
 
     expect(normalizedSql).toContain('create unique index medical_assignments_member_staff_active_idx')
     expect(normalizedSql).toContain('create index medical_assignments_member_status_idx')
@@ -39,5 +43,19 @@ describe('medical workspace migration', () => {
     expect(normalizedSql).toContain('create policy "medical staff can insert own visit notes"')
     expect(normalizedSql).toContain('create trigger set_updated_at before update on public.medical_assignments')
     expect(normalizedSql).toContain('create trigger set_updated_at before update on public.medical_visit_notes')
+  })
+
+  it('adds the completed assignment consistency check in a follow-up migration', () => {
+    const normalizedSql = normalizeSql(readFileSync(completionConstraintMigrationPath, 'utf8'))
+
+    expect(normalizedSql).toContain(
+      'alter table public.medical_assignments add constraint assignments_completed_consistency check',
+    )
+    expect(normalizedSql).toContain(
+      "(status = 'completed' and completed_at is not null and completed_by is not null)",
+    )
+    expect(normalizedSql).toContain(
+      "(status <> 'completed' and completed_at is null and completed_by is null)",
+    )
   })
 })

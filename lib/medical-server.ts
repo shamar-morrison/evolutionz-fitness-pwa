@@ -176,7 +176,7 @@ function mapMedicalAssignmentRecord(
   }
 }
 
-function mapMedicalVisitNoteRecord(record: MedicalVisitNoteRecord): MedicalVisitNote {
+export function mapMedicalVisitNoteRecord(record: MedicalVisitNoteRecord): MedicalVisitNote {
   return {
     id: normalizeText(record.id),
     assignmentId: normalizeText(record.assignment_id),

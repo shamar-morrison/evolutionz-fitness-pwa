@@ -134,7 +134,25 @@ function buildNote(overrides: Partial<Record<string, unknown>> = {}) {
   }
 }
 
-function createAssignmentUpdateClient() {
+function buildInsertedNoteRecord(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: NOTE_ID,
+    assignment_id: ASSIGNMENT_ID,
+    visit_date: '2026-05-23',
+    notes: 'Discussed mobility goals.',
+    follow_up_date: '2026-05-30',
+    created_by: MEDICAL_ID,
+    created_at: '2026-05-23T15:00:00.000Z',
+    updated_at: '2026-05-23T15:00:00.000Z',
+    creator: {
+      id: MEDICAL_ID,
+      name: 'Morgan Medical',
+    },
+    ...overrides,
+  }
+}
+
+function createAssignmentUpdateClient(overrides: Partial<{ updatedId: string | null }> = {}) {
   const updateValues: Array<Record<string, unknown>> = []
 
   return {
@@ -152,9 +170,30 @@ function createAssignmentUpdateClient() {
                 expect(column).toBe('id')
                 expect(value).toBe(ASSIGNMENT_ID)
 
-                return Promise.resolve({
-                  error: null,
-                })
+                return {
+                  eq(nextColumn: string, nextValue: string) {
+                    expect(nextColumn).toBe('status')
+                    expect(nextValue).toBe('active')
+
+                    return {
+                      select(columns: string) {
+                        expect(columns).toBe('id')
+
+                        return {
+                          maybeSingle() {
+                            return Promise.resolve({
+                              data:
+                                overrides.updatedId === null
+                                  ? null
+                                  : { id: overrides.updatedId ?? ASSIGNMENT_ID },
+                              error: null,
+                            })
+                          },
+                        }
+                      },
+                    }
+                  },
+                }
               },
             }
           },
@@ -164,7 +203,9 @@ function createAssignmentUpdateClient() {
   }
 }
 
-function createVisitNoteClient() {
+function createVisitNoteClient(
+  insertedNoteRecord: Record<string, unknown> = buildInsertedNoteRecord(),
+) {
   const assignmentUpdateValues: Array<Record<string, unknown>> = []
   const noteInsertValues: Array<Record<string, unknown>> = []
 
@@ -185,7 +226,7 @@ function createVisitNoteClient() {
                   return {
                     maybeSingle() {
                       return Promise.resolve({
-                        data: { id: NOTE_ID },
+                        data: insertedNoteRecord,
                         error: null,
                       })
                     },
@@ -311,6 +352,27 @@ describe('medical assignment action routes', () => {
     })
   })
 
+  it('returns a conflict when the assignment changes before completion is written', async () => {
+    const { client } = createAssignmentUpdateClient({
+      updatedId: null,
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readAuthorizedMedicalProfileMock.mockResolvedValue(createMedicalAuthResult())
+    readMedicalAssignmentRowByIdMock.mockResolvedValue(buildAssignmentRow())
+
+    const response = await completeMedicalAssignment(new Request('http://localhost'), {
+      params: Promise.resolve({ id: ASSIGNMENT_ID }),
+    })
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Medical assignment changed before it could be completed.',
+    })
+    expect(readMedicalAssignmentByIdMock).not.toHaveBeenCalled()
+  })
+
   it('rejects completion requests for assignments that are already completed', async () => {
     getSupabaseAdminClientMock.mockReturnValue({ from: vi.fn() })
     readAuthorizedMedicalProfileMock.mockResolvedValue(createMedicalAuthResult())
@@ -370,6 +432,38 @@ describe('medical assignment action routes', () => {
     })
   })
 
+  it('returns a conflict when the assignment changes before the follow-up update is written', async () => {
+    const { client } = createAssignmentUpdateClient({
+      updatedId: null,
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readAuthorizedMedicalProfileMock.mockResolvedValue(createMedicalAuthResult())
+    readMedicalAssignmentRowByIdMock.mockResolvedValue(buildAssignmentRow())
+
+    const response = await updateMedicalAssignmentFollowUp(
+      new Request('http://localhost', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          followUpDate: null,
+        }),
+      }),
+      {
+        params: Promise.resolve({ id: ASSIGNMENT_ID }),
+      },
+    )
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Medical assignment changed before the follow-up date could be updated.',
+    })
+    expect(readMedicalAssignmentByIdMock).not.toHaveBeenCalled()
+  })
+
   it('returns visit notes for the owning medical staff member', async () => {
     const supabase = { from: vi.fn() }
     const notes = [buildNote()]
@@ -391,7 +485,12 @@ describe('medical assignment action routes', () => {
   })
 
   it('creates a visit note and updates the assignment follow-up date when provided', async () => {
-    const { assignmentUpdateValues, client, noteInsertValues } = createVisitNoteClient()
+    const insertedNoteRecord = buildInsertedNoteRecord({
+      notes: 'Trimmed note.',
+      follow_up_date: '2026-06-01',
+    })
+    const { assignmentUpdateValues, client, noteInsertValues } =
+      createVisitNoteClient(insertedNoteRecord)
     const createdNote = buildNote({
       notes: 'Trimmed note.',
       followUpDate: '2026-06-01',
@@ -400,7 +499,6 @@ describe('medical assignment action routes', () => {
     getSupabaseAdminClientMock.mockReturnValue(client)
     readAuthorizedMedicalProfileMock.mockResolvedValue(createMedicalAuthResult())
     readMedicalAssignmentRowByIdMock.mockResolvedValue(buildAssignmentRow())
-    readMedicalVisitNotesMock.mockResolvedValue([createdNote])
 
     const response = await postMedicalVisitNote(
       new Request('http://localhost', {
@@ -438,10 +536,16 @@ describe('medical assignment action routes', () => {
       ok: true,
       note: createdNote,
     })
+    expect(readMedicalVisitNotesMock).not.toHaveBeenCalled()
   })
 
   it('creates a visit note without changing the assignment follow-up date when it is omitted', async () => {
-    const { assignmentUpdateValues, client, noteInsertValues } = createVisitNoteClient()
+    const insertedNoteRecord = buildInsertedNoteRecord({
+      notes: null,
+      follow_up_date: null,
+    })
+    const { assignmentUpdateValues, client, noteInsertValues } =
+      createVisitNoteClient(insertedNoteRecord)
     const createdNote = buildNote({
       notes: null,
       followUpDate: null,
@@ -450,7 +554,6 @@ describe('medical assignment action routes', () => {
     getSupabaseAdminClientMock.mockReturnValue(client)
     readAuthorizedMedicalProfileMock.mockResolvedValue(createMedicalAuthResult())
     readMedicalAssignmentRowByIdMock.mockResolvedValue(buildAssignmentRow())
-    readMedicalVisitNotesMock.mockResolvedValue([createdNote])
 
     const response = await postMedicalVisitNote(
       new Request('http://localhost', {
@@ -483,5 +586,6 @@ describe('medical assignment action routes', () => {
       ok: true,
       note: createdNote,
     })
+    expect(readMedicalVisitNotesMock).not.toHaveBeenCalled()
   })
 })

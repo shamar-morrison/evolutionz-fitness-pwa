@@ -117,7 +117,17 @@ function buildAssignment(overrides: Partial<Record<string, unknown>> = {}) {
   }
 }
 
-function createPostClient() {
+function createPostClient(
+  overrides: Partial<{
+    existingAssignmentId: string | null
+    insertError: {
+      code?: string | null
+      details?: string | null
+      message: string
+    } | null
+    insertedAssignmentId: string | null
+  }> = {},
+) {
   const insertValues: Array<Record<string, unknown>> = []
 
   return {
@@ -156,7 +166,9 @@ function createPostClient() {
                             return {
                               maybeSingle() {
                                 return Promise.resolve({
-                                  data: null,
+                                  data: overrides.existingAssignmentId
+                                    ? { id: overrides.existingAssignmentId }
+                                    : null,
                                   error: null,
                                 })
                               },
@@ -180,8 +192,12 @@ function createPostClient() {
                 return {
                   maybeSingle() {
                     return Promise.resolve({
-                      data: { id: 'assignment-1' },
-                      error: null,
+                      data: overrides.insertedAssignmentId
+                        ? { id: overrides.insertedAssignmentId }
+                        : overrides.insertedAssignmentId === null
+                          ? null
+                          : { id: 'assignment-1' },
+                      error: overrides.insertError ?? null,
                     })
                   },
                 }
@@ -427,6 +443,57 @@ describe('medical assignments route', () => {
       ok: true,
       assignment: buildAssignment({ followUpDate: null }),
     })
+  })
+
+  it('returns the duplicate-assignment error when the insert races with another request', async () => {
+    const { client } = createPostClient({
+      insertError: {
+        code: '23505',
+        message:
+          'duplicate key value violates unique constraint "medical_assignments_member_staff_active_idx"',
+      },
+      insertedAssignmentId: null,
+    })
+
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser({
+      user: { id: ADMIN_ID },
+      profile: { id: ADMIN_ID, role: 'admin', titles: ['Owner'] },
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: MEDICAL_ID,
+      name: 'Morgan Medical',
+      email: 'medical@evolutionzfitness.com',
+      role: 'staff',
+      titles: ['Medical/Consultant'],
+      isSuspended: false,
+      phone: null,
+      gender: null,
+      remark: null,
+      specialties: [],
+      photoUrl: null,
+      archivedAt: null,
+      created_at: '2026-05-23T00:00:00.000Z',
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/medical/assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: MEMBER_ID,
+          staffId: MEDICAL_ID,
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error:
+        'This staff member already has an active medical assignment for the selected client.',
+    })
+    expect(readMedicalAssignmentByIdMock).not.toHaveBeenCalled()
   })
 
   it('rejects duplicate active assignments for the same client and medical staff member', async () => {

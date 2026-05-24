@@ -57,7 +57,7 @@ export async function PATCH(
       )
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('medical_assignments')
       .update({
         status: 'completed',
@@ -65,9 +65,16 @@ export async function PATCH(
         completed_by: authResult.profile.id,
       })
       .eq('id', id)
+      .eq('status', 'active')
+      .select('id')
+      .maybeSingle()
 
     if (error) {
       throw new Error(`Failed to complete the medical assignment: ${error.message}`)
+    }
+
+    if (!data?.id) {
+      return createErrorResponse('Medical assignment changed before it could be completed.', 409)
     }
 
     const assignment = await readMedicalAssignmentById(supabase, id)

@@ -169,6 +169,7 @@ export default function MedicalAssignmentDetailPage() {
           error instanceof Error ? error.message : 'Failed to complete the assignment.',
         variant: 'destructive',
       })
+    } finally {
       setPendingAction(null)
     }
   }
