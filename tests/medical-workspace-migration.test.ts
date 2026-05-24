@@ -70,5 +70,8 @@ describe('medical workspace migration', () => {
     expect(normalizedSql).toContain('returns public.medical_visit_notes')
     expect(normalizedSql).toContain('insert into public.medical_visit_notes')
     expect(normalizedSql).toContain('update public.medical_assignments')
+    expect(normalizedSql).toContain('revoke all on function public.create_medical_visit_note')
+    expect(normalizedSql).toContain('grant execute on function public.create_medical_visit_note')
+    expect(normalizedSql).toContain('to service_role')
   })
 })
