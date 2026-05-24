@@ -22,6 +22,7 @@ import { toast } from '@/hooks/use-toast'
 import { compressImage } from '@/lib/compress-image'
 import { queryKeys } from '@/lib/query-keys'
 import {
+  getStaffTitlesConflictError,
   hasStaffTitle,
   isEditableStaffGender,
   normalizeStaffSpecialtiesForTitles,
@@ -120,6 +121,17 @@ export function EditStaffModal({ profile, open, onOpenChange, onSuccess }: EditS
       toast({
         title: 'Title required',
         description: 'Choose at least one title before saving this staff profile.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const titleConflictError = getStaffTitlesConflictError(formData.titles)
+
+    if (titleConflictError) {
+      toast({
+        title: 'Invalid title combination',
+        description: titleConflictError,
         variant: 'destructive',
       })
       return

@@ -302,6 +302,40 @@ describe('Sidebar', () => {
     )
   })
 
+  it('shows the medical workspace navigation for medical staff', async () => {
+    pathnameState.value = '/medical'
+    setAuthState({
+      id: 'medical-1',
+      email: 'medical@evolutionzfitness.com',
+      name: 'Morgan Medical',
+      role: 'staff',
+      titles: ['Medical/Consultant'],
+    })
+
+    await act(async () => {
+      root.render(
+        <SidebarProvider>
+          <AppSidebar />
+        </SidebarProvider>,
+      )
+    })
+
+    expect(container.textContent).toContain('My Clients')
+    expect(container.textContent).toContain('Medical workspace')
+    expect(container.textContent).not.toContain('My Schedule')
+    expect(container.textContent).not.toContain('Members')
+    expect(container.textContent).not.toContain('Classes')
+
+    const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
+
+    expect(links).toContain('/medical')
+    expect(links).not.toContain('/trainer/schedule')
+    expect(links).not.toContain('/members')
+    expect(usePendingApprovalCountsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    )
+  })
+
   it('does not enable pending approval counts for staff users with admin-like titles', async () => {
     pathnameState.value = '/members'
     setAuthState({
@@ -362,6 +396,7 @@ describe('Sidebar', () => {
     })
 
     expect(container.textContent).toContain('Dashboard')
+    expect(container.textContent).toContain('Medical')
     expect(container.textContent).toContain('Cards')
     expect(container.textContent).toContain('Send Email')
     expect(container.textContent).toContain('Classes')
@@ -385,6 +420,7 @@ describe('Sidebar', () => {
 
     const links = Array.from(container.querySelectorAll('a')).map((link) => link.getAttribute('href'))
 
+    expect(links).toContain('/medical')
     expect(links).toContain('/cards')
 
     const badges = Array.from(container.querySelectorAll('[data-sidebar="menu-badge"]')).map(

@@ -8,6 +8,11 @@ export type Permission =
   | 'members.suspend'
   | 'members.recordPayment'
   | 'door.unlock'
+  | 'medical.assign'
+  | 'medical.viewAssignments'
+  | 'medical.updateAssignments'
+  | 'medical.readVisitNotes'
+  | 'medical.createVisitNotes'
   | 'pt.assign'
   | 'pt.viewOwnSchedule'
   | 'pt.manageOwnSchedule'
@@ -37,6 +42,11 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'members.suspend',
     'members.recordPayment',
     'door.unlock',
+    'medical.assign',
+    'medical.viewAssignments',
+    'medical.updateAssignments',
+    'medical.readVisitNotes',
+    'medical.createVisitNotes',
     'pt.assign',
     'pt.viewOwnSchedule',
     'pt.manageOwnSchedule',
@@ -74,7 +84,12 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'classes.markAttendance',
     'door.unlock',
   ],
-  medical: [],
+  medical: [
+    'medical.viewAssignments',
+    'medical.updateAssignments',
+    'medical.readVisitNotes',
+    'medical.createVisitNotes',
+  ],
   assistant: [
     'members.view',
     'members.create',
@@ -143,6 +158,7 @@ function normalizeTitle(title: string): string {
     'Administrative Assistant': 'administrativeAssistant',
     Assistant: 'assistant',
     Medical: 'medical',
+    'Medical/Consultant': 'medical',
     'Physiotherapist/Nutritionist': 'physiotherapistNutritionist',
   }
 

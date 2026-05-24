@@ -236,7 +236,7 @@ describe('GET /api/reports/pt-payments', () => {
         {
           id: 'trainer-2',
           name: 'Blake Coach',
-          titles: ['Trainer', 'Medical'],
+          titles: ['Trainer', 'Medical/Consultant'],
         },
       ],
       members: [
@@ -298,7 +298,7 @@ describe('GET /api/reports/pt-payments', () => {
         {
           trainerId: 'trainer-2',
           trainerName: 'Blake Coach',
-          trainerTitles: ['Trainer', 'Medical'],
+          trainerTitles: ['Trainer', 'Medical/Consultant'],
           activeClients: 1,
           monthlyPayout: TRAINER_PAYOUT_PER_CLIENT_JMD,
           clients: [

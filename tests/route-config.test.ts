@@ -79,6 +79,20 @@ describe('route config helpers', () => {
     expect(isRouteAllowed('/trainer/commission', 'staff', ['Administrative Assistant'])).toBe(false)
   })
 
+  it('allows medical staff on medical routes only', () => {
+    expect(isRouteAllowed('/medical', 'staff', ['Medical/Consultant'])).toBe(true)
+    expect(
+      isRouteAllowed(
+        '/medical/123e4567-e89b-12d3-a456-426614174000',
+        'staff',
+        ['Medical/Consultant'],
+      ),
+    ).toBe(true)
+    expect(isRouteAllowed('/members', 'staff', ['Medical/Consultant'])).toBe(false)
+    expect(isRouteAllowed('/classes', 'staff', ['Medical/Consultant'])).toBe(false)
+    expect(isRouteAllowed('/trainer/requests', 'staff', ['Medical/Consultant'])).toBe(false)
+  })
+
   it('denies unknown titles on staff-restricted routes', () => {
     expect(isRouteAllowed('/members', 'staff', ['Mystery Role'])).toBe(false)
     expect(isRouteAllowed('/trainer/schedule', 'staff', ['Mystery Role'])).toBe(false)
@@ -89,7 +103,7 @@ describe('route config helpers', () => {
   it('returns false when staff does not have a matching title on a restricted route', () => {
     expect(isRouteAllowed('/members', 'staff', ['Assistant'])).toBe(true)
     expect(isRouteAllowed('/classes', 'staff', ['Assistant'])).toBe(true)
-    expect(isRouteAllowed('/trainer/requests', 'staff', ['Medical'])).toBe(false)
+    expect(isRouteAllowed('/trainer/requests', 'staff', ['Medical/Consultant'])).toBe(false)
   })
 
   it('marks auth recovery routes as public', () => {
@@ -155,6 +169,17 @@ describe('route config helpers', () => {
     expect(
       getBackLink('/classes/123', 'staff', ['Administrative Assistant'], '/members'),
     ).toBe('/classes')
+  })
+
+  it('returns the medical back link for assignment detail routes', () => {
+    expect(
+      getBackLink(
+        '/medical/123e4567-e89b-12d3-a456-426614174000',
+        'staff',
+        ['Medical/Consultant'],
+        '/members',
+      ),
+    ).toBe('/medical')
   })
 
   it('never resolves back links to routes the staff user cannot access', () => {

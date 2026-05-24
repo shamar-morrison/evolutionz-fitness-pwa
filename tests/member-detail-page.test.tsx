@@ -115,13 +115,23 @@ vi.mock('@/hooks/use-pt-scheduling', () => ({
 vi.mock('@/components/role-guard', () => ({
   RoleGuard: ({
     role,
+    permission,
     children,
     fallback = null,
   }: {
-    role: 'admin' | 'staff'
+    role?: 'admin' | 'staff'
+    permission?: string
     children: React.ReactNode
     fallback?: React.ReactNode
-  }) => (role === 'admin' && currentRoleState.role !== 'admin' ? <>{fallback}</> : <>{children}</>),
+  }) => {
+    const isAllowed = role
+      ? currentRoleState.role === role
+      : permission
+        ? currentRoleState.role === 'admin'
+        : true
+
+    return isAllowed ? <>{children}</> : <>{fallback}</>
+  },
 }))
 
 vi.mock('@/components/assign-card-modal', () => ({
@@ -188,6 +198,10 @@ vi.mock('@/components/member-avatar', () => ({
 
 vi.mock('@/components/member-pt-section', () => ({
   MemberPtSection: () => <div>PT Assignment Section</div>,
+}))
+
+vi.mock('@/components/member-medical-section', () => ({
+  MemberMedicalSection: () => <div>Medical Assignment Section</div>,
 }))
 
 vi.mock('@/components/check-in-history', () => ({
@@ -539,10 +553,27 @@ describe('Member detail page tabs', () => {
 
     expect(container.textContent).toContain('PT Attendance')
     expect(container.textContent).toContain('PT Assignment Section')
+    expect(container.textContent).not.toContain('Medical Assignment Section')
     expect(container.textContent).toContain('Edit Member')
     expect(container.textContent).toContain('Record Payment')
     expect(container.textContent).not.toContain('Membership Type')
     expect(container.textContent).not.toContain('Payments')
+  })
+
+  it('shows the medical assignment section for admins only', async () => {
+    currentRoleState.role = 'admin'
+    currentProfileState.profile = {
+      id: 'admin-1',
+      name: 'Admin User',
+      role: 'admin',
+      titles: ['Owner'],
+    }
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    expect(container.textContent).toContain('Medical Assignment Section')
   })
 
   it('shows the no-payment reminder banner for payment-capable staff when no payment is recorded', async () => {

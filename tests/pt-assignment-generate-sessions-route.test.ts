@@ -50,6 +50,7 @@ function buildAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient 
     memberId: overrides.memberId ?? 'member-1',
     status: overrides.status ?? 'active',
     ptFee: overrides.ptFee ?? 15000,
+    commissionOverride: overrides.commissionOverride ?? null,
     sessionsPerWeek: overrides.sessionsPerWeek ?? scheduledSessions.length,
     scheduledSessions,
     scheduledDays,
