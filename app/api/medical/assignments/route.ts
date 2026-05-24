@@ -38,9 +38,9 @@ function isActiveMedicalAssignmentConflict(error: {
   message?: string | null
 }) {
   return (
-    error.code === '23505' ||
-    error.message?.includes('medical_assignments_member_staff_active_idx') === true ||
-    error.details?.includes('medical_assignments_member_staff_active_idx') === true
+    error.code === '23505' &&
+    (error.message?.includes('medical_assignments_member_staff_active_idx') === true ||
+      error.details?.includes('medical_assignments_member_staff_active_idx') === true)
   )
 }
 

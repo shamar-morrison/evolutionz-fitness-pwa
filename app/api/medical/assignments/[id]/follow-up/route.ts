@@ -76,6 +76,7 @@ export async function PATCH(
       })
       .eq('id', id)
       .eq('status', 'active')
+      .eq('staff_id', assignmentRow.staff_id)
       .select('id')
       .maybeSingle()
 

@@ -130,13 +130,12 @@ export async function POST(
     }
 
     const { data, error } = await supabase
-      .from('medical_visit_notes')
-      .insert({
-        assignment_id: id,
-        visit_date: input.visitDate,
-        notes: normalizeOptionalText(input.notes),
-        follow_up_date: input.followUpDate ?? null,
-        created_by: authResult.profile.id,
+      .rpc('create_medical_visit_note', {
+        p_assignment_id: id,
+        p_visit_date: input.visitDate,
+        p_notes: normalizeOptionalText(input.notes),
+        p_follow_up_date: input.followUpDate ?? null,
+        p_created_by: authResult.profile.id,
       })
       .select(MEDICAL_VISIT_NOTE_SELECT)
       .maybeSingle()
@@ -147,21 +146,6 @@ export async function POST(
 
     if (!data) {
       throw new Error('Failed to create the visit note: missing inserted row.')
-    }
-
-    if (input.followUpDate) {
-      const { error: updateAssignmentError } = await supabase
-        .from('medical_assignments')
-        .update({
-          follow_up_date: input.followUpDate,
-        })
-        .eq('id', id)
-
-      if (updateAssignmentError) {
-        throw new Error(
-          `Visit note saved, but the assignment follow-up date could not be updated: ${updateAssignmentError.message}`,
-        )
-      }
     }
 
     const note = data

@@ -10,6 +10,10 @@ const completionConstraintMigrationPath = resolve(
   process.cwd(),
   'supabase/migrations/20260524_add_medical_assignment_completion_consistency.sql',
 )
+const rpcMigrationPath = resolve(
+  process.cwd(),
+  'supabase/migrations/20260525_add_create_medical_visit_note_rpc.sql',
+)
 
 function normalizeSql(sql: string) {
   return sql.toLowerCase().replace(/\s+/gu, ' ').trim()
@@ -57,5 +61,14 @@ describe('medical workspace migration', () => {
     expect(normalizedSql).toContain(
       "(status <> 'completed' and completed_at is null and completed_by is null)",
     )
+  })
+
+  it('creates the public.create_medical_visit_note function in a follow-up migration', () => {
+    const normalizedSql = normalizeSql(readFileSync(rpcMigrationPath, 'utf8'))
+
+    expect(normalizedSql).toContain('create or replace function public.create_medical_visit_note')
+    expect(normalizedSql).toContain('returns public.medical_visit_notes')
+    expect(normalizedSql).toContain('insert into public.medical_visit_notes')
+    expect(normalizedSql).toContain('update public.medical_assignments')
   })
 })

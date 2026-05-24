@@ -155,6 +155,36 @@ function buildInsertedNoteRecord(overrides: Partial<Record<string, unknown>> = {
 function createAssignmentUpdateClient(overrides: Partial<{ updatedId: string | null }> = {}) {
   const updateValues: Array<Record<string, unknown>> = []
 
+  const builder = {
+    eq(column: string, value: string) {
+      if (column === 'id') {
+        expect(value).toBe(ASSIGNMENT_ID)
+      } else if (column === 'status') {
+        expect(value).toBe('active')
+      } else if (column === 'staff_id') {
+        expect(value).toBe(MEDICAL_ID)
+      } else {
+        throw new Error(`Unexpected eq call: ${column} = ${value}`)
+      }
+      return builder
+    },
+    select(columns: string) {
+      expect(columns).toBe('id')
+
+      return {
+        maybeSingle() {
+          return Promise.resolve({
+            data:
+              overrides.updatedId === null
+                ? null
+                : { id: overrides.updatedId ?? ASSIGNMENT_ID },
+            error: null,
+          })
+        },
+      }
+    },
+  }
+
   return {
     updateValues,
     client: {
@@ -164,38 +194,7 @@ function createAssignmentUpdateClient(overrides: Partial<{ updatedId: string | n
         return {
           update(values: Record<string, unknown>) {
             updateValues.push(values)
-
-            return {
-              eq(column: string, value: string) {
-                expect(column).toBe('id')
-                expect(value).toBe(ASSIGNMENT_ID)
-
-                return {
-                  eq(nextColumn: string, nextValue: string) {
-                    expect(nextColumn).toBe('status')
-                    expect(nextValue).toBe('active')
-
-                    return {
-                      select(columns: string) {
-                        expect(columns).toBe('id')
-
-                        return {
-                          maybeSingle() {
-                            return Promise.resolve({
-                              data:
-                                overrides.updatedId === null
-                                  ? null
-                                  : { id: overrides.updatedId ?? ASSIGNMENT_ID },
-                              error: null,
-                            })
-                          },
-                        }
-                      },
-                    }
-                  },
-                }
-              },
-            }
+            return builder
           },
         }
       },
@@ -206,57 +205,28 @@ function createAssignmentUpdateClient(overrides: Partial<{ updatedId: string | n
 function createVisitNoteClient(
   insertedNoteRecord: Record<string, unknown> = buildInsertedNoteRecord(),
 ) {
-  const assignmentUpdateValues: Array<Record<string, unknown>> = []
-  const noteInsertValues: Array<Record<string, unknown>> = []
+  const rpcCalls: Array<{ name: string; params: Record<string, unknown> }> = []
 
   return {
-    assignmentUpdateValues,
-    noteInsertValues,
+    rpcCalls,
     client: {
-      from(table: string) {
-        if (table === 'medical_visit_notes') {
-          return {
-            insert(values: Record<string, unknown>) {
-              noteInsertValues.push(values)
+      rpc(fnName: string, params: Record<string, unknown>) {
+        rpcCalls.push({ name: fnName, params })
 
-              return {
-                select(columns: string) {
-                  expect(columns).toBe(MEDICAL_VISIT_NOTE_SELECT)
+        return {
+          select(columns: string) {
+            expect(columns).toBe(MEDICAL_VISIT_NOTE_SELECT)
 
-                  return {
-                    maybeSingle() {
-                      return Promise.resolve({
-                        data: insertedNoteRecord,
-                        error: null,
-                      })
-                    },
-                  }
-                },
-              }
-            },
-          }
+            return {
+              maybeSingle() {
+                return Promise.resolve({
+                  data: insertedNoteRecord,
+                  error: null,
+                })
+              },
+            }
+          },
         }
-
-        if (table === 'medical_assignments') {
-          return {
-            update(values: Record<string, unknown>) {
-              assignmentUpdateValues.push(values)
-
-              return {
-                eq(column: string, value: string) {
-                  expect(column).toBe('id')
-                  expect(value).toBe(ASSIGNMENT_ID)
-
-                  return Promise.resolve({
-                    error: null,
-                  })
-                },
-              }
-            },
-          }
-        }
-
-        throw new Error(`Unexpected table: ${table}`)
       },
     },
   }
@@ -489,7 +459,7 @@ describe('medical assignment action routes', () => {
       notes: 'Trimmed note.',
       follow_up_date: '2026-06-01',
     })
-    const { assignmentUpdateValues, client, noteInsertValues } =
+    const { rpcCalls, client } =
       createVisitNoteClient(insertedNoteRecord)
     const createdNote = buildNote({
       notes: 'Trimmed note.',
@@ -518,18 +488,16 @@ describe('medical assignment action routes', () => {
     )
 
     expect(response.status).toBe(201)
-    expect(noteInsertValues).toEqual([
+    expect(rpcCalls).toEqual([
       {
-        assignment_id: ASSIGNMENT_ID,
-        visit_date: '2026-05-23',
-        notes: 'Trimmed note.',
-        follow_up_date: '2026-06-01',
-        created_by: MEDICAL_ID,
-      },
-    ])
-    expect(assignmentUpdateValues).toEqual([
-      {
-        follow_up_date: '2026-06-01',
+        name: 'create_medical_visit_note',
+        params: {
+          p_assignment_id: ASSIGNMENT_ID,
+          p_visit_date: '2026-05-23',
+          p_notes: 'Trimmed note.',
+          p_follow_up_date: '2026-06-01',
+          p_created_by: MEDICAL_ID,
+        },
       },
     ])
     await expect(response.json()).resolves.toEqual({
@@ -544,7 +512,7 @@ describe('medical assignment action routes', () => {
       notes: null,
       follow_up_date: null,
     })
-    const { assignmentUpdateValues, client, noteInsertValues } =
+    const { rpcCalls, client } =
       createVisitNoteClient(insertedNoteRecord)
     const createdNote = buildNote({
       notes: null,
@@ -572,16 +540,18 @@ describe('medical assignment action routes', () => {
     )
 
     expect(response.status).toBe(201)
-    expect(noteInsertValues).toEqual([
+    expect(rpcCalls).toEqual([
       {
-        assignment_id: ASSIGNMENT_ID,
-        visit_date: '2026-05-23',
-        notes: null,
-        follow_up_date: null,
-        created_by: MEDICAL_ID,
+        name: 'create_medical_visit_note',
+        params: {
+          p_assignment_id: ASSIGNMENT_ID,
+          p_visit_date: '2026-05-23',
+          p_notes: null,
+          p_follow_up_date: null,
+          p_created_by: MEDICAL_ID,
+        },
       },
     ])
-    expect(assignmentUpdateValues).toEqual([])
     await expect(response.json()).resolves.toEqual({
       ok: true,
       note: createdNote,
