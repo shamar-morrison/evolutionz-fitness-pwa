@@ -281,6 +281,9 @@ describe('PATCH /api/members/[id]/edit', () => {
   })
 
   it('queues add_user when the access window changes', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-15T00:00:00Z'))
+
     const { client, insertedJobs, memberUpdates } = createEditAdminClient({
       updatedMemberRow: {
         id: 'member-1',
@@ -352,6 +355,9 @@ describe('PATCH /api/members/[id]/edit', () => {
   })
 
   it('uses nextRequiresCard when deciding whether to sync the edited access window', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-15T00:00:00Z'))
+
     const { client, insertedJobs, memberUpdates } = createEditAdminClient({
       memberTypeRow: {
         id: MEMBER_TYPE_ID_GENERAL,

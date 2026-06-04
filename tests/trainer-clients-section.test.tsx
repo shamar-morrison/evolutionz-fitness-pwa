@@ -26,6 +26,7 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     memberId: overrides.memberId ?? 'member-1',
     status: overrides.status ?? 'active',
     ptFee: Object.prototype.hasOwnProperty.call(overrides, 'ptFee') ? (overrides.ptFee ?? null) : 14000,
+    commissionOverride: overrides.commissionOverride ?? null,
     sessionsPerWeek: overrides.sessionsPerWeek ?? 1,
     scheduledSessions:
       overrides.scheduledSessions ??
