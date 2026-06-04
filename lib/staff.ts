@@ -4,7 +4,7 @@ import type { Profile, StaffGender, UserRole } from '@/types'
 export const STAFF_TITLES = [
   'Owner',
   'Trainer',
-  'Medical',
+  'Medical/Consultant',
   'Physiotherapist/Nutritionist',
   'Administrative Assistant',
   'Assistant',
@@ -151,6 +151,10 @@ function normalizeText(value: string | null | undefined) {
   return typeof value === "string" ? value.trim() : ''
 }
 
+function normalizeStaffTitleValue(value: string) {
+  return value === 'Medical' ? 'Medical/Consultant' : value
+}
+
 function normalizeNullableText(value: string | null | undefined) {
   const normalizedValue = normalizeText(value)
   return normalizedValue || null
@@ -166,7 +170,7 @@ export function normalizeStaffTitles(
       : []
   const selectedTitles = new Set(
     titleValues
-      .map((title) => normalizeText(title))
+      .map((title) => normalizeStaffTitleValue(normalizeText(title)))
       .filter((title): title is StaffTitle => isStaffTitle(title)),
   )
 
@@ -178,6 +182,20 @@ export function hasStaffTitle(
   title: StaffTitle,
 ) {
   return normalizeStaffTitles(titles).includes(title)
+}
+
+export function getStaffTitlesConflictError(
+  titles: ReadonlyArray<string> | string | null | undefined,
+) {
+  const normalizedTitles = normalizeStaffTitles(titles)
+  const hasTrainerTitle = normalizedTitles.includes('Trainer')
+  const hasMedicalTitle = normalizedTitles.includes('Medical/Consultant')
+
+  if (hasTrainerTitle && hasMedicalTitle) {
+    return 'Trainer and Medical/Consultant titles cannot be assigned to the same staff profile.'
+  }
+
+  return null
 }
 
 export function isFrontDeskStaff(

@@ -5,6 +5,7 @@ import {
   STAFF_TITLES,
   TRAINER_SPECIALTIES,
   deriveRoleFromTitles,
+  getStaffTitlesConflictError,
   hasStaffTitle,
   normalizeProfile,
   normalizeStaffSpecialtiesForTitles,
@@ -84,6 +85,11 @@ export async function POST(
     }
 
     const mergedTitles = normalizeStaffTitles([...existingProfile.titles, ...input.titles])
+    const titleConflictError = getStaffTitlesConflictError(mergedTitles)
+
+    if (titleConflictError) {
+      return createErrorResponse(titleConflictError, 400)
+    }
     const mergedSpecialties = hasStaffTitle(mergedTitles, 'Trainer')
       ? normalizeTrainerSpecialties([...existingProfile.specialties, ...(input.specialties ?? [])])
       : normalizeStaffSpecialtiesForTitles(mergedTitles, [])

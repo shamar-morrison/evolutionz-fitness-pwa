@@ -20,6 +20,7 @@ import { compressImage } from '@/lib/compress-image'
 import { queryKeys } from '@/lib/query-keys'
 import {
   formatStaffTitles,
+  getStaffTitlesConflictError,
   hasStaffTitle,
   isEditableStaffGender,
   normalizeTrainerSpecialties,
@@ -113,6 +114,17 @@ export function AddStaffModal({ open, onOpenChange, onSuccess }: AddStaffModalPr
       toast({
         title: 'Title required',
         description: 'Choose at least one title before continuing.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
+    const titleConflictError = getStaffTitlesConflictError(formData.titles)
+
+    if (titleConflictError) {
+      toast({
+        title: 'Invalid title combination',
+        description: titleConflictError,
         variant: 'destructive',
       })
       return false

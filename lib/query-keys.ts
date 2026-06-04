@@ -90,6 +90,13 @@ export const queryKeys = {
     memberAssignment: (memberId: string) => ['pt-assignments', 'member', memberId] as const,
     trainerAssignments: (trainerId: string) => ['pt-assignments', 'trainer', trainerId] as const,
   },
+  medical: {
+    all: ['medical'] as const,
+    assignments: (filters?: Record<string, string>) =>
+      ['medical', 'assignments', filters ?? {}] as const,
+    assignment: (id: string) => ['medical', 'assignment', id] as const,
+    notes: (assignmentId: string) => ['medical', 'notes', assignmentId] as const,
+  },
   notifications: {
     all: (profileId: string) => ['notifications', profileId] as const,
     archived: (profileId: string) => ['notifications', profileId, 'archived'] as const,

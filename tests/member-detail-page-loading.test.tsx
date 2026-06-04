@@ -121,6 +121,10 @@ vi.mock('@/components/member-pt-section', () => ({
   MemberPtSection: () => <div>PT section</div>,
 }))
 
+vi.mock('@/components/member-medical-section', () => ({
+  MemberMedicalSection: () => <div>Medical section</div>,
+}))
+
 vi.mock('@/components/check-in-history', () => ({
   CheckInHistory: () => <div>Check-in history</div>,
 }))

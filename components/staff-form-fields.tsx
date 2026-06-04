@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import type { FileWithPreview } from '@/hooks/use-file-upload'
 import {
+  getStaffTitlesConflictError,
   hasStaffTitle,
   isEditableStaffGender,
   normalizeStaffTitles,
@@ -228,6 +229,8 @@ export function StaffTitlesFields({
   const selectedTitles = normalizeStaffTitles(formData.titles)
   const selectedSpecialties = normalizeTrainerSpecialties(formData.specialties)
   const isTrainer = hasStaffTitle(selectedTitles, 'Trainer')
+  const hasMedicalTitle = hasStaffTitle(selectedTitles, 'Medical/Consultant')
+  const titleConflictError = getStaffTitlesConflictError(selectedTitles)
 
   return (
     <div className="grid gap-4">
@@ -236,6 +239,10 @@ export function StaffTitlesFields({
         <div className="flex flex-wrap gap-2">
           {STAFF_TITLES.map((title) => {
             const isSelected = selectedTitles.includes(title)
+            const isDisabled =
+              !isSelected &&
+              ((title === 'Trainer' && hasMedicalTitle) ||
+                (title === 'Medical/Consultant' && isTrainer))
 
             return (
               <Button
@@ -256,13 +263,20 @@ export function StaffTitlesFields({
                     }
                   })
                 }
-                disabled={isSubmitting}
+                disabled={isSubmitting || isDisabled}
               >
                 {title}
               </Button>
             )
           })}
         </div>
+        {titleConflictError ? (
+          <p className="text-destructive text-sm">{titleConflictError}</p>
+        ) : isTrainer || hasMedicalTitle ? (
+          <p className="text-muted-foreground text-sm">
+            Trainer and Medical/Consultant cannot be combined on the same staff profile.
+          </p>
+        ) : null}
         <OwnerTitleWarning titles={selectedTitles} />
       </div>
 

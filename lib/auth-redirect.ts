@@ -13,6 +13,10 @@ export function getAuthenticatedHomePath(
     return '/trainer/schedule'
   }
 
+  if (hasStaffTitle(titles, 'Medical/Consultant')) {
+    return '/medical'
+  }
+
   if (isFrontDeskStaff(titles)) {
     return '/members'
   }

@@ -99,11 +99,32 @@ describe('permissions', () => {
     )
   })
 
-  it('gives placeholder titles no permissions', () => {
-    expect(sortPermissions(resolvePermissions('staff', ['Medical']))).toEqual([])
-    expect(sortPermissions(resolvePermissions('staff', ['Physiotherapist/Nutritionist']))).toEqual(
-      [],
+  it('gives medical staff the correct permission set', () => {
+    const permissions = resolvePermissions('staff', ['Medical/Consultant'])
+
+    expect(sortPermissions(permissions)).toEqual(
+      sortPermissions(ROLE_PRESETS.medical),
     )
+    expect(permissions.has('medical.viewAssignments')).toBe(true)
+    expect(permissions.has('medical.updateAssignments')).toBe(true)
+    expect(permissions.has('medical.readVisitNotes')).toBe(true)
+    expect(permissions.has('medical.createVisitNotes')).toBe(true)
+    expect(permissions.has('medical.assign')).toBe(false)
+    expect(permissions.has('members.view')).toBe(false)
+    expect(permissions.has('classes.view')).toBe(false)
+    expect(permissions.has('pt.viewOwnSchedule')).toBe(false)
+  })
+
+  it('maps the legacy Medical title to the medical permission preset', () => {
+    expect(sortPermissions(resolvePermissions('staff', ['Medical']))).toEqual(
+      sortPermissions(ROLE_PRESETS.medical),
+    )
+  })
+
+  it('keeps placeholder physiotherapist/nutritionist titles unprivileged', () => {
+    expect(
+      sortPermissions(resolvePermissions('staff', ['Physiotherapist/Nutritionist'])),
+    ).toEqual([])
   })
 
   it('gives owner plus trainer the full admin permissions', () => {

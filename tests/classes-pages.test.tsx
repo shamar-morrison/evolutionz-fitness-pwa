@@ -638,7 +638,7 @@ describe('classes pages', () => {
         buildStaffProfile({
           id: 'trainer-2',
           name: 'Alex Coach',
-          titles: ['Trainer', 'Medical'],
+          titles: ['Trainer', 'Medical/Consultant'],
           email: 'alex@evolutionzfitness.com',
         }),
         buildStaffProfile({
@@ -773,13 +773,13 @@ describe('classes pages', () => {
     expect(container.textContent).toContain('Mark Attendance')
   })
 
-  it('redirects unauthorized users away from the class detail page instead of rendering blank', async () => {
+  it('redirects unauthorized users to their workspace home route instead of rendering blank', async () => {
     authState.role = 'staff'
     authState.profile = {
       id: 'user-4',
       name: 'Medical Staff',
       role: 'staff',
-      titles: ['Medical'],
+      titles: ['Medical/Consultant'],
     }
 
     await act(async () => {
@@ -787,7 +787,7 @@ describe('classes pages', () => {
       await Promise.resolve()
     })
 
-    expect(replaceMock).toHaveBeenCalledWith('/unauthorized')
+    expect(replaceMock).toHaveBeenCalledWith('/medical')
   })
 
   it('keys schedule-management controls off the owner permission path instead of auth role alone', async () => {
@@ -977,7 +977,7 @@ describe('classes pages', () => {
       {
         id: 'trainer-2',
         name: 'Alex Coach',
-        titles: ['Trainer', 'Medical'],
+        titles: ['Trainer', 'Medical/Consultant'],
       },
     ]
     const deferred = createDeferred<void>()

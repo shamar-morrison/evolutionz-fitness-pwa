@@ -351,8 +351,8 @@ export function PtAssignmentScheduleEditor({
 
               return (
                 <div key={day} className="space-y-2">
-                  <div className="grid gap-3 sm:grid-cols-[110px_140px_minmax(0,1fr)] sm:items-center">
-                    <div className="text-sm font-medium">{day}</div>
+                  <div className="grid gap-3 grid-cols-2 items-center sm:grid-cols-[110px_140px_minmax(0,1fr)]">
+                    <div className="text-sm font-medium col-span-full sm:col-span-1">{day}</div>
                     <Input
                       aria-label={`${day} session time`}
                       type="time"
@@ -443,7 +443,7 @@ export function PtAssignmentScheduleEditor({
                         }
                         disabled={isSubmitting}
                       >
-                        <SelectTrigger aria-label={`${day} training type`}>
+                        <SelectTrigger aria-label={`${day} training type`} className="w-full">
                           <SelectValue placeholder="Select training type" />
                         </SelectTrigger>
                         <SelectContent>

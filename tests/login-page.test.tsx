@@ -243,6 +243,98 @@ describe('LoginPage', () => {
     expect(refreshMock).toHaveBeenCalledOnce()
   })
 
+  it('redirects medical staff to /medical after sign-in', async () => {
+    const supabase = createSupabaseBrowserClient()
+
+    supabase.auth.signInWithPassword.mockResolvedValue({
+      data: {
+        user: { id: 'medical-1' },
+      },
+      error: null,
+    })
+    createClientMock.mockReturnValue(supabase)
+    readStaffProfileMock.mockResolvedValue({
+      id: 'medical-1',
+      role: 'staff',
+      titles: ['Medical/Consultant'],
+    })
+
+    await renderLoginPage(root)
+
+    const emailInput = container.querySelector('#email')
+    const passwordInput = container.querySelector('#password')
+    const form = container.querySelector('form')
+
+    if (!(emailInput instanceof HTMLInputElement)) {
+      throw new Error('Email input not found.')
+    }
+
+    if (!(passwordInput instanceof HTMLInputElement)) {
+      throw new Error('Password input not found.')
+    }
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('Login form not found.')
+    }
+
+    await act(async () => {
+      setInputValue(emailInput, 'medical@evolutionzfitness.com')
+      setInputValue(passwordInput, 'secret-password')
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+
+    await flushAsyncWork()
+
+    expect(pushMock).toHaveBeenCalledWith('/medical')
+    expect(refreshMock).toHaveBeenCalledOnce()
+  })
+
+  it('keeps mixed trainer and medical profiles on /trainer/schedule after sign-in', async () => {
+    const supabase = createSupabaseBrowserClient()
+
+    supabase.auth.signInWithPassword.mockResolvedValue({
+      data: {
+        user: { id: 'trainer-medical-1' },
+      },
+      error: null,
+    })
+    createClientMock.mockReturnValue(supabase)
+    readStaffProfileMock.mockResolvedValue({
+      id: 'trainer-medical-1',
+      role: 'staff',
+      titles: ['Trainer', 'Medical/Consultant'],
+    })
+
+    await renderLoginPage(root)
+
+    const emailInput = container.querySelector('#email')
+    const passwordInput = container.querySelector('#password')
+    const form = container.querySelector('form')
+
+    if (!(emailInput instanceof HTMLInputElement)) {
+      throw new Error('Email input not found.')
+    }
+
+    if (!(passwordInput instanceof HTMLInputElement)) {
+      throw new Error('Password input not found.')
+    }
+
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('Login form not found.')
+    }
+
+    await act(async () => {
+      setInputValue(emailInput, 'trainer-medical@evolutionzfitness.com')
+      setInputValue(passwordInput, 'secret-password')
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+
+    await flushAsyncWork()
+
+    expect(pushMock).toHaveBeenCalledWith('/trainer/schedule')
+    expect(refreshMock).toHaveBeenCalledOnce()
+  })
+
   it('redirects admins to /dashboard after sign-in', async () => {
     const supabase = createSupabaseBrowserClient()
 

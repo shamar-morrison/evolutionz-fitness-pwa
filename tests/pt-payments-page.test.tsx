@@ -193,7 +193,7 @@ describe('PtPaymentsPage', () => {
                 {
                   trainerId: 'trainer-1',
                   trainerName: 'Jordan Trainer',
-                  trainerTitles: ['Trainer', 'Medical'],
+                  trainerTitles: ['Trainer', 'Medical/Consultant'],
                   activeClients: 2,
                   monthlyPayout: 21000,
                   clients: [

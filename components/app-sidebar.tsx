@@ -30,7 +30,7 @@ import { toast } from '@/hooks/use-toast'
 import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
 import { createClient } from '@/lib/supabase/client'
 import { isRouteAllowed } from '@/lib/route-config'
-import { formatStaffTitles, isFrontDeskStaff } from '@/lib/staff'
+import { formatStaffTitles, hasStaffTitle, isFrontDeskStaff } from '@/lib/staff'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -94,6 +94,7 @@ async function unlockDoor() {
 const adminNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/members', label: 'Members', icon: Users },
+  { href: '/medical', label: 'Medical', icon: ClipboardList },
   { href: '/staff', label: 'Staff', icon: Users },
   { href: '/cards', label: 'Cards', icon: CreditCard },
   { href: '/email', label: 'Send Email', icon: Mail },
@@ -160,6 +161,8 @@ const trainerNavItems: NavItem[] = [
   { href: '/trainer/commission', label: 'My Commission', icon: BanknoteIcon },
 ]
 
+const medicalNavItems: NavItem[] = [{ href: '/medical', label: 'My Clients', icon: Users }]
+
 const frontDeskNavItems: NavItem[] = [
   { href: '/members', label: 'Members', icon: Users },
   { href: '/classes', label: 'Classes', icon: GraduationCap },
@@ -197,8 +200,13 @@ export function AppSidebar() {
     enabled: isAdmin,
   })
   const staffTitles = profile?.titles ?? []
+  const isTrainer = hasStaffTitle(staffTitles, 'Trainer')
+  const isMedical = hasStaffTitle(staffTitles, 'Medical/Consultant')
   const isFrontDesk = isFrontDeskStaff(staffTitles)
   const trainerPrimaryNavItems = trainerNavItems.filter((item) =>
+    isRouteAllowed(item.href, 'staff', staffTitles),
+  )
+  const medicalPrimaryNavItems = medicalNavItems.filter((item) =>
     isRouteAllowed(item.href, 'staff', staffTitles),
   )
   const frontDeskPrimaryNavItems = frontDeskNavItems.filter((item) =>
@@ -209,19 +217,35 @@ export function AppSidebar() {
   )
   const navItems =
     role === 'staff'
-      ? isFrontDesk
-        ? frontDeskPrimaryNavItems
-        : trainerPrimaryNavItems
+      ? isTrainer
+        ? trainerPrimaryNavItems
+        : isMedical
+          ? medicalPrimaryNavItems
+          : isFrontDesk
+            ? frontDeskPrimaryNavItems
+            : []
       : adminNavItems
-  const secondaryNavItems = role === 'staff' && !isFrontDesk ? trainerSecondaryNavItems : []
+  const secondaryNavItems =
+    role === 'staff' && isTrainer ? trainerSecondaryNavItems : []
   const homeHref = getAuthenticatedHomePath(role, staffTitles)
-  const workspaceLabel = role === 'staff' && !isFrontDesk ? 'Trainer' : 'Application'
+  const workspaceLabel =
+    role === 'staff'
+      ? isTrainer
+        ? 'Trainer'
+        : isMedical
+          ? 'Medical'
+          : 'Application'
+      : 'Application'
   const workspaceSubtitle =
     role === 'admin'
       ? 'Admin workspace'
-      : isFrontDesk
-        ? 'Front desk workspace'
-        : 'Trainer workspace'
+      : isTrainer
+        ? 'Trainer workspace'
+        : isMedical
+          ? 'Medical workspace'
+          : isFrontDesk
+            ? 'Front desk workspace'
+            : 'Staff workspace'
   const displayName = profile?.name ?? user?.email ?? 'Account'
   const subtitle = profile ? formatStaffTitles(profile.titles) || 'Signed in' : user?.email ?? null
   const userEmail = profile?.email ?? user?.email ?? 'No email available'
