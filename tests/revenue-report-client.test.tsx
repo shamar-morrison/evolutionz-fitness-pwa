@@ -367,6 +367,7 @@ describe('RevenueReportClient', () => {
                     trainerName: 'Jordan Trainer',
                     ptFee: 15000,
                     sessionDate: '2026-04-10T09:00:00-05:00',
+                    sessionsCompleted: 2,
                   },
                 ],
                 totalsByTrainer: [
@@ -630,6 +631,7 @@ describe('RevenueReportClient', () => {
                     trainerName: 'Jordan Trainer',
                     ptFee: 15000,
                     sessionDate: '2026-04-10T09:00:00-05:00',
+                    sessionsCompleted: 1,
                   },
                 ],
                 totalsByTrainer: [

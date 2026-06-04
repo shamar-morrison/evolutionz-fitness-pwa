@@ -426,14 +426,14 @@ async function downloadPtRevenuePdf(report: PtRevenueReport, range: DateRangeVal
     startY: cursorY,
     margin: { left: leftMargin, right: leftMargin },
     theme: 'grid',
-    head: [['Member Name', 'Trainer', 'PT Fee (JMD)', 'Session Date']],
+    head: [['Member Name', 'Trainer', 'PT Fee (JMD)', 'Sessions Completed']],
     body:
       report.sessions.length > 0
         ? report.sessions.map((session) => [
             session.memberName,
             session.trainerName,
             formatRevenueCurrency(session.ptFee),
-            formatRevenueReportDateTime(session.sessionDate),
+            String(session.sessionsCompleted),
           ])
         : [['No completed PT sessions found for the selected period.', '', '', '']],
     styles: {
@@ -1058,7 +1058,7 @@ function PtRevenueContent({
                   <TableHead>Member Name</TableHead>
                   <TableHead>Trainer</TableHead>
                   <TableHead className="text-right">PT Fee (JMD)</TableHead>
-                  <TableHead>Session Date</TableHead>
+                  <TableHead className="text-right">Sessions Completed</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1072,7 +1072,7 @@ function PtRevenueContent({
                       <TableCell className="font-medium">{session.memberName}</TableCell>
                       <TableCell>{session.trainerName}</TableCell>
                       <TableCell className="text-right">{formatRevenueCurrency(session.ptFee)}</TableCell>
-                      <TableCell>{formatRevenueReportDateTime(session.sessionDate)}</TableCell>
+                      <TableCell className="text-right">{session.sessionsCompleted}</TableCell>
                     </TableRow>
                   ))
                 ) : (

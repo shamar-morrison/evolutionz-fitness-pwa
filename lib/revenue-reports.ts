@@ -87,6 +87,7 @@ const ptRevenueReportSchema = z.object({
       trainerName: z.string().trim().min(1),
       ptFee: z.number().finite(),
       sessionDate: z.string().trim().min(1),
+      sessionsCompleted: z.number().int().nonnegative(),
     }),
   ),
   totalsByTrainer: z.array(

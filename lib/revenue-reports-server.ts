@@ -489,13 +489,23 @@ export async function readPtRevenueReport(
     }
   >()
 
-  const reportSessions = sessions.flatMap((session) => {
-    const ptFee = ptFeeByAssignmentId.get(session.assignment_id)
+  const sessionsByAssignmentId = new Map<string, PtSessionRevenueRow[]>()
+
+  for (const session of sessions) {
+    const assignmentSessions = sessionsByAssignmentId.get(session.assignment_id) ?? []
+    assignmentSessions.push(session)
+    sessionsByAssignmentId.set(session.assignment_id, assignmentSessions)
+  }
+
+  const reportSessions = Array.from(sessionsByAssignmentId.entries()).flatMap(([assignmentId, assignmentSessions]) => {
+    const ptFee = ptFeeByAssignmentId.get(assignmentId)
 
     if (typeof ptFee !== 'number') {
       return []
     }
 
+    const session = assignmentSessions[0]
+    const sessionsCompleted = assignmentSessions.length
     const trainerName = normalizeText(trainerById.get(session.trainer_id)?.name) || 'Unknown trainer'
     const memberName = normalizeText(memberById.get(session.member_id)?.name) || 'Unknown member'
     const trainerTotals = totalsByTrainer.get(session.trainer_id) ?? {
@@ -506,17 +516,18 @@ export async function readPtRevenueReport(
     }
 
     trainerTotals.totalRevenue += ptFee
-    trainerTotals.sessionCount += 1
+    trainerTotals.sessionCount += sessionsCompleted
     totalsByTrainer.set(session.trainer_id, trainerTotals)
 
     return [
       {
-        id: session.id,
+        id: assignmentId,
         memberId: normalizeText(session.member_id),
         memberName,
         trainerName,
         ptFee,
         sessionDate: session.scheduled_at,
+        sessionsCompleted,
       },
     ]
   })
@@ -524,7 +535,10 @@ export async function readPtRevenueReport(
   return {
     summary: {
       totalRevenue: reportSessions.reduce((sum, session) => sum + session.ptFee, 0),
-      totalSessionsCompleted: reportSessions.length,
+      totalSessionsCompleted: reportSessions.reduce(
+        (sum, session) => sum + session.sessionsCompleted,
+        0,
+      ),
     },
     sessions: reportSessions,
     totalsByTrainer: Array.from(totalsByTrainer.values()).sort((left, right) =>

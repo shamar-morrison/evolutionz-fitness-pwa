@@ -209,7 +209,7 @@ describe('GET /api/reports/revenue/pt', () => {
     )
   })
 
-  it('aggregates PT revenue by session and trainer', async () => {
+  it('aggregates PT revenue by assignment and trainer', async () => {
     const { client } = createSupabasePtRevenueClient({
       pt_sessions: [
         {
@@ -269,27 +269,30 @@ describe('GET /api/reports/revenue/pt', () => {
 
     expect(response.status).toBe(200)
     expect(body.summary).toEqual({
-      totalRevenue: 68000,
+      totalRevenue: 53000,
       totalSessionsCompleted: 4,
     })
     expect(body.sessions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: 'session-1',
+          id: 'assignment-1',
           memberId: 'member-1',
           memberName: 'Member One',
           trainerName: 'Jordan Trainer',
           ptFee: 15000,
+          sessionsCompleted: 2,
         }),
         expect.objectContaining({
-          id: 'session-4',
+          id: 'assignment-3',
           memberId: 'member-3',
           memberName: 'Member Three',
           trainerName: 'Alex Coach',
           ptFee: 20000,
+          sessionsCompleted: 1,
         }),
       ]),
     )
+    expect(body.sessions).toHaveLength(3)
     expect(body.totalsByTrainer).toEqual([
       {
         trainerId: 'trainer-2',
@@ -300,7 +303,7 @@ describe('GET /api/reports/revenue/pt', () => {
       {
         trainerId: 'trainer-1',
         trainerName: 'Jordan Trainer',
-        totalRevenue: 48000,
+        totalRevenue: 33000,
         sessionCount: 3,
       },
     ])
@@ -351,12 +354,13 @@ describe('GET /api/reports/revenue/pt', () => {
       },
       sessions: [
         {
-          id: 'session-1',
+          id: 'assignment-1',
           memberId: 'member-1',
           memberName: 'Member One',
           trainerName: 'Jordan Trainer',
           ptFee: 15000,
           sessionDate: '2026-04-10T09:00:00-05:00',
+          sessionsCompleted: 1,
         },
       ],
       totalsByTrainer: [
