@@ -2,11 +2,14 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
   buildJamaicaScheduledAt,
+  getDateRangeBoundsInJamaica,
   getIsoWeekKey,
   getJamaicaDateValue,
+  getPtSessionGenerationEndDate,
+  getScheduledDateValuesForRange,
+  getScheduledSessionForStartDate,
   MAX_PT_SESSIONS_PER_WEEK,
-  getMonthRange,
-  getScheduledDateValuesForMonth,
+  PT_SESSION_GENERATION_DURATIONS,
 } from '@/lib/pt-scheduling'
 import { readTrainerClientById } from '@/lib/pt-scheduling-server'
 import { requireAdminUser } from '@/lib/server-auth'
@@ -14,8 +17,9 @@ import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const generateSessionsSchema = z
   .object({
-    month: z.number().int().min(1).max(12),
-    year: z.number().int().min(2000).max(9999),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+    duration: z.enum(PT_SESSION_GENERATION_DURATIONS),
+    firstSessionTime: z.string().trim().optional(),
     override: z.boolean().optional(),
   })
   .strict()
@@ -55,28 +59,59 @@ export async function POST(
       return createErrorResponse('Sessions can only be generated for active PT assignments.', 400)
     }
 
-    const monthRange = getMonthRange(input.month, input.year)
+    const endDate = getPtSessionGenerationEndDate(input.startDate, input.duration)
 
-    if (!monthRange) {
-      return createErrorResponse('Invalid month or year.', 400)
+    if (!endDate) {
+      return createErrorResponse('Invalid start date or duration.', 400)
     }
 
-    const candidateScheduledAtValues = assignment.scheduledSessions
-      .flatMap(({ day, sessionTime }) =>
-        getScheduledDateValuesForMonth(input.month, input.year, [day]).map((dateValue) =>
-          buildJamaicaScheduledAt(dateValue, sessionTime),
-        ),
+    const range = getDateRangeBoundsInJamaica(input.startDate, endDate)
+
+    if (!range) {
+      return createErrorResponse('Invalid generation date range.', 400)
+    }
+
+    const startDateScheduledSession = getScheduledSessionForStartDate(
+      assignment.scheduledSessions,
+      input.startDate,
+    )
+    const firstSessionTime = startDateScheduledSession?.sessionTime ?? input.firstSessionTime
+    const firstScheduledAt = firstSessionTime
+      ? buildJamaicaScheduledAt(input.startDate, firstSessionTime)
+      : null
+
+    if (!firstScheduledAt) {
+      return createErrorResponse(
+        'First session time is required when the start date is not a scheduled training day.',
+        400,
       )
-      .filter((value): value is string => Boolean(value))
-      .sort()
+    }
+
+    const scheduledAtSet = new Set<string>([firstScheduledAt])
+
+    for (const { day, sessionTime } of assignment.scheduledSessions) {
+      for (const dateValue of getScheduledDateValuesForRange(input.startDate, endDate, [day])) {
+        if (dateValue === input.startDate) {
+          continue
+        }
+
+        const scheduledAt = buildJamaicaScheduledAt(dateValue, sessionTime)
+
+        if (scheduledAt) {
+          scheduledAtSet.add(scheduledAt)
+        }
+      }
+    }
+
+    const candidateScheduledAtValues = Array.from(scheduledAtSet).sort()
 
     const { data: existingAssignmentSessions, error: existingAssignmentSessionsError } =
       await supabase
         .from('pt_sessions')
         .select('scheduled_at')
         .eq('assignment_id', assignment.id)
-        .gte('scheduled_at', monthRange.startInclusive)
-        .lt('scheduled_at', monthRange.endExclusive)
+        .gte('scheduled_at', range.startInclusive)
+        .lt('scheduled_at', range.endExclusive)
 
     if (existingAssignmentSessionsError) {
       throw new Error(
@@ -93,8 +128,8 @@ export async function POST(
       (scheduledAt) => !existingAssignmentSessionSet.has(scheduledAt),
     )
     const skipped = candidateScheduledAtValues.length - scheduledAtValuesToInsert.length
-    const bufferRangeStart = new Date(new Date(monthRange.startInclusive).getTime() - 7 * 86_400_000)
-    const bufferRangeEnd = new Date(new Date(monthRange.endExclusive).getTime() + 7 * 86_400_000)
+    const bufferRangeStart = new Date(new Date(range.startInclusive).getTime() - 7 * 86_400_000)
+    const bufferRangeEnd = new Date(new Date(range.endExclusive).getTime() + 7 * 86_400_000)
     const { data: existingPairSessions, error: existingPairSessionsError } = await supabase
       .from('pt_sessions')
       .select('id, scheduled_at')

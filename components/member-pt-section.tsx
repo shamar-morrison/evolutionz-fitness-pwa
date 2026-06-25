@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, Pencil, Trash2, UserRoundPlus } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
-import { ConfirmDialog } from '@/components/confirm-dialog'
 import { PtAssignmentDialog } from '@/components/pt-assignment-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,6 +17,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePermissions } from '@/hooks/use-permissions'
 import { usePtAssignments, useMemberPtAssignment } from '@/hooks/use-pt-scheduling'
@@ -25,14 +33,19 @@ import { useStaff } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
 import {
   deletePtAssignment,
+  DEFAULT_PT_SESSION_GENERATION_DURATION,
   formatOptionalJmdCurrency,
   formatScheduleSummary,
   generatePtAssignmentSessions,
-  getMonthLabel,
-  getMonthValueInJamaica,
+  getJamaicaDateValueFromIso,
+  getPtSessionGenerationEndDate,
+  getPtSessionGenerationDurationLabel,
   MAX_PT_SESSIONS_PER_WEEK,
   normalizeTrainingPlan,
-  parseMonthValue,
+  PT_SESSION_GENERATION_DURATION_OPTIONS,
+  requiresFirstSessionTime,
+  type GeneratePtSessionsRequest,
+  type PtSessionGenerationDuration,
   type TrainerClient,
 } from '@/lib/pt-scheduling'
 import { queryKeys } from '@/lib/query-keys'
@@ -43,6 +56,41 @@ type MemberPtSectionProps = {
 }
 
 type RemovalAction = 'keep' | 'cancel-future'
+
+type GenerateAssignmentConfig = {
+  startDate: string
+  duration: PtSessionGenerationDuration
+  firstSessionTime: string
+}
+
+function getDefaultGenerateAssignmentConfig(assignment: TrainerClient): GenerateAssignmentConfig {
+  return {
+    startDate: getJamaicaDateValueFromIso(assignment.createdAt) ?? '',
+    duration: DEFAULT_PT_SESSION_GENERATION_DURATION,
+    firstSessionTime: '',
+  }
+}
+
+function getGenerateAssignmentRequest(
+  assignment: TrainerClient,
+  config: GenerateAssignmentConfig,
+): GeneratePtSessionsRequest | null {
+  if (!config.startDate || !getPtSessionGenerationEndDate(config.startDate, config.duration)) {
+    return null
+  }
+
+  const needsFirstSessionTime = requiresFirstSessionTime(assignment.scheduledSessions, config.startDate)
+
+  if (needsFirstSessionTime && !config.firstSessionTime) {
+    return null
+  }
+
+  return {
+    startDate: config.startDate,
+    duration: config.duration,
+    ...(needsFirstSessionTime ? { firstSessionTime: config.firstSessionTime } : {}),
+  }
+}
 
 function getAssignmentSortTimestamp(assignment: Pick<TrainerClient, 'updatedAt' | 'createdAt'>) {
   const updatedAtTime = new Date(assignment.updatedAt).getTime()
@@ -116,8 +164,6 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
   const queryClient = useQueryClient()
   const { profile } = useAuth()
   const { can } = usePermissions()
-  const currentMonthValue = getMonthValueInJamaica()
-  const currentMonth = parseMonthValue(currentMonthValue)
   const isFrontDesk = isFrontDeskStaff(profile?.titles)
   const canAssignTrainer = can('pt.assign')
   const { assignment, isLoading, error } = useMemberPtAssignment(memberId)
@@ -126,6 +172,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false)
   const [showRemoveDialog, setShowRemoveDialog] = useState(false)
   const [pendingGenerateAssignment, setPendingGenerateAssignment] = useState<TrainerClient | null>(null)
+  const [generateConfig, setGenerateConfig] = useState<GenerateAssignmentConfig | null>(null)
   const [removalAction, setRemovalAction] = useState<RemovalAction | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const isRemoving = removalAction !== null
@@ -159,6 +206,7 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
 
     if (mode === 'create') {
       setPendingGenerateAssignment(nextAssignment)
+      setGenerateConfig(getDefaultGenerateAssignmentConfig(nextAssignment))
     }
   }
 
@@ -193,19 +241,28 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
     }
   }
 
-  const handleGenerateCurrentMonth = async () => {
-    if (!pendingGenerateAssignment || !currentMonth) {
+  const handleGenerateSessions = async () => {
+    if (!pendingGenerateAssignment || !generateConfig) {
       setPendingGenerateAssignment(null)
+      setGenerateConfig(null)
+      return
+    }
+
+    const request = getGenerateAssignmentRequest(pendingGenerateAssignment, generateConfig)
+
+    if (!request) {
+      toast({
+        title: 'Generation details required',
+        description: 'Complete the start date, duration, and required first session time before generating sessions.',
+        variant: 'destructive',
+      })
       return
     }
 
     setIsGenerating(true)
 
     try {
-      const result = await generatePtAssignmentSessions(pendingGenerateAssignment.id, {
-        month: currentMonth.month,
-        year: currentMonth.year,
-      })
+      const result = await generatePtAssignmentSessions(pendingGenerateAssignment.id, request)
 
       if (!result.ok) {
         toast({
@@ -220,19 +277,20 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
         })
         toast({
           title: 'Sessions generated',
-          description: `${result.generated} session${result.generated === 1 ? '' : 's'} generated and ${result.skipped} skipped for ${getMonthLabel(currentMonth.month, currentMonth.year)}.`,
+          description: `${result.generated} session${result.generated === 1 ? '' : 's'} generated and ${result.skipped} skipped for the selected range.`,
         })
       }
     } catch (error) {
       toast({
         title: 'Session generation failed',
         description:
-          error instanceof Error ? error.message : 'Failed to generate the current month sessions.',
+          error instanceof Error ? error.message : 'Failed to generate sessions for the selected range.',
         variant: 'destructive',
       })
     } finally {
       setIsGenerating(false)
       setPendingGenerateAssignment(null)
+      setGenerateConfig(null)
     }
   }
 
@@ -436,25 +494,124 @@ export function MemberPtSection({ memberId }: MemberPtSectionProps) {
             </DialogContent>
           </Dialog>
 
-          <ConfirmDialog
+          <Dialog
             open={Boolean(pendingGenerateAssignment)}
             onOpenChange={(open) => {
-              if (!open) {
+              if (!open && !isGenerating) {
                 setPendingGenerateAssignment(null)
+                setGenerateConfig(null)
               }
             }}
-            title="Generate sessions now?"
-            description={
-              currentMonth
-                ? `Would you like to generate sessions for ${getMonthLabel(currentMonth.month, currentMonth.year)}?`
-                : 'Would you like to generate sessions for the current month?'
-            }
-            confirmLabel="Yes, Generate"
-            cancelLabel="No"
-            onConfirm={() => void handleGenerateCurrentMonth()}
-            onCancel={() => setPendingGenerateAssignment(null)}
-            isLoading={isGenerating}
-          />
+          >
+            <DialogContent className="sm:max-w-[520px]" isLoading={isGenerating}>
+              <DialogHeader>
+                <DialogTitle>Generate sessions now?</DialogTitle>
+                <DialogDescription>
+                  Create PT sessions for this assignment using its schedule.
+                </DialogDescription>
+              </DialogHeader>
+
+              {pendingGenerateAssignment && generateConfig ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="member-pt-generate-start-date">Start date</Label>
+                    <Input
+                      id="member-pt-generate-start-date"
+                      type="date"
+                      value={generateConfig.startDate}
+                      onChange={(event) =>
+                        setGenerateConfig((current) =>
+                          current ? { ...current, startDate: event.target.value } : current,
+                        )
+                      }
+                      disabled={isGenerating}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="member-pt-generate-duration">Duration</Label>
+                    <Select
+                      value={generateConfig.duration}
+                      onValueChange={(value) =>
+                        setGenerateConfig((current) =>
+                          current
+                            ? { ...current, duration: value as PtSessionGenerationDuration }
+                            : current,
+                        )
+                      }
+                      disabled={isGenerating}
+                    >
+                      <SelectTrigger id="member-pt-generate-duration">
+                        <SelectValue placeholder="Duration" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PT_SESSION_GENERATION_DURATION_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {requiresFirstSessionTime(
+                    pendingGenerateAssignment.scheduledSessions,
+                    generateConfig.startDate,
+                  ) ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="member-pt-generate-first-time">First session time</Label>
+                      <Input
+                        id="member-pt-generate-first-time"
+                        type="time"
+                        value={generateConfig.firstSessionTime}
+                        onChange={(event) =>
+                          setGenerateConfig((current) =>
+                            current ? { ...current, firstSessionTime: event.target.value } : current,
+                          )
+                        }
+                        disabled={isGenerating}
+                      />
+                    </div>
+                  ) : null}
+
+                  <p className="text-muted-foreground text-sm">
+                    {getPtSessionGenerationDurationLabel(generateConfig.duration)} from{' '}
+                    {generateConfig.startDate} through{' '}
+                    {getPtSessionGenerationEndDate(
+                      generateConfig.startDate,
+                      generateConfig.duration,
+                    ) ?? 'Invalid date'}
+                  </p>
+                </div>
+              ) : null}
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setPendingGenerateAssignment(null)
+                    setGenerateConfig(null)
+                  }}
+                  disabled={isGenerating}
+                >
+                  No
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void handleGenerateSessions()}
+                  disabled={
+                    !pendingGenerateAssignment ||
+                    !generateConfig ||
+                    !getGenerateAssignmentRequest(pendingGenerateAssignment, generateConfig)
+                  }
+                  loading={isGenerating}
+                >
+                  Yes, Generate
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       ) : null}
     </>

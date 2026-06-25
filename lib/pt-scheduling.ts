@@ -43,6 +43,28 @@ export const TRAINER_PAYOUT_PER_CLIENT_JMD = 10500
 export const DEFAULT_PT_SESSION_TIME = '07:00'
 export const DEFAULT_PT_SESSIONS_PER_WEEK = 3
 export const MAX_PT_SESSIONS_PER_WEEK = 7
+export const PT_SESSION_GENERATION_DURATIONS = [
+  '1_day',
+  '1_week',
+  '1_month',
+  '3_months',
+  '6_months',
+  '1_year',
+] as const
+export type PtSessionGenerationDuration = typeof PT_SESSION_GENERATION_DURATIONS[number]
+
+export const PT_SESSION_GENERATION_DURATION_OPTIONS: Array<{
+  value: PtSessionGenerationDuration
+  label: string
+}> = [
+  { value: '1_day', label: '1 Day' },
+  { value: '1_week', label: '1 Week' },
+  { value: '1_month', label: '1 Month' },
+  { value: '3_months', label: '3 Months' },
+  { value: '6_months', label: '6 Months' },
+  { value: '1_year', label: '1 Year' },
+]
+export const DEFAULT_PT_SESSION_GENERATION_DURATION: PtSessionGenerationDuration = '1_month'
 
 export type TrainingPlanDay = {
   id: string
@@ -266,8 +288,9 @@ export type UpdatePtAssignmentData = {
 }
 
 export type GeneratePtSessionsRequest = {
-  month: number
-  year: number
+  startDate: string
+  duration: PtSessionGenerationDuration
+  firstSessionTime?: string
   override?: boolean
 }
 
@@ -592,6 +615,15 @@ const sessionStatusLabels: Record<SessionStatus, string> = {
   missed: 'Missed',
   rescheduled: 'Rescheduled',
   cancelled: 'Cancelled',
+}
+
+const ptSessionGenerationDurationDays: Record<PtSessionGenerationDuration, number> = {
+  '1_day': 1,
+  '1_week': 7,
+  '1_month': 28,
+  '3_months': 84,
+  '6_months': 168,
+  '1_year': 336,
 }
 
 const dayToWeekdayIndex: Record<DayOfWeek, number> = {
@@ -1093,6 +1125,10 @@ export function getJamaicaDateValue(value: string) {
   return `${year}-${month}-${day}`
 }
 
+export function getJamaicaDateValueFromIso(value: string) {
+  return getJamaicaDateValue(value)
+}
+
 export function getMonthValueInJamaica(date = new Date()) {
   const parts = getDatePartsInTimeZone(
     date,
@@ -1143,6 +1179,74 @@ export function shiftDateValue(value: string, offsetDays: number) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(
     date.getUTCDate(),
   ).padStart(2, '0')}`
+}
+
+export function getPtSessionGenerationDurationLabel(duration: PtSessionGenerationDuration) {
+  return (
+    PT_SESSION_GENERATION_DURATION_OPTIONS.find((option) => option.value === duration)?.label ??
+    duration
+  )
+}
+
+export function getPtSessionGenerationEndDate(
+  startDate: string,
+  duration: PtSessionGenerationDuration,
+) {
+  if (!isDateValue(startDate)) {
+    return null
+  }
+
+  return shiftDateValue(startDate, ptSessionGenerationDurationDays[duration] - 1)
+}
+
+export function getDateValuesInRange(startDate: string, endDate: string) {
+  if (!isDateValue(startDate) || !isDateValue(endDate) || startDate > endDate) {
+    return []
+  }
+
+  const values: string[] = []
+  let currentDate: string | null = startDate
+
+  while (currentDate && currentDate <= endDate) {
+    values.push(currentDate)
+    currentDate = shiftDateValue(currentDate, 1)
+  }
+
+  return values
+}
+
+export function getScheduledDateValuesForRange(
+  startDate: string,
+  endDate: string,
+  scheduledDays: DayOfWeek[],
+) {
+  const matchingWeekdays = new Set(scheduledDays.map((day) => dayToWeekdayIndex[day]))
+
+  return getDateValuesInRange(startDate, endDate).filter((dateValue) => {
+    const date = getUtcDateFromDateValue(dateValue)
+
+    return date ? matchingWeekdays.has(date.getUTCDay()) : false
+  })
+}
+
+export function getScheduledSessionForStartDate(
+  scheduledSessions: ReadonlyArray<ScheduledSessionInput | AssignmentScheduleDay>,
+  startDate: string,
+) {
+  const startDay = getJamaicaDayOfWeek(`${startDate}T12:00:00${JAMAICA_OFFSET}`)
+
+  if (!startDay) {
+    return null
+  }
+
+  return scheduledSessions.find((session) => session.day === startDay) ?? null
+}
+
+export function requiresFirstSessionTime(
+  scheduledSessions: ReadonlyArray<ScheduledSessionInput | AssignmentScheduleDay>,
+  startDate: string,
+) {
+  return Boolean(isDateValue(startDate) && !getScheduledSessionForStartDate(scheduledSessions, startDate))
 }
 
 export function getMonthLabel(month: number, year: number) {
