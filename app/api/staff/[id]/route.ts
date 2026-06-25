@@ -6,6 +6,7 @@ import {
   STAFF_TITLES,
   TRAINER_SPECIALTIES,
   deriveRoleFromTitles,
+  getStaffTitlesConflictError,
   hasStaffTitle,
   normalizeProfile,
   normalizeStaffSpecialtiesForTitles,
@@ -270,6 +271,11 @@ export async function PATCH(
       requestBody !== null &&
       Object.prototype.hasOwnProperty.call(requestBody, 'specialties')
     const input = updateStaffRequestSchema.parse(requestBody)
+    const titleConflictError = getStaffTitlesConflictError(input.titles)
+
+    if (titleConflictError) {
+      return createErrorResponse(titleConflictError, 400)
+    }
 
     if (authResult.user.id === id && !hasStaffTitle(input.titles, 'Owner')) {
       return createErrorResponse(SELF_DEMOTION_ERROR, 403)

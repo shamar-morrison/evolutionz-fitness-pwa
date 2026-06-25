@@ -6,6 +6,7 @@ import {
   STAFF_TITLES,
   TRAINER_SPECIALTIES,
   deriveRoleFromTitles,
+  getStaffTitlesConflictError,
   normalizeExistingStaffProfileSummary,
   normalizeProfile,
   normalizeStaffSpecialtiesForTitles,
@@ -144,6 +145,11 @@ export async function POST(request: Request) {
 
     const requestBody = await request.json()
     const input = createStaffRequestSchema.parse(requestBody)
+    const titleConflictError = getStaffTitlesConflictError(input.titles)
+
+    if (titleConflictError) {
+      return createErrorResponse(titleConflictError, 400)
+    }
     const supabase = getSupabaseAdminClient() as unknown as CreateStaffAdminClient
     const normalizedEmail = input.email.trim()
     const { data: existingProfileData, error: existingProfileError } = await supabase

@@ -184,7 +184,7 @@ describe('GET /api/reports/class-payments', () => {
           profiles: {
             id: 'trainer-1',
             name: 'Alex Coach',
-            titles: ['Medical'],
+            titles: ['Medical/Consultant'],
           },
           classes: {
             id: 'class-1',
@@ -255,7 +255,7 @@ describe('GET /api/reports/class-payments', () => {
       {
         trainerId: 'trainer-1',
         trainerName: 'Alex Coach',
-        trainerTitles: ['Medical'],
+        trainerTitles: ['Medical/Consultant'],
         classes: [
           {
             classId: 'class-1',
@@ -321,7 +321,7 @@ describe('GET /api/reports/class-payments', () => {
           profiles: {
             id: 'trainer-2',
             name: 'Alex Coach',
-            titles: ['Medical'],
+            titles: ['Medical/Consultant'],
           },
           classes: {
             id: 'class-1',
@@ -384,7 +384,7 @@ describe('GET /api/reports/class-payments', () => {
       {
         trainerId: 'trainer-2',
         trainerName: 'Alex Coach',
-        trainerTitles: ['Medical'],
+        trainerTitles: ['Medical/Consultant'],
         classes: [
           {
             classId: 'class-1',

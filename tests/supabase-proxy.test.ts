@@ -107,6 +107,40 @@ describe('updateSession', () => {
     expect(response.headers.get('location')).toBe('http://localhost/trainer/schedule')
   })
 
+  it('keeps mixed trainer and medical staff on /trainer/schedule after login', async () => {
+    mockSupabaseUser({
+      id: 'user-3',
+      email: 'trainer-medical@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'user-3',
+      role: 'staff',
+      titles: ['Trainer', 'Medical/Consultant'],
+    })
+
+    const response = await updateSession(createRequest('/login'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/trainer/schedule')
+  })
+
+  it('redirects authenticated /login requests to /medical for medical staff', async () => {
+    mockSupabaseUser({
+      id: 'user-9',
+      email: 'medical@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'user-9',
+      role: 'staff',
+      titles: ['Medical/Consultant'],
+    })
+
+    const response = await updateSession(createRequest('/login'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/medical')
+  })
+
   it('redirects authenticated /login requests to /members for front desk staff', async () => {
     mockSupabaseUser({
       id: 'user-4',
@@ -247,6 +281,23 @@ describe('updateSession', () => {
     expect(response.headers.get('location')).toBe('http://localhost/trainer/schedule')
   })
 
+  it('keeps mixed trainer and medical staff on /trainer/schedule for blocked routes', async () => {
+    mockSupabaseUser({
+      id: 'trainer-medical-1',
+      email: 'trainer-medical@evolutionzfitness.com',
+    })
+    readStaffProfileMock.mockResolvedValue({
+      id: 'trainer-medical-1',
+      role: 'staff',
+      titles: ['Trainer', 'Medical/Consultant'],
+    })
+
+    const response = await updateSession(createRequest('/cards'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('http://localhost/trainer/schedule')
+  })
+
   it('redirects administrative assistants away from trainer routes to /members', async () => {
     mockSupabaseUser({
       id: 'assistant-1',
@@ -264,7 +315,7 @@ describe('updateSession', () => {
     expect(response.headers.get('location')).toBe('http://localhost/members')
   })
 
-  it('redirects staff without permitted titles to /unauthorized', async () => {
+  it('redirects medical staff to /medical when they hit an unauthorized route', async () => {
     mockSupabaseUser({
       id: 'medical-1',
       email: 'medical@evolutionzfitness.com',
@@ -272,13 +323,13 @@ describe('updateSession', () => {
     readStaffProfileMock.mockResolvedValue({
       id: 'medical-1',
       role: 'staff',
-      titles: ['Medical'],
+      titles: ['Medical/Consultant'],
     })
 
     const response = await updateSession(createRequest('/classes'))
 
     expect(response.status).toBe(307)
-    expect(response.headers.get('location')).toBe('http://localhost/unauthorized')
+    expect(response.headers.get('location')).toBe('http://localhost/medical')
   })
 
   it('redirects archived or missing-profile sessions back to /login', async () => {

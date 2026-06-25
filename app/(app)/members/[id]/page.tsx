@@ -12,6 +12,7 @@ import { MemberAvatar } from '@/components/member-avatar'
 import { MemberPaymentHistory } from '@/components/member-payment-history'
 import { MemberPtAttendance } from '@/components/member-pt-attendance'
 import { MemberPtSection } from '@/components/member-pt-section'
+import { MemberMedicalSection } from '@/components/member-medical-section'
 import { StatusBadge } from '@/components/status-badge'
 import { CheckInHistory } from '@/components/check-in-history'
 import { EditMemberModal } from '@/components/edit-member-modal'
@@ -897,6 +898,9 @@ export default function MemberDetailPage() {
       </div>
 
       {showPtAttendance ? <MemberPtSection memberId={memberId} /> : null}
+      <RoleGuard permission="medical.assign">
+        <MemberMedicalSection memberId={memberId} />
+      </RoleGuard>
 
       <AssignCardModal
         member={member}

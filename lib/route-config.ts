@@ -7,7 +7,7 @@ export type AppTitle =
   | 'Trainer'
   | 'Administrative Assistant'
   | 'Assistant'
-  | 'Medical'
+  | 'Medical/Consultant'
   | 'Physiotherapist/Nutritionist'
 
 export interface RouteConfig {
@@ -116,6 +116,18 @@ export const routeConfig: Record<string, RouteConfig> = {
     allowedRoles: ['admin', 'staff'],
     allowedTitles: ['Trainer'],
   },
+  '/medical': {
+    allowedRoles: ['admin', 'staff'],
+    allowedTitles: ['Medical/Consultant'],
+  },
+  '/medical/[id]': {
+    allowedRoles: ['admin', 'staff'],
+    allowedTitles: ['Medical/Consultant'],
+    backLink: {
+      admin: '/medical',
+      staff: '/medical',
+    },
+  },
 }
 
 const uuidSegmentPattern =
@@ -127,16 +139,21 @@ function normalizePathname(pathname: string) {
 }
 
 function normalizeTitles(titles: string[]): AppTitle[] {
+  const normalizedTitles = titles.map((title) =>
+    title.trim() === 'Medical' ? 'Medical/Consultant' : title.trim(),
+  )
   const allowedTitles = new Set<AppTitle>([
     'Owner',
     'Trainer',
     'Administrative Assistant',
     'Assistant',
-    'Medical',
+    'Medical/Consultant',
     'Physiotherapist/Nutritionist',
   ])
 
-  return titles.filter((title): title is AppTitle => allowedTitles.has(title as AppTitle))
+  return normalizedTitles.filter(
+    (title): title is AppTitle => allowedTitles.has(title as AppTitle),
+  )
 }
 
 function getDefaultHomePath(role: AppRole, titles: string[]) {

@@ -355,7 +355,7 @@ describe('ClassPaymentsPage', () => {
                 {
                   trainerId: 'trainer-2',
                   trainerName: 'Alex Coach',
-                  trainerTitles: ['Coach', 'Medical'],
+                  trainerTitles: ['Coach', 'Medical/Consultant'],
                   classes: [
                     {
                       classId: 'class-1',
