@@ -44,7 +44,6 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     trainingPlan,
     sessionTime,
     notes: overrides.notes ?? null,
-    commissionOverride: overrides.commissionOverride ?? null,
     createdAt: overrides.createdAt ?? '2026-04-03T00:00:00.000Z',
     updatedAt: overrides.updatedAt ?? '2026-04-03T00:00:00.000Z',
     trainerName: overrides.trainerName ?? 'Jordan Trainer',

@@ -34,13 +34,13 @@ import { toast } from '@/hooks/use-toast'
 import { config } from '@/lib/config'
 import {
   deletePtSessions,
-  DEFAULT_PT_SESSION_GENERATION_DURATION,
   fetchPtSessions,
   formatPtSessionStatusLabel,
   formatScheduleSummary,
   generatePtAssignmentSessions,
+  getDefaultGenerateAssignmentConfig,
+  getGenerateAssignmentRequest,
   getJamaicaDateValue,
-  getJamaicaDateValueFromIso,
   getMonthDateValues,
   getMonthLabel,
   getMonthValueInJamaica,
@@ -51,6 +51,7 @@ import {
   parseMonthValue,
   PT_SESSION_GENERATION_DURATION_OPTIONS,
   requiresFirstSessionTime,
+  type GenerateAssignmentConfig,
   type GeneratePtSessionsRequest,
   type GeneratePtSessionsResult,
   type PtSessionGenerationDuration,
@@ -85,12 +86,6 @@ type BulkGenerationSummary = {
   generatedAssignments: number
   skippedAssignments: number
   unconfirmedOverrideAssignments: number
-}
-
-type GenerateAssignmentConfig = {
-  startDate: string
-  duration: PtSessionGenerationDuration
-  firstSessionTime: string
 }
 
 const EMPTY_ACTIVE_ASSIGNMENTS: TrainerClient[] = []
@@ -202,35 +197,6 @@ function formatGenerateAssignmentLabel(
   assignment: Pick<TrainerClient, 'memberName' | 'trainerName'>,
 ) {
   return `${assignment.memberName ?? 'Member'} <-> ${assignment.trainerName ?? 'Trainer'}`
-}
-
-function getDefaultGenerateAssignmentConfig(assignment: TrainerClient): GenerateAssignmentConfig {
-  return {
-    startDate: getJamaicaDateValueFromIso(assignment.createdAt) ?? getJamaicaDateValueFromIso(new Date().toISOString()) ?? '',
-    duration: DEFAULT_PT_SESSION_GENERATION_DURATION,
-    firstSessionTime: '',
-  }
-}
-
-function getGenerateAssignmentRequest(
-  assignment: TrainerClient,
-  config: GenerateAssignmentConfig,
-): GeneratePtSessionsRequest | null {
-  if (!config.startDate || !getPtSessionGenerationEndDate(config.startDate, config.duration)) {
-    return null
-  }
-
-  const needsFirstSessionTime = requiresFirstSessionTime(assignment.scheduledSessions, config.startDate)
-
-  if (needsFirstSessionTime && !config.firstSessionTime) {
-    return null
-  }
-
-  return {
-    startDate: config.startDate,
-    duration: config.duration,
-    ...(needsFirstSessionTime ? { firstSessionTime: config.firstSessionTime } : {}),
-  }
 }
 
 function formatPtAssignmentLabel(
@@ -389,7 +355,13 @@ function SchedulePageContent() {
   const canGenerateSelectedAssignments =
     selectedGenerateAssignments.length > 0 &&
     selectedGenerateAssignments.every((assignment) =>
-      Boolean(getGenerateAssignmentRequest(assignment, generateAssignmentConfigs[assignment.id] ?? getDefaultGenerateAssignmentConfig(assignment))),
+      Boolean(
+        getGenerateAssignmentRequest(
+          assignment,
+          generateAssignmentConfigs[assignment.id] ??
+            getDefaultGenerateAssignmentConfig(assignment, new Date().toISOString()),
+        ),
+      ),
     ) &&
     !isGenerating
   const removeMonthAssignmentTargets = useMemo(() => {
@@ -624,7 +596,8 @@ function SchedulePageContent() {
     if (assignment) {
       setGenerateAssignmentConfigs((current) => ({
         ...current,
-        [assignmentId]: current[assignmentId] ?? getDefaultGenerateAssignmentConfig(assignment),
+        [assignmentId]:
+          current[assignmentId] ?? getDefaultGenerateAssignmentConfig(assignment, new Date().toISOString()),
       }))
     }
   }
@@ -637,7 +610,7 @@ function SchedulePageContent() {
         ...Object.fromEntries(
           activeAssignments.map((assignment) => [
             assignment.id,
-            current[assignment.id] ?? getDefaultGenerateAssignmentConfig(assignment),
+            current[assignment.id] ?? getDefaultGenerateAssignmentConfig(assignment, new Date().toISOString()),
           ]),
         ),
       }))
@@ -651,7 +624,7 @@ function SchedulePageContent() {
     setGenerateAssignmentConfigs((current) => ({
       ...current,
       [assignment.id]: {
-        ...(current[assignment.id] ?? getDefaultGenerateAssignmentConfig(assignment)),
+        ...(current[assignment.id] ?? getDefaultGenerateAssignmentConfig(assignment, new Date().toISOString())),
         ...updates,
       },
     }))
@@ -689,7 +662,9 @@ function SchedulePageContent() {
       let skippedAssignments = 0
 
       for (const assignment of selectedGenerateAssignments) {
-        const config = generateAssignmentConfigs[assignment.id] ?? getDefaultGenerateAssignmentConfig(assignment)
+        const config =
+          generateAssignmentConfigs[assignment.id] ??
+          getDefaultGenerateAssignmentConfig(assignment, new Date().toISOString())
         const request = getGenerateAssignmentRequest(assignment, config)
 
         if (!request) {
@@ -1147,7 +1122,7 @@ function SchedulePageContent() {
                     const isSelected = selectedGenerateAssignmentIdSet.has(assignment.id)
                     const config =
                       generateAssignmentConfigs[assignment.id] ??
-                      getDefaultGenerateAssignmentConfig(assignment)
+                      getDefaultGenerateAssignmentConfig(assignment, new Date().toISOString())
                     const needsFirstSessionTime = requiresFirstSessionTime(
                       assignment.scheduledSessions,
                       config.startDate,
@@ -1196,6 +1171,7 @@ function SchedulePageContent() {
                           <div
                             className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_140px]"
                             onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
                           >
                             <div className="space-y-2">
                               <Label htmlFor={`generate-start-date-${assignment.id}`}>

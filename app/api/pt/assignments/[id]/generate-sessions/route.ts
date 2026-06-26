@@ -34,6 +34,12 @@ function createErrorResponse(error: string, status: number) {
   )
 }
 
+function normalizeScheduledAtInstant(value: string) {
+  const date = new Date(value)
+
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -119,13 +125,13 @@ export async function POST(
       )
     }
 
-    const existingAssignmentSessionSet = new Set<string>(
-      ((existingAssignmentSessions ?? []) as Array<{ scheduled_at: string }>).map(
-        (session) => session.scheduled_at,
-      ),
+    const existingAssignmentSessionSet = new Set(
+      ((existingAssignmentSessions ?? []) as Array<{ scheduled_at: string }>)
+        .map((session) => normalizeScheduledAtInstant(session.scheduled_at))
+        .filter((scheduledAt): scheduledAt is string => Boolean(scheduledAt)),
     )
     const scheduledAtValuesToInsert = candidateScheduledAtValues.filter(
-      (scheduledAt) => !existingAssignmentSessionSet.has(scheduledAt),
+      (scheduledAt) => !existingAssignmentSessionSet.has(normalizeScheduledAtInstant(scheduledAt) ?? ''),
     )
     const skipped = candidateScheduledAtValues.length - scheduledAtValuesToInsert.length
     const bufferRangeStart = new Date(new Date(range.startInclusive).getTime() - 7 * 86_400_000)

@@ -57,13 +57,13 @@ export const PT_SESSION_GENERATION_DURATION_OPTIONS: Array<{
   value: PtSessionGenerationDuration
   label: string
 }> = [
-  { value: '1_day', label: '1 Day' },
-  { value: '1_week', label: '1 Week' },
-  { value: '1_month', label: '1 Month' },
-  { value: '3_months', label: '3 Months' },
-  { value: '6_months', label: '6 Months' },
-  { value: '1_year', label: '1 Year' },
-]
+    { value: '1_day', label: '1 Day' },
+    { value: '1_week', label: '1 Week' },
+    { value: '1_month', label: '1 Month' },
+    { value: '3_months', label: '3 Months' },
+    { value: '6_months', label: '6 Months' },
+    { value: '1_year', label: '1 Year' },
+  ]
 export const DEFAULT_PT_SESSION_GENERATION_DURATION: PtSessionGenerationDuration = '1_month'
 
 export type TrainingPlanDay = {
@@ -201,20 +201,20 @@ export type Notification = {
   id: string
   recipientId: string
   type:
-    | 'reschedule_request'
-    | 'member_create_request'
-    | 'member_edit_request'
-    | 'member_payment_request'
-    | 'member_extension_request'
-    | 'member_pause_request'
-    | 'class_registration_edit_request'
-    | 'class_registration_removal_request'
-    | 'reschedule_approved'
-    | 'reschedule_denied'
-    | 'client_assigned'
-    | 'status_change_request'
-    | 'status_change_approved'
-    | 'status_change_denied'
+  | 'reschedule_request'
+  | 'member_create_request'
+  | 'member_edit_request'
+  | 'member_payment_request'
+  | 'member_extension_request'
+  | 'member_pause_request'
+  | 'class_registration_edit_request'
+  | 'class_registration_removal_request'
+  | 'reschedule_approved'
+  | 'reschedule_denied'
+  | 'client_assigned'
+  | 'status_change_request'
+  | 'status_change_approved'
+  | 'status_change_denied'
   title: string
   body: string
   read: boolean
@@ -294,6 +294,12 @@ export type GeneratePtSessionsRequest = {
   override?: boolean
 }
 
+export type GenerateAssignmentConfig = {
+  startDate: string
+  duration: PtSessionGenerationDuration
+  firstSessionTime: string
+}
+
 export type DeletePtSessionsData = {
   month: string
   assignmentIds: string[]
@@ -301,15 +307,15 @@ export type DeletePtSessionsData = {
 
 export type GeneratePtSessionsResult =
   | {
-      ok: true
-      generated: number
-      skipped: number
-    }
+    ok: true
+    generated: number
+    skipped: number
+  }
   | {
-      ok: false
-      code: 'WEEK_LIMIT_EXCEEDED'
-      weeks: string[]
-    }
+    ok: false
+    code: 'WEEK_LIMIT_EXCEEDED'
+    weeks: string[]
+  }
 
 export type UpdatePtSessionData = {
   status?: SessionStatus
@@ -330,17 +336,17 @@ export type ReviewRescheduleRequestData = {
 
 export type MarkPtSessionData =
   | {
-      requestedStatus: SessionUpdateRequestedStatus
-      status?: SessionUpdateRequestedStatus
-      note?: string | null
-      notes?: string | null
-    }
+    requestedStatus: SessionUpdateRequestedStatus
+    status?: SessionUpdateRequestedStatus
+    note?: string | null
+    notes?: string | null
+  }
   | {
-      status: SessionUpdateRequestedStatus
-      requestedStatus?: SessionUpdateRequestedStatus
-      note?: string | null
-      notes?: string | null
-    }
+    status: SessionUpdateRequestedStatus
+    requestedStatus?: SessionUpdateRequestedStatus
+    note?: string | null
+    notes?: string | null
+  }
 
 export type ApprovalRequestFilters = {
   status?: ApprovalRequestStatus
@@ -767,11 +773,11 @@ export function normalizeScheduledSessions(value: unknown): ScheduledSessionInpu
 
     return sessionTime
       ? [
-          {
-            day,
-            sessionTime,
-          },
-        ]
+        {
+          day,
+          sessionTime,
+        },
+      ]
       : []
   })
 }
@@ -810,12 +816,12 @@ export function normalizeTrainingPlan(value: unknown): DayTrainingPlan[] {
 
     return trainingTypeName
       ? [
-          {
-            day,
-            trainingTypeName,
-            isCustom: !isPredefinedTrainingType(trainingTypeName),
-          },
-        ]
+        {
+          day,
+          trainingTypeName,
+          isCustom: !isPredefinedTrainingType(trainingTypeName),
+        },
+      ]
       : []
   })
 }
@@ -870,13 +876,13 @@ export function normalizeAssignmentSchedule(value: unknown): AssignmentScheduleD
 
     return entry
       ? [
-          {
-            day,
-            sessionTime: entry.sessionTime,
-            trainingTypeName: entry.trainingTypeName,
-            isCustom: entry.trainingTypeName ? !isPredefinedTrainingType(entry.trainingTypeName) : false,
-          },
-        ]
+        {
+          day,
+          sessionTime: entry.sessionTime,
+          trainingTypeName: entry.trainingTypeName,
+          isCustom: entry.trainingTypeName ? !isPredefinedTrainingType(entry.trainingTypeName) : false,
+        },
+      ]
       : []
   })
 }
@@ -905,12 +911,12 @@ export function getTrainingPlanFromSchedule(value: unknown): DayTrainingPlan[] {
   return normalizeAssignmentSchedule(value).flatMap((entry) =>
     entry.trainingTypeName
       ? [
-          {
-            day: entry.day,
-            trainingTypeName: entry.trainingTypeName,
-            isCustom: entry.isCustom,
-          },
-        ]
+        {
+          day: entry.day,
+          trainingTypeName: entry.trainingTypeName,
+          isCustom: entry.isCustom,
+        },
+      ]
       : [],
   )
 }
@@ -982,20 +988,20 @@ export function formatScheduleSummary(
   const scheduledSessions =
     typeof scheduleOrDays[0] === 'string'
       ? normalizeScheduledDays(scheduleOrDays).flatMap((day) => {
-          const sessionTime =
-            typeof sessionTimeOrSessionsPerWeek === 'string'
-              ? normalizeSessionTimeValue(sessionTimeOrSessionsPerWeek)
-              : null
+        const sessionTime =
+          typeof sessionTimeOrSessionsPerWeek === 'string'
+            ? normalizeSessionTimeValue(sessionTimeOrSessionsPerWeek)
+            : null
 
-          return sessionTime
-            ? [
-                {
-                  day,
-                  sessionTime,
-                },
-              ]
-            : []
-        })
+        return sessionTime
+          ? [
+            {
+              day,
+              sessionTime,
+            },
+          ]
+          : []
+      })
       : normalizeScheduledSessions(scheduleOrDays)
   const sessionsPerWeek =
     typeof sessionTimeOrSessionsPerWeek === 'number' ? sessionTimeOrSessionsPerWeek : maybeSessionsPerWeek
@@ -1197,6 +1203,41 @@ export function getPtSessionGenerationEndDate(
   }
 
   return shiftDateValue(startDate, ptSessionGenerationDurationDays[duration] - 1)
+}
+
+export function getDefaultGenerateAssignmentConfig(
+  assignment: Pick<TrainerClient, 'createdAt'>,
+  fallbackIso?: string,
+): GenerateAssignmentConfig {
+  return {
+    startDate:
+      getJamaicaDateValueFromIso(assignment.createdAt) ??
+      (fallbackIso ? getJamaicaDateValueFromIso(fallbackIso) : null) ??
+      '',
+    duration: DEFAULT_PT_SESSION_GENERATION_DURATION,
+    firstSessionTime: '',
+  }
+}
+
+export function getGenerateAssignmentRequest(
+  assignment: Pick<TrainerClient, 'scheduledSessions'>,
+  config: GenerateAssignmentConfig,
+): GeneratePtSessionsRequest | null {
+  if (!config.startDate || !getPtSessionGenerationEndDate(config.startDate, config.duration)) {
+    return null
+  }
+
+  const needsFirstSessionTime = requiresFirstSessionTime(assignment.scheduledSessions, config.startDate)
+
+  if (needsFirstSessionTime && !config.firstSessionTime) {
+    return null
+  }
+
+  return {
+    startDate: config.startDate,
+    duration: config.duration,
+    ...(needsFirstSessionTime ? { firstSessionTime: config.firstSessionTime } : {}),
+  }
 }
 
 export function getDateValuesInRange(startDate: string, endDate: string) {

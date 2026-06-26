@@ -33,18 +33,18 @@ import { useStaff } from '@/hooks/use-staff'
 import { toast } from '@/hooks/use-toast'
 import {
   deletePtAssignment,
-  DEFAULT_PT_SESSION_GENERATION_DURATION,
   formatOptionalJmdCurrency,
   formatScheduleSummary,
   generatePtAssignmentSessions,
-  getJamaicaDateValueFromIso,
+  getDefaultGenerateAssignmentConfig,
+  getGenerateAssignmentRequest,
   getPtSessionGenerationEndDate,
   getPtSessionGenerationDurationLabel,
   MAX_PT_SESSIONS_PER_WEEK,
   normalizeTrainingPlan,
   PT_SESSION_GENERATION_DURATION_OPTIONS,
   requiresFirstSessionTime,
-  type GeneratePtSessionsRequest,
+  type GenerateAssignmentConfig,
   type PtSessionGenerationDuration,
   type TrainerClient,
 } from '@/lib/pt-scheduling'
@@ -56,41 +56,6 @@ type MemberPtSectionProps = {
 }
 
 type RemovalAction = 'keep' | 'cancel-future'
-
-type GenerateAssignmentConfig = {
-  startDate: string
-  duration: PtSessionGenerationDuration
-  firstSessionTime: string
-}
-
-function getDefaultGenerateAssignmentConfig(assignment: TrainerClient): GenerateAssignmentConfig {
-  return {
-    startDate: getJamaicaDateValueFromIso(assignment.createdAt) ?? '',
-    duration: DEFAULT_PT_SESSION_GENERATION_DURATION,
-    firstSessionTime: '',
-  }
-}
-
-function getGenerateAssignmentRequest(
-  assignment: TrainerClient,
-  config: GenerateAssignmentConfig,
-): GeneratePtSessionsRequest | null {
-  if (!config.startDate || !getPtSessionGenerationEndDate(config.startDate, config.duration)) {
-    return null
-  }
-
-  const needsFirstSessionTime = requiresFirstSessionTime(assignment.scheduledSessions, config.startDate)
-
-  if (needsFirstSessionTime && !config.firstSessionTime) {
-    return null
-  }
-
-  return {
-    startDate: config.startDate,
-    duration: config.duration,
-    ...(needsFirstSessionTime ? { firstSessionTime: config.firstSessionTime } : {}),
-  }
-}
 
 function getAssignmentSortTimestamp(assignment: Pick<TrainerClient, 'updatedAt' | 'createdAt'>) {
   const updatedAtTime = new Date(assignment.updatedAt).getTime()

@@ -69,6 +69,7 @@ function buildAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient 
 function createPtSessionsClient(options: {
   existingAssignmentSessions?: Array<{ scheduled_at: string }>
   existingPairSessions?: Array<{ id: string; scheduled_at: string }>
+  expectedAssignmentRangeEnd?: string
 } = {}) {
   const insertedRows: Array<Array<Record<string, unknown>>> = []
 
@@ -94,7 +95,9 @@ function createPtSessionsClient(options: {
                       return {
                         lt(lastColumn: string, lastValue: string) {
                           expect(lastColumn).toBe('scheduled_at')
-                          expect(lastValue).toContain('T00:00:00')
+                          expect(lastValue).toBe(
+                            options.expectedAssignmentRangeEnd ?? '2026-04-29T00:00:00-05:00',
+                          )
 
                           return Promise.resolve({
                             data: options.existingAssignmentSessions ?? [],
@@ -230,7 +233,9 @@ describe('PT assignment generate sessions route', () => {
   })
 
   it('creates the first session on an unscheduled start date with the provided one-off time', async () => {
-    const { client, insertedRows } = createPtSessionsClient()
+    const { client, insertedRows } = createPtSessionsClient({
+      expectedAssignmentRangeEnd: '2026-04-08T00:00:00-05:00',
+    })
     getSupabaseAdminClientMock.mockReturnValue(client)
     mockAdminUser()
     readTrainerClientByIdMock.mockResolvedValue(
@@ -272,11 +277,11 @@ describe('PT assignment generate sessions route', () => {
     ])
   })
 
-  it('skips exact duplicate sessions that already exist in the generated range', async () => {
+  it('skips duplicate sessions that already exist at the same instant', async () => {
     const { client, insertedRows } = createPtSessionsClient({
       existingAssignmentSessions: [
         {
-          scheduled_at: '2026-04-01T07:00:00-05:00',
+          scheduled_at: '2026-04-01T12:00:00.000Z',
         },
       ],
     })
