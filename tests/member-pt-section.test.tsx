@@ -56,8 +56,8 @@ const {
     sessionTime: '07:00',
     notes: null,
     commissionOverride: null,
-    createdAt: '2026-04-05T00:00:00.000Z',
-    updatedAt: '2026-04-05T00:00:00.000Z',
+    createdAt: '2026-04-06T12:00:00.000Z',
+    updatedAt: '2026-04-06T12:00:00.000Z',
     trainerName: 'Jamie Trainer',
     trainerTitles: ['Trainer'],
     memberName: 'Member One',
@@ -231,9 +231,8 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     trainingPlan,
     sessionTime,
     notes: overrides.notes ?? null,
-    commissionOverride: overrides.commissionOverride ?? null,
-    createdAt: overrides.createdAt ?? '2026-04-03T00:00:00.000Z',
-    updatedAt: overrides.updatedAt ?? '2026-04-03T00:00:00.000Z',
+    createdAt: overrides.createdAt ?? '2026-04-06T12:00:00.000Z',
+    updatedAt: overrides.updatedAt ?? '2026-04-06T12:00:00.000Z',
     trainerName: overrides.trainerName ?? 'Jordan Trainer',
     trainerTitles: overrides.trainerTitles ?? ['Trainer'],
     memberName: overrides.memberName ?? 'Member One',
@@ -385,8 +384,8 @@ describe('MemberPtSection', () => {
     await flushAsyncWork()
 
     expect(generatePtAssignmentSessionsMock).toHaveBeenCalledWith('assignment-new', {
-      month: 4,
-      year: 2026,
+      startDate: '2026-04-06',
+      duration: '1_month',
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: queryKeys.ptScheduling.sessions({}),

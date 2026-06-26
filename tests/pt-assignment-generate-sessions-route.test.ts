@@ -69,6 +69,7 @@ function buildAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient 
 function createPtSessionsClient(options: {
   existingAssignmentSessions?: Array<{ scheduled_at: string }>
   existingPairSessions?: Array<{ id: string; scheduled_at: string }>
+  expectedAssignmentRangeEnd?: string
 } = {}) {
   const insertedRows: Array<Array<Record<string, unknown>>> = []
 
@@ -94,7 +95,9 @@ function createPtSessionsClient(options: {
                       return {
                         lt(lastColumn: string, lastValue: string) {
                           expect(lastColumn).toBe('scheduled_at')
-                          expect(lastValue).toContain('2026-05-01T00:00:00')
+                          expect(lastValue).toBe(
+                            options.expectedAssignmentRangeEnd ?? '2026-04-29T00:00:00-05:00',
+                          )
 
                           return Promise.resolve({
                             data: options.existingAssignmentSessions ?? [],
@@ -203,8 +206,8 @@ describe('PT assignment generate sessions route', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          month: 4,
-          year: 2026,
+          startDate: '2026-04-01',
+          duration: '1_month',
         }),
       }),
       { params: Promise.resolve({ id: 'assignment-1' }) },
@@ -214,7 +217,7 @@ describe('PT assignment generate sessions route', () => {
     expect(response.status).toBe(200)
     expect(payload).toEqual({
       ok: true,
-      generated: 9,
+      generated: 8,
       skipped: 0,
     })
     expect(insertedRows[0]).toEqual(
@@ -227,6 +230,130 @@ describe('PT assignment generate sessions route', () => {
         }),
       ]),
     )
+  })
+
+  it('creates the first session on an unscheduled start date with the provided one-off time', async () => {
+    const { client, insertedRows } = createPtSessionsClient({
+      expectedAssignmentRangeEnd: '2026-04-08T00:00:00-05:00',
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser()
+    readTrainerClientByIdMock.mockResolvedValue(
+      buildAssignment({
+        scheduledDays: ['Monday'],
+        scheduledSessions: buildScheduledSessions(['Monday'], '06:30'),
+      }),
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/assignments/assignment-1/generate-sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          startDate: '2026-04-01',
+          duration: '1_week',
+          firstSessionTime: '08:45',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload).toEqual({
+      ok: true,
+      generated: 2,
+      skipped: 0,
+    })
+    expect(insertedRows[0]).toEqual([
+      expect.objectContaining({
+        scheduled_at: '2026-04-01T08:45:00-05:00',
+      }),
+      expect.objectContaining({
+        scheduled_at: '2026-04-06T06:30:00-05:00',
+      }),
+    ])
+  })
+
+  it('skips duplicate sessions that already exist at the same instant', async () => {
+    const { client, insertedRows } = createPtSessionsClient({
+      existingAssignmentSessions: [
+        {
+          scheduled_at: '2026-04-01T12:00:00.000Z',
+        },
+      ],
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser()
+    readTrainerClientByIdMock.mockResolvedValue(
+      buildAssignment({
+        scheduledDays: ['Wednesday'],
+        scheduledSessions: buildScheduledSessions(['Wednesday']),
+      }),
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/assignments/assignment-1/generate-sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          startDate: '2026-04-01',
+          duration: '1_month',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload).toEqual({
+      ok: true,
+      generated: 3,
+      skipped: 1,
+    })
+    expect(insertedRows[0]).toHaveLength(3)
+    expect(insertedRows[0]).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scheduled_at: '2026-04-01T07:00:00-05:00',
+        }),
+      ]),
+    )
+  })
+
+  it('requires a first session time when the start date is not scheduled', async () => {
+    const { client, insertedRows } = createPtSessionsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAdminUser()
+    readTrainerClientByIdMock.mockResolvedValue(
+      buildAssignment({
+        scheduledDays: ['Monday'],
+        scheduledSessions: buildScheduledSessions(['Monday']),
+      }),
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/assignments/assignment-1/generate-sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          startDate: '2026-04-01',
+          duration: '1_week',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(payload.error).toContain('First session time is required')
+    expect(insertedRows).toEqual([])
   })
 
   it('allows seven sessions in a week without returning a limit warning', async () => {
@@ -250,8 +377,8 @@ describe('PT assignment generate sessions route', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          month: 4,
-          year: 2026,
+          startDate: '2026-04-01',
+          duration: '1_month',
         }),
       }),
       { params: Promise.resolve({ id: 'assignment-1' }) },
@@ -261,7 +388,7 @@ describe('PT assignment generate sessions route', () => {
     expect(response.status).toBe(200)
     expect(payload.ok).toBe(true)
     expect(payload.generated).toBeGreaterThan(0)
-    expect(insertedRows[0]).toHaveLength(30)
+    expect(insertedRows[0]).toHaveLength(28)
   })
 
   it('returns WEEK_LIMIT_EXCEEDED only when a week would exceed seven sessions', async () => {
@@ -292,8 +419,8 @@ describe('PT assignment generate sessions route', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          month: 4,
-          year: 2026,
+          startDate: '2026-04-01',
+          duration: '1_month',
         }),
       }),
       { params: Promise.resolve({ id: 'assignment-1' }) },

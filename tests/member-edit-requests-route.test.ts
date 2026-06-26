@@ -1128,7 +1128,7 @@ describe('member edit request routes', () => {
     const existingRequestRow = createEditRequestRecord({
       proposed_name: null,
       proposed_member_type_id: MEMBER_TYPE_ID_DAY_PASS,
-      proposed_start_date: '2026-06-05',
+      proposed_start_date: '2026-07-05',
       proposed_start_time: '08:30:00',
       proposed_duration: '1 Day',
     })
@@ -1193,8 +1193,8 @@ describe('member edit request routes', () => {
       {
         member_type_id: MEMBER_TYPE_ID_DAY_PASS,
         type: 'Day Pass',
-        begin_time: '2026-06-05T08:30:00',
-        end_time: '2026-06-05T23:59:59',
+        begin_time: '2026-07-05T08:30:00',
+        end_time: '2026-07-05T23:59:59',
         status: 'Active',
       },
     ])

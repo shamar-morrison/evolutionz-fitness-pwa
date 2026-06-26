@@ -210,9 +210,8 @@ function createAssignment(overrides: Partial<TrainerClient> = {}): TrainerClient
     trainingPlan,
     sessionTime,
     notes: overrides.notes ?? null,
-    commissionOverride: overrides.commissionOverride ?? null,
-    createdAt: overrides.createdAt ?? '2026-04-03T00:00:00.000Z',
-    updatedAt: overrides.updatedAt ?? '2026-04-03T00:00:00.000Z',
+    createdAt: overrides.createdAt ?? '2026-04-06T12:00:00.000Z',
+    updatedAt: overrides.updatedAt ?? '2026-04-06T12:00:00.000Z',
     trainerName: overrides.trainerName ?? 'Jordan Trainer',
     trainerTitles: overrides.trainerTitles ?? ['Trainer'],
     memberName: overrides.memberName ?? 'Member One',
@@ -474,16 +473,11 @@ describe('SchedulePage', () => {
     await clickButton(container, 'Generate')
     await flushAsyncWork()
 
-    expect(fetchQueryMock).toHaveBeenCalledWith({
-      queryKey: queryKeys.ptScheduling.sessions({ month: '2026-04' }),
-      queryFn: expect.any(Function),
-    })
-    expect(fetchPtSessionsMock).toHaveBeenCalledWith({
-      month: '2026-04',
-    })
+    expect(fetchQueryMock).not.toHaveBeenCalled()
+    expect(fetchPtSessionsMock).not.toHaveBeenCalled()
     expect(generatePtAssignmentSessionsMock).toHaveBeenCalledWith('assignment-1', {
-      month: 4,
-      year: 2026,
+      startDate: '2026-04-06',
+      duration: '1_month',
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: queryKeys.ptScheduling.sessions({}),
@@ -813,7 +807,7 @@ describe('SchedulePage', () => {
     expect(getBadge(container, 'Rescheduled').className).toContain('text-orange-700')
   })
 
-  it('disables generation until at least one assignment is selected and a month is chosen', async () => {
+  it('disables generation until at least one assignment is selected and a valid start date is chosen', async () => {
     await act(async () => {
       root.render(<SchedulePage />)
     })
@@ -827,7 +821,7 @@ describe('SchedulePage', () => {
     expect(getButton(container, 'Generate').disabled).toBe(false)
 
     await act(async () => {
-      setInputValue(getMonthInput(container), '')
+      setInputValue(getMonthInputById(container, 'generate-start-date-assignment-1'), '')
     })
 
     expect(getButton(container, 'Generate').disabled).toBe(true)
@@ -911,8 +905,8 @@ describe('SchedulePage', () => {
 
     expect(generatePtAssignmentSessionsMock).toHaveBeenCalledTimes(1)
     expect(generatePtAssignmentSessionsMock).toHaveBeenNthCalledWith(1, 'assignment-1', {
-      month: 4,
-      year: 2026,
+      startDate: '2026-04-06',
+      duration: '1_month',
     })
 
     await act(async () => {
@@ -927,12 +921,12 @@ describe('SchedulePage', () => {
 
     expect(generatePtAssignmentSessionsMock).toHaveBeenCalledTimes(2)
     expect(generatePtAssignmentSessionsMock).toHaveBeenNthCalledWith(2, 'assignment-2', {
-      month: 4,
-      year: 2026,
+      startDate: '2026-04-06',
+      duration: '1_month',
     })
   })
 
-  it('skips assignments that already have sessions in the selected month and reports the mixed summary', async () => {
+  it('reports a mixed summary when some generated ranges only skip existing sessions', async () => {
     usePtAssignmentsMock.mockReturnValue({
       data: [
         createAssignment({
@@ -950,17 +944,17 @@ describe('SchedulePage', () => {
       ],
       isLoading: false,
     })
-    fetchPtSessionsMock.mockResolvedValue([
-      createSession({
-        id: 'session-existing',
-        assignmentId: 'assignment-1',
-      }),
-    ])
-    generatePtAssignmentSessionsMock.mockResolvedValue({
-      ok: true,
-      generated: 2,
-      skipped: 0,
-    })
+    generatePtAssignmentSessionsMock
+      .mockResolvedValueOnce({
+        ok: true,
+        generated: 0,
+        skipped: 2,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        generated: 2,
+        skipped: 0,
+      })
 
     await act(async () => {
       root.render(<SchedulePage />)
@@ -971,18 +965,18 @@ describe('SchedulePage', () => {
     await clickButton(container, 'Generate')
     await flushAsyncWork()
 
-    expect(generatePtAssignmentSessionsMock).toHaveBeenCalledTimes(1)
+    expect(generatePtAssignmentSessionsMock).toHaveBeenCalledTimes(2)
     expect(generatePtAssignmentSessionsMock).toHaveBeenCalledWith('assignment-2', {
-      month: 4,
-      year: 2026,
+      startDate: '2026-04-06',
+      duration: '1_month',
     })
     expect(toastMock).toHaveBeenCalledWith({
       title: 'Sessions generated',
-      description: 'Sessions generated for 1 assignment. 1 skipped — sessions already exist for the selected month.',
+      description: 'Sessions generated for 1 assignment. 1 skipped — sessions already exist in the selected range.',
     })
   })
 
-  it('reports when every selected assignment is skipped because sessions already exist', async () => {
+  it('reports when every selected assignment range only skips existing sessions', async () => {
     usePtAssignmentsMock.mockReturnValue({
       data: [
         createAssignment({
@@ -1000,16 +994,11 @@ describe('SchedulePage', () => {
       ],
       isLoading: false,
     })
-    fetchPtSessionsMock.mockResolvedValue([
-      createSession({
-        id: 'session-1',
-        assignmentId: 'assignment-1',
-      }),
-      createSession({
-        id: 'session-2',
-        assignmentId: 'assignment-2',
-      }),
-    ])
+    generatePtAssignmentSessionsMock.mockResolvedValue({
+      ok: true,
+      generated: 0,
+      skipped: 2,
+    })
 
     await act(async () => {
       root.render(<SchedulePage />)
@@ -1020,11 +1009,11 @@ describe('SchedulePage', () => {
     await clickButton(container, 'Generate')
     await flushAsyncWork()
 
-    expect(generatePtAssignmentSessionsMock).not.toHaveBeenCalled()
+    expect(generatePtAssignmentSessionsMock).toHaveBeenCalledTimes(2)
     expect(toastMock).toHaveBeenCalledWith({
       title: 'No sessions generated',
       description:
-        'No sessions were generated. Sessions already exist for the selected month for all selected assignments.',
+        'No sessions were generated. Sessions already exist in the selected range for all selected assignments.',
     })
   })
 
@@ -1079,16 +1068,16 @@ describe('SchedulePage', () => {
     await flushAsyncWork()
 
     expect(generatePtAssignmentSessionsMock).toHaveBeenNthCalledWith(1, 'assignment-1', {
-      month: 4,
-      year: 2026,
+      startDate: '2026-04-06',
+      duration: '1_month',
     })
     expect(generatePtAssignmentSessionsMock).toHaveBeenNthCalledWith(2, 'assignment-2', {
-      month: 4,
-      year: 2026,
+      startDate: '2026-04-06',
+      duration: '1_month',
     })
     expect(generatePtAssignmentSessionsMock).toHaveBeenNthCalledWith(3, 'assignment-1', {
-      month: 4,
-      year: 2026,
+      startDate: '2026-04-06',
+      duration: '1_month',
       override: true,
     })
     expect(toastMock).toHaveBeenCalledWith({

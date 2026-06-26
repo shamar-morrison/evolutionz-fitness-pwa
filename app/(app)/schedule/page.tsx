@@ -38,14 +38,23 @@ import {
   formatPtSessionStatusLabel,
   formatScheduleSummary,
   generatePtAssignmentSessions,
+  getDefaultGenerateAssignmentConfig,
+  getGenerateAssignmentRequest,
   getJamaicaDateValue,
   getMonthDateValues,
   getMonthLabel,
   getMonthValueInJamaica,
+  getPtSessionGenerationEndDate,
+  getPtSessionGenerationDurationLabel,
   getPtSessionStatusBadgeClassName,
   MAX_PT_SESSIONS_PER_WEEK,
   parseMonthValue,
+  PT_SESSION_GENERATION_DURATION_OPTIONS,
+  requiresFirstSessionTime,
+  type GenerateAssignmentConfig,
+  type GeneratePtSessionsRequest,
   type GeneratePtSessionsResult,
+  type PtSessionGenerationDuration,
   SESSION_STATUSES,
   type TrainerClient,
   type PtSession,
@@ -64,10 +73,9 @@ const scheduleCalendarStatusBadgeClassNames: Partial<Record<SessionStatus, strin
 }
 
 type PendingGenerateOverride = {
-  month: number
-  year: number
   warnings: Array<{
     assignmentId: string
+    request: GeneratePtSessionsRequest
     warning: Extract<GeneratePtSessionsResult, { ok: false }>
   }>
   generatedAssignments: number
@@ -233,7 +241,7 @@ function getBulkGenerationToastTitle(summary: BulkGenerationSummary) {
 
 function getBulkGenerationToastDescription(summary: BulkGenerationSummary) {
   if (summary.generatedAssignments === 0 && summary.skippedAssignments > 0 && summary.unconfirmedOverrideAssignments === 0) {
-    return 'No sessions were generated. Sessions already exist for the selected month for all selected assignments.'
+    return 'No sessions were generated. Sessions already exist in the selected range for all selected assignments.'
   }
 
   const parts: string[] = []
@@ -247,7 +255,7 @@ function getBulkGenerationToastDescription(summary: BulkGenerationSummary) {
   }
 
   if (summary.skippedAssignments > 0) {
-    parts.push(`${summary.skippedAssignments} skipped — sessions already exist for the selected month.`)
+    parts.push(`${summary.skippedAssignments} skipped — sessions already exist in the selected range.`)
   }
 
   if (summary.unconfirmedOverrideAssignments > 0) {
@@ -290,7 +298,9 @@ function SchedulePageContent() {
   const [statusFilter, setStatusFilter] = useState<'all' | PtSessionFilterStatus>('active')
   const [showGenerateDialog, setShowGenerateDialog] = useState(false)
   const [selectedGenerateAssignmentIds, setSelectedGenerateAssignmentIds] = useState<string[]>([])
-  const [generateMonthValue, setGenerateMonthValue] = useState(() => getMonthValueInJamaica())
+  const [generateAssignmentConfigs, setGenerateAssignmentConfigs] = useState<
+    Record<string, GenerateAssignmentConfig>
+  >({})
   const [pendingOverride, setPendingOverride] = useState<PendingGenerateOverride | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [showRemoveDialog, setShowRemoveDialog] = useState(false)
@@ -304,7 +314,6 @@ function SchedulePageContent() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const monthParts = parseMonthValue(monthValue)
   const calendarMonthLabel = monthParts ? getMonthLabel(monthParts.month, monthParts.year) : monthValue
-  const generateMonthParts = parseMonthValue(generateMonthValue)
   const removeMonthParts = parseMonthValue(removeMonthValue)
   const removeMonthLabel = removeMonthParts
     ? getMonthLabel(removeMonthParts.month, removeMonthParts.year)
@@ -344,7 +353,17 @@ function SchedulePageContent() {
         ? true
         : 'indeterminate'
   const canGenerateSelectedAssignments =
-    Boolean(generateMonthParts) && selectedGenerateAssignments.length > 0 && !isGenerating
+    selectedGenerateAssignments.length > 0 &&
+    selectedGenerateAssignments.every((assignment) =>
+      Boolean(
+        getGenerateAssignmentRequest(
+          assignment,
+          generateAssignmentConfigs[assignment.id] ??
+            getDefaultGenerateAssignmentConfig(assignment, new Date().toISOString()),
+        ),
+      ),
+    ) &&
+    !isGenerating
   const removeMonthAssignmentTargets = useMemo(() => {
     const groupedTargets = new Map<string, RemoveMonthAssignmentTarget>()
 
@@ -416,6 +435,11 @@ function SchedulePageContent() {
 
     setSelectedGenerateAssignmentIds((current) =>
       current.filter((assignmentId) => availableAssignmentIds.has(assignmentId)),
+    )
+    setGenerateAssignmentConfigs((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([assignmentId]) => availableAssignmentIds.has(assignmentId)),
+      ),
     )
   }, [activeAssignments])
 
@@ -510,6 +534,7 @@ function SchedulePageContent() {
 
   const resetGenerateSelection = () => {
     setSelectedGenerateAssignmentIds([])
+    setGenerateAssignmentConfigs({})
   }
 
   const resetRemoveSelection = () => {
@@ -558,15 +583,51 @@ function SchedulePageContent() {
   }
 
   const handleGenerateAssignmentToggle = (assignmentId: string) => {
-    setSelectedGenerateAssignmentIds((current) =>
-      current.includes(assignmentId)
-        ? current.filter((currentAssignmentId) => currentAssignmentId !== assignmentId)
-        : [...current, assignmentId],
-    )
+    const assignment = activeAssignments.find((candidate) => candidate.id === assignmentId)
+
+    setSelectedGenerateAssignmentIds((current) => {
+      if (current.includes(assignmentId)) {
+        return current.filter((currentAssignmentId) => currentAssignmentId !== assignmentId)
+      }
+
+      return [...current, assignmentId]
+    })
+
+    if (assignment) {
+      setGenerateAssignmentConfigs((current) => ({
+        ...current,
+        [assignmentId]:
+          current[assignmentId] ?? getDefaultGenerateAssignmentConfig(assignment, new Date().toISOString()),
+      }))
+    }
   }
 
   const handleSelectAllGenerateAssignments = (checked: boolean) => {
     setSelectedGenerateAssignmentIds(checked ? activeAssignments.map((assignment) => assignment.id) : [])
+
+    if (checked) {
+      setGenerateAssignmentConfigs((current) => ({
+        ...Object.fromEntries(
+          activeAssignments.map((assignment) => [
+            assignment.id,
+            current[assignment.id] ?? getDefaultGenerateAssignmentConfig(assignment, new Date().toISOString()),
+          ]),
+        ),
+      }))
+    }
+  }
+
+  const updateGenerateAssignmentConfig = (
+    assignment: TrainerClient,
+    updates: Partial<GenerateAssignmentConfig>,
+  ) => {
+    setGenerateAssignmentConfigs((current) => ({
+      ...current,
+      [assignment.id]: {
+        ...(current[assignment.id] ?? getDefaultGenerateAssignmentConfig(assignment, new Date().toISOString())),
+        ...updates,
+      },
+    }))
   }
 
   const handleRemoveAssignmentToggle = (assignmentId: string) => {
@@ -584,10 +645,10 @@ function SchedulePageContent() {
   }
 
   const handleGenerate = async () => {
-    if (selectedGenerateAssignments.length === 0 || !generateMonthParts) {
+    if (selectedGenerateAssignments.length === 0) {
       toast({
         title: 'Selection required',
-        description: 'Choose at least one active assignment and a month before generating sessions.',
+        description: 'Choose at least one active assignment before generating sessions.',
         variant: 'destructive',
       })
       return
@@ -596,31 +657,26 @@ function SchedulePageContent() {
     setIsGenerating(true)
 
     try {
-      const monthSessions = await queryClient.fetchQuery({
-        queryKey: queryKeys.ptScheduling.sessions({ month: generateMonthValue }),
-        queryFn: () => fetchPtSessions({ month: generateMonthValue }),
-      })
-      const existingAssignmentIds = new Set(
-        monthSessions.map((session) => session.assignmentId).filter((assignmentId) => Boolean(assignmentId)),
-      )
       const warnings: PendingGenerateOverride['warnings'] = []
       let generatedAssignments = 0
       let skippedAssignments = 0
 
       for (const assignment of selectedGenerateAssignments) {
-        if (existingAssignmentIds.has(assignment.id)) {
-          skippedAssignments += 1
-          continue
+        const config =
+          generateAssignmentConfigs[assignment.id] ??
+          getDefaultGenerateAssignmentConfig(assignment, new Date().toISOString())
+        const request = getGenerateAssignmentRequest(assignment, config)
+
+        if (!request) {
+          throw new Error('Complete the start date, duration, and required first session time for each selected assignment.')
         }
 
-        const result = await generatePtAssignmentSessions(assignment.id, {
-          month: generateMonthParts.month,
-          year: generateMonthParts.year,
-        })
+        const result = await generatePtAssignmentSessions(assignment.id, request)
 
         if (!result.ok) {
           warnings.push({
             assignmentId: assignment.id,
+            request,
             warning: result,
           })
           continue
@@ -637,8 +693,6 @@ function SchedulePageContent() {
         setShowGenerateDialog(false)
         resetGenerateSelection()
         setPendingOverride({
-          month: generateMonthParts.month,
-          year: generateMonthParts.year,
           warnings,
           generatedAssignments,
           skippedAssignments,
@@ -687,8 +741,7 @@ function SchedulePageContent() {
 
       for (const item of currentPendingOverride.warnings) {
         const result = await generatePtAssignmentSessions(item.assignmentId, {
-          month: currentPendingOverride.month,
-          year: currentPendingOverride.year,
+          ...item.request,
           override: true,
         })
 
@@ -1005,22 +1058,11 @@ function SchedulePageContent() {
           <DialogHeader>
             <DialogTitle>Generate Sessions</DialogTitle>
             <DialogDescription>
-              Create recurring PT sessions for one or more active assignments in the selected month.
+              Create recurring PT sessions for one or more active assignments in each selected range.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="generate-month">Month</Label>
-              <Input
-                id="generate-month"
-                type="month"
-                value={generateMonthValue}
-                onChange={(event) => setGenerateMonthValue(event.target.value)}
-                disabled={isGenerating}
-              />
-            </div>
-
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -1078,6 +1120,14 @@ function SchedulePageContent() {
                 <div className="max-h-[320px] overflow-y-auto rounded-lg border">
                   {activeAssignments.map((assignment) => {
                     const isSelected = selectedGenerateAssignmentIdSet.has(assignment.id)
+                    const config =
+                      generateAssignmentConfigs[assignment.id] ??
+                      getDefaultGenerateAssignmentConfig(assignment, new Date().toISOString())
+                    const needsFirstSessionTime = requiresFirstSessionTime(
+                      assignment.scheduledSessions,
+                      config.startDate,
+                    )
+                    const endDate = getPtSessionGenerationEndDate(config.startDate, config.duration)
 
                     return (
                       <div
@@ -1092,28 +1142,107 @@ function SchedulePageContent() {
                             handleGenerateAssignmentToggle(assignment.id)
                           }
                         }}
-                        className={`flex items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0 ${
+                        className={`border-b px-4 py-3 text-left transition-colors last:border-b-0 ${
                           isSelected ? 'bg-muted/40' : 'hover:bg-muted/20'
                         } ${isGenerating ? 'pointer-events-none opacity-70' : 'cursor-pointer'}`}
                       >
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => handleGenerateAssignmentToggle(assignment.id)}
-                          disabled={isGenerating}
-                          aria-label={`Select ${formatGenerateAssignmentLabel(assignment)}`}
-                          onClick={(event) => event.stopPropagation()}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium">
-                            {formatGenerateAssignmentLabel(assignment)}
-                          </p>
-                          <p className="text-muted-foreground text-sm">
-                            {formatScheduleSummary(
-                              assignment.scheduledSessions,
-                              assignment.sessionsPerWeek,
-                            )}
-                          </p>
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => handleGenerateAssignmentToggle(assignment.id)}
+                            disabled={isGenerating}
+                            aria-label={`Select ${formatGenerateAssignmentLabel(assignment)}`}
+                            onClick={(event) => event.stopPropagation()}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium">
+                              {formatGenerateAssignmentLabel(assignment)}
+                            </p>
+                            <p className="text-muted-foreground text-sm">
+                              {formatScheduleSummary(
+                                assignment.scheduledSessions,
+                                assignment.sessionsPerWeek,
+                              )}
+                            </p>
+                          </div>
                         </div>
+
+                        {isSelected ? (
+                          <div
+                            className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_140px]"
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
+                          >
+                            <div className="space-y-2">
+                              <Label htmlFor={`generate-start-date-${assignment.id}`}>
+                                Start date
+                              </Label>
+                              <Input
+                                id={`generate-start-date-${assignment.id}`}
+                                type="date"
+                                value={config.startDate}
+                                onChange={(event) =>
+                                  updateGenerateAssignmentConfig(assignment, {
+                                    startDate: event.target.value,
+                                  })
+                                }
+                                disabled={isGenerating}
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor={`generate-duration-${assignment.id}`}>
+                                Duration
+                              </Label>
+                              <Select
+                                value={config.duration}
+                                onValueChange={(value) =>
+                                  updateGenerateAssignmentConfig(assignment, {
+                                    duration: value as PtSessionGenerationDuration,
+                                  })
+                                }
+                                disabled={isGenerating}
+                              >
+                                <SelectTrigger id={`generate-duration-${assignment.id}`}>
+                                  <SelectValue placeholder="Duration" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PT_SESSION_GENERATION_DURATION_OPTIONS.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {needsFirstSessionTime ? (
+                              <div className="space-y-2">
+                                <Label htmlFor={`generate-first-time-${assignment.id}`}>
+                                  First time
+                                </Label>
+                                <Input
+                                  id={`generate-first-time-${assignment.id}`}
+                                  type="time"
+                                  value={config.firstSessionTime}
+                                  onChange={(event) =>
+                                    updateGenerateAssignmentConfig(assignment, {
+                                      firstSessionTime: event.target.value,
+                                    })
+                                  }
+                                  disabled={isGenerating}
+                                />
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <Label>Ends</Label>
+                                <p className="text-muted-foreground rounded-md border px-3 py-2 text-sm">
+                                  {endDate ?? 'Invalid date'}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
                     )
                   })}
