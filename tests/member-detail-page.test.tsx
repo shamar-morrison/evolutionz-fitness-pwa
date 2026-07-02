@@ -561,7 +561,7 @@ describe('Member detail page tabs', () => {
     expect(container.textContent).toContain('Edit Member')
     expect(container.textContent).toContain('Record Payment')
     expect(container.textContent).not.toContain('Membership Type')
-    expect(container.textContent).toContain('PT Payments Section')
+    expect(container.textContent).not.toContain('PT Payments Section')
     expect(container.textContent).not.toContain('Payment History Content')
   })
 
