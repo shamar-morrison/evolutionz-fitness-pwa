@@ -96,6 +96,18 @@ const ptRevenueReportSchema = z.object({
       trainerName: z.string().trim().min(1),
       totalRevenue: z.number().finite(),
       sessionCount: z.number().int().nonnegative(),
+      payments: z.array(
+        z.object({
+          id: z.string().trim().min(1),
+          memberId: z.string().trim().min(1),
+          memberName: z.string().trim().min(1),
+          amount: z.number().finite(),
+          monthsCovered: z.number().int().positive(),
+          paymentMethod: z.enum(['cash', 'fygaro', 'bank_transfer', 'point_of_sale']),
+          paymentDate: z.string().trim().min(1),
+          notes: z.string().nullable(),
+        }),
+      ),
     }),
   ),
 })

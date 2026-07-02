@@ -7,7 +7,7 @@ import {
   formatPaymentMethodLabel,
   type PtRevenueReport,
 } from '@/lib/revenue-reports'
-import { getDateRangeBoundsInJamaica } from '@/lib/pt-scheduling'
+import { getCleanMemberName } from '@/lib/member-name'
 import type { MemberPaymentMethod } from '@/types'
 
 export type RevenueReportsAdminClient = {
@@ -28,6 +28,7 @@ type MemberPaymentRow = {
 type MemberSummaryRow = {
   id: string
   name: string
+  card_code?: string | null
 }
 
 type MemberTypeSummaryRow = {
@@ -35,18 +36,15 @@ type MemberTypeSummaryRow = {
   name: string
 }
 
-type PtSessionRevenueRow = {
+type PtPaymentRevenueRow = {
   id: string
-  assignment_id: string
   trainer_id: string
   member_id: string
-  scheduled_at: string
-  status: 'completed'
-}
-
-type TrainerClientRevenueRow = {
-  id: string
-  pt_fee: number | string | null
+  amount: number | string
+  months_covered: number
+  payment_method: MemberPaymentMethod
+  notes: string | null
+  payment_date: string
 }
 
 type ProfileSummaryRow = {
@@ -121,7 +119,7 @@ async function loadMemberNames(
 
   const { data, error } = await supabase
     .from('members')
-    .select('id, name')
+    .select('id, name, card_code')
     .in('id', ids)
 
   if (error) {
@@ -169,36 +167,6 @@ async function loadTrainerNames(
   }
 
   return new Map(((data ?? []) as ProfileSummaryRow[]).map((row) => [row.id, row]))
-}
-
-async function loadPtFeesByAssignmentId(
-  supabase: RevenueReportsAdminClient,
-  ids: string[],
-) {
-  if (ids.length === 0) {
-    return new Map<string, number>()
-  }
-
-  const { data, error } = await supabase
-    .from('trainer_clients')
-    .select('id, pt_fee')
-    .in('id', ids)
-
-  if (error) {
-    throw new Error(`Failed to read PT fees for the revenue report: ${error.message}`)
-  }
-
-  const ptFeesByAssignmentId = new Map<string, number>()
-
-  for (const row of (data ?? []) as TrainerClientRevenueRow[]) {
-    const ptFee = normalizeNullableAmount(row.pt_fee)
-
-    if (ptFee !== null) {
-      ptFeesByAssignmentId.set(row.id, ptFee)
-    }
-  }
-
-  return ptFeesByAssignmentId
 }
 
 export async function readMembershipRevenueReport(
@@ -439,27 +407,20 @@ export async function readPtRevenueReport(
     to: string
   },
 ): Promise<PtRevenueReport> {
-  const dateRange = getDateRangeBoundsInJamaica(filters.from, filters.to)
-
-  if (!dateRange) {
-    throw new Error('PT revenue report dates must use valid YYYY-MM-DD values.')
-  }
-
   const { data, error } = await supabase
-    .from('pt_sessions')
-    .select('id, assignment_id, trainer_id, member_id, scheduled_at, status')
-    .eq('status', 'completed')
-    .gte('scheduled_at', dateRange.startInclusive)
-    .lt('scheduled_at', dateRange.endExclusive)
-    .order('scheduled_at', { ascending: false })
+    .from('pt_payments')
+    .select('id, trainer_id, member_id, amount, months_covered, payment_method, notes, payment_date')
+    .gte('payment_date', filters.from)
+    .lte('payment_date', filters.to)
+    .order('payment_date', { ascending: false })
 
   if (error) {
-    throw new Error(`Failed to read PT sessions for the revenue report: ${error.message}`)
+    throw new Error(`Failed to read PT payments for the revenue report: ${error.message}`)
   }
 
-  const sessions = (data ?? []) as PtSessionRevenueRow[]
+  const payments = (data ?? []) as PtPaymentRevenueRow[]
 
-  if (sessions.length === 0) {
+  if (payments.length === 0) {
     return {
       summary: {
         totalRevenue: 0,
@@ -470,11 +431,9 @@ export async function readPtRevenueReport(
     }
   }
 
-  const assignmentIds = Array.from(new Set(sessions.map((session) => session.assignment_id)))
-  const trainerIds = Array.from(new Set(sessions.map((session) => session.trainer_id)))
-  const memberIds = Array.from(new Set(sessions.map((session) => session.member_id)))
-  const [ptFeeByAssignmentId, trainerById, memberById] = await Promise.all([
-    loadPtFeesByAssignmentId(supabase, assignmentIds),
+  const trainerIds = Array.from(new Set(payments.map((payment) => payment.trainer_id)))
+  const memberIds = Array.from(new Set(payments.map((payment) => payment.member_id)))
+  const [trainerById, memberById] = await Promise.all([
     loadTrainerNames(supabase, trainerIds),
     loadMemberNames(supabase, memberIds),
   ])
@@ -486,61 +445,52 @@ export async function readPtRevenueReport(
       trainerName: string
       totalRevenue: number
       sessionCount: number
+      payments: Array<{
+        id: string
+        memberId: string
+        memberName: string
+        amount: number
+        monthsCovered: number
+        paymentMethod: MemberPaymentMethod
+        paymentDate: string
+        notes: string | null
+      }>
     }
   >()
 
-  const sessionsByAssignmentId = new Map<string, PtSessionRevenueRow[]>()
-
-  for (const session of sessions) {
-    const assignmentSessions = sessionsByAssignmentId.get(session.assignment_id) ?? []
-    assignmentSessions.push(session)
-    sessionsByAssignmentId.set(session.assignment_id, assignmentSessions)
-  }
-
-  const reportSessions = Array.from(sessionsByAssignmentId.entries()).flatMap(([assignmentId, assignmentSessions]) => {
-    const ptFee = ptFeeByAssignmentId.get(assignmentId)
-
-    if (typeof ptFee !== 'number') {
-      return []
-    }
-
-    const session = assignmentSessions[0]
-    const sessionsCompleted = assignmentSessions.length
-    const trainerName = normalizeText(trainerById.get(session.trainer_id)?.name) || 'Unknown trainer'
-    const memberName = normalizeText(memberById.get(session.member_id)?.name) || 'Unknown member'
-    const trainerTotals = totalsByTrainer.get(session.trainer_id) ?? {
-      trainerId: session.trainer_id,
+  for (const payment of payments) {
+    const amount = normalizeAmount(payment.amount)
+    const trainerName = normalizeText(trainerById.get(payment.trainer_id)?.name) || 'Unknown trainer'
+    const member = memberById.get(payment.member_id)
+    const fallbackMemberName = normalizeText(member?.name) || 'Unknown member'
+    const trainerTotals = totalsByTrainer.get(payment.trainer_id) ?? {
+      trainerId: payment.trainer_id,
       trainerName,
       totalRevenue: 0,
       sessionCount: 0,
+      payments: [],
     }
 
-    trainerTotals.totalRevenue += ptFee
-    trainerTotals.sessionCount += sessionsCompleted
-    totalsByTrainer.set(session.trainer_id, trainerTotals)
-
-    return [
-      {
-        id: assignmentId,
-        memberId: normalizeText(session.member_id),
-        memberName,
-        trainerName,
-        ptFee,
-        sessionDate: session.scheduled_at,
-        sessionsCompleted,
-      },
-    ]
-  })
+    trainerTotals.totalRevenue += amount
+    trainerTotals.payments.push({
+      id: payment.id,
+      memberId: payment.member_id,
+      memberName: getCleanMemberName(fallbackMemberName, member?.card_code) || fallbackMemberName,
+      amount,
+      monthsCovered: payment.months_covered,
+      paymentMethod: payment.payment_method,
+      paymentDate: payment.payment_date,
+      notes: payment.notes,
+    })
+    totalsByTrainer.set(payment.trainer_id, trainerTotals)
+  }
 
   return {
     summary: {
-      totalRevenue: reportSessions.reduce((sum, session) => sum + session.ptFee, 0),
-      totalSessionsCompleted: reportSessions.reduce(
-        (sum, session) => sum + session.sessionsCompleted,
-        0,
-      ),
+      totalRevenue: payments.reduce((sum, payment) => sum + normalizeAmount(payment.amount), 0),
+      totalSessionsCompleted: 0,
     },
-    sessions: reportSessions,
+    sessions: [],
     totalsByTrainer: Array.from(totalsByTrainer.values()).sort((left, right) =>
       left.trainerName.localeCompare(right.trainerName),
     ),

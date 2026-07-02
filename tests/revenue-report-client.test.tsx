@@ -376,6 +376,18 @@ describe('RevenueReportClient', () => {
                     trainerName: 'Jordan Trainer',
                     totalRevenue: 30000,
                     sessionCount: 2,
+                    payments: [
+                      {
+                        id: 'pt-payment-1',
+                        memberId: 'member-2',
+                        memberName: 'Member Two',
+                        amount: 30000,
+                        monthsCovered: 2,
+                        paymentMethod: 'cash',
+                        paymentDate: '2026-04-10',
+                        notes: null,
+                      },
+                    ],
                   },
                 ],
               }
@@ -517,7 +529,7 @@ describe('RevenueReportClient', () => {
       expect.objectContaining({ enabled: false }),
     )
     expect(container.textContent).toContain('Jordan Trainer')
-    expect(container.textContent).toContain('Total Sessions Completed')
+    expect(container.textContent).toContain('Trainers Paid')
 
     await clickButton(container, 'Overall')
     await flushAsyncWork()
@@ -640,6 +652,18 @@ describe('RevenueReportClient', () => {
                     trainerName: 'Jordan Trainer',
                     totalRevenue: 15000,
                     sessionCount: 1,
+                    payments: [
+                      {
+                        id: 'pt-payment-1',
+                        memberId: 'member-2',
+                        memberName: 'Member Two',
+                        amount: 15000,
+                        monthsCovered: 1,
+                        paymentMethod: 'cash',
+                        paymentDate: '2026-04-10',
+                        notes: null,
+                      },
+                    ],
                   },
                 ],
               }
@@ -676,10 +700,7 @@ describe('RevenueReportClient', () => {
     await clickButton(container, 'PT Revenue')
     await flushAsyncWork()
 
-    const ptRow = await clickTableRow(container, 'Member Two')
-    expect(ptRow.className).toContain('cursor-pointer')
-    expect(pushMock).toHaveBeenLastCalledWith(
-      '/members/member-2?returnTo=%2Freports%2Frevenue%3Ffrom%3D2026-04-01%26to%3D2026-04-30',
-    )
+    expect(container.textContent).toContain('Totals by Trainer')
+    expect(container.textContent).toContain('Jordan Trainer')
   })
 })
