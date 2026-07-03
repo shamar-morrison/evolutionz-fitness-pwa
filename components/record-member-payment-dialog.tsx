@@ -812,14 +812,13 @@ export function RecordMemberPaymentDialog({
 
                         <div className="grid gap-2">
                           <Label htmlFor="record-pt-payment-date">Payment Date</Label>
-                          <Input
+                          <StringDatePicker
                             id="record-pt-payment-date"
-                            type="date"
                             value={ptFormData.paymentDate}
-                            onChange={(event) =>
+                            onChange={(value) =>
                               setPtFormData((currentFormData) => ({
                                 ...currentFormData,
-                                paymentDate: event.target.value,
+                                paymentDate: value,
                               }))
                             }
                             disabled={isSubmitting}

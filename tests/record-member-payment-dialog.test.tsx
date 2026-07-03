@@ -733,19 +733,28 @@ describe('RecordMemberPaymentDialog', () => {
 
     const amountInput = container.querySelector('#record-pt-payment-amount')
     const monthsCoveredInput = container.querySelector('#record-pt-months-covered')
-    const paymentDateInput = container.querySelector('#record-pt-payment-date')
+    const paymentDateTrigger = getDateTrigger(container, 'record-pt-payment-date')
 
     if (
       !(amountInput instanceof HTMLInputElement) ||
-      !(monthsCoveredInput instanceof HTMLInputElement) ||
-      !(paymentDateInput instanceof HTMLInputElement)
+      !(monthsCoveredInput instanceof HTMLInputElement)
     ) {
       throw new Error('PT payment form inputs not found.')
     }
 
     expect(amountInput.value).toBe('15000')
     expect(monthsCoveredInput.value).toBe('1')
-    expect(paymentDateInput.value).toBe('2026-04-09')
+    expect(paymentDateTrigger.textContent).toContain('Apr 9, 2026')
+
+    await selectCalendarDate(
+      container,
+      'record-pt-payment-date',
+      new Date(2026, 3, 15, 12, 0, 0, 0),
+    )
+
+    expect(getDateTrigger(container, 'record-pt-payment-date').textContent).toContain(
+      'Apr 15, 2026',
+    )
 
     await clickButton(container, 'Cash')
     await clickButton(container, 'Record Payment')
@@ -757,7 +766,7 @@ describe('RecordMemberPaymentDialog', () => {
       amount: 15000,
       monthsCovered: 1,
       paymentMethod: 'cash',
-      paymentDate: '2026-04-09',
+      paymentDate: '2026-04-15',
     })
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ['ptPayments', 'member-1'],

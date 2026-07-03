@@ -59,6 +59,10 @@ const ptPaymentMutationResponseSchema = z.object({
   }),
 })
 
+const ptPaymentDeleteResponseSchema = z.object({
+  ok: z.literal(true),
+})
+
 export { getDefaultMemberPaymentDate }
 
 export async function fetchPtPayments(memberId: string): Promise<PtPaymentHistoryItem[]> {
@@ -90,4 +94,16 @@ export async function recordPtPayment(input: CreatePtPaymentInput) {
   )
 
   return response.payment
+}
+
+export async function deletePtPayment(paymentId: string) {
+  await apiFetch(
+    `/api/pt/payments/${paymentId}`,
+    {
+      method: 'DELETE',
+      cache: 'no-store',
+    },
+    ptPaymentDeleteResponseSchema,
+    'Failed to delete the PT payment.',
+  )
 }

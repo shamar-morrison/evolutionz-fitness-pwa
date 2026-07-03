@@ -27,6 +27,7 @@ import {
   getMemberPaymentTypeLabel,
   MEMBER_PAYMENTS_PAGE_SIZE,
 } from '@/lib/member-payments'
+import { deletePtPayment, type PtPaymentHistoryItem } from '@/lib/pt-payments'
 import { queryKeys } from '@/lib/query-keys'
 import {
   formatPaymentMethodLabel,
@@ -70,6 +71,7 @@ export function MemberPaymentHistory({ memberId, memberEmail = null }: MemberPay
   const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
   const [paymentToDelete, setPaymentToDelete] = useState<MemberPaymentHistoryItem | null>(null)
+  const [ptPaymentToDelete, setPtPaymentToDelete] = useState<PtPaymentHistoryItem | null>(null)
   const [receiptPayment, setReceiptPayment] = useState<MemberPaymentHistoryItem | null>(null)
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<PaymentHistoryTab>('membership')
@@ -84,6 +86,7 @@ export function MemberPaymentHistory({ memberId, memberEmail = null }: MemberPay
   useEffect(() => {
     setPage(0)
     setPaymentToDelete(null)
+    setPtPaymentToDelete(null)
     setReceiptPayment(null)
     setActiveTab('membership')
   }, [memberId])
@@ -97,23 +100,38 @@ export function MemberPaymentHistory({ memberId, memberEmail = null }: MemberPay
   const rangeEnd = Math.min((page + 1) * MEMBER_PAYMENTS_PAGE_SIZE, totalMatches)
 
   const handleDeletePayment = async () => {
-    if (!paymentToDelete) {
+    if (!paymentToDelete && !ptPaymentToDelete) {
       return
     }
 
-    setDeletingPaymentId(paymentToDelete.id)
+    const deletingId = paymentToDelete?.id ?? ptPaymentToDelete?.id
+
+    if (!deletingId) {
+      return
+    }
+
+    setDeletingPaymentId(deletingId)
 
     try {
-      await deleteMemberPayment(memberId, paymentToDelete.id)
+      if (paymentToDelete) {
+        await deleteMemberPayment(memberId, paymentToDelete.id)
 
-      if (page > 0 && payments.length === 1) {
-        setPage((currentPage) => Math.max(currentPage - 1, 0))
+        if (page > 0 && payments.length === 1) {
+          setPage((currentPage) => Math.max(currentPage - 1, 0))
+        }
+
+        setPaymentToDelete(null)
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.memberPayments.member(memberId),
+        })
+      } else if (ptPaymentToDelete) {
+        await deletePtPayment(ptPaymentToDelete.id)
+        setPtPaymentToDelete(null)
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.ptPayments.member(memberId),
+        })
       }
 
-      setPaymentToDelete(null)
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.memberPayments.member(memberId),
-      })
       toast({
         title: 'Payment deleted',
       })
@@ -254,7 +272,7 @@ export function MemberPaymentHistory({ memberId, memberEmail = null }: MemberPay
 
   const renderPtPaymentsTable = () => (
     <div className="overflow-x-auto rounded-lg border">
-      <Table className="min-w-[980px]">
+      <Table className="min-w-[1080px]">
         <TableHeader>
           <TableRow>
             <TableHead>Date</TableHead>
@@ -264,6 +282,7 @@ export function MemberPaymentHistory({ memberId, memberEmail = null }: MemberPay
             <TableHead>Method</TableHead>
             <TableHead>Notes</TableHead>
             <TableHead>Recorded By</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -277,11 +296,12 @@ export function MemberPaymentHistory({ memberId, memberEmail = null }: MemberPay
                 <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-28" /></TableCell>
+                <TableCell><Skeleton className="ml-auto h-9 w-24" /></TableCell>
               </TableRow>
             ))
           ) : ptPaymentsError ? (
             <TableRow>
-              <TableCell colSpan={7} className="py-8 text-center">
+              <TableCell colSpan={8} className="py-8 text-center">
                 <div className="flex flex-col items-center gap-3">
                   <p className="text-sm text-destructive">
                     {ptPaymentsError.message || 'Failed to load PT payments.'}
@@ -294,7 +314,7 @@ export function MemberPaymentHistory({ memberId, memberEmail = null }: MemberPay
             </TableRow>
           ) : ptPayments.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+              <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                 No PT payments recorded.
               </TableCell>
             </TableRow>
@@ -308,6 +328,20 @@ export function MemberPaymentHistory({ memberId, memberEmail = null }: MemberPay
                 <TableCell>{formatPaymentMethodLabel(payment.paymentMethod)}</TableCell>
                 <TableCell>{formatOptionalText(payment.notes)}</TableCell>
                 <TableCell>{payment.recordedBy}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    className="ml-auto"
+                    onClick={() => setPtPaymentToDelete(payment)}
+                    loading={deletingPaymentId === payment.id}
+                    disabled={deletingPaymentId === payment.id}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </Button>
+                </TableCell>
               </TableRow>
             ))
           )}
@@ -369,23 +403,29 @@ export function MemberPaymentHistory({ memberId, memberEmail = null }: MemberPay
       </Card>
 
       <ConfirmDialog
-        open={paymentToDelete !== null}
+        open={paymentToDelete !== null || ptPaymentToDelete !== null}
         title="Delete payment?"
         description={
           paymentToDelete
             ? `Delete the ${formatRevenueCurrency(paymentToDelete.amountPaid)} payment recorded on ${formatRevenueReportDate(paymentToDelete.paymentDate)}? This cannot be undone.`
+            : ptPaymentToDelete
+              ? `Delete the ${formatRevenueCurrency(ptPaymentToDelete.amount)} payment recorded on ${formatRevenueReportDate(ptPaymentToDelete.paymentDate)}? This cannot be undone.`
             : ''
         }
         confirmLabel="Delete Payment"
         cancelLabel="Cancel"
         onConfirm={() => void handleDeletePayment()}
-        onCancel={() => setPaymentToDelete(null)}
+        onCancel={() => {
+          setPaymentToDelete(null)
+          setPtPaymentToDelete(null)
+        }}
         onOpenChange={(open) => {
           if (!open) {
             setPaymentToDelete(null)
+            setPtPaymentToDelete(null)
           }
         }}
-        isLoading={deletingPaymentId === paymentToDelete?.id}
+        isLoading={deletingPaymentId === (paymentToDelete?.id ?? ptPaymentToDelete?.id)}
         variant="destructive"
       />
 

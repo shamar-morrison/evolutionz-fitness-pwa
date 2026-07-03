@@ -119,7 +119,7 @@ async function loadMemberNames(
 
   const { data, error } = await supabase
     .from('members')
-    .select('id, name, card_code')
+    .select('id, name')
     .in('id', ids)
 
   if (error) {
