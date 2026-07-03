@@ -258,6 +258,36 @@ describe('/api/pt/payments', () => {
     expect(response.status).toBe(400)
   })
 
+  it('returns 400 before insert when the payment date is not a real calendar date', async () => {
+    mockAuthenticatedUser({ id: adminId })
+    readStaffProfileMock.mockResolvedValue(createProfile())
+    const { client, inserts } = createSupabasePtPaymentsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    for (const paymentDate of ['2026-02-30', '2026-13-01']) {
+      const response = await POST(
+        new Request('http://localhost/api/pt/payments', {
+          method: 'POST',
+          body: JSON.stringify({
+            memberId,
+            assignmentId,
+            amount: 15000,
+            monthsCovered: 1,
+            paymentMethod: 'cash',
+            paymentDate,
+          }),
+        }),
+      )
+
+      expect(response.status).toBe(400)
+      await expect(response.json()).resolves.toMatchObject({
+        ok: false,
+      })
+    }
+
+    expect(inserts).toEqual([])
+  })
+
   it('derives trainer_id from the active assignment when recording a payment', async () => {
     mockAuthenticatedUser({ id: adminId })
     readStaffProfileMock.mockResolvedValue(createProfile())

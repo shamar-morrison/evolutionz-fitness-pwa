@@ -10,6 +10,17 @@ const paymentDateSchema = z
   .string()
   .trim()
   .regex(/^\d{4}-\d{2}-\d{2}$/u, 'Payment date must be in YYYY-MM-DD format.')
+  .refine((value) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) {
+      return false
+    }
+
+    const [year, month, day] = value.split('-').map(Number)
+    const date = new Date(Date.UTC(year, month - 1, day))
+    const normalizedValue = date.toISOString().slice(0, 10)
+
+    return normalizedValue === value
+  }, 'Payment date must be a valid calendar date.')
 
 const createPtPaymentSchema = z
   .object({

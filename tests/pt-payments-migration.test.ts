@@ -6,6 +6,10 @@ const migrationPath = join(
   process.cwd(),
   'supabase/migrations/20260521_add_pt_payments.sql',
 )
+const paymentMethodCheckMigrationPath = join(
+  process.cwd(),
+  'supabase/migrations/20260527_add_pt_payments_payment_method_check.sql',
+)
 
 function normalizeSql(sql: string) {
   return sql.replace(/\s+/g, ' ').trim().toLowerCase()
@@ -30,5 +34,13 @@ describe('pt_payments migration', () => {
     expect(normalizedSql).toContain('alter table public.pt_payments enable row level security')
     expect(normalizedSql).toContain('revoke all on table public.pt_payments from public, anon, authenticated')
     expect(normalizedSql).toContain('grant all on table public.pt_payments to service_role')
+  })
+
+  it('adds the PT payment method check constraint in a follow-up migration', () => {
+    const sql = readFileSync(paymentMethodCheckMigrationPath, 'utf8')
+    const normalizedSql = normalizeSql(sql)
+
+    expect(normalizedSql).toContain('alter table public.pt_payments add constraint pt_payments_payment_method_check')
+    expect(normalizedSql).toContain("check (payment_method in ('cash', 'fygaro', 'bank_transfer', 'point_of_sale'))")
   })
 })

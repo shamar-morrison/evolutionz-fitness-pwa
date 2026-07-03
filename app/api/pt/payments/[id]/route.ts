@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireAdminUser } from '@/lib/server-auth'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -44,13 +45,18 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const { id } = await params
+
+    if (!z.string().uuid().safeParse(id).success) {
+      return createErrorResponse('id must be a valid UUID.', 400)
+    }
+
     const authResult = await requireAdminUser()
 
     if ('response' in authResult) {
       return authResult.response
     }
 
-    const { id } = await params
     const supabase = getSupabaseAdminClient() as unknown as DeletePtPaymentRouteClient
     const { data: payment, error: paymentError } = await supabase
       .from('pt_payments')

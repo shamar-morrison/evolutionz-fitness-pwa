@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   mockAdminUser,
   mockForbidden,
+  requireAdminUserMock,
   resetServerAuthMocks,
 } from '@/tests/support/server-auth'
 
@@ -25,9 +26,11 @@ vi.mock('@/lib/server-auth', async () => {
 
 import { DELETE } from '@/app/api/pt/payments/[id]/route'
 
+const paymentId = '55555555-5555-4555-8555-555555555555'
+
 function createDeletePtPaymentRouteClient({
   paymentRow = {
-    id: 'pt-payment-1',
+    id: paymentId,
   },
   paymentError = null,
   deleteError = null,
@@ -51,7 +54,7 @@ function createDeletePtPaymentRouteClient({
             return {
               eq(column: string, value: string) {
                 expect(column).toBe('id')
-                expect(value).toBe('pt-payment-1')
+                expect(value).toBe(paymentId)
 
                 return {
                   maybeSingle() {
@@ -68,7 +71,7 @@ function createDeletePtPaymentRouteClient({
             return {
               eq(column: string, value: string) {
                 expect(column).toBe('id')
-                expect(value).toBe('pt-payment-1')
+                expect(value).toBe(paymentId)
                 deletes.push(value)
 
                 return Promise.resolve({
@@ -98,14 +101,30 @@ describe('DELETE /api/pt/payments/[id]', () => {
 
     const response = await DELETE(new Request('http://localhost'), {
       params: Promise.resolve({
-        id: 'pt-payment-1',
+        id: paymentId,
       }),
     })
 
     expect(response.status).toBe(200)
-    expect(deletes).toEqual(['pt-payment-1'])
+    expect(deletes).toEqual([paymentId])
     await expect(response.json()).resolves.toEqual({
       ok: true,
+    })
+  })
+
+  it('returns 400 before auth and Supabase when the id is not a UUID', async () => {
+    const response = await DELETE(new Request('http://localhost'), {
+      params: Promise.resolve({
+        id: 'pt-payment-1',
+      }),
+    })
+
+    expect(response.status).toBe(400)
+    expect(requireAdminUserMock).not.toHaveBeenCalled()
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'id must be a valid UUID.',
     })
   })
 
@@ -114,7 +133,7 @@ describe('DELETE /api/pt/payments/[id]', () => {
 
     const response = await DELETE(new Request('http://localhost'), {
       params: Promise.resolve({
-        id: 'pt-payment-1',
+        id: paymentId,
       }),
     })
 
@@ -133,7 +152,7 @@ describe('DELETE /api/pt/payments/[id]', () => {
 
     const response = await DELETE(new Request('http://localhost'), {
       params: Promise.resolve({
-        id: 'pt-payment-1',
+        id: paymentId,
       }),
     })
 
@@ -154,14 +173,14 @@ describe('DELETE /api/pt/payments/[id]', () => {
 
     const response = await DELETE(new Request('http://localhost'), {
       params: Promise.resolve({
-        id: 'pt-payment-1',
+        id: paymentId,
       }),
     })
 
     expect(response.status).toBe(500)
     await expect(response.json()).resolves.toEqual({
       ok: false,
-      error: 'Failed to read PT payment pt-payment-1: select failed',
+      error: `Failed to read PT payment ${paymentId}: select failed`,
     })
   })
 
@@ -174,14 +193,14 @@ describe('DELETE /api/pt/payments/[id]', () => {
 
     const response = await DELETE(new Request('http://localhost'), {
       params: Promise.resolve({
-        id: 'pt-payment-1',
+        id: paymentId,
       }),
     })
 
     expect(response.status).toBe(500)
     await expect(response.json()).resolves.toEqual({
       ok: false,
-      error: 'Failed to delete PT payment pt-payment-1: delete failed',
+      error: `Failed to delete PT payment ${paymentId}: delete failed`,
     })
   })
 })
