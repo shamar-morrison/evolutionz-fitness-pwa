@@ -200,6 +200,10 @@ vi.mock('@/components/member-pt-section', () => ({
   MemberPtSection: () => <div>PT Assignment Section</div>,
 }))
 
+vi.mock('@/components/member-pt-payments-section', () => ({
+  MemberPtPaymentsSection: () => <div>PT Payments Section</div>,
+}))
+
 vi.mock('@/components/member-medical-section', () => ({
   MemberMedicalSection: () => <div>Medical Assignment Section</div>,
 }))
@@ -557,7 +561,8 @@ describe('Member detail page tabs', () => {
     expect(container.textContent).toContain('Edit Member')
     expect(container.textContent).toContain('Record Payment')
     expect(container.textContent).not.toContain('Membership Type')
-    expect(container.textContent).not.toContain('Payments')
+    expect(container.textContent).not.toContain('PT Payments Section')
+    expect(container.textContent).not.toContain('Payment History Content')
   })
 
   it('shows the medical assignment section for admins only', async () => {

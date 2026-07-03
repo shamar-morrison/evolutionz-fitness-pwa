@@ -6,14 +6,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   deleteMemberPaymentMock,
+  deletePtPaymentMock,
   invalidateQueriesMock,
   toastMock,
   useMemberPaymentsMock,
+  usePtPaymentsMock,
 } = vi.hoisted(() => ({
   deleteMemberPaymentMock: vi.fn().mockResolvedValue(undefined),
+  deletePtPaymentMock: vi.fn().mockResolvedValue(undefined),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   toastMock: vi.fn(),
   useMemberPaymentsMock: vi.fn(),
+  usePtPaymentsMock: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -24,6 +28,10 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@/hooks/use-member-payments', () => ({
   useMemberPayments: useMemberPaymentsMock,
+}))
+
+vi.mock('@/hooks/use-pt-payments', () => ({
+  usePtPayments: usePtPaymentsMock,
 }))
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -72,6 +80,52 @@ vi.mock('@/components/member-payment-receipt-preview-dialog', () => ({
   }) => (open && paymentId ? <div data-testid="receipt-preview">{paymentId}</div> : null),
 }))
 
+vi.mock('@/components/ui/tabs', async () => {
+  const React = await import('react')
+
+  const TabsContext = React.createContext<{
+    onValueChange?: (value: string) => void
+    value?: string
+  } | null>(null)
+
+  return {
+    Tabs: ({
+      children,
+      onValueChange,
+      value,
+    }: {
+      children: React.ReactNode
+      onValueChange?: (value: string) => void
+      value?: string
+    }) => (
+      <TabsContext.Provider value={{ onValueChange, value }}>
+        <div>{children}</div>
+      </TabsContext.Provider>
+    ),
+    TabsList: ({ children }: React.ComponentProps<'div'>) => <div>{children}</div>,
+    TabsTrigger: ({
+      children,
+      value,
+    }: React.ComponentProps<'button'> & { value: string }) => {
+      const context = React.useContext(TabsContext)
+
+      return (
+        <button type="button" onClick={() => context?.onValueChange?.(value)}>
+          {children}
+        </button>
+      )
+    },
+    TabsContent: ({
+      children,
+      value,
+    }: React.ComponentProps<'div'> & { value: string }) => {
+      const context = React.useContext(TabsContext)
+
+      return context?.value === value ? <div>{children}</div> : null
+    },
+  }
+})
+
 vi.mock('@/lib/member-payments', async () => {
   const actual = await vi.importActual<typeof import('@/lib/member-payments')>(
     '@/lib/member-payments',
@@ -80,6 +134,17 @@ vi.mock('@/lib/member-payments', async () => {
   return {
     ...actual,
     deleteMemberPayment: deleteMemberPaymentMock,
+  }
+})
+
+vi.mock('@/lib/pt-payments', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/pt-payments')>(
+    '@/lib/pt-payments',
+  )
+
+  return {
+    ...actual,
+    deletePtPayment: deletePtPaymentMock,
   }
 })
 
@@ -131,6 +196,12 @@ describe('MemberPaymentHistory', () => {
         payments: [],
         totalMatches: 0,
       },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+    usePtPaymentsMock.mockReturnValue({
+      payments: [],
       isLoading: false,
       error: null,
       refetch: vi.fn(),
@@ -433,6 +504,18 @@ describe('MemberPaymentHistory', () => {
       root.render(<MemberPaymentHistory memberId="member-1" memberEmail={null} />)
     })
 
+    await act(async () => {
+      const cardTab = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Card',
+      )
+
+      if (!(cardTab instanceof HTMLButtonElement)) {
+        throw new Error('Card tab not found.')
+      }
+
+      cardTab.click()
+    })
+
     expect(container.textContent).toContain('Card Fee')
 
     const sendReceiptButton = Array.from(container.querySelectorAll('button')).find(
@@ -444,5 +527,197 @@ describe('MemberPaymentHistory', () => {
     }
 
     expect(sendReceiptButton.disabled).toBe(true)
+  })
+
+  it('renders PT payment history in the PT tab', async () => {
+    usePtPaymentsMock.mockReturnValue({
+      payments: [
+        {
+          id: 'pt-payment-1',
+          assignmentId: 'assignment-1',
+          trainerName: 'Jordan Trainer',
+          amount: 15000,
+          monthsCovered: 1,
+          paymentMethod: 'cash',
+          notes: null,
+          paymentDate: '2026-04-10',
+          recordedBy: 'Admin User',
+          createdAt: '2026-04-10T12:00:00.000Z',
+        },
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(<MemberPaymentHistory memberId="member-1" />)
+    })
+
+    await act(async () => {
+      const ptTab = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'PT',
+      )
+
+      if (!(ptTab instanceof HTMLButtonElement)) {
+        throw new Error('PT tab not found.')
+      }
+
+      ptTab.click()
+    })
+
+    expect(container.textContent).toContain('Jordan Trainer')
+    expect(container.textContent).toContain('$15,000')
+    expect(container.textContent).toContain('Admin User')
+    expect(container.textContent).toContain('Actions')
+    expect(container.textContent).toContain('Delete')
+  })
+
+  it('deletes a PT payment and invalidates PT payment queries', async () => {
+    usePtPaymentsMock.mockReturnValue({
+      payments: [
+        {
+          id: 'pt-payment-1',
+          assignmentId: 'assignment-1',
+          trainerName: 'Jordan Trainer',
+          amount: 15000,
+          monthsCovered: 1,
+          paymentMethod: 'cash',
+          notes: null,
+          paymentDate: '2026-04-10',
+          recordedBy: 'Admin User',
+          createdAt: '2026-04-10T12:00:00.000Z',
+        },
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(<MemberPaymentHistory memberId="member-1" />)
+    })
+
+    await act(async () => {
+      const ptTab = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'PT',
+      )
+
+      if (!(ptTab instanceof HTMLButtonElement)) {
+        throw new Error('PT tab not found.')
+      }
+
+      ptTab.click()
+    })
+
+    await act(async () => {
+      const deleteButton = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Delete',
+      )
+
+      if (!(deleteButton instanceof HTMLButtonElement)) {
+        throw new Error('Delete button not found.')
+      }
+
+      deleteButton.click()
+    })
+
+    expect(container.textContent).toContain('Delete payment?')
+    expect(container.textContent).toContain('$15,000')
+
+    await act(async () => {
+      const confirmDeleteButton = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Delete Payment',
+      )
+
+      if (!(confirmDeleteButton instanceof HTMLButtonElement)) {
+        throw new Error('Delete Payment button not found.')
+      }
+
+      confirmDeleteButton.click()
+      await Promise.resolve()
+    })
+
+    await flushAsyncWork()
+
+    expect(deletePtPaymentMock).toHaveBeenCalledWith('pt-payment-1')
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['ptPayments', 'member-1'],
+    })
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Payment deleted',
+    })
+  })
+
+  it('shows the delete failure toast when deleting a PT payment fails', async () => {
+    deletePtPaymentMock.mockRejectedValueOnce(new Error('PT delete failed.'))
+    usePtPaymentsMock.mockReturnValue({
+      payments: [
+        {
+          id: 'pt-payment-1',
+          assignmentId: 'assignment-1',
+          trainerName: 'Jordan Trainer',
+          amount: 15000,
+          monthsCovered: 1,
+          paymentMethod: 'cash',
+          notes: null,
+          paymentDate: '2026-04-10',
+          recordedBy: 'Admin User',
+          createdAt: '2026-04-10T12:00:00.000Z',
+        },
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(<MemberPaymentHistory memberId="member-1" />)
+    })
+
+    await act(async () => {
+      const ptTab = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'PT',
+      )
+
+      if (!(ptTab instanceof HTMLButtonElement)) {
+        throw new Error('PT tab not found.')
+      }
+
+      ptTab.click()
+    })
+
+    await act(async () => {
+      const deleteButton = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Delete',
+      )
+
+      if (!(deleteButton instanceof HTMLButtonElement)) {
+        throw new Error('Delete button not found.')
+      }
+
+      deleteButton.click()
+    })
+
+    await act(async () => {
+      const confirmDeleteButton = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Delete Payment',
+      )
+
+      if (!(confirmDeleteButton instanceof HTMLButtonElement)) {
+        throw new Error('Delete Payment button not found.')
+      }
+
+      confirmDeleteButton.click()
+      await Promise.resolve()
+    })
+
+    await flushAsyncWork()
+
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'Delete failed',
+      description: 'PT delete failed.',
+      variant: 'destructive',
+    })
   })
 })

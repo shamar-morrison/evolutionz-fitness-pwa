@@ -11,9 +11,11 @@ const {
   getDefaultMemberPaymentDateMock,
   invalidateQueriesMock,
   onOpenChangeMock,
+  recordPtPaymentMock,
   recordMemberPaymentMock,
   toastMock,
   useCardFeeSettingsMock,
+  useMemberPtAssignmentMock,
   useMemberTypesMock,
 } = vi.hoisted(() => ({
   calendarSelectionState: { value: new Date(2026, 3, 9, 12, 0, 0, 0) },
@@ -23,6 +25,9 @@ const {
   getDefaultMemberPaymentDateMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   onOpenChangeMock: vi.fn(),
+  recordPtPaymentMock: vi.fn().mockResolvedValue({
+    id: 'pt-payment-1',
+  }),
   recordMemberPaymentMock: vi.fn().mockResolvedValue({
     id: 'payment-1',
     member_id: 'member-1',
@@ -42,6 +47,7 @@ const {
   }),
   toastMock: vi.fn(),
   useCardFeeSettingsMock: vi.fn(),
+  useMemberPtAssignmentMock: vi.fn(),
   useMemberTypesMock: vi.fn(),
 }))
 
@@ -57,6 +63,10 @@ vi.mock('@/hooks/use-member-types', () => ({
 
 vi.mock('@/hooks/use-card-fee-settings', () => ({
   useCardFeeSettings: useCardFeeSettingsMock,
+}))
+
+vi.mock('@/hooks/use-pt-scheduling', () => ({
+  useMemberPtAssignment: useMemberPtAssignmentMock,
 }))
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -89,6 +99,17 @@ vi.mock('@/lib/member-payment-requests', async () => {
   return {
     ...actual,
     createMemberPaymentRequest: createMemberPaymentRequestMock,
+  }
+})
+
+vi.mock('@/lib/pt-payments', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/pt-payments')>(
+    '@/lib/pt-payments',
+  )
+
+  return {
+    ...actual,
+    recordPtPayment: recordPtPaymentMock,
   }
 })
 
@@ -420,6 +441,12 @@ describe('RecordMemberPaymentDialog', () => {
     }
     useMemberTypesMock.mockImplementation(() => memberTypesState)
     useCardFeeSettingsMock.mockImplementation(() => cardFeeSettingsState)
+    useMemberPtAssignmentMock.mockReturnValue({
+      assignment: null,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
   })
 
   afterEach(async () => {
@@ -675,6 +702,79 @@ describe('RecordMemberPaymentDialog', () => {
       payment_date: '2026-04-09',
       notes: null,
     })
+  })
+
+  it('shows the PT tab only for active assignments and records PT payments with optional notes', async () => {
+    useMemberPtAssignmentMock.mockReturnValue({
+      assignment: {
+        id: 'assignment-1',
+        ptFee: 15000,
+        trainerName: 'Jordan Trainer',
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('PT')
+
+    await clickButton(container, 'PT')
+    await flushAsyncWork()
+
+    const amountInput = container.querySelector('#record-pt-payment-amount')
+    const monthsCoveredInput = container.querySelector('#record-pt-months-covered')
+    const paymentDateTrigger = getDateTrigger(container, 'record-pt-payment-date')
+
+    if (
+      !(amountInput instanceof HTMLInputElement) ||
+      !(monthsCoveredInput instanceof HTMLInputElement)
+    ) {
+      throw new Error('PT payment form inputs not found.')
+    }
+
+    expect(amountInput.value).toBe('15000')
+    expect(monthsCoveredInput.value).toBe('1')
+    expect(paymentDateTrigger.textContent).toContain('Apr 9, 2026')
+
+    await selectCalendarDate(
+      container,
+      'record-pt-payment-date',
+      new Date(2026, 3, 15, 12, 0, 0, 0),
+    )
+
+    expect(getDateTrigger(container, 'record-pt-payment-date').textContent).toContain(
+      'Apr 15, 2026',
+    )
+
+    await clickButton(container, 'Cash')
+    await clickButton(container, 'Record Payment')
+    await flushAsyncWork()
+
+    expect(recordPtPaymentMock).toHaveBeenCalledWith({
+      memberId: 'member-1',
+      assignmentId: 'assignment-1',
+      amount: 15000,
+      monthsCovered: 1,
+      paymentMethod: 'cash',
+      paymentDate: '2026-04-15',
+    })
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ['ptPayments', 'member-1'],
+    })
+    expect(toastMock).toHaveBeenCalledWith({
+      title: 'PT payment recorded',
+    })
+    expect(onOpenChangeMock).toHaveBeenCalledWith(false)
   })
 
   it('submits the selected card fee payment date as the same calendar-date string', async () => {

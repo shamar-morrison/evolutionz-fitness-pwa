@@ -457,7 +457,7 @@ describe('member extension routes', () => {
           id: 'member-canonical',
           name: 'Jane Doe',
           status: 'Active',
-          end_time: '2026-06-30T23:59:59.000Z',
+          end_time: '2099-06-30T23:59:59.000Z',
         },
       }),
     })
@@ -467,7 +467,7 @@ describe('member extension routes', () => {
     readMemberWithCardCodeMock.mockResolvedValue({
       id: 'member-canonical',
       status: 'Active',
-      endTime: '2026-06-30T23:59:59.000Z',
+      endTime: '2099-06-30T23:59:59.000Z',
     })
     readAdminNotificationRecipientsMock.mockResolvedValue([{ id: 'admin-1' }])
     mockAuthenticatedUser({ id: 'staff-1' })

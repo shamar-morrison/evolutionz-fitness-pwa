@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { usePathname, useSearchParams, type ReadonlyURLSearchParams } from 'next/navigation'
 import { BarChart3, Download, FileText } from 'lucide-react'
 import { useProgressRouter } from '@/hooks/use-progress-router'
@@ -403,8 +403,8 @@ async function downloadPtRevenuePdf(report: PtRevenueReport, range: DateRangeVal
     startY: cursorY + 20,
     margin: { left: leftMargin, right: leftMargin },
     theme: 'grid',
-    head: [['Total PT Revenue (JMD)', 'Sessions Completed']],
-    body: [[formatRevenueCurrency(report.summary.totalRevenue), String(report.summary.totalSessionsCompleted)]],
+    head: [['Total PT Revenue (JMD)', 'Trainers Paid']],
+    body: [[formatRevenueCurrency(report.summary.totalRevenue), String(report.totalsByTrainer.length)]],
     styles: {
       font: 'helvetica',
       fontSize: 10,
@@ -412,37 +412,6 @@ async function downloadPtRevenuePdf(report: PtRevenueReport, range: DateRangeVal
       lineColor: [190, 190, 190],
       lineWidth: 0.5,
       cellPadding: 6,
-    },
-    headStyles: {
-      fillColor: [235, 235, 235],
-      textColor: [0, 0, 0],
-      fontStyle: 'bold',
-    },
-  })
-
-  cursorY = getPdfCursorY(doc as any, cursorY)
-
-  autoTable(doc, {
-    startY: cursorY,
-    margin: { left: leftMargin, right: leftMargin },
-    theme: 'grid',
-    head: [['Member Name', 'Trainer', 'PT Fee (JMD)', 'Sessions Completed']],
-    body:
-      report.sessions.length > 0
-        ? report.sessions.map((session) => [
-            session.memberName,
-            session.trainerName,
-            formatRevenueCurrency(session.ptFee),
-            String(session.sessionsCompleted),
-          ])
-        : [['No completed PT sessions found for the selected period.', '', '', '']],
-    styles: {
-      font: 'helvetica',
-      fontSize: 9,
-      textColor: [0, 0, 0],
-      lineColor: [190, 190, 190],
-      lineWidth: 0.5,
-      cellPadding: 5,
     },
     headStyles: {
       fillColor: [235, 235, 235],
@@ -461,15 +430,30 @@ async function downloadPtRevenuePdf(report: PtRevenueReport, range: DateRangeVal
     startY: cursorY + 10,
     margin: { left: leftMargin, right: leftMargin },
     theme: 'grid',
-    head: [['Trainer', 'Revenue (JMD)', 'Sessions']],
+    head: [['Trainer', 'Date', 'Member', 'Amount', 'Months', 'Method', 'Notes']],
     body:
       report.totalsByTrainer.length > 0
-        ? report.totalsByTrainer.map((item) => [
-            item.trainerName,
-            formatRevenueCurrency(item.totalRevenue),
-            String(item.sessionCount),
+        ? report.totalsByTrainer.flatMap((item) => [
+            [
+              `${item.trainerName} total`,
+              '',
+              '',
+              formatRevenueCurrency(item.totalRevenue),
+              '',
+              '',
+              '',
+            ],
+            ...item.payments.map((payment) => [
+              '',
+              formatRevenueReportDate(payment.paymentDate),
+              payment.memberName,
+              formatRevenueCurrency(payment.amount),
+              String(payment.monthsCovered),
+              formatPaymentMethodLabel(payment.paymentMethod),
+              payment.notes?.trim() || '-',
+            ]),
           ])
-        : [['No trainer totals for the selected period.', '', '']],
+        : [['No trainer totals for the selected period.', '', '', '', '', '', '']],
     styles: {
       font: 'helvetica',
       fontSize: 9,
@@ -1031,7 +1015,7 @@ function PtRevenueContent({
         <div>
           <h2 className="text-xl font-semibold tracking-tight">PT Revenue</h2>
           <p className="text-sm text-muted-foreground">
-            Completed PT sessions recorded from {formatRevenueReportDate(appliedRange.from)} to{' '}
+            PT payments recorded from {formatRevenueReportDate(appliedRange.from)} to{' '}
             {formatRevenueReportDate(appliedRange.to)}.
           </p>
         </div>
@@ -1043,50 +1027,8 @@ function PtRevenueContent({
 
       <div className="grid gap-4 md:grid-cols-2">
         <SummaryCard title="Total PT Revenue (JMD)" value={formatRevenueCurrency(report.summary.totalRevenue)} />
-        <SummaryCard title="Total Sessions Completed" value={String(report.summary.totalSessionsCompleted)} />
+        <SummaryCard title="Trainers Paid" value={String(report.totalsByTrainer.length)} />
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Completed Session Breakdown</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Member Name</TableHead>
-                  <TableHead>Trainer</TableHead>
-                  <TableHead className="text-right">PT Fee (JMD)</TableHead>
-                  <TableHead className="text-right">Sessions Completed</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {report.sessions.length > 0 ? (
-                  report.sessions.map((session) => (
-                    <TableRow
-                      key={session.id}
-                      onClick={() => onMemberSelect(session.memberId)}
-                      className="cursor-pointer hover:bg-muted/20"
-                    >
-                      <TableCell className="font-medium">{session.memberName}</TableCell>
-                      <TableCell>{session.trainerName}</TableCell>
-                      <TableCell className="text-right">{formatRevenueCurrency(session.ptFee)}</TableCell>
-                      <TableCell className="text-right">{session.sessionsCompleted}</TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                      No completed PT sessions found for the selected period.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
@@ -1098,22 +1040,47 @@ function PtRevenueContent({
               <TableHeader>
                 <TableRow>
                   <TableHead>Trainer</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Member</TableHead>
                   <TableHead className="text-right">Revenue (JMD)</TableHead>
-                  <TableHead className="text-right">Sessions</TableHead>
+                  <TableHead className="text-right">Months Covered</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead>Notes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {report.totalsByTrainer.length > 0 ? (
                   report.totalsByTrainer.map((item) => (
-                    <TableRow key={item.trainerId}>
-                      <TableCell>{item.trainerName}</TableCell>
-                      <TableCell className="text-right">{formatRevenueCurrency(item.totalRevenue)}</TableCell>
-                      <TableCell className="text-right">{item.sessionCount}</TableCell>
-                    </TableRow>
+                    <Fragment key={item.trainerId}>
+                      <TableRow className="bg-muted/40 font-medium">
+                        <TableCell>{item.trainerName}</TableCell>
+                        <TableCell />
+                        <TableCell />
+                        <TableCell className="text-right">
+                          {formatRevenueCurrency(item.totalRevenue)}
+                        </TableCell>
+                        <TableCell />
+                        <TableCell />
+                        <TableCell />
+                      </TableRow>
+                      {item.payments.map((payment) => (
+                        <TableRow key={payment.id}>
+                          <TableCell />
+                          <TableCell>{formatRevenueReportDate(payment.paymentDate)}</TableCell>
+                          <TableCell>{payment.memberName}</TableCell>
+                          <TableCell className="text-right">
+                            {formatRevenueCurrency(payment.amount)}
+                          </TableCell>
+                          <TableCell className="text-right">{payment.monthsCovered}</TableCell>
+                          <TableCell>{formatPaymentMethodLabel(payment.paymentMethod)}</TableCell>
+                          <TableCell>{payment.notes?.trim() || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </Fragment>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                       No trainer totals for the selected period.
                     </TableCell>
                   </TableRow>

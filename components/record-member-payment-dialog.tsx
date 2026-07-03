@@ -32,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useCardFeeSettings } from '@/hooks/use-card-fee-settings'
 import { useMemberTypes } from '@/hooks/use-member-types'
+import { useMemberPtAssignment } from '@/hooks/use-pt-scheduling'
 import { formatCardFeeAmount } from '@/lib/card-fee-settings'
 import { toast } from '@/hooks/use-toast'
 import {
@@ -43,6 +44,7 @@ import {
 import {
   createMemberPaymentRequest,
 } from '@/lib/member-payment-requests'
+import { recordPtPayment } from '@/lib/pt-payments'
 import { queryKeys } from '@/lib/query-keys'
 import type {
   Member,
@@ -65,12 +67,22 @@ type CardFeeFormState = {
   notes: string
 }
 
+type PtPaymentFormState = {
+  amount: string
+  monthsCovered: string
+  paymentMethod: MemberPaymentMethod | ''
+  paymentDate: string
+  notes: string
+}
+
 type SuccessfulPaymentState = {
   paymentId: string
   receiptNumber: string | null
   paymentType: MemberPaymentType
   receiptSentAt: string | null
 }
+
+type RecordPaymentTab = MemberPaymentType | 'pt'
 
 const EMPTY_PAYMENT_METHOD_VALUE = '__none__'
 
@@ -82,6 +94,20 @@ function createInitialCardFeeFormState(now: Date = new Date()): CardFeeFormState
     paymentDate: getDefaultMemberPaymentDate(now),
     notes: '',
   }
+}
+
+function createInitialPtPaymentFormState(now: Date = new Date()): PtPaymentFormState {
+  return {
+    amount: '',
+    monthsCovered: '1',
+    paymentMethod: '',
+    paymentDate: getDefaultMemberPaymentDate(now),
+    notes: '',
+  }
+}
+
+function getAmountInputValue(amount: number | null | undefined) {
+  return typeof amount === 'number' ? String(amount) : ''
 }
 
 export function RecordMemberPaymentDialog({
@@ -101,7 +127,8 @@ export function RecordMemberPaymentDialog({
   const { memberTypes, isLoading: isMemberTypesLoading, error: memberTypesError } = useMemberTypes({
     enabled: open,
   })
-  const [activeTab, setActiveTab] = useState<MemberPaymentType>('membership')
+  const { assignment: ptAssignment } = useMemberPtAssignment(open ? member.id : '')
+  const [activeTab, setActiveTab] = useState<RecordPaymentTab>('membership')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [amountDirty, setAmountDirty] = useState(false)
   const [membershipFormData, setMembershipFormData] = useState<MemberPaymentFormState>(() =>
@@ -109,6 +136,9 @@ export function RecordMemberPaymentDialog({
   )
   const [cardFeeFormData, setCardFeeFormData] = useState<CardFeeFormState>(() =>
     createInitialCardFeeFormState(),
+  )
+  const [ptFormData, setPtFormData] = useState<PtPaymentFormState>(() =>
+    createInitialPtPaymentFormState(),
   )
   const [successfulPayment, setSuccessfulPayment] = useState<SuccessfulPaymentState | null>(null)
   const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false)
@@ -146,11 +176,29 @@ export function RecordMemberPaymentDialog({
     setActiveTab('membership')
     setMembershipFormData(createInitialMemberPaymentFormState(member.memberTypeId ?? '', memberTypes))
     setCardFeeFormData(createInitialCardFeeFormState())
+    setPtFormData(createInitialPtPaymentFormState())
     setAmountDirty(false)
     setIsSubmitting(false)
     setSuccessfulPayment(null)
     setReceiptPreviewOpen(false)
   }, [member.id, member.memberTypeId, memberTypes, open])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    setPtFormData((currentFormData) => ({
+      ...currentFormData,
+      amount: getAmountInputValue(ptAssignment?.ptFee),
+    }))
+  }, [open, ptAssignment?.id, ptAssignment?.ptFee])
+
+  useEffect(() => {
+    if (activeTab === 'pt' && !ptAssignment) {
+      setActiveTab('membership')
+    }
+  }, [activeTab, ptAssignment])
 
   useEffect(() => {
     if (
@@ -363,6 +411,79 @@ export function RecordMemberPaymentDialog({
     })
   }
 
+  const resetPtForm = () => {
+    setPtFormData({
+      ...createInitialPtPaymentFormState(),
+      amount: getAmountInputValue(ptAssignment?.ptFee),
+    })
+  }
+
+  const handlePtSubmit = async () => {
+    if (!ptAssignment) {
+      toast({
+        title: 'PT assignment required',
+        description: 'This member does not have an active PT assignment.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const parsedAmount = Number(ptFormData.amount)
+    const parsedMonthsCovered = Number(ptFormData.monthsCovered)
+
+    if (!Number.isInteger(parsedAmount) || parsedAmount <= 0) {
+      toast({
+        title: 'Invalid amount',
+        description: 'Amount must be a whole number greater than 0.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!Number.isInteger(parsedMonthsCovered) || parsedMonthsCovered <= 0) {
+      toast({
+        title: 'Invalid months covered',
+        description: 'Months covered must be a whole number greater than 0.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!ptFormData.paymentMethod) {
+      toast({
+        title: 'Payment method required',
+        description: 'Select a payment method before recording the PT payment.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!ptFormData.paymentDate) {
+      toast({
+        title: 'Payment date required',
+        description: 'Choose the payment date before saving.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    await recordPtPayment({
+      memberId: member.id,
+      assignmentId: ptAssignment.id,
+      amount: parsedAmount,
+      monthsCovered: parsedMonthsCovered,
+      paymentMethod: ptFormData.paymentMethod,
+      paymentDate: ptFormData.paymentDate,
+      ...(ptFormData.notes.trim() ? { notes: ptFormData.notes.trim() } : {}),
+    })
+    await queryClient.invalidateQueries({ queryKey: queryKeys.ptPayments.member(member.id) })
+    resetPtForm()
+    toast({
+      title: 'PT payment recorded',
+    })
+    onOpenChange(false)
+  }
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -380,8 +501,10 @@ export function RecordMemberPaymentDialog({
     try {
       if (activeTab === 'membership') {
         await handleMembershipSubmit()
-      } else {
+      } else if (activeTab === 'card_fee') {
         await handleCardFeeSubmit()
+      } else {
+        await handlePtSubmit()
       }
     } catch (error) {
       const fallbackMessage = requiresApproval
@@ -484,10 +607,11 @@ export function RecordMemberPaymentDialog({
                 </div>
               ) : null}
 
-              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as MemberPaymentType)}>
-                <TabsList className="grid w-full grid-cols-2">
+              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as RecordPaymentTab)}>
+                <TabsList className={`grid w-full ${ptAssignment ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   <TabsTrigger value="membership">Membership</TabsTrigger>
                   <TabsTrigger value="card_fee">Card Fee</TabsTrigger>
+                  {ptAssignment ? <TabsTrigger value="pt">PT</TabsTrigger> : null}
                 </TabsList>
 
                 <TabsContent value="membership" className="pt-3">
@@ -612,6 +736,116 @@ export function RecordMemberPaymentDialog({
                     </div>
                   </div>
                 </TabsContent>
+
+                {ptAssignment ? (
+                  <TabsContent value="pt" className="pt-3">
+                    <div className="grid gap-4">
+                      <div className="grid gap-4 items-start sm:grid-cols-2">
+                        <div className="grid gap-2">
+                          <Label htmlFor="record-pt-payment-amount">Amount (JMD)</Label>
+                          <Input
+                            id="record-pt-payment-amount"
+                            type="number"
+                            min={1}
+                            step={1}
+                            inputMode="numeric"
+                            value={ptFormData.amount}
+                            onChange={(event) =>
+                              setPtFormData((currentFormData) => ({
+                                ...currentFormData,
+                                amount: event.target.value,
+                              }))
+                            }
+                            disabled={isSubmitting}
+                          />
+                        </div>
+
+                        <div className="grid gap-2">
+                          <Label htmlFor="record-pt-months-covered">Months Covered</Label>
+                          <Input
+                            id="record-pt-months-covered"
+                            type="number"
+                            min={1}
+                            step={1}
+                            inputMode="numeric"
+                            value={ptFormData.monthsCovered}
+                            onChange={(event) =>
+                              setPtFormData((currentFormData) => ({
+                                ...currentFormData,
+                                monthsCovered: event.target.value,
+                              }))
+                            }
+                            disabled={isSubmitting}
+                          />
+                        </div>
+
+                        <div className="grid gap-2">
+                          <Label htmlFor="record-pt-payment-method">Payment Method</Label>
+                          <Select
+                            value={ptFormData.paymentMethod || EMPTY_PAYMENT_METHOD_VALUE}
+                            onValueChange={(value) =>
+                              setPtFormData((currentFormData) => ({
+                                ...currentFormData,
+                                paymentMethod:
+                                  value === EMPTY_PAYMENT_METHOD_VALUE
+                                    ? ''
+                                    : (value as MemberPaymentMethod),
+                              }))
+                            }
+                            disabled={isSubmitting}
+                          >
+                            <SelectTrigger id="record-pt-payment-method">
+                              <SelectValue placeholder="Select payment method" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={EMPTY_PAYMENT_METHOD_VALUE}>
+                                Select payment method
+                              </SelectItem>
+                              {MEMBER_PAYMENT_METHOD_OPTIONS.map((paymentMethod) => (
+                                <SelectItem key={paymentMethod.value} value={paymentMethod.value}>
+                                  {paymentMethod.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="grid gap-2">
+                          <Label htmlFor="record-pt-payment-date">Payment Date</Label>
+                          <StringDatePicker
+                            id="record-pt-payment-date"
+                            value={ptFormData.paymentDate}
+                            onChange={(value) =>
+                              setPtFormData((currentFormData) => ({
+                                ...currentFormData,
+                                paymentDate: value,
+                              }))
+                            }
+                            disabled={isSubmitting}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2">
+                        <Label htmlFor="record-pt-notes">Notes</Label>
+                        <Textarea
+                          id="record-pt-notes"
+                          rows={3}
+                          value={ptFormData.notes}
+                          onChange={(event) =>
+                            setPtFormData((currentFormData) => ({
+                              ...currentFormData,
+                              notes: event.target.value,
+                            }))
+                          }
+                          disabled={isSubmitting}
+                          placeholder="Optional notes"
+                          className="resize-none"
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+                ) : null}
               </Tabs>
 
               <DialogFooter>

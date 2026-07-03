@@ -250,13 +250,13 @@ function ScheduleContent() {
       }),
       trainerId
         ? queryClient.invalidateQueries({
-            queryKey: queryKeys.rescheduleRequests.mine(trainerId),
-          })
+          queryKey: queryKeys.rescheduleRequests.mine(trainerId),
+        })
         : Promise.resolve(),
       trainerId
         ? queryClient.invalidateQueries({
-            queryKey: queryKeys.sessionUpdateRequests.mine(trainerId),
-          })
+          queryKey: queryKeys.sessionUpdateRequests.mine(trainerId),
+        })
         : Promise.resolve(),
     ])
   }

@@ -30,8 +30,7 @@ function createSupabaseOverallRevenueClient(
     member_payments: [] as Array<Record<string, unknown>>,
     member_types: [] as Array<Record<string, unknown>>,
     members: [] as Array<Record<string, unknown>>,
-    pt_sessions: [] as Array<Record<string, unknown>>,
-    trainer_clients: [] as Array<Record<string, unknown>>,
+    pt_payments: [] as Array<Record<string, unknown>>,
     profiles: [] as Array<Record<string, unknown>>,
     ...overrides,
   }
@@ -186,25 +185,14 @@ describe('GET /api/reports/revenue/overall', () => {
       ],
       member_types: [{ id: 'type-general', name: 'General' }],
       members: [{ id: 'member-1', name: 'Member One' }],
-      pt_sessions: [
+      pt_payments: [
         {
-          id: 'session-1',
-          assignment_id: 'assignment-1',
+          id: 'pt-payment-1',
           trainer_id: 'trainer-1',
-          member_id: 'member-1',
-          scheduled_at: '2026-04-10T09:00:00-05:00',
-          status: 'completed',
-        },
-        {
-          id: 'session-2',
-          assignment_id: 'assignment-1',
-          trainer_id: 'trainer-1',
-          member_id: 'member-1',
-          scheduled_at: '2026-04-17T09:00:00-05:00',
-          status: 'completed',
+          amount: 15000,
+          payment_date: '2026-04-10',
         },
       ],
-      trainer_clients: [{ id: 'assignment-1', pt_fee: 15000 }],
       profiles: [{ id: 'trainer-1', name: 'Jordan Trainer' }],
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -245,7 +233,7 @@ describe('GET /api/reports/revenue/overall', () => {
     expect(body.breakdown[2].percentageOfTotal).toBeCloseTo(55.555, 2)
   })
 
-  it('excludes PT sessions tied to null PT fees from the overall PT revenue totals', async () => {
+  it('uses PT payments for the overall PT revenue totals', async () => {
     const { client } = createSupabaseOverallRevenueClient({
       member_payments: [
         {
@@ -264,27 +252,13 @@ describe('GET /api/reports/revenue/overall', () => {
         { id: 'member-1', name: 'Member One' },
         { id: 'member-2', name: 'Member Two' },
       ],
-      pt_sessions: [
+      pt_payments: [
         {
-          id: 'session-1',
-          assignment_id: 'assignment-1',
+          id: 'pt-payment-1',
           trainer_id: 'trainer-1',
-          member_id: 'member-1',
-          scheduled_at: '2026-04-10T09:00:00-05:00',
-          status: 'completed',
+          amount: 15000,
+          payment_date: '2026-04-10',
         },
-        {
-          id: 'session-2',
-          assignment_id: 'assignment-2',
-          trainer_id: 'trainer-1',
-          member_id: 'member-2',
-          scheduled_at: '2026-04-12T09:00:00-05:00',
-          status: 'completed',
-        },
-      ],
-      trainer_clients: [
-        { id: 'assignment-1', pt_fee: 15000 },
-        { id: 'assignment-2', pt_fee: null },
       ],
       profiles: [{ id: 'trainer-1', name: 'Jordan Trainer' }],
     })

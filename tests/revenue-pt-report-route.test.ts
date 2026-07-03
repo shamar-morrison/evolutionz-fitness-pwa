@@ -25,7 +25,7 @@ import { GET } from '@/app/api/reports/revenue/pt/route'
 
 type QueryOperation =
   | { table: string; type: 'select'; columns: string }
-  | { table: string; type: 'eq' | 'gte' | 'lt'; column: string; value: string }
+  | { table: string; type: 'eq' | 'gte' | 'lte' | 'lt'; column: string; value: string }
   | { table: string; type: 'in'; column: string; values: string[] }
   | { table: string; type: 'order'; column: string; ascending: boolean }
 
@@ -34,10 +34,9 @@ function createSupabasePtRevenueClient(
 ) {
   const operations: QueryOperation[] = []
   const datasets = {
-    pt_sessions: [] as Array<Record<string, unknown>>,
-    trainer_clients: [] as Array<Record<string, unknown>>,
-    members: [] as Array<Record<string, unknown>>,
+    pt_payments: [] as Array<Record<string, unknown>>,
     profiles: [] as Array<Record<string, unknown>>,
+    members: [] as Array<Record<string, unknown>>,
     ...overrides,
   }
 
@@ -62,6 +61,10 @@ function createSupabasePtRevenueClient(
           },
           lt(column: string, value: string) {
             operations.push({ table, type: 'lt', column, value })
+            return this
+          },
+          lte(column: string, value: string) {
+            operations.push({ table, type: 'lte', column, value })
             return this
           },
           in(column: string, values: string[]) {
@@ -170,7 +173,7 @@ describe('GET /api/reports/revenue/pt', () => {
     })
   })
 
-  it('uses Jamaica-local scheduled_at bounds and only includes completed sessions', async () => {
+  it('uses plain payment_date bounds without timezone shifting', async () => {
     const { client, operations } = createSupabasePtRevenueClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
 
@@ -182,82 +185,70 @@ describe('GET /api/reports/revenue/pt', () => {
     expect(operations).toEqual(
       expect.arrayContaining([
         {
-          table: 'pt_sessions',
-          type: 'eq',
-          column: 'status',
-          value: 'completed',
-        },
-        {
-          table: 'pt_sessions',
+          table: 'pt_payments',
           type: 'gte',
-          column: 'scheduled_at',
-          value: '2026-04-01T00:00:00-05:00',
+          column: 'payment_date',
+          value: '2026-04-01',
         },
         {
-          table: 'pt_sessions',
-          type: 'lt',
-          column: 'scheduled_at',
-          value: '2026-05-01T00:00:00-05:00',
+          table: 'pt_payments',
+          type: 'lte',
+          column: 'payment_date',
+          value: '2026-04-30',
         },
         {
-          table: 'pt_sessions',
+          table: 'pt_payments',
           type: 'order',
-          column: 'scheduled_at',
+          column: 'payment_date',
           ascending: false,
         },
       ]),
     )
+    expect(operations.some((operation) => JSON.stringify(operation).includes('-05:00'))).toBe(false)
   })
 
-  it('aggregates PT revenue by assignment and trainer', async () => {
-    const { client } = createSupabasePtRevenueClient({
-      pt_sessions: [
+  it('aggregates PT revenue by payment and trainer', async () => {
+    const { client, operations } = createSupabasePtRevenueClient({
+      pt_payments: [
         {
-          id: 'session-1',
-          assignment_id: 'assignment-1',
+          id: 'payment-1',
           trainer_id: 'trainer-1',
           member_id: 'member-1',
-          scheduled_at: '2026-04-10T09:00:00-05:00',
-          status: 'completed',
+          amount: 15000,
+          months_covered: 1,
+          payment_method: 'cash',
+          notes: null,
+          payment_date: '2026-04-10',
         },
         {
-          id: 'session-2',
-          assignment_id: 'assignment-1',
-          trainer_id: 'trainer-1',
-          member_id: 'member-1',
-          scheduled_at: '2026-04-08T09:00:00-05:00',
-          status: 'completed',
-        },
-        {
-          id: 'session-3',
-          assignment_id: 'assignment-2',
+          id: 'payment-2',
           trainer_id: 'trainer-1',
           member_id: 'member-2',
-          scheduled_at: '2026-04-05T09:00:00-05:00',
-          status: 'completed',
+          amount: 18000,
+          months_covered: 2,
+          payment_method: 'bank_transfer',
+          notes: 'Paid ahead',
+          payment_date: '2026-04-08',
         },
         {
-          id: 'session-4',
-          assignment_id: 'assignment-3',
+          id: 'payment-3',
           trainer_id: 'trainer-2',
           member_id: 'member-3',
-          scheduled_at: '2026-04-03T09:00:00-05:00',
-          status: 'completed',
+          amount: 20000,
+          months_covered: 1,
+          payment_method: 'point_of_sale',
+          notes: null,
+          payment_date: '2026-04-03',
         },
-      ],
-      trainer_clients: [
-        { id: 'assignment-1', pt_fee: 15000 },
-        { id: 'assignment-2', pt_fee: 18000 },
-        { id: 'assignment-3', pt_fee: 20000 },
-      ],
-      members: [
-        { id: 'member-1', name: 'Member One' },
-        { id: 'member-2', name: 'Member Two' },
-        { id: 'member-3', name: 'Member Three' },
       ],
       profiles: [
         { id: 'trainer-1', name: 'Jordan Trainer' },
         { id: 'trainer-2', name: 'Alex Coach' },
+      ],
+      members: [
+        { id: 'member-1', name: 'J11 First Member', card_code: 'J11' },
+        { id: 'member-2', name: 'Second Member', card_code: null },
+        { id: 'member-3', name: 'Third Member', card_code: null },
       ],
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -270,111 +261,89 @@ describe('GET /api/reports/revenue/pt', () => {
     expect(response.status).toBe(200)
     expect(body.summary).toEqual({
       totalRevenue: 53000,
-      totalSessionsCompleted: 4,
+      totalSessionsCompleted: 0,
     })
-    expect(body.sessions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: 'assignment-1',
-          memberId: 'member-1',
-          memberName: 'Member One',
-          trainerName: 'Jordan Trainer',
-          ptFee: 15000,
-          sessionsCompleted: 2,
-        }),
-        expect.objectContaining({
-          id: 'assignment-3',
-          memberId: 'member-3',
-          memberName: 'Member Three',
-          trainerName: 'Alex Coach',
-          ptFee: 20000,
-          sessionsCompleted: 1,
-        }),
-      ]),
-    )
-    expect(body.sessions).toHaveLength(3)
+    expect(body.sessions).toEqual([])
     expect(body.totalsByTrainer).toEqual([
       {
         trainerId: 'trainer-2',
         trainerName: 'Alex Coach',
         totalRevenue: 20000,
-        sessionCount: 1,
+        sessionCount: 0,
+        payments: [
+          {
+            id: 'payment-3',
+            memberId: 'member-3',
+            memberName: 'Third Member',
+            amount: 20000,
+            monthsCovered: 1,
+            paymentMethod: 'point_of_sale',
+            paymentDate: '2026-04-03',
+            notes: null,
+          },
+        ],
       },
       {
         trainerId: 'trainer-1',
         trainerName: 'Jordan Trainer',
         totalRevenue: 33000,
-        sessionCount: 3,
+        sessionCount: 0,
+        payments: [
+          {
+            id: 'payment-1',
+            memberId: 'member-1',
+            memberName: 'First Member',
+            amount: 15000,
+            monthsCovered: 1,
+            paymentMethod: 'cash',
+            paymentDate: '2026-04-10',
+            notes: null,
+          },
+          {
+            id: 'payment-2',
+            memberId: 'member-2',
+            memberName: 'Second Member',
+            amount: 18000,
+            monthsCovered: 2,
+            paymentMethod: 'bank_transfer',
+            paymentDate: '2026-04-08',
+            notes: 'Paid ahead',
+          },
+        ],
       },
     ])
   })
 
-  it('excludes completed sessions tied to null PT fees from PT revenue rows and totals', async () => {
-    const { client } = createSupabasePtRevenueClient({
-      pt_sessions: [
+  it('does not read trainer_clients or pt_sessions when calculating PT revenue', async () => {
+    const { client, operations } = createSupabasePtRevenueClient({
+      pt_payments: [
         {
-          id: 'session-1',
-          assignment_id: 'assignment-1',
+          id: 'payment-1',
           trainer_id: 'trainer-1',
           member_id: 'member-1',
-          scheduled_at: '2026-04-10T09:00:00-05:00',
-          status: 'completed',
+          amount: 15000,
+          months_covered: 1,
+          payment_method: 'cash',
+          notes: null,
+          payment_date: '2026-04-10',
         },
-        {
-          id: 'session-2',
-          assignment_id: 'assignment-2',
-          trainer_id: 'trainer-1',
-          member_id: 'member-2',
-          scheduled_at: '2026-04-08T09:00:00-05:00',
-          status: 'completed',
-        },
-      ],
-      trainer_clients: [
-        { id: 'assignment-1', pt_fee: 15000 },
-        { id: 'assignment-2', pt_fee: null },
-      ],
-      members: [
-        { id: 'member-1', name: 'Member One' },
-        { id: 'member-2', name: 'Member Two' },
       ],
       profiles: [{ id: 'trainer-1', name: 'Jordan Trainer' }],
+      members: [{ id: 'member-1', name: 'Member One', card_code: null }],
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
 
     const response = await GET(
       new Request('http://localhost/api/reports/revenue/pt?from=2026-04-01&to=2026-04-30'),
     )
-    const body = await response.json()
+    await response.json()
 
     expect(response.status).toBe(200)
-    expect(body).toEqual({
-      summary: {
-        totalRevenue: 15000,
-        totalSessionsCompleted: 1,
-      },
-      sessions: [
-        {
-          id: 'assignment-1',
-          memberId: 'member-1',
-          memberName: 'Member One',
-          trainerName: 'Jordan Trainer',
-          ptFee: 15000,
-          sessionDate: '2026-04-10T09:00:00-05:00',
-          sessionsCompleted: 1,
-        },
-      ],
-      totalsByTrainer: [
-        {
-          trainerId: 'trainer-1',
-          trainerName: 'Jordan Trainer',
-          totalRevenue: 15000,
-          sessionCount: 1,
-        },
-      ],
-    })
+    expect(operations.every((operation) => operation.table !== 'pt_sessions')).toBe(true)
+    expect(operations.every((operation) => operation.table !== 'trainer_clients')).toBe(true)
   })
 
-  it('returns an empty PT report when no sessions are completed in range', async () => {
+  it('returns an empty PT report when no payments are recorded in range', async () => {
     const { client } = createSupabasePtRevenueClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
 

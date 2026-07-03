@@ -52,6 +52,9 @@ export const queryKeys = {
     member: (memberId: string) => ['memberPayments', memberId] as const,
     page: (memberId: string, page: number) => ['memberPayments', memberId, page] as const,
   },
+  ptPayments: {
+    member: (memberId: string) => ['ptPayments', memberId] as const,
+  },
   memberPaymentRequests: {
     all: ['memberPaymentRequests'] as const,
     pending: ['memberPaymentRequests', 'pending'] as const,
