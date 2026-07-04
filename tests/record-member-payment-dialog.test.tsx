@@ -704,7 +704,7 @@ describe('RecordMemberPaymentDialog', () => {
     })
   })
 
-  it('shows the PT tab only for active assignments and records PT payments with optional notes', async () => {
+  it('shows the PT tab for active assignments and records PT payments with optional notes', async () => {
     useMemberPtAssignmentMock.mockReturnValue({
       assignment: {
         id: 'assignment-1',
@@ -775,6 +775,52 @@ describe('RecordMemberPaymentDialog', () => {
       title: 'PT payment recorded',
     })
     expect(onOpenChangeMock).toHaveBeenCalledWith(false)
+  })
+
+  it('shows the PT tab without an active assignment and omits assignmentId from the payload', async () => {
+    await act(async () => {
+      root.render(
+        <RecordMemberPaymentDialog
+          member={createMember()}
+          open
+          onOpenChange={onOpenChangeMock}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('PT')
+
+    await clickButton(container, 'PT')
+    await flushAsyncWork()
+
+    const amountInput = container.querySelector('#record-pt-payment-amount')
+    const monthsCoveredInput = container.querySelector('#record-pt-months-covered')
+
+    if (
+      !(amountInput instanceof HTMLInputElement) ||
+      !(monthsCoveredInput instanceof HTMLInputElement)
+    ) {
+      throw new Error('PT payment form inputs not found.')
+    }
+
+    expect(amountInput.value).toBe('')
+    expect(monthsCoveredInput.value).toBe('1')
+
+    await act(async () => {
+      setInputValue(amountInput, '12000')
+    })
+
+    await clickButton(container, 'Bank Transfer')
+    await clickButton(container, 'Record Payment')
+    await flushAsyncWork()
+
+    expect(recordPtPaymentMock).toHaveBeenCalledWith({
+      memberId: 'member-1',
+      amount: 12000,
+      monthsCovered: 1,
+      paymentMethod: 'bank_transfer',
+      paymentDate: '2026-04-09',
+    })
   })
 
   it('submits the selected card fee payment date as the same calendar-date string', async () => {

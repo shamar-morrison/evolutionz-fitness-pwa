@@ -205,6 +205,19 @@ describe('/api/pt/payments', () => {
           recorded_by: adminId,
           created_at: '2026-04-10T12:00:00.000Z',
         },
+        {
+          id: 'payment-2',
+          member_id: memberId,
+          assignment_id: null,
+          trainer_id: null,
+          amount: 12000,
+          months_covered: 1,
+          payment_method: 'bank_transfer',
+          notes: null,
+          payment_date: '2026-04-09',
+          recorded_by: adminId,
+          created_at: '2026-04-09T12:00:00.000Z',
+        },
       ],
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -224,6 +237,18 @@ describe('/api/pt/payments', () => {
         paymentDate: '2026-04-10',
         recordedBy: 'Admin User',
         createdAt: '2026-04-10T12:00:00.000Z',
+      },
+      {
+        id: 'payment-2',
+        assignmentId: null,
+        trainerName: 'Unassigned',
+        amount: 12000,
+        monthsCovered: 1,
+        paymentMethod: 'bank_transfer',
+        notes: null,
+        paymentDate: '2026-04-09',
+        recordedBy: 'Admin User',
+        createdAt: '2026-04-09T12:00:00.000Z',
       },
     ])
   })
@@ -319,6 +344,42 @@ describe('/api/pt/payments', () => {
         months_covered: 1,
         payment_method: 'cash',
         notes: 'April',
+        payment_date: '2026-04-10',
+        recorded_by: adminId,
+      },
+    ])
+  })
+
+  it('records a payment without an assignment lookup when assignmentId is omitted', async () => {
+    mockAuthenticatedUser({ id: adminId })
+    readStaffProfileMock.mockResolvedValue(createProfile())
+    const { client, inserts, operations } = createSupabasePtPaymentsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/payments', {
+        method: 'POST',
+        body: JSON.stringify({
+          memberId,
+          amount: 12000,
+          monthsCovered: 1,
+          paymentMethod: 'bank_transfer',
+          paymentDate: '2026-04-10',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(operations.some((operation) => operation.table === 'trainer_clients')).toBe(false)
+    expect(inserts).toEqual([
+      {
+        member_id: memberId,
+        assignment_id: null,
+        trainer_id: null,
+        amount: 12000,
+        months_covered: 1,
+        payment_method: 'bank_transfer',
+        notes: null,
         payment_date: '2026-04-10',
         recorded_by: adminId,
       },

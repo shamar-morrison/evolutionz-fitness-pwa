@@ -38,7 +38,7 @@ type MemberTypeSummaryRow = {
 
 type PtPaymentRevenueRow = {
   id: string
-  trainer_id: string
+  trainer_id: string | null
   member_id: string
   amount: number | string
   months_covered: number
@@ -431,7 +431,9 @@ export async function readPtRevenueReport(
     }
   }
 
-  const trainerIds = Array.from(new Set(payments.map((payment) => payment.trainer_id)))
+  const trainerIds = Array.from(
+    new Set(payments.map((payment) => payment.trainer_id).filter((value): value is string => Boolean(value))),
+  )
   const memberIds = Array.from(new Set(payments.map((payment) => payment.member_id)))
   const [trainerById, memberById] = await Promise.all([
     loadTrainerNames(supabase, trainerIds),
@@ -460,11 +462,14 @@ export async function readPtRevenueReport(
 
   for (const payment of payments) {
     const amount = normalizeAmount(payment.amount)
-    const trainerName = normalizeText(trainerById.get(payment.trainer_id)?.name) || 'Unknown trainer'
+    const trainerId = payment.trainer_id ?? 'unassigned'
+    const trainerName = payment.trainer_id
+      ? normalizeText(trainerById.get(payment.trainer_id)?.name) || 'Unknown trainer'
+      : 'Unassigned'
     const member = memberById.get(payment.member_id)
     const fallbackMemberName = normalizeText(member?.name) || 'Unknown member'
-    const trainerTotals = totalsByTrainer.get(payment.trainer_id) ?? {
-      trainerId: payment.trainer_id,
+    const trainerTotals = totalsByTrainer.get(trainerId) ?? {
+      trainerId,
       trainerName,
       totalRevenue: 0,
       sessionCount: 0,
@@ -482,7 +487,7 @@ export async function readPtRevenueReport(
       paymentDate: payment.payment_date,
       notes: payment.notes,
     })
-    totalsByTrainer.set(payment.trainer_id, trainerTotals)
+    totalsByTrainer.set(trainerId, trainerTotals)
   }
 
   return {
@@ -491,9 +496,17 @@ export async function readPtRevenueReport(
       totalSessionsCompleted: 0,
     },
     sessions: [],
-    totalsByTrainer: Array.from(totalsByTrainer.values()).sort((left, right) =>
-      left.trainerName.localeCompare(right.trainerName),
-    ),
+    totalsByTrainer: Array.from(totalsByTrainer.values()).sort((left, right) => {
+      if (left.trainerId === 'unassigned') {
+        return 1
+      }
+
+      if (right.trainerId === 'unassigned') {
+        return -1
+      }
+
+      return left.trainerName.localeCompare(right.trainerName)
+    }),
   }
 }
 

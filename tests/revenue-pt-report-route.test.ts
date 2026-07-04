@@ -240,6 +240,16 @@ describe('GET /api/reports/revenue/pt', () => {
           notes: null,
           payment_date: '2026-04-03',
         },
+        {
+          id: 'payment-4',
+          trainer_id: null,
+          member_id: 'member-4',
+          amount: 12000,
+          months_covered: 1,
+          payment_method: 'fygaro',
+          notes: 'No trainer yet',
+          payment_date: '2026-04-01',
+        },
       ],
       profiles: [
         { id: 'trainer-1', name: 'Jordan Trainer' },
@@ -249,6 +259,7 @@ describe('GET /api/reports/revenue/pt', () => {
         { id: 'member-1', name: 'J11 First Member', card_code: 'J11' },
         { id: 'member-2', name: 'Second Member', card_code: null },
         { id: 'member-3', name: 'Third Member', card_code: null },
+        { id: 'member-4', name: 'Fourth Member', card_code: null },
       ],
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
@@ -260,7 +271,7 @@ describe('GET /api/reports/revenue/pt', () => {
 
     expect(response.status).toBe(200)
     expect(body.summary).toEqual({
-      totalRevenue: 53000,
+      totalRevenue: 65000,
       totalSessionsCompleted: 0,
     })
     expect(body.sessions).toEqual([])
@@ -311,7 +322,30 @@ describe('GET /api/reports/revenue/pt', () => {
           },
         ],
       },
+      {
+        trainerId: 'unassigned',
+        trainerName: 'Unassigned',
+        totalRevenue: 12000,
+        sessionCount: 0,
+        payments: [
+          {
+            id: 'payment-4',
+            memberId: 'member-4',
+            memberName: 'Fourth Member',
+            amount: 12000,
+            monthsCovered: 1,
+            paymentMethod: 'fygaro',
+            paymentDate: '2026-04-01',
+            notes: 'No trainer yet',
+          },
+        ],
+      },
     ])
+    expect(
+      operations.find((operation) => operation.table === 'profiles' && operation.type === 'in'),
+    ).toMatchObject({
+      values: ['trainer-1', 'trainer-2'],
+    })
   })
 
   it('does not read trainer_clients or pt_sessions when calculating PT revenue', async () => {

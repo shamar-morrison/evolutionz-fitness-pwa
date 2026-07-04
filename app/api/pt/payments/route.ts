@@ -25,7 +25,7 @@ const paymentDateSchema = z
 const createPtPaymentSchema = z
   .object({
     memberId: z.string().uuid(),
-    assignmentId: z.string().uuid(),
+    assignmentId: z.string().uuid().optional(),
     amount: z
       .number()
       .finite()
@@ -61,8 +61,8 @@ type TrainerClientPaymentRow = {
 type PtPaymentRow = {
   id: string
   member_id: string
-  assignment_id: string
-  trainer_id: string
+  assignment_id: string | null
+  trainer_id: string | null
   amount: number
   months_covered: number
   payment_method: MemberPaymentMethod
@@ -91,8 +91,8 @@ type PtPaymentsRouteClient = {
   from(table: 'pt_payments'): {
     insert(values: {
       member_id: string
-      assignment_id: string
-      trainer_id: string
+      assignment_id: string | null
+      trainer_id: string | null
       amount: number
       months_covered: number
       payment_method: MemberPaymentMethod
@@ -195,7 +195,9 @@ function mapPaymentRow(row: PtPaymentRow, profileNamesById: Map<string, string>)
   return {
     id: row.id,
     assignmentId: row.assignment_id,
-    trainerName: profileNamesById.get(row.trainer_id) ?? 'Unknown trainer',
+    trainerName: row.trainer_id
+      ? profileNamesById.get(row.trainer_id) ?? 'Unknown trainer'
+      : 'Unassigned',
     amount: row.amount,
     monthsCovered: row.months_covered,
     paymentMethod: row.payment_method,
@@ -236,7 +238,7 @@ export async function GET(request: Request) {
     const payments = data ?? []
     const profileNamesById = await loadProfileNames(
       supabase,
-      payments.flatMap((payment) => [payment.trainer_id, payment.recorded_by]),
+      payments.flatMap((payment) => [payment.trainer_id, payment.recorded_by].filter(Boolean)),
     )
 
     return NextResponse.json(payments.map((payment) => mapPaymentRow(payment, profileNamesById)))
@@ -261,26 +263,34 @@ export async function POST(request: Request) {
 
     const requestBody = await request.json()
     const input = createPtPaymentSchema.parse(requestBody)
-    const { data: assignment, error: assignmentError } = await supabase
-      .from('trainer_clients')
-      .select('id, member_id, trainer_id, status')
-      .eq('id', input.assignmentId)
-      .maybeSingle()
+    let assignmentId: string | null = null
+    let trainerId: string | null = null
 
-    if (assignmentError) {
-      throw new Error(`Failed to read PT assignment ${input.assignmentId}: ${assignmentError.message}`)
-    }
+    if (input.assignmentId) {
+      const { data: assignment, error: assignmentError } = await supabase
+        .from('trainer_clients')
+        .select('id, member_id, trainer_id, status')
+        .eq('id', input.assignmentId)
+        .maybeSingle()
 
-    if (!assignment || assignment.member_id !== input.memberId || assignment.status !== 'active') {
-      return createErrorResponse('Active PT assignment not found for this member.', 400)
+      if (assignmentError) {
+        throw new Error(`Failed to read PT assignment ${input.assignmentId}: ${assignmentError.message}`)
+      }
+
+      if (!assignment || assignment.member_id !== input.memberId || assignment.status !== 'active') {
+        return createErrorResponse('Active PT assignment not found for this member.', 400)
+      }
+
+      assignmentId = assignment.id
+      trainerId = assignment.trainer_id
     }
 
     const { data, error } = await supabase
       .from('pt_payments')
       .insert({
         member_id: input.memberId,
-        assignment_id: assignment.id,
-        trainer_id: assignment.trainer_id,
+        assignment_id: assignmentId,
+        trainer_id: trainerId,
         amount: input.amount,
         months_covered: input.monthsCovered,
         payment_method: input.paymentMethod,
