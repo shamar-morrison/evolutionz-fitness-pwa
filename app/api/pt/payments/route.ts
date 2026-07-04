@@ -238,7 +238,9 @@ export async function GET(request: Request) {
     const payments = data ?? []
     const profileNamesById = await loadProfileNames(
       supabase,
-      payments.flatMap((payment) => [payment.trainer_id, payment.recorded_by].filter(Boolean)),
+      payments.flatMap((payment) =>
+        [payment.trainer_id, payment.recorded_by].filter((id): id is string => Boolean(id)),
+      ),
     )
 
     return NextResponse.json(payments.map((payment) => mapPaymentRow(payment, profileNamesById)))
