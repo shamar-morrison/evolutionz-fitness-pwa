@@ -10,6 +10,10 @@ const paymentMethodCheckMigrationPath = join(
   process.cwd(),
   'supabase/migrations/20260527_add_pt_payments_payment_method_check.sql',
 )
+const nullableAssignmentMigrationPath = join(
+  process.cwd(),
+  'supabase/migrations/20260528_make_pt_payment_assignment_nullable.sql',
+)
 
 function normalizeSql(sql: string) {
   return sql.replace(/\s+/g, ' ').trim().toLowerCase()
@@ -42,5 +46,14 @@ describe('pt_payments migration', () => {
 
     expect(normalizedSql).toContain('alter table public.pt_payments add constraint pt_payments_payment_method_check')
     expect(normalizedSql).toContain("check (payment_method in ('cash', 'fygaro', 'bank_transfer', 'point_of_sale'))")
+  })
+
+  it('makes PT payment assignment and trainer nullable in a follow-up migration', () => {
+    const sql = readFileSync(nullableAssignmentMigrationPath, 'utf8')
+    const normalizedSql = normalizeSql(sql)
+
+    expect(normalizedSql).toBe(
+      'alter table public.pt_payments alter column assignment_id drop not null, alter column trainer_id drop not null;',
+    )
   })
 })

@@ -195,12 +195,6 @@ export function RecordMemberPaymentDialog({
   }, [open, ptAssignment?.id, ptAssignment?.ptFee])
 
   useEffect(() => {
-    if (activeTab === 'pt' && !ptAssignment) {
-      setActiveTab('membership')
-    }
-  }, [activeTab, ptAssignment])
-
-  useEffect(() => {
     if (
       !open ||
       isCardFeeSettingsLoading ||
@@ -419,15 +413,6 @@ export function RecordMemberPaymentDialog({
   }
 
   const handlePtSubmit = async () => {
-    if (!ptAssignment) {
-      toast({
-        title: 'PT assignment required',
-        description: 'This member does not have an active PT assignment.',
-        variant: 'destructive',
-      })
-      return
-    }
-
     const parsedAmount = Number(ptFormData.amount)
     const parsedMonthsCovered = Number(ptFormData.monthsCovered)
 
@@ -469,7 +454,7 @@ export function RecordMemberPaymentDialog({
 
     await recordPtPayment({
       memberId: member.id,
-      assignmentId: ptAssignment.id,
+      ...(ptAssignment ? { assignmentId: ptAssignment.id } : {}),
       amount: parsedAmount,
       monthsCovered: parsedMonthsCovered,
       paymentMethod: ptFormData.paymentMethod,
@@ -608,10 +593,10 @@ export function RecordMemberPaymentDialog({
               ) : null}
 
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as RecordPaymentTab)}>
-                <TabsList className={`grid w-full ${ptAssignment ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="membership">Membership</TabsTrigger>
                   <TabsTrigger value="card_fee">Card Fee</TabsTrigger>
-                  {ptAssignment ? <TabsTrigger value="pt">PT</TabsTrigger> : null}
+                  <TabsTrigger value="pt">PT</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="membership" className="pt-3">
@@ -737,8 +722,7 @@ export function RecordMemberPaymentDialog({
                   </div>
                 </TabsContent>
 
-                {ptAssignment ? (
-                  <TabsContent value="pt" className="pt-3">
+                <TabsContent value="pt" className="pt-3">
                     <div className="grid gap-4">
                       <div className="grid gap-4 items-start sm:grid-cols-2">
                         <div className="grid gap-2">
@@ -844,8 +828,7 @@ export function RecordMemberPaymentDialog({
                         />
                       </div>
                     </div>
-                  </TabsContent>
-                ) : null}
+                </TabsContent>
               </Tabs>
 
               <DialogFooter>

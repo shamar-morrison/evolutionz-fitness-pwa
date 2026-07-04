@@ -6,7 +6,7 @@ import type { MemberPaymentMethod } from '@/types'
 
 export type PtPaymentHistoryItem = {
   id: string
-  assignmentId: string
+  assignmentId: string | null
   trainerName: string
   amount: number
   monthsCovered: number
@@ -19,7 +19,7 @@ export type PtPaymentHistoryItem = {
 
 export type CreatePtPaymentInput = {
   memberId: string
-  assignmentId: string
+  assignmentId?: string
   amount: number
   monthsCovered: number
   paymentMethod: MemberPaymentMethod
@@ -29,7 +29,7 @@ export type CreatePtPaymentInput = {
 
 const ptPaymentHistoryItemSchema = z.object({
   id: z.string().trim().min(1),
-  assignmentId: z.string().trim().min(1),
+  assignmentId: z.string().trim().min(1).nullable(),
   trainerName: z.string().trim().min(1),
   amount: z.number().int().positive(),
   monthsCovered: z.number().int().positive(),
@@ -47,8 +47,8 @@ const ptPaymentMutationResponseSchema = z.object({
   payment: z.object({
     id: z.string().trim().min(1),
     member_id: z.string().trim().min(1),
-    assignment_id: z.string().trim().min(1),
-    trainer_id: z.string().trim().min(1),
+    assignment_id: z.string().trim().min(1).nullable(),
+    trainer_id: z.string().trim().min(1).nullable(),
     amount: z.number().int().positive(),
     months_covered: z.number().int().positive(),
     payment_method: paymentMethodSchema,
