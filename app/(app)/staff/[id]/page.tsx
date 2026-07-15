@@ -3,7 +3,7 @@
 import { format } from 'date-fns'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { AlertCircle, Archive, ArrowLeft, Pencil, Trash2, User } from 'lucide-react'
+import { AlertCircle, Archive, ArrowLeft, Pencil, Trash2, User, X } from 'lucide-react'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EditStaffModal } from '@/components/edit-staff-modal'
 import { MemberAvatar } from '@/components/member-avatar'
@@ -56,6 +56,7 @@ function StaffDetailPageContent() {
   const profileId = params.id as string
   const { profile, removal, isLoading, error } = useStaffProfile(profileId)
   const [avatarPhotoUrl, setAvatarPhotoUrl] = useState<string | null>(null)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [activeDialog, setActiveDialog] = useState<
@@ -293,12 +294,28 @@ function StaffDetailPageContent() {
         <Card className="lg:col-span-1">
           <CardContent className="flex flex-col items-center pt-6">
             <div className="relative">
-              <MemberAvatar
-                name={profile.name}
-                photoUrl={avatarPhotoUrl}
-                size="lg"
-                className="h-28 w-28 text-2xl"
-              />
+              {avatarPhotoUrl ? (
+                <button
+                  type="button"
+                  aria-label="View staff photo"
+                  onClick={() => setLightboxOpen(true)}
+                  className="cursor-zoom-in rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <MemberAvatar
+                    name={profile.name}
+                    photoUrl={avatarPhotoUrl}
+                    size="lg"
+                    className="h-28 w-28 text-2xl"
+                  />
+                </button>
+              ) : (
+                <MemberAvatar
+                  name={profile.name}
+                  photoUrl={avatarPhotoUrl}
+                  size="lg"
+                  className="h-28 w-28 text-2xl"
+                />
+              )}
               {avatarPhotoUrl && !isArchived ? (
                 <Button
                   type="button"
@@ -472,6 +489,35 @@ function StaffDetailPageContent() {
 
       {hasStaffTitle(profile.titles, 'Trainer') ? (
         <TrainerClientsSection trainerId={profile.id} />
+      ) : null}
+
+      {lightboxOpen && avatarPhotoUrl ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Staff photo"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <button
+            type="button"
+            aria-label="Close photo"
+            className="absolute top-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+            onClick={(event) => {
+              event.stopPropagation()
+              setLightboxOpen(false)
+            }}
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={avatarPhotoUrl}
+            alt="Staff photo"
+            className="h-[min(85vh,85vw)] w-[min(85vh,85vw)] rounded-xl object-cover shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
       ) : null}
 
       <ConfirmDialog

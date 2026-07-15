@@ -91,7 +91,8 @@ vi.mock('@/components/role-guard', () => ({
 }))
 
 vi.mock('@/components/member-avatar', () => ({
-  MemberAvatar: ({ name }: { name: string }) => <div>{name}</div>,
+  MemberAvatar: ({ name, photoUrl }: { name: string; photoUrl?: string | null }) =>
+    photoUrl ? <img src={photoUrl} alt={`${name} avatar`} /> : <div>{name}</div>,
 }))
 
 vi.mock('@/components/trainer-clients-section', () => ({
@@ -444,5 +445,66 @@ describe('StaffDetailPage', () => {
 
     expect(container.textContent).not.toContain('Suspend Account')
     expect(container.textContent).not.toContain('Restore Access')
+  })
+
+  it('opens and closes the staff photo lightbox', async () => {
+    useStaffProfileMock.mockReturnValue({
+      profile: createProfile({ photoUrl: 'https://example.com/staff-photo.jpg' }),
+      removal: createRemoval(),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<StaffDetailPage />)
+    })
+
+    const viewPhotoButton = container.querySelector('[aria-label="View staff photo"]')
+    expect(viewPhotoButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      ;(viewPhotoButton as HTMLButtonElement).click()
+    })
+
+    const lightbox = container.querySelector('[role="dialog"][aria-label="Staff photo"]')
+    expect(lightbox).toBeInstanceOf(HTMLDivElement)
+    expect(lightbox?.querySelector('img[alt="Staff photo"]')?.getAttribute('src')).toBe(
+      'https://example.com/staff-photo.jpg',
+    )
+
+    const closeButton = lightbox?.querySelector('[aria-label="Close photo"]')
+    expect(closeButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      ;(closeButton as HTMLButtonElement).click()
+    })
+
+    expect(container.querySelector('[role="dialog"][aria-label="Staff photo"]')).toBeNull()
+  })
+
+  it('closes the staff photo lightbox when its backdrop is clicked', async () => {
+    useStaffProfileMock.mockReturnValue({
+      profile: createProfile({ photoUrl: 'https://example.com/staff-photo.jpg' }),
+      removal: createRemoval(),
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<StaffDetailPage />)
+    })
+
+    await act(async () => {
+      ;(container.querySelector('[aria-label="View staff photo"]') as HTMLButtonElement).click()
+    })
+
+    const lightbox = container.querySelector('[role="dialog"][aria-label="Staff photo"]')
+    expect(lightbox).toBeInstanceOf(HTMLDivElement)
+
+    await act(async () => {
+      ;(lightbox as HTMLDivElement).click()
+    })
+
+    expect(container.querySelector('[role="dialog"][aria-label="Staff photo"]')).toBeNull()
   })
 })
