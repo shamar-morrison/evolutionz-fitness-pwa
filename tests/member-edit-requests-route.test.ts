@@ -1195,7 +1195,7 @@ describe('member edit request routes', () => {
         type: 'Day Pass',
         begin_time: '2026-07-05T08:30:00',
         end_time: '2026-07-05T23:59:59',
-        status: 'Active',
+        status: 'Expired',
       },
     ])
     expect(insertedJobs).toEqual([])
