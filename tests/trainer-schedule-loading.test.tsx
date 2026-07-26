@@ -7,6 +7,7 @@ import type { PtSession } from '@/lib/pt-scheduling'
 
 const {
   createPtRescheduleRequestMock,
+  fetchPtSessionsMock,
   invalidateQueriesMock,
   markPtSessionMock,
   toastMock,
@@ -14,6 +15,7 @@ const {
   useTrainerPtAssignmentsMock,
 } = vi.hoisted(() => ({
   createPtRescheduleRequestMock: vi.fn(),
+  fetchPtSessionsMock: vi.fn(),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
   markPtSessionMock: vi.fn(),
   toastMock: vi.fn(),
@@ -128,6 +130,7 @@ vi.mock('@/lib/pt-scheduling', async () => {
   return {
     ...actual,
     createPtRescheduleRequest: createPtRescheduleRequestMock,
+    fetchPtSessions: fetchPtSessionsMock,
     markPtSession: markPtSessionMock,
   }
 })
@@ -161,6 +164,32 @@ function createDeferred<T>() {
   })
 
   return { promise, resolve }
+}
+
+function getQueryFn(tab: 'upcoming' | 'today' | 'past') {
+  const query = useQueryMock.mock.calls
+    .map(
+      ([options]) =>
+        options as {
+          queryKey: unknown[]
+          queryFn: () => Promise<PtSession[]>
+        },
+    )
+    .find((options) =>
+      options.queryKey.some(
+        (part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'tab' in part &&
+          part.tab === tab,
+      ),
+    )
+
+  if (!query) {
+    throw new Error(`${tab} query was not registered.`)
+  }
+
+  return query.queryFn
 }
 
 function getSessionCard(container: HTMLDivElement, sessionId: string) {
@@ -400,5 +429,62 @@ describe('Trainer schedule loading feedback', () => {
 
     deferred.resolve({ ok: true, pending: true })
     await flushAsyncWork()
+  })
+
+  it('partitions sessions by Jamaica date and excludes terminal sessions from upcoming and today', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-25T04:30:00.000Z'))
+
+    const sessions = [
+      createSession({ id: 'past-scheduled', scheduledAt: '2026-07-23T09:00:00-05:00' }),
+      createSession({
+        id: 'past-completed',
+        scheduledAt: '2026-07-23T10:00:00-05:00',
+        status: 'completed',
+      }),
+      createSession({
+        id: 'today-rescheduled',
+        scheduledAt: '2026-07-24T18:00:00-05:00',
+        status: 'rescheduled',
+      }),
+      createSession({
+        id: 'today-cancelled',
+        scheduledAt: '2026-07-24T19:00:00-05:00',
+        status: 'cancelled',
+      }),
+      createSession({
+        id: 'upcoming-rescheduled',
+        scheduledAt: '2026-07-25T09:00:00-05:00',
+        status: 'rescheduled',
+      }),
+      createSession({
+        id: 'upcoming-missed',
+        scheduledAt: '2026-07-25T10:00:00-05:00',
+        status: 'missed',
+      }),
+    ]
+    fetchPtSessionsMock.mockResolvedValue(sessions)
+
+    try {
+      await act(async () => {
+        root.render(<TrainerSchedulePage />)
+      })
+
+      const [upcoming, today, past] = await Promise.all([
+        getQueryFn('upcoming')(),
+        getQueryFn('today')(),
+        getQueryFn('past')(),
+      ])
+
+      expect(upcoming.map((session) => session.id)).toEqual(['upcoming-rescheduled'])
+      expect(today.map((session) => session.id)).toEqual(['today-rescheduled'])
+      expect(past.map((session) => session.id)).toEqual(['past-completed', 'past-scheduled'])
+      expect(fetchPtSessionsMock).toHaveBeenCalledTimes(3)
+      expect(fetchPtSessionsMock).toHaveBeenNthCalledWith(1, { trainerId: 'trainer-1' })
+      expect(fetchPtSessionsMock).toHaveBeenNthCalledWith(2, { trainerId: 'trainer-1' })
+      expect(fetchPtSessionsMock).toHaveBeenNthCalledWith(3, { trainerId: 'trainer-1' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -55,6 +55,11 @@ const TWO_MINUTES_MS = 2 * 60 * 1000
 const PAST_PAGE_SIZE = 10
 const PENDING_APPROVAL_BADGE_CLASSNAME =
   'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+const TERMINAL_SESSION_STATUSES = new Set<PtSession['status']>([
+  'completed',
+  'missed',
+  'cancelled',
+])
 
 type TrainerScheduleTab = 'upcoming' | 'today' | 'past'
 type SessionPendingAction = 'completed' | 'missed' | 'cancelled' | 'reschedule'
@@ -69,6 +74,10 @@ function sortDescending(left: PtSession, right: PtSession) {
 
 function getTodayDateValue() {
   return getJamaicaDateValue(new Date().toISOString()) ?? ''
+}
+
+function isTerminalSessionStatus(status: PtSession['status']) {
+  return TERMINAL_SESSION_STATUSES.has(status)
 }
 
 function getEmptyStateLabel(tab: TrainerScheduleTab) {
@@ -164,13 +173,19 @@ function ScheduleContent() {
     queryKey: queryKeys.ptScheduling.sessions({ trainerId, tab: 'upcoming' }),
     queryFn: async () => {
       const sessions = await fetchPtSessions({ trainerId })
-      const now = Date.now()
+      const todayDateValue = getTodayDateValue()
 
       return sessions
         .filter(
-          (session) =>
-            session.status === 'scheduled' &&
-            new Date(session.scheduledAt).getTime() >= now,
+          (session) => {
+            const sessionDateValue = getJamaicaDateValue(session.scheduledAt)
+
+            return (
+              !isTerminalSessionStatus(session.status) &&
+              sessionDateValue !== null &&
+              sessionDateValue > todayDateValue
+            )
+          },
         )
         .sort(sortAscending)
     },
@@ -185,7 +200,11 @@ function ScheduleContent() {
       const todayDateValue = getTodayDateValue()
 
       return sessions
-        .filter((session) => getJamaicaDateValue(session.scheduledAt) === todayDateValue)
+        .filter(
+          (session) =>
+            !isTerminalSessionStatus(session.status) &&
+            getJamaicaDateValue(session.scheduledAt) === todayDateValue,
+        )
         .sort(sortAscending)
     },
     enabled: Boolean(trainerId) && activeTab === 'today',
@@ -195,9 +214,16 @@ function ScheduleContent() {
   const pastQuery = useQuery({
     queryKey: queryKeys.ptScheduling.sessions({ trainerId, tab: 'past' }),
     queryFn: async () => {
-      const sessions = await fetchPtSessions({ trainerId, past: 'true' })
+      const sessions = await fetchPtSessions({ trainerId })
+      const todayDateValue = getTodayDateValue()
 
-      return sessions.sort(sortDescending)
+      return sessions
+        .filter((session) => {
+          const sessionDateValue = getJamaicaDateValue(session.scheduledAt)
+
+          return sessionDateValue !== null && sessionDateValue < todayDateValue
+        })
+        .sort(sortDescending)
     },
     enabled: Boolean(trainerId) && activeTab === 'past',
     staleTime: TWO_MINUTES_MS,
