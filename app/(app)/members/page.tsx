@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import { useAuth } from '@/contexts/auth-context'
+import { useCardSync } from '@/components/providers/card-sync-provider'
 import { useMembers } from '@/hooks/use-members'
 import { usePermissions } from '@/hooks/use-permissions'
 import { MembersTable } from '@/components/members-table'
@@ -23,7 +24,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from '@/hooks/use-toast'
 import { syncMembersFromDevice } from '@/lib/hik-sync'
-import { syncAvailableAccessCards } from '@/lib/available-cards'
 import { config } from '@/lib/config'
 import { replaceCurrentUrl } from '@/lib/client-history'
 import { isMemberType, MEMBER_TYPE_VALUES } from '@/lib/member-type-utils'
@@ -89,8 +89,8 @@ function MembersPageContent() {
   })
   const [showAddModal, setShowAddModal] = useState(false)
   const [isSyncingMembers, setIsSyncingMembers] = useState(false)
-  const [isSyncingCards, setIsSyncingCards] = useState(false)
   const queryClient = useQueryClient()
+  const { isSyncing: isSyncingCards, triggerSync } = useCardSync()
   const { profile, loading } = useAuth()
   const { can, role } = usePermissions()
   const canCreateMembers = can('members.create')
@@ -160,29 +160,6 @@ function MembersPageContent() {
     }
   }
 
-  const handleSyncCards = async () => {
-    setIsSyncingCards(true)
-
-    try {
-      const syncedCards = await syncAvailableAccessCards()
-
-      toast({
-        title: 'Cards synced',
-        description: `Sync complete — ${syncedCards} cards synced`,
-      })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.cards.available })
-    } catch (syncError) {
-      toast({
-        title: 'Card sync failed',
-        description:
-          syncError instanceof Error ? syncError.message : 'Failed to sync cards from the device.',
-        variant: 'destructive',
-      })
-    } finally {
-      setIsSyncingCards(false)
-    }
-  }
-
   if (error) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
@@ -203,7 +180,7 @@ function MembersPageContent() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => void handleSyncCards()}
+              onClick={() => void triggerSync()}
               disabled={isSyncingCards}
             >
               {isSyncingCards ? <Spinner className="mr-2" /> : <RefreshCw className="h-4 w-4" />}

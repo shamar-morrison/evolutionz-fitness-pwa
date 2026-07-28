@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   authState,
+  cardSyncState,
   configFeatures,
   invalidateQueriesMock,
   searchParamsValue,
@@ -22,6 +23,10 @@ const {
     },
     role: 'admin' as 'admin' | 'staff',
     loading: false,
+  },
+  cardSyncState: {
+    isSyncing: false,
+    triggerSync: vi.fn().mockResolvedValue(undefined),
   },
   configFeatures: {
     showSyncCardsButton: true,
@@ -54,6 +59,10 @@ vi.mock('@/hooks/use-members', () => ({
 
 vi.mock('@/contexts/auth-context', () => ({
   useAuth: () => authState,
+}))
+
+vi.mock('@/components/providers/card-sync-provider', () => ({
+  useCardSync: () => cardSyncState,
 }))
 
 vi.mock('@/components/add-member-modal', () => ({
@@ -196,6 +205,8 @@ describe('MembersPage', () => {
     }
     authState.role = 'admin'
     authState.loading = false
+    cardSyncState.isSyncing = false
+    cardSyncState.triggerSync.mockResolvedValue(undefined)
     configFeatures.showSyncCardsButton = true
     configFeatures.showSyncMembersButton = true
     searchParamsValue.value = ''
@@ -313,6 +324,39 @@ describe('MembersPage', () => {
 
     expect(container.textContent).toContain('Sync Cards')
     expect(container.textContent).not.toContain('Sync Members')
+  })
+
+  it('delegates card sync to the provider and reflects its loading state', async () => {
+    await act(async () => {
+      root.render(<MembersPage />)
+    })
+
+    const syncCardsButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Sync Cards'),
+    )
+
+    if (!syncCardsButton) {
+      throw new Error('Sync Cards button not found.')
+    }
+
+    await act(async () => {
+      syncCardsButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(cardSyncState.triggerSync).toHaveBeenCalledTimes(1)
+
+    cardSyncState.isSyncing = true
+    await act(async () => {
+      root.render(<MembersPage />)
+    })
+
+    const syncingButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Sync Cards'),
+    )
+
+    expect(syncingButton).toBeInstanceOf(HTMLButtonElement)
+    expect((syncingButton as HTMLButtonElement).disabled).toBe(true)
+    expect(syncingButton?.querySelector('svg')?.getAttribute('class')).toContain('mr-2')
   })
 
   it('hides Sync Cards for non-admin users even when card sync is enabled', async () => {

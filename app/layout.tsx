@@ -3,10 +3,12 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import { Suspense } from 'react'
 import { Analytics } from '@vercel/analytics/next'
 import { AuthProvider } from '@/contexts/auth-context'
+import { CardSyncProvider } from '@/components/providers/card-sync-provider'
 import { NavigationProgress } from '@/components/navigation-progress'
 import { PwaInstallPrompt } from '@/components/pwa-install-prompt'
 import { QueryProvider } from '@/components/query-provider'
 import { ServiceWorkerRegistration } from '@/components/service-worker-registration'
+import { Toaster as SonnerToaster } from '@/components/ui/sonner'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -62,8 +64,11 @@ export default function RootLayout({
         <ServiceWorkerRegistration />
         <PwaInstallPrompt />
         <QueryProvider>
-          <AuthProvider>{children}</AuthProvider>
-          <Analytics />
+          <CardSyncProvider>
+            <AuthProvider>{children}</AuthProvider>
+            <Analytics />
+            <SonnerToaster />
+          </CardSyncProvider>
         </QueryProvider>
       </body>
     </html>
