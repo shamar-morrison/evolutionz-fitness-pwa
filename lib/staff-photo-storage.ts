@@ -17,7 +17,6 @@ export type StaffPhotoStorageClient = {
         fileBody: ArrayBuffer,
         options: {
           contentType: string
-          upsert: boolean
         },
       ): PromiseLike<{
         data: { path?: string } | null
@@ -34,7 +33,7 @@ export type StaffPhotoStorageClient = {
 }
 
 export function buildStaffPhotoPath(profileId: string) {
-  return `${profileId}.jpg`
+  return `${profileId}-${Date.now()}.jpg`
 }
 
 export function getStaffPhotoPublicUrl(
@@ -52,7 +51,6 @@ export async function uploadStaffPhotoObject(
   const path = buildStaffPhotoPath(profileId)
   const { error } = await storageClient.storage.from(STAFF_PHOTOS_BUCKET).upload(path, fileBody, {
     contentType: 'image/jpeg',
-    upsert: true,
   })
 
   if (error) {

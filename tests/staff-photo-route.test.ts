@@ -74,7 +74,6 @@ function createStaffPhotoAdminClient({
   const uploadCalls: Array<{
     path: string
     contentType: string
-    upsert: boolean
     body: ArrayBuffer
   }> = []
   const removeCalls: string[][] = []
@@ -139,12 +138,11 @@ function createStaffPhotoAdminClient({
           expect(bucket).toBe('staff-photos')
 
           return {
-            upload(path: string, body: ArrayBuffer, options: { contentType: string; upsert: boolean }) {
+            upload(path: string, body: ArrayBuffer, options: { contentType: string }) {
               uploadCalls.push({
                 path,
                 body,
                 contentType: options.contentType,
-                upsert: options.upsert,
               })
 
               return Promise.resolve(uploadResult)
@@ -189,15 +187,51 @@ describe('/api/staff/[id]/photo', () => {
 
     expect(response.status).toBe(200)
     expect(uploadCalls).toHaveLength(1)
-    expect(uploadCalls[0]?.path).toBe('staff-1.jpg')
+    expect(uploadCalls[0]?.path).toMatch(/^staff-1-\d+\.jpg$/)
     expect(uploadCalls[0]?.contentType).toBe('image/jpeg')
-    expect(uploadCalls[0]?.upsert).toBe(true)
-    expect(updateValues).toEqual([{ photo_url: 'staff-1.jpg' }])
+    expect(updateValues).toHaveLength(1)
+    expect(updateValues[0]?.photo_url).toMatch(/^staff-1-\d+\.jpg$/)
     expect(removeCalls).toEqual([])
-    await expect(response.json()).resolves.toEqual({
-      ok: true,
-      photo_url: 'staff-1.jpg',
+
+    const body = await response.json()
+    expect(body.ok).toBe(true)
+    expect(body.photo_url).toMatch(/^staff-1-\d+\.jpg$/)
+  })
+
+  it('deletes the previous photo from storage when re-uploading', async () => {
+    const { client, uploadCalls, updateValues, removeCalls } = createStaffPhotoAdminClient({
+      profileReads: [
+        buildProfileRow({
+          photoUrl: 'staff-1-old.jpg',
+        }),
+      ],
     })
+    const formData = new FormData()
+
+    formData.append('photo', new File(['new-photo-bytes'], 'photo.jpg', { type: 'image/jpeg' }))
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/staff/staff-1/photo', {
+        method: 'POST',
+        body: formData,
+      }),
+      {
+        params: Promise.resolve({ id: 'staff-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(uploadCalls).toHaveLength(1)
+    expect(uploadCalls[0]?.path).toMatch(/^staff-1-\d+\.jpg$/)
+    expect(updateValues).toHaveLength(1)
+    expect(updateValues[0]?.photo_url).toMatch(/^staff-1-\d+\.jpg$/)
+    // Old photo should be cleaned up
+    expect(removeCalls).toEqual([['staff-1-old.jpg']])
+
+    const body = await response.json()
+    expect(body.ok).toBe(true)
+    expect(body.photo_url).toMatch(/^staff-1-\d+\.jpg$/)
   })
 
   it('cleans up the uploaded file when the profile update fails', async () => {
@@ -225,7 +259,9 @@ describe('/api/staff/[id]/photo', () => {
     )
 
     expect(response.status).toBe(500)
-    expect(removeCalls).toEqual([['staff-1.jpg']])
+    expect(removeCalls).toHaveLength(1)
+    expect(removeCalls[0]).toHaveLength(1)
+    expect(removeCalls[0]?.[0]).toMatch(/^staff-1-\d+\.jpg$/)
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Failed to update staff profile staff-1: Update failed.',

@@ -99,6 +99,15 @@ export async function POST(
       return createErrorResponse('Staff profile not found.', 404)
     }
 
+    // Clean up the previous photo now that the new one is persisted
+    if (existingProfile.photoUrl && existingProfile.photoUrl !== photoPath) {
+      try {
+        await deleteStaffPhotoObject(supabase, existingProfile.photoUrl)
+      } catch (cleanupError) {
+        console.error('Failed to delete previous staff photo:', cleanupError)
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       photo_url: photoPath,
