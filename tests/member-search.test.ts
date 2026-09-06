@@ -41,6 +41,16 @@ describe('member search helpers', () => {
     expect(matchesMemberSearch(member, 'B3')).toBe(false)
   })
 
+  it('matches names regardless of first/last name order', () => {
+    expect(matchesMemberSearch(member, 'Kimberly Connell')).toBe(true)
+    expect(matchesMemberSearch(member, 'Connell Kimberly')).toBe(true)
+    expect(matchesMemberSearch(member, 'Connell, Kimberly')).toBe(true)
+    expect(matchesMemberSearch(member, 'connell kimberly')).toBe(true)
+    expect(matchesMemberSearch(member, '  Connell   Kimberly  ')).toBe(true)
+    expect(matchesMemberSearch(member, 'Kim Connell')).toBe(true)
+    expect(matchesMemberSearch(member, 'Connell B3')).toBe(false)
+  })
+
   it('does not throw when cardNo is null', () => {
     expect(
       matchesMemberSearch(
