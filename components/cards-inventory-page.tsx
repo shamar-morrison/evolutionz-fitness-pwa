@@ -1,8 +1,8 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { Plus, Search } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Plus, Search, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AddAccessCardModal } from '@/components/add-access-card-modal'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { PaginationControls } from '@/components/pagination-controls'
@@ -80,6 +80,7 @@ export function CardsInventoryPage() {
   const [search, setSearch] = useState('')
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [currentPage, setCurrentPage] = useState(0)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const { cards, isLoading, error } = useCardInventory()
   const normalizedSearch = search.trim().toLowerCase()
   const filteredCards = normalizedSearch
@@ -104,6 +105,12 @@ export function CardsInventoryPage() {
   const handleAddCardSuccess = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.cards.inventory })
   }
+
+  const handleClearSearch = useCallback(() => {
+    setSearch('')
+    setCurrentPage(0)
+    searchInputRef.current?.focus()
+  }, [])
 
   const handleDecommission = async () => {
     if (!selectedCard) {
@@ -174,14 +181,25 @@ export function CardsInventoryPage() {
               <div className="relative flex-1 min-w-[200px] max-w-sm">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
+                  ref={searchInputRef}
                   placeholder="Search by card number or card code..."
                   value={search}
                   onChange={(event) => {
                     setSearch(event.target.value)
                     setCurrentPage(0)
                   }}
-                  className="pl-9"
+                  className="pl-9 pr-9"
                 />
+                {search ? (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={handleClearSearch}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded-sm p-1.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
               </div>
             </div>
 

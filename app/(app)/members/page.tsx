@@ -1,7 +1,7 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
-import { Suspense, useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import { useAuth } from '@/contexts/auth-context'
@@ -34,7 +34,7 @@ import {
 } from '@/lib/member-list-status-filter'
 import { queryKeys } from '@/lib/query-keys'
 import { isFrontDeskStaff } from '@/lib/staff'
-import { RefreshCw, Search, UserPlus } from 'lucide-react'
+import { RefreshCw, Search, UserPlus, X } from 'lucide-react'
 import type { MemberType } from '@/types'
 
 const typeOptions: (MemberType | 'All')[] = ['All', ...MEMBER_TYPE_VALUES]
@@ -89,6 +89,7 @@ function MembersPageContent() {
   })
   const [showAddModal, setShowAddModal] = useState(false)
   const [isSyncingMembers, setIsSyncingMembers] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
   const { isSyncing: isSyncingCards, triggerSync } = useCardSync()
   const { profile, loading } = useAuth()
@@ -128,6 +129,12 @@ function MembersPageContent() {
       setShowAddModal(true)
     }
   }, [action, canCreateMembers, loading])
+
+  const handleClearSearch = useCallback(() => {
+    setSearch('')
+    updateSearchParams({ search: '' })
+    searchInputRef.current?.focus()
+  }, [updateSearchParams])
 
   const handleSyncMembers = async () => {
     setIsSyncingMembers(true)
@@ -215,14 +222,25 @@ function MembersPageContent() {
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={searchInputRef}
             placeholder="Search by name or card ID..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value)
               updateSearchParams({ search: e.target.value })
             }}
-            className="pl-9"
+            className="pl-9 pr-9"
           />
+          {search ? (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={handleClearSearch}
+              className="absolute right-1 top-1/2 -translate-y-1/2 rounded-sm p-1.5 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Label htmlFor="members-status-filter" className="text-muted-foreground">
