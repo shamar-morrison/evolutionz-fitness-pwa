@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Trash2, WandSparkles } from 'lucide-react'
+import { useAuth } from '@/contexts/auth-context'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { PtSessionDialog } from '@/components/pt-session-dialog'
 import { RoleGuard } from '@/components/role-guard'
@@ -288,6 +289,8 @@ function getPendingOverrideDescription(pendingOverride: PendingGenerateOverride)
 
 function SchedulePageContent() {
   const queryClient = useQueryClient()
+  const { role } = useAuth()
+  const isAdmin = role === 'admin'
   const calendarHeaderScrollRef = useRef<HTMLDivElement | null>(null)
   const calendarBodyScrollRef = useRef<HTMLDivElement | null>(null)
   const scrollSyncSourceRef = useRef<'header' | 'body' | null>(null)
@@ -1014,33 +1017,52 @@ function SchedulePageContent() {
                           </div>
 
                           <div className="space-y-2">
-                            {daySessions.map((session) => (
-                              <button
-                                key={session.id}
-                                type="button"
-                                onClick={() => setSelectedSessionId(session.id)}
-                                className="bg-muted/40 hover:bg-muted flex w-full flex-col gap-1 rounded-md border p-2 text-left transition-colors"
-                              >
-                                <span className="truncate text-sm font-medium">
-                                  {session.memberName ?? 'Unknown member'}
-                                </span>
-                                <span className="text-muted-foreground truncate text-xs">
-                                  {session.trainerName ?? 'Unknown trainer'}
-                                </span>
-                                <span className="text-xs">{formatPtSessionTime(session.scheduledAt)}</span>
-                                {session.trainingTypeName ? (
-                                  <span className="text-muted-foreground truncate text-xs">
-                                    {session.trainingTypeName}
+                            {daySessions.map((session) => {
+                              const sessionCardContent = (
+                                <>
+                                  <span className="truncate text-sm font-medium">
+                                    {session.memberName ?? 'Unknown member'}
                                   </span>
-                                ) : null}
-                                <Badge
-                                  variant="secondary"
-                                  className={getScheduleCalendarStatusBadgeClassName(session.status)}
+                                  <span className="text-muted-foreground truncate text-xs">
+                                    {session.trainerName ?? 'Unknown trainer'}
+                                  </span>
+                                  <span className="text-xs">{formatPtSessionTime(session.scheduledAt)}</span>
+                                  {session.trainingTypeName ? (
+                                    <span className="text-muted-foreground truncate text-xs">
+                                      {session.trainingTypeName}
+                                    </span>
+                                  ) : null}
+                                  <Badge
+                                    variant="secondary"
+                                    className={getScheduleCalendarStatusBadgeClassName(session.status)}
+                                  >
+                                    {formatPtSessionStatusLabel(session.status)}
+                                  </Badge>
+                                </>
+                              )
+
+                              if (!isAdmin) {
+                                return (
+                                  <div
+                                    key={session.id}
+                                    className="bg-muted/40 flex w-full flex-col gap-1 rounded-md border p-2 text-left"
+                                  >
+                                    {sessionCardContent}
+                                  </div>
+                                )
+                              }
+
+                              return (
+                                <button
+                                  key={session.id}
+                                  type="button"
+                                  onClick={() => setSelectedSessionId(session.id)}
+                                  className="bg-muted/40 hover:bg-muted flex w-full flex-col gap-1 rounded-md border p-2 text-left transition-colors"
                                 >
-                                  {formatPtSessionStatusLabel(session.status)}
-                                </Badge>
-                              </button>
-                            ))}
+                                  {sessionCardContent}
+                                </button>
+                              )
+                            })}
                           </div>
                         </div>
                       )

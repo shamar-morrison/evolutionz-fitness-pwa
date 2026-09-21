@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  authState,
   configFeatures,
   deletePtSessionsMock,
   fetchPtSessionsMock,
@@ -17,6 +18,9 @@ const {
   useStaffMock,
   roleGuardProps,
 } = vi.hoisted(() => ({
+  authState: {
+    role: 'admin' as 'admin' | 'staff' | null,
+  },
   configFeatures: {
     showDevRemovePtSessionsButton: true,
   },
@@ -81,6 +85,10 @@ vi.mock('@/components/role-guard', () => ({
     roleGuardProps.push(props)
     return <>{props.children}</>
   },
+}))
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => authState,
 }))
 
 vi.mock('@/components/pt-session-dialog', () => ({
@@ -400,6 +408,7 @@ describe('SchedulePage', () => {
     configFeatures.showDevRemovePtSessionsButton = true
     deletePtSessionsMock.mockReset()
     roleGuardProps.length = 0
+    authState.role = 'admin'
     useStaffMock.mockReturnValue({
       staff: [],
     })
@@ -437,6 +446,76 @@ describe('SchedulePage', () => {
     expect(roleGuardProps).toHaveLength(1)
     expect(roleGuardProps[0]).toMatchObject({ permission: 'pt.assign' })
     expect(roleGuardProps[0]).not.toHaveProperty('role')
+  })
+
+  it('renders clickable session cards for admins', async () => {
+    usePtSessionsMock.mockReturnValue({
+      sessions: [
+        {
+          id: 'session-1',
+          assignmentId: 'assignment-1',
+          trainerId: 'trainer-1',
+          memberId: 'member-1',
+          scheduledAt: '2026-04-06T07:00:00-05:00',
+          status: 'scheduled',
+          isRecurring: false,
+          notes: null,
+          trainingTypeName: null,
+          createdAt: '2026-04-05T00:00:00.000Z',
+          updatedAt: '2026-04-05T00:00:00.000Z',
+          trainerName: 'Jordan Trainer',
+          memberName: 'Member One',
+        },
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    const sessionButtons = Array.from(container.querySelectorAll('button')).filter((button) =>
+      button.textContent?.includes('Member One'),
+    )
+
+    expect(sessionButtons).toHaveLength(1)
+  })
+
+  it('renders non-clickable session cards for non-admin staff', async () => {
+    authState.role = 'staff'
+    usePtSessionsMock.mockReturnValue({
+      sessions: [
+        {
+          id: 'session-1',
+          assignmentId: 'assignment-1',
+          trainerId: 'trainer-1',
+          memberId: 'member-1',
+          scheduledAt: '2026-04-06T07:00:00-05:00',
+          status: 'scheduled',
+          isRecurring: false,
+          notes: null,
+          trainingTypeName: null,
+          createdAt: '2026-04-05T00:00:00.000Z',
+          updatedAt: '2026-04-05T00:00:00.000Z',
+          trainerName: 'Jordan Trainer',
+          memberName: 'Member One',
+        },
+      ],
+      isLoading: false,
+      error: null,
+    })
+
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    expect(container.textContent).toContain('Member One')
+    const sessionButtons = Array.from(container.querySelectorAll('button')).filter((button) =>
+      button.textContent?.includes('Member One'),
+    )
+
+    expect(sessionButtons).toHaveLength(0)
   })
 
   it('renders a sticky calendar header and keeps it aligned with the horizontal calendar body', async () => {
