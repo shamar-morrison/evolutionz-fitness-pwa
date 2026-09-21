@@ -542,7 +542,7 @@ describe('Member detail page tabs', () => {
     expect(usePtSessionsMock).not.toHaveBeenCalled()
   })
 
-  it('shows front desk staff the PT attendance tab while hiding direct edit and payment controls', async () => {
+  it('shows front desk staff the PT attendance tab and payment history tab', async () => {
     currentRoleState.role = 'staff'
     currentProfileState.profile = {
       id: 'assistant-1',
@@ -562,7 +562,24 @@ describe('Member detail page tabs', () => {
     expect(container.textContent).toContain('Record Payment')
     expect(container.textContent).not.toContain('Membership Type')
     expect(container.textContent).not.toContain('PT Payments Section')
+    expect(getButton(container, 'Payments')).toBeDefined()
     expect(container.textContent).not.toContain('Payment History Content')
+  })
+
+  it('hides the Payments tab from plain assistants', async () => {
+    currentRoleState.role = 'staff'
+    currentProfileState.profile = {
+      id: 'assistant-2',
+      name: 'Alex Assistant',
+      role: 'staff',
+      titles: ['Assistant'],
+    }
+
+    await act(async () => {
+      root.render(<MemberDetailPage />)
+    })
+
+    expect(container.textContent).not.toContain('Payments')
   })
 
   it('shows the medical assignment section for admins only', async () => {

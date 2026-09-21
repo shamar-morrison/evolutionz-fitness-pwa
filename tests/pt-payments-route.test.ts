@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  mockAuthenticatedProfile,
   mockAuthenticatedUser,
   mockUnauthorized,
   resetServerAuthMocks,
@@ -19,6 +20,7 @@ vi.mock('@/lib/server-auth', async () => {
 
   return {
     requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -170,26 +172,67 @@ describe('/api/pt/payments', () => {
     expect(readStaffProfileMock).not.toHaveBeenCalled()
   })
 
-  it('rejects non-front-desk staff', async () => {
-    mockAuthenticatedUser({ id: adminId })
-    readStaffProfileMock.mockResolvedValue(createProfile({
-      role: 'staff',
-      titles: ['Trainer'],
-    }))
-    const { client } = createSupabasePtPaymentsClient()
+  it('allows admins to list member PT payments', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: adminId,
+        role: 'admin',
+        titles: ['Owner'],
+      },
+    })
+    const { client } = createSupabasePtPaymentsClient({
+      payments: [
+        {
+          id: 'payment-1',
+          member_id: memberId,
+          assignment_id: assignmentId,
+          trainer_id: trainerId,
+          amount: 15000,
+          months_covered: 2,
+          payment_method: 'cash',
+          notes: 'April and May',
+          payment_date: '2026-04-10',
+          recorded_by: adminId,
+          created_at: '2026-04-10T12:00:00.000Z',
+        },
+      ],
+    })
     getSupabaseAdminClientMock.mockReturnValue(client)
 
     const response = await GET(new Request(`http://localhost/api/pt/payments?memberId=${memberId}`))
 
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(200)
   })
 
-  it('allows front desk users to list member PT payments', async () => {
-    mockAuthenticatedUser({ id: adminId })
-    readStaffProfileMock.mockResolvedValue(createProfile({
-      role: 'staff',
-      titles: ['Administrative Assistant'],
-    }))
+  it('rejects staff without payment history access', async () => {
+    const { client } = createSupabasePtPaymentsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    for (const titles of [['Assistant'], ['Trainer']]) {
+      mockAuthenticatedProfile({
+        profile: {
+          id: adminId,
+          role: 'staff',
+          titles,
+        },
+      })
+
+      const response = await GET(
+        new Request(`http://localhost/api/pt/payments?memberId=${memberId}`),
+      )
+
+      expect(response.status, titles.join(', ')).toBe(403)
+    }
+  })
+
+  it('allows administrative assistants to list member PT payments', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: adminId,
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
     const { client } = createSupabasePtPaymentsClient({
       payments: [
         {
@@ -384,5 +427,59 @@ describe('/api/pt/payments', () => {
         recorded_by: adminId,
       },
     ])
+  })
+
+  it('still allows front desk assistants to record PT payments', async () => {
+    mockAuthenticatedUser({ id: adminId })
+    readStaffProfileMock.mockResolvedValue(createProfile({
+      id: adminId,
+      role: 'staff',
+      titles: ['Assistant'],
+    }))
+    const { client, inserts } = createSupabasePtPaymentsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/payments', {
+        method: 'POST',
+        body: JSON.stringify({
+          memberId,
+          amount: 12000,
+          monthsCovered: 1,
+          paymentMethod: 'bank_transfer',
+          paymentDate: '2026-04-10',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(inserts).toHaveLength(1)
+  })
+
+  it('still rejects non-front-desk staff from recording PT payments', async () => {
+    mockAuthenticatedUser({ id: adminId })
+    readStaffProfileMock.mockResolvedValue(createProfile({
+      id: adminId,
+      role: 'staff',
+      titles: ['Trainer'],
+    }))
+    const { client, inserts } = createSupabasePtPaymentsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/payments', {
+        method: 'POST',
+        body: JSON.stringify({
+          memberId,
+          amount: 12000,
+          monthsCovered: 1,
+          paymentMethod: 'bank_transfer',
+          paymentDate: '2026-04-10',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(403)
+    expect(inserts).toEqual([])
   })
 })

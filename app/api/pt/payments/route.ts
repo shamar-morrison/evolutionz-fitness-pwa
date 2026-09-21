@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { isFrontDeskStaff, readStaffProfile } from '@/lib/staff'
-import { requireAuthenticatedUser } from '@/lib/server-auth'
+import { requireAuthenticatedProfile, requireAuthenticatedUser } from '@/lib/server-auth'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import { paymentMethodSchema } from '@/lib/validation-schemas'
 import type { MemberPaymentMethod, Profile } from '@/types'
@@ -210,12 +211,17 @@ function mapPaymentRow(row: PtPaymentRow, profileNamesById: Map<string, string>)
 
 export async function GET(request: Request) {
   try {
-    const supabase = getSupabaseAdminClient() as unknown as PtPaymentsRouteClient
-    const authResult = await requirePtPaymentRecorder(supabase)
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
     }
+
+    if (!resolvePermissionsForProfile(authResult.profile).can('payments.viewHistory')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const supabase = getSupabaseAdminClient() as unknown as PtPaymentsRouteClient
 
     const { searchParams } = new URL(request.url)
     const memberId = searchParams.get('memberId') ?? ''

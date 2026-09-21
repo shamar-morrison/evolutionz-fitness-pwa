@@ -8,6 +8,7 @@ const {
   deleteMemberPaymentMock,
   deletePtPaymentMock,
   invalidateQueriesMock,
+  permissionsState,
   toastMock,
   useMemberPaymentsMock,
   usePtPaymentsMock,
@@ -15,6 +16,7 @@ const {
   deleteMemberPaymentMock: vi.fn().mockResolvedValue(undefined),
   deletePtPaymentMock: vi.fn().mockResolvedValue(undefined),
   invalidateQueriesMock: vi.fn().mockResolvedValue(undefined),
+  permissionsState: { role: 'admin' as 'admin' | 'staff' },
   toastMock: vi.fn(),
   useMemberPaymentsMock: vi.fn(),
   usePtPaymentsMock: vi.fn(),
@@ -32,6 +34,15 @@ vi.mock('@/hooks/use-member-payments', () => ({
 
 vi.mock('@/hooks/use-pt-payments', () => ({
   usePtPayments: usePtPaymentsMock,
+}))
+
+vi.mock('@/hooks/use-permissions', () => ({
+  usePermissions: () => ({
+    role: permissionsState.role,
+    can: () => true,
+    requiresApproval: () => false,
+    permissions: new Set(),
+  }),
 }))
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -191,6 +202,7 @@ describe('MemberPaymentHistory', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    permissionsState.role = 'admin'
     useMemberPaymentsMock.mockReturnValue({
       data: {
         payments: [],
@@ -719,5 +731,129 @@ describe('MemberPaymentHistory', () => {
       description: 'PT delete failed.',
       variant: 'destructive',
     })
+  })
+
+  it('hides delete actions but keeps receipts for non-admin viewers on the General tab', async () => {
+    permissionsState.role = 'staff'
+    useMemberPaymentsMock.mockReturnValue({
+      data: {
+        payments: [createPayment(0)],
+        totalMatches: 1,
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(<MemberPaymentHistory memberId="member-1" memberEmail="member@example.com" />)
+    })
+
+    const deleteButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Delete',
+    )
+
+    expect(deleteButton).toBeUndefined()
+
+    const sendReceiptButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Send Receipt',
+    )
+
+    if (!(sendReceiptButton instanceof HTMLButtonElement)) {
+      throw new Error('Send Receipt button not found.')
+    }
+
+    expect(sendReceiptButton.disabled).toBe(false)
+  })
+
+  it('hides delete actions for non-admin viewers on the PT tab', async () => {
+    permissionsState.role = 'staff'
+    usePtPaymentsMock.mockReturnValue({
+      payments: [
+        {
+          id: 'pt-payment-1',
+          assignmentId: 'assignment-1',
+          trainerName: 'Jordan Trainer',
+          amount: 15000,
+          monthsCovered: 1,
+          paymentMethod: 'cash',
+          notes: null,
+          paymentDate: '2026-04-10',
+          recordedBy: 'Admin User',
+          createdAt: '2026-04-10T12:00:00.000Z',
+        },
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(<MemberPaymentHistory memberId="member-1" />)
+    })
+
+    await act(async () => {
+      const ptTab = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'PT',
+      )
+
+      if (!(ptTab instanceof HTMLButtonElement)) {
+        throw new Error('PT tab not found.')
+      }
+
+      ptTab.click()
+    })
+
+    expect(container.textContent).toContain('Jordan Trainer')
+
+    const deleteButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Delete',
+    )
+
+    expect(deleteButton).toBeUndefined()
+  })
+
+  it('shows delete actions for admins on the PT tab', async () => {
+    usePtPaymentsMock.mockReturnValue({
+      payments: [
+        {
+          id: 'pt-payment-1',
+          assignmentId: 'assignment-1',
+          trainerName: 'Jordan Trainer',
+          amount: 15000,
+          monthsCovered: 1,
+          paymentMethod: 'cash',
+          notes: null,
+          paymentDate: '2026-04-10',
+          recordedBy: 'Admin User',
+          createdAt: '2026-04-10T12:00:00.000Z',
+        },
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    await act(async () => {
+      root.render(<MemberPaymentHistory memberId="member-1" />)
+    })
+
+    await act(async () => {
+      const ptTab = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'PT',
+      )
+
+      if (!(ptTab instanceof HTMLButtonElement)) {
+        throw new Error('PT tab not found.')
+      }
+
+      ptTab.click()
+    })
+
+    const deleteButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Delete',
+    )
+
+    expect(deleteButton).toBeInstanceOf(HTMLButtonElement)
   })
 })

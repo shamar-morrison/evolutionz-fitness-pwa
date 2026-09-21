@@ -21,6 +21,7 @@ describe('permissions', () => {
     expect(permissions.has('classes.manage')).toBe(true)
     expect(permissions.has('staff.suspend')).toBe(true)
     expect(permissions.has('members.extendMembership')).toBe(true)
+    expect(permissions.has('payments.viewHistory')).toBe(true)
   })
 
   it('never requires approval for admins', () => {
@@ -50,6 +51,7 @@ describe('permissions', () => {
     expect(permissions.has('classes.manage')).toBe(false)
     expect(permissions.has('reports.view')).toBe(false)
     expect(permissions.has('dashboard.view')).toBe(false)
+    expect(permissions.has('payments.viewHistory')).toBe(false)
   })
 
   it('gives administrative assistants the correct permission set', () => {
@@ -67,6 +69,7 @@ describe('permissions', () => {
     expect(permissions.has('email.send')).toBe(true)
     expect(permissions.has('pt.assign')).toBe(true)
     expect(permissions.has('staff.view')).toBe(true)
+    expect(permissions.has('payments.viewHistory')).toBe(true)
   })
 
   it('requires administrative assistant approval for member creation, edits, and payments', () => {
@@ -105,6 +108,7 @@ describe('permissions', () => {
     expect(permissions.has('door.fetchHistory')).toBe(false)
     expect(permissions.has('pt.assign')).toBe(false)
     expect(permissions.has('staff.view')).toBe(false)
+    expect(permissions.has('payments.viewHistory')).toBe(false)
     expect(permissions.has('door.unlock')).toBe(true)
     expect(permissions.has('members.view')).toBe(true)
     expect(sortPermissions(permissions)).toEqual(
@@ -171,6 +175,7 @@ describe('permissions', () => {
         'members.extendMembership',
         'members.pauseMembership',
         'members.recordPayment',
+        'payments.viewHistory',
         'door.unlock',
         'door.viewHistory',
         'door.fetchHistory',
@@ -272,6 +277,7 @@ describe('resolvePermissionsForProfile', () => {
           'door.viewHistory',
           'door.fetchHistory',
           'email.send',
+          'payments.viewHistory',
           'pt.assign',
           'staff.view',
         ],
