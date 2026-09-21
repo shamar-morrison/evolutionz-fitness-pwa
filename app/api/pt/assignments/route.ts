@@ -127,7 +127,10 @@ export async function GET(request: Request) {
     })
     const nextFilters = { ...filters }
 
-    if (authResult.profile.role !== 'admin') {
+    if (
+      authResult.profile.role !== 'admin' &&
+      !resolvePermissionsForProfile(authResult.profile).can('pt.assign')
+    ) {
       const titles = authResult.profile.titles
       const isTrainer = hasStaffTitle(titles, 'Trainer')
       const isFrontDesk = isFrontDeskStaff(titles)

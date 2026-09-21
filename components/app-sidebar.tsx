@@ -170,6 +170,7 @@ const frontDeskNavItems: NavItem[] = [
   { href: '/classes', label: 'Classes', icon: GraduationCap },
   { href: '/email', label: 'Send Email', icon: Mail, permission: 'email.send' },
   { href: '/door-history', label: 'Door History', icon: History, permission: 'door.viewHistory' },
+  { href: '/schedule', label: 'Schedule', icon: CalendarDays, permission: 'pt.assign' },
 ]
 
 const trainerClassesNavItems: NavItem[] = [{ href: '/classes', label: 'Classes', icon: GraduationCap }]

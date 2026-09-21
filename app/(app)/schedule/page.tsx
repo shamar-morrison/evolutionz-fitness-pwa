@@ -1522,7 +1522,7 @@ function SchedulePageContent() {
 
 export default function SchedulePage() {
   return (
-    <RoleGuard role="admin">
+    <RoleGuard permission="pt.assign">
       <SchedulePageContent />
     </RoleGuard>
   )

@@ -15,6 +15,7 @@ const {
   usePtAssignmentsMock,
   usePtSessionsMock,
   useStaffMock,
+  roleGuardProps,
 } = vi.hoisted(() => ({
   configFeatures: {
     showDevRemovePtSessionsButton: true,
@@ -28,6 +29,7 @@ const {
   usePtAssignmentsMock: vi.fn(),
   usePtSessionsMock: vi.fn(),
   useStaffMock: vi.fn(),
+  roleGuardProps: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock('@tanstack/react-query', () => ({
@@ -75,7 +77,10 @@ vi.mock('@/lib/pt-scheduling', async () => {
 })
 
 vi.mock('@/components/role-guard', () => ({
-  RoleGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  RoleGuard: (props: { children: React.ReactNode }) => {
+    roleGuardProps.push(props)
+    return <>{props.children}</>
+  },
 }))
 
 vi.mock('@/components/pt-session-dialog', () => ({
@@ -394,6 +399,7 @@ describe('SchedulePage', () => {
     })
     configFeatures.showDevRemovePtSessionsButton = true
     deletePtSessionsMock.mockReset()
+    roleGuardProps.length = 0
     useStaffMock.mockReturnValue({
       staff: [],
     })
@@ -421,6 +427,16 @@ describe('SchedulePage', () => {
       trainerId: undefined,
       status: 'active',
     })
+  })
+
+  it('gates the schedule page on the pt.assign permission instead of the admin role', async () => {
+    await act(async () => {
+      root.render(<SchedulePage />)
+    })
+
+    expect(roleGuardProps).toHaveLength(1)
+    expect(roleGuardProps[0]).toMatchObject({ permission: 'pt.assign' })
+    expect(roleGuardProps[0]).not.toHaveProperty('role')
   })
 
   it('renders a sticky calendar header and keeps it aligned with the horizontal calendar body', async () => {

@@ -282,6 +282,7 @@ describe('Sidebar', () => {
     expect(container.textContent).toContain('Classes')
     expect(container.textContent).toContain('Send Email')
     expect(container.textContent).toContain('Door History')
+    expect(container.textContent).toContain('Schedule')
     expect(container.textContent).toContain('Front desk workspace')
     expect(container.textContent).not.toContain('Cards')
     expect(container.textContent).not.toContain('My Schedule')
@@ -298,6 +299,7 @@ describe('Sidebar', () => {
     expect(links).toContain('/classes')
     expect(links).toContain('/email')
     expect(links).toContain('/door-history')
+    expect(links).toContain('/schedule')
     expect(links).not.toContain('/trainer/clients')
     expect(links).not.toContain('/trainer/requests')
     expect(usePendingApprovalCountsMock).toHaveBeenCalledWith(
