@@ -25,6 +25,7 @@ vi.mock('@/lib/server-auth', async () => {
   return {
     requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
     requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 

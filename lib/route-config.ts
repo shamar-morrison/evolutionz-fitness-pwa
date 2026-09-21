@@ -44,7 +44,8 @@ export const routeConfig: Record<string, RouteConfig> = {
     allowedRoles: ['admin'],
   },
   '/email': {
-    allowedRoles: ['admin'],
+    allowedRoles: ['admin', 'staff'],
+    allowedTitles: ['Administrative Assistant'],
   },
   '/classes': {
     allowedRoles: ['admin', 'staff'],
@@ -62,7 +63,8 @@ export const routeConfig: Record<string, RouteConfig> = {
     allowedRoles: ['admin'],
   },
   '/door-history': {
-    allowedRoles: ['admin'],
+    allowedRoles: ['admin', 'staff'],
+    allowedTitles: ['Administrative Assistant'],
   },
   '/reports': {
     allowedRoles: ['admin'],

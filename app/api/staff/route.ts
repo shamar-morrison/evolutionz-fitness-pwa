@@ -14,7 +14,8 @@ import {
   type StaffReadClient,
 } from '@/lib/staff'
 import { hydrateStaffPhotoUrls, type StaffPhotoStorageClient } from '@/lib/staff-photo-storage'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAdminUser, requireAuthenticatedProfile } from '@/lib/server-auth'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { createClient } from '@/lib/supabase/server'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -111,10 +112,14 @@ async function rollbackCreatedAuthUser(
 
 export async function GET(request: Request) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
+    }
+
+    if (!resolvePermissionsForProfile(authResult.profile).can('staff.view')) {
+      return createErrorResponse('Forbidden', 403)
     }
 
     const searchParams = new URL(request.url).searchParams

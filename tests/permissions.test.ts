@@ -62,6 +62,11 @@ describe('permissions', () => {
     expect(permissions.has('classes.register')).toBe(true)
     expect(permissions.has('classes.manage')).toBe(false)
     expect(permissions.has('door.unlock')).toBe(true)
+    expect(permissions.has('door.viewHistory')).toBe(true)
+    expect(permissions.has('door.fetchHistory')).toBe(true)
+    expect(permissions.has('email.send')).toBe(true)
+    expect(permissions.has('pt.assign')).toBe(true)
+    expect(permissions.has('staff.view')).toBe(true)
   })
 
   it('requires administrative assistant approval for member creation, edits, and payments', () => {
@@ -85,7 +90,6 @@ describe('permissions', () => {
     const permissions = resolvePermissions('staff', ['Administrative Assistant'])
 
     expect(permissions.has('staff.manage')).toBe(false)
-    expect(permissions.has('pt.assign')).toBe(false)
     expect(permissions.has('pt.manageOwnSchedule')).toBe(false)
     expect(permissions.has('classes.manage')).toBe(false)
     expect(permissions.has('classes.markAttendance')).toBe(true)
@@ -93,10 +97,25 @@ describe('permissions', () => {
     expect(permissions.has('members.delete')).toBe(false)
   })
 
-  it('gives assistants the same permissions as administrative assistants', () => {
-    expect(sortPermissions(resolvePermissions('staff', ['Assistant']))).toEqual(
-      sortPermissions(ROLE_PRESETS.administrativeAssistant),
+  it('keeps assistants without the expanded administrative assistant capabilities', () => {
+    const permissions = resolvePermissions('staff', ['Assistant'])
+
+    expect(permissions.has('email.send')).toBe(false)
+    expect(permissions.has('door.viewHistory')).toBe(false)
+    expect(permissions.has('door.fetchHistory')).toBe(false)
+    expect(permissions.has('pt.assign')).toBe(false)
+    expect(permissions.has('staff.view')).toBe(false)
+    expect(permissions.has('door.unlock')).toBe(true)
+    expect(permissions.has('members.view')).toBe(true)
+    expect(sortPermissions(permissions)).toEqual(
+      sortPermissions(ROLE_PRESETS.assistant),
     )
+  })
+
+  it('does not let trainers view the staff directory', () => {
+    const permissions = resolvePermissions('staff', ['Trainer'])
+
+    expect(permissions.has('staff.view')).toBe(false)
   })
 
   it('gives medical staff the correct permission set', () => {
@@ -145,6 +164,7 @@ describe('permissions', () => {
         'pt.viewOwnSchedule',
         'pt.markSession',
         'pt.requestReschedule',
+        'pt.assign',
         'members.view',
         'members.create',
         'members.edit',
@@ -152,6 +172,10 @@ describe('permissions', () => {
         'members.pauseMembership',
         'members.recordPayment',
         'door.unlock',
+        'door.viewHistory',
+        'door.fetchHistory',
+        'email.send',
+        'staff.view',
       ]),
     )
   })
@@ -245,6 +269,11 @@ describe('resolvePermissionsForProfile', () => {
           'classes.view',
           'classes.register',
           'door.unlock',
+          'door.viewHistory',
+          'door.fetchHistory',
+          'email.send',
+          'pt.assign',
+          'staff.view',
         ],
         denied: ['staff.manage', 'members.delete', 'reports.view', 'classes.manage'],
       },

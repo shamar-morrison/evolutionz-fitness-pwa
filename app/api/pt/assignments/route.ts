@@ -11,7 +11,8 @@ import {
   type ScheduledSessionInput,
 } from '@/lib/pt-scheduling'
 import { readTrainerClientById, readTrainerClients } from '@/lib/pt-scheduling-server'
-import { requireAdminUser, requireAuthenticatedProfile } from '@/lib/server-auth'
+import { requireAuthenticatedProfile } from '@/lib/server-auth'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { hasStaffTitle, isFrontDeskStaff, readStaffProfile } from '@/lib/staff'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -178,10 +179,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
+    }
+
+    if (!resolvePermissionsForProfile(authResult.profile).can('pt.assign')) {
+      return createErrorResponse('Forbidden', 403)
     }
 
     const requestBody = await request.json()

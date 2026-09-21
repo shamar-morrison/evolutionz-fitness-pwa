@@ -8,7 +8,8 @@ import {
   normalizeDoorHistoryDeviceResult,
   parseDoorHistoryDateInput,
 } from '@/lib/door-history'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAuthenticatedProfile } from '@/lib/server-auth'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const MAX_WAIT_MS = 55_000
@@ -77,10 +78,14 @@ export const maxDuration = 60
 
 export async function POST(request: Request) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
+    }
+
+    if (!resolvePermissionsForProfile(authResult.profile).can('door.fetchHistory')) {
+      return createErrorResponse('Forbidden', 403)
     }
 
     const requestBody = await request.json()
