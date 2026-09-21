@@ -49,10 +49,13 @@ describe('route config helpers', () => {
     expect(isRouteAllowed('/reports/revenue', 'staff', ['Trainer'])).toBe(false)
   })
 
-  it('allows administrative assistants on member and class routes', () => {
+  it('allows administrative assistants on member, class, email, door-history, and schedule routes', () => {
     expect(isRouteAllowed('/members', 'staff', ['Administrative Assistant'])).toBe(true)
     expect(isRouteAllowed('/classes', 'staff', ['Administrative Assistant'])).toBe(true)
     expect(isRouteAllowed('/classes/123', 'staff', ['Administrative Assistant'])).toBe(true)
+    expect(isRouteAllowed('/email', 'staff', ['Administrative Assistant'])).toBe(true)
+    expect(isRouteAllowed('/door-history', 'staff', ['Administrative Assistant'])).toBe(true)
+    expect(isRouteAllowed('/schedule', 'staff', ['Administrative Assistant'])).toBe(true)
     expect(
       isRouteAllowed(
         '/members/123e4567-e89b-12d3-a456-426614174000',
@@ -103,6 +106,9 @@ describe('route config helpers', () => {
   it('returns false when staff does not have a matching title on a restricted route', () => {
     expect(isRouteAllowed('/members', 'staff', ['Assistant'])).toBe(true)
     expect(isRouteAllowed('/classes', 'staff', ['Assistant'])).toBe(true)
+    expect(isRouteAllowed('/email', 'staff', ['Assistant'])).toBe(false)
+    expect(isRouteAllowed('/door-history', 'staff', ['Assistant'])).toBe(false)
+    expect(isRouteAllowed('/schedule', 'staff', ['Assistant'])).toBe(false)
     expect(isRouteAllowed('/trainer/requests', 'staff', ['Medical/Consultant'])).toBe(false)
   })
 
@@ -203,8 +209,12 @@ describe('route config helpers', () => {
     expect(routeConfig['/reports/class-payments']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports/members']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/reports/revenue']?.allowedRoles).toEqual(['admin'])
-    expect(routeConfig['/door-history']?.allowedRoles).toEqual(['admin'])
-    expect(routeConfig['/email']?.allowedRoles).toEqual(['admin'])
+    expect(routeConfig['/door-history']?.allowedRoles).toEqual(['admin', 'staff'])
+    expect(routeConfig['/door-history']?.allowedTitles).toEqual(['Administrative Assistant'])
+    expect(routeConfig['/email']?.allowedRoles).toEqual(['admin', 'staff'])
+    expect(routeConfig['/email']?.allowedTitles).toEqual(['Administrative Assistant'])
+    expect(routeConfig['/schedule']?.allowedRoles).toEqual(['admin', 'staff'])
+    expect(routeConfig['/schedule']?.allowedTitles).toEqual(['Administrative Assistant'])
     expect(routeConfig['/cards']?.allowedRoles).toEqual(['admin'])
     expect(routeConfig['/settings']?.allowedRoles).toEqual(['admin'])
   })

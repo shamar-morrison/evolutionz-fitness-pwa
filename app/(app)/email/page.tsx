@@ -7,7 +7,7 @@ import { RoleGuard } from '@/components/role-guard'
 
 export default function EmailPage() {
   return (
-    <RoleGuard role="admin" fallback={<AuthenticatedHomeRedirect />}>
+    <RoleGuard permission="email.send" fallback={<AuthenticatedHomeRedirect />}>
       <EmailClient resendDailyLimit={getResendDailyEmailLimit()} />
     </RoleGuard>
   )

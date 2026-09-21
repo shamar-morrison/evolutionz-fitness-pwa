@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mockUnauthorized, resetServerAuthMocks } from '@/tests/support/server-auth'
+import { mockAuthenticatedProfile, mockUnauthorized, resetServerAuthMocks } from '@/tests/support/server-auth'
 
 type DeliveryRecord = {
   senderProfileId: string
@@ -50,6 +50,7 @@ vi.mock('@/lib/server-auth', async () => {
 
   return {
     requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -790,5 +791,52 @@ describe('POST /api/email/send', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'Unauthorized',
     })
+  })
+
+  it('returns 403 for staff without email send permission', async () => {
+    configureDeliveryStore()
+    mockAuthenticatedProfile({
+      profile: { id: 'assistant-1', role: 'staff', titles: ['Assistant'] },
+    })
+    const fetchMock = vi.fn().mockResolvedValue(createSuccessResponse())
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await POST(createSendRequest({}))
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('sends email for administrative assistants', async () => {
+    configureDeliveryStore()
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+    process.env.RESEND_API_KEY = 'resend-key'
+    process.env.MEMBERSHIP_EXPIRY_EMAIL_FROM = 'Evolutionz Fitness <reminders@example.com>'
+    process.env.RESEND_DAILY_EMAIL_LIMIT = '100'
+    const fetchMock = vi.fn().mockResolvedValue(createSuccessResponse())
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await POST(createSendRequest({}))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      sentCount: 2,
+      alreadySentCount: 0,
+      skippedDueToQuotaCount: 0,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

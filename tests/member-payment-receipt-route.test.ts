@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mockAdminUser, mockForbidden, resetServerAuthMocks } from '@/tests/support/server-auth'
+import {
+  mockAuthenticatedProfile,
+  mockForbidden,
+  resetServerAuthMocks,
+} from '@/tests/support/server-auth'
 
 const {
   createSupabaseAdminEmailDeliveryStoreMock,
@@ -37,6 +41,7 @@ vi.mock('@/lib/server-auth', async () => {
 
   return {
     requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -186,7 +191,7 @@ describe('member payment receipt route', () => {
     const deliveryStore = createDeliveryStore()
     getSupabaseAdminClientMock.mockReturnValue(client)
     createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
-    mockAdminUser({
+    mockAuthenticatedProfile({
       profile: {
         id: 'admin-1',
         role: 'admin',
@@ -223,7 +228,7 @@ describe('member payment receipt route', () => {
     getSupabaseAdminClientMock.mockReturnValue(client)
     createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
     sendAdminResendEmailToRecipientMock.mockResolvedValue('resend-1')
-    mockAdminUser({
+    mockAuthenticatedProfile({
       profile: {
         id: 'admin-1',
         role: 'admin',
@@ -284,7 +289,7 @@ describe('member payment receipt route', () => {
     const deliveryStore = createDeliveryStore()
     getSupabaseAdminClientMock.mockReturnValue(client)
     createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
-    mockAdminUser()
+    mockAuthenticatedProfile()
 
     const response = await POST(new Request('http://localhost', { method: 'POST' }), {
       params: Promise.resolve({ id: 'member-1', paymentId: 'payment-1' }),
@@ -311,7 +316,7 @@ describe('member payment receipt route', () => {
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
     createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
-    mockAdminUser()
+    mockAuthenticatedProfile()
 
     const response = await POST(new Request('http://localhost', { method: 'POST' }), {
       params: Promise.resolve({ id: 'member-1', paymentId: 'payment-1' }),
@@ -343,7 +348,7 @@ describe('member payment receipt route', () => {
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
     createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
-    mockAdminUser()
+    mockAuthenticatedProfile()
 
     const response = await POST(new Request('http://localhost', { method: 'POST' }), {
       params: Promise.resolve({ id: 'member-1', paymentId: 'payment-1' }),
@@ -368,7 +373,7 @@ describe('member payment receipt route', () => {
     })
     getSupabaseAdminClientMock.mockReturnValue(client)
     createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
-    mockAdminUser()
+    mockAuthenticatedProfile()
 
     const response = await POST(new Request('http://localhost', { method: 'POST' }), {
       params: Promise.resolve({ id: 'member-1', paymentId: 'payment-1' }),
@@ -390,7 +395,7 @@ describe('member payment receipt route', () => {
     getSupabaseAdminClientMock.mockReturnValue(client)
     createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
     sendAdminResendEmailToRecipientMock.mockRejectedValue(new Error('provider: Resend rejected'))
-    mockAdminUser()
+    mockAuthenticatedProfile()
 
     const response = await POST(new Request('http://localhost', { method: 'POST' }), {
       params: Promise.resolve({ id: 'member-1', paymentId: 'payment-1' }),
@@ -406,5 +411,62 @@ describe('member payment receipt route', () => {
     })
     expect(deliveryStore.markReceiptDeliverySent).not.toHaveBeenCalled()
     expect(receiptSentAtUpdates).toEqual([])
+  })
+
+  it('allows administrative assistants to preview and send receipts', async () => {
+    const { client } = createReceiptRouteClient(createReceiptPaymentRow())
+    const deliveryStore = createDeliveryStore()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
+    sendAdminResendEmailToRecipientMock.mockResolvedValue('resend-1')
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+
+    const previewResponse = await GET(new Request('http://localhost'), {
+      params: Promise.resolve({ id: 'member-1', paymentId: 'payment-1' }),
+    })
+
+    expect(previewResponse.status).toBe(200)
+
+    const sendResponse = await POST(new Request('http://localhost', { method: 'POST' }), {
+      params: Promise.resolve({ id: 'member-1', paymentId: 'payment-1' }),
+    })
+
+    expect(sendResponse.status).toBe(200)
+    expect(sendAdminResendEmailToRecipientMock).toHaveBeenCalled()
+  })
+
+  it('rejects plain assistants and trainers from previewing or sending receipts', async () => {
+    const { client } = createReceiptRouteClient(createReceiptPaymentRow())
+    const deliveryStore = createDeliveryStore()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    createSupabaseAdminEmailDeliveryStoreMock.mockReturnValue(deliveryStore)
+
+    for (const titles of [['Assistant'], ['Trainer']]) {
+      mockAuthenticatedProfile({
+        profile: {
+          id: 'staff-1',
+          role: 'staff',
+          titles,
+        },
+      })
+
+      const previewResponse = await GET(new Request('http://localhost'), {
+        params: Promise.resolve({ id: 'member-1', paymentId: 'payment-1' }),
+      })
+      const sendResponse = await POST(new Request('http://localhost', { method: 'POST' }), {
+        params: Promise.resolve({ id: 'member-1', paymentId: 'payment-1' }),
+      })
+
+      expect(previewResponse.status, titles.join(', ')).toBe(403)
+      expect(sendResponse.status, titles.join(', ')).toBe(403)
+    }
+
+    expect(sendAdminResendEmailToRecipientMock).not.toHaveBeenCalled()
   })
 })

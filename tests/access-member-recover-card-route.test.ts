@@ -22,6 +22,8 @@ vi.mock('@/lib/server-auth', async () => {
 
 import { POST } from '@/app/api/access/members/[id]/recover-card/route'
 
+const FIXED_NOW = new Date('2026-03-30T14:15:16.000Z')
+
 type QueryResult<T> = {
   data: T | null
   error: { message: string } | null
@@ -246,6 +248,9 @@ describe('POST /api/access/members/[id]/recover-card', () => {
   })
 
   it('reissues the card, clears lost_at, and reactivates the member', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
     const { client, insertedJobs, cardUpdates, memberUpdates } = createRecoverCardAdminClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
 

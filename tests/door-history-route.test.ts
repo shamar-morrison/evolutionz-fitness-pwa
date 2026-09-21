@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resetServerAuthMocks } from '@/tests/support/server-auth'
+import { mockAuthenticatedProfile, resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -14,6 +14,7 @@ vi.mock('@/lib/server-auth', async () => {
 
   return {
     requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -469,6 +470,43 @@ describe('GET /api/door-history', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'date must use YYYY-MM-DD format.',
+    })
+  })
+
+  it('returns 403 for staff without door history view permission', async () => {
+    mockAuthenticatedProfile({
+      profile: { id: 'assistant-1', role: 'staff', titles: ['Assistant'] },
+    })
+
+    const response = await GET(new Request('http://localhost/api/door-history?date=2026-04-14'))
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('returns cached events for administrative assistants', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+    const { client, recorded } = createDoorHistoryReadClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await GET(new Request('http://localhost/api/door-history?date=2026-04-14'))
+
+    expect(response.status).toBe(200)
+    expect(recorded.cacheDates).toEqual(['2026-04-14'])
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      cacheDate: '2026-04-14',
+      totalMatches: 2,
     })
   })
 })

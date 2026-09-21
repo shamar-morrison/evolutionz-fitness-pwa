@@ -414,6 +414,9 @@ describe('POST /api/access/members/[id]/assign-card', () => {
   })
 
   it('assigns an available card and returns the updated member', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
     const { client, insertedJobs, memberUpdateCalls, rpcCalls } = createAssignCardAdminClient()
     getSupabaseAdminClientMock.mockReturnValue(client)
 
@@ -899,6 +902,9 @@ describe('POST /api/access/members/[id]/assign-card', () => {
   })
 
   it('reactivates an expired member when the assigned access window ends in the future', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
+
     const { client, memberUpdateCalls } = createAssignCardAdminClient({
       detailRows: [
         {
@@ -970,6 +976,7 @@ describe('POST /api/access/members/[id]/assign-card', () => {
 
   it('revokes a placeholder-held card before assigning it to the member', async () => {
     vi.useFakeTimers()
+    vi.setSystemTime(FIXED_NOW)
 
     const { client, insertedJobs, memberUpdateCalls, rpcCalls } = createAssignCardAdminClient({
       pollResults: [

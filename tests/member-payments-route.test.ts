@@ -3,6 +3,7 @@ import { DEFAULT_CARD_FEE_AMOUNT_JMD } from '@/lib/business-constants'
 import { MEMBER_PAYMENT_RECORD_SELECT } from '@/lib/member-payment-records'
 import {
   mockAdminUser,
+  mockAuthenticatedProfile,
   mockForbidden,
   resetServerAuthMocks,
 } from '@/tests/support/server-auth'
@@ -22,6 +23,7 @@ vi.mock('@/lib/server-auth', async () => {
 
   return {
     requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -1011,7 +1013,7 @@ describe('GET /api/members/[id]/payments', () => {
     })
   })
 
-  it('rejects non-admin users from reading member payments', async () => {
+  it('returns the auth response when reading payment history is forbidden', async () => {
     mockForbidden()
 
     const response = await GET(
@@ -1025,5 +1027,56 @@ describe('GET /api/members/[id]/payments', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'Forbidden',
     })
+  })
+
+  it('allows administrative assistants to read payment history', async () => {
+    const { client } = createGetPaymentsRouteClient({
+      paymentRows: [],
+      count: 0,
+    })
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+
+    const response = await GET(
+      new Request('http://localhost/api/members/member-1/payments?page=0&limit=10'),
+      {
+        params: Promise.resolve({ id: 'member-1' }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+  })
+
+  it('rejects plain assistants and trainers from reading payment history', async () => {
+    const { client } = createGetPaymentsRouteClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    for (const titles of [['Assistant'], ['Trainer']]) {
+      mockAuthenticatedProfile({
+        profile: {
+          id: 'staff-1',
+          role: 'staff',
+          titles,
+        },
+      })
+
+      const response = await GET(
+        new Request('http://localhost/api/members/member-1/payments?page=0&limit=10'),
+        {
+          params: Promise.resolve({ id: 'member-1' }),
+        },
+      )
+
+      expect(response.status, titles.join(', ')).toBe(403)
+      await expect(response.json()).resolves.toEqual({
+        error: 'Forbidden',
+      })
+    }
   })
 })

@@ -13,7 +13,8 @@ import {
   sendAdminResendEmailToRecipient,
 } from '@/lib/admin-email-server'
 import { getJamaicaDateInputValue } from '@/lib/member-access-time'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAuthenticatedProfile } from '@/lib/server-auth'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const RESEND_SEND_BATCH_SIZE = 10
@@ -76,10 +77,14 @@ async function buildAttachment(file: File | null) {
 
 export async function POST(request: Request) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
+    }
+
+    if (!resolvePermissionsForProfile(authResult.profile).can('email.send')) {
+      return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 })
     }
 
     const formData = await request.formData()

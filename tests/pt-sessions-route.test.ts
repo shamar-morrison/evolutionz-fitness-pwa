@@ -494,7 +494,7 @@ describe('GET /api/pt/sessions', () => {
       profile: {
         id: 'assistant-1',
         role: 'staff',
-        titles: ['Administrative Assistant'],
+        titles: ['Assistant'],
       },
     })
 
@@ -504,6 +504,33 @@ describe('GET /api/pt/sessions', () => {
     await expect(response.json()).resolves.toEqual({
       ok: false,
       error: 'Forbidden',
+    })
+  })
+
+  it('returns unscoped PT sessions for administrative assistants', async () => {
+    const { client, operations } = createPtSessionsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+
+    const response = await GET(new Request('http://localhost/api/pt/sessions'))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ sessions: [] })
+    expect(operations).not.toContainEqual({
+      type: 'eq',
+      column: 'trainer_id',
+      value: 'admin-assistant-1',
+    })
+    expect(operations).not.toContainEqual({
+      type: 'eq',
+      column: 'member_id',
+      value: expect.anything(),
     })
   })
 

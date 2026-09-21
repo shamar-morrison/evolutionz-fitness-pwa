@@ -7,7 +7,11 @@ export type Permission =
   | 'members.delete'
   | 'members.suspend'
   | 'members.recordPayment'
+  | 'payments.viewHistory'
   | 'door.unlock'
+  | 'door.viewHistory'
+  | 'door.fetchHistory'
+  | 'email.send'
   | 'medical.assign'
   | 'medical.viewAssignments'
   | 'medical.updateAssignments'
@@ -41,7 +45,11 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'members.delete',
     'members.suspend',
     'members.recordPayment',
+    'payments.viewHistory',
     'door.unlock',
+    'door.viewHistory',
+    'door.fetchHistory',
+    'email.send',
     'medical.assign',
     'medical.viewAssignments',
     'medical.updateAssignments',
@@ -79,10 +87,16 @@ export const ROLE_PRESETS: Record<string, Permission[]> = {
     'members.extendMembership',
     'members.pauseMembership',
     'members.recordPayment',
+    'payments.viewHistory',
     'classes.view',
     'classes.register',
     'classes.markAttendance',
     'door.unlock',
+    'door.viewHistory',
+    'door.fetchHistory',
+    'email.send',
+    'pt.assign',
+    'staff.view',
   ],
   medical: [
     'medical.viewAssignments',

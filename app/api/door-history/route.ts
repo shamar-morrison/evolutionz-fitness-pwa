@@ -6,7 +6,8 @@ import {
   parseDoorHistoryDateInput,
   sortDoorHistoryEvents,
 } from '@/lib/door-history'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAuthenticatedProfile } from '@/lib/server-auth'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import type { DoorHistoryEvent } from '@/types'
 
@@ -180,10 +181,14 @@ function enrichDoorHistoryEvents(
 
 export async function GET(request: Request) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
+    }
+
+    if (!resolvePermissionsForProfile(authResult.profile).can('door.viewHistory')) {
+      return createErrorResponse('Forbidden', 403)
     }
 
     const { searchParams } = new URL(request.url)
