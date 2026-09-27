@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mockUnauthorized, resetServerAuthMocks } from '@/tests/support/server-auth'
+import { mockAuthenticatedProfile, mockUnauthorized, resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -14,6 +14,7 @@ vi.mock('@/lib/server-auth', async () => {
 
   return {
     requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -218,5 +219,39 @@ describe('GET /api/email/recipients', () => {
       error: 'Unauthorized',
     })
     expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 for staff without email send permission', async () => {
+    mockAuthenticatedProfile({
+      profile: { id: 'assistant-1', role: 'staff', titles: ['Assistant'] },
+    })
+
+    const response = await GET(new Request('http://localhost/api/email/recipients'))
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('returns recipients for administrative assistants', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+    getSupabaseAdminClientMock.mockReturnValue(createMembersClient([]))
+
+    const response = await GET(new Request('http://localhost/api/email/recipients'))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      recipients: [],
+    })
   })
 })

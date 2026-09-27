@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useMemberPayments } from '@/hooks/use-member-payments'
+import { usePermissions } from '@/hooks/use-permissions'
 import { usePtPayments } from '@/hooks/use-pt-payments'
 import { toast } from '@/hooks/use-toast'
 import {
@@ -69,6 +70,8 @@ function getReceiptDisabledReason(
 
 export function MemberPaymentHistory({ memberId, memberEmail = null }: MemberPaymentHistoryProps) {
   const queryClient = useQueryClient()
+  const { role } = usePermissions()
+  const canDeletePayments = role === 'admin'
   const [page, setPage] = useState(0)
   const [paymentToDelete, setPaymentToDelete] = useState<MemberPaymentHistoryItem | null>(null)
   const [ptPaymentToDelete, setPtPaymentToDelete] = useState<PtPaymentHistoryItem | null>(null)
@@ -233,18 +236,20 @@ export function MemberPaymentHistory({ memberId, memberEmail = null }: MemberPay
                             Send Receipt
                           </Button>
                         )}
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          className="ml-auto"
-                          onClick={() => setPaymentToDelete(payment)}
-                          loading={deletingPaymentId === payment.id}
-                          disabled={deletingPaymentId === payment.id}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
-                        </Button>
+                        {canDeletePayments ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            className="ml-auto"
+                            onClick={() => setPaymentToDelete(payment)}
+                            loading={deletingPaymentId === payment.id}
+                            disabled={deletingPaymentId === payment.id}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </Button>
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -329,18 +334,20 @@ export function MemberPaymentHistory({ memberId, memberEmail = null }: MemberPay
                 <TableCell>{formatOptionalText(payment.notes)}</TableCell>
                 <TableCell>{payment.recordedBy}</TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    className="ml-auto"
-                    onClick={() => setPtPaymentToDelete(payment)}
-                    loading={deletingPaymentId === payment.id}
-                    disabled={deletingPaymentId === payment.id}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Delete
-                  </Button>
+                  {canDeletePayments ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      className="ml-auto"
+                      onClick={() => setPtPaymentToDelete(payment)}
+                      loading={deletingPaymentId === payment.id}
+                      disabled={deletingPaymentId === payment.id}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </Button>
+                  ) : null}
                 </TableCell>
               </TableRow>
             ))

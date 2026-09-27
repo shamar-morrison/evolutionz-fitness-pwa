@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resetServerAuthMocks } from '@/tests/support/server-auth'
+import { mockAuthenticatedProfile, resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -14,6 +14,7 @@ vi.mock('@/lib/server-auth', async () => {
 
   return {
     requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -445,6 +446,71 @@ describe('POST /api/door-history/fetch', () => {
       ok: false,
       jobId: 'job-123',
       error: 'Fetch door history request timed out after 55 seconds.',
+    })
+  })
+
+  it('returns 403 for staff without door history fetch permission', async () => {
+    mockAuthenticatedProfile({
+      profile: { id: 'assistant-1', role: 'staff', titles: ['Assistant'] },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/door-history/fetch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ date: '2026-04-14' }),
+      }),
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('lets administrative assistants trigger a fresh device fetch', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-15T12:34:56.000Z'))
+
+    const { client, insertedJobs, upserts } = createDoorHistoryFetchClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+
+    const response = await POST(
+      new Request('http://localhost/api/door-history/fetch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ date: '2026-04-14' }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(insertedJobs).toEqual([
+      {
+        type: 'get_door_history',
+        payload: {
+          startTime: '2026-04-14T00:00:00-05:00',
+          endTime: '2026-04-15T00:00:00-05:00',
+        },
+      },
+    ])
+    expect(upserts).toHaveLength(1)
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      cacheDate: '2026-04-14',
+      totalMatches: 2,
     })
   })
 })

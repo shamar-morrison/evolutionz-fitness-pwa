@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mockAdminUser, resetServerAuthMocks } from '@/tests/support/server-auth'
+import { mockAdminUser, mockAuthenticatedProfile, resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const {
   getSupabaseAdminClientMock,
@@ -18,6 +18,7 @@ vi.mock('@/lib/server-auth', async () => {
 
   return {
     requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -434,5 +435,86 @@ describe('PT assignment generate sessions route', () => {
       weeks: ['2026-W15'],
     })
     expect(insertedRows).toEqual([])
+  })
+
+  it('returns 403 for staff without PT assignment permission', async () => {
+    mockAuthenticatedProfile({
+      profile: { id: 'assistant-1', role: 'staff', titles: ['Assistant'] },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/assignments/assignment-1/generate-sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          startDate: '2026-04-01',
+          duration: '1_month',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('generates sessions for administrative assistants', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+    const { client, insertedRows } = createPtSessionsClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientByIdMock.mockResolvedValue(
+      buildAssignment({
+        scheduledDays: ['Monday', 'Wednesday'],
+        scheduledSessions: [
+          {
+            day: 'Monday',
+            sessionTime: '06:30',
+            trainingTypeName: null,
+            isCustom: false,
+          },
+          {
+            day: 'Wednesday',
+            sessionTime: '07:15',
+            trainingTypeName: 'Upper Body',
+            isCustom: false,
+          },
+        ],
+      }),
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/assignments/assignment-1/generate-sessions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          startDate: '2026-04-01',
+          duration: '1_month',
+        }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload).toEqual({
+      ok: true,
+      generated: 8,
+      skipped: 0,
+    })
+    expect(insertedRows).toHaveLength(1)
   })
 })

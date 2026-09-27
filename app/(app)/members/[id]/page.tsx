@@ -453,7 +453,7 @@ export default function MemberDetailPage() {
   const showDirectMemberPhotoActions = canEditMember && !isFrontDesk
   const showRecordPaymentAction = can('members.recordPayment')
   const showPtAttendance = canViewAllPtSchedules || isFrontDesk
-  const showPaymentsTab = role === 'admin'
+  const showPaymentsTab = can('payments.viewHistory')
   const showPaymentReminderBanner =
     role !== 'admin' &&
     showRecordPaymentAction &&

@@ -4,6 +4,7 @@ import { config } from '@/lib/config'
 import { getMonthRange, PT_SESSION_FILTER_STATUSES } from '@/lib/pt-scheduling'
 import { readPtSessions } from '@/lib/pt-scheduling-server'
 import { requireAdminUser, requireAuthenticatedProfile } from '@/lib/server-auth'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { isFrontDeskStaff } from '@/lib/staff'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
@@ -56,7 +57,10 @@ export async function GET(request: Request) {
     })
     const nextFilters = { ...filters }
 
-    if (authResult.profile.role !== 'admin') {
+    if (
+      authResult.profile.role !== 'admin' &&
+      !resolvePermissionsForProfile(authResult.profile).can('pt.assign')
+    ) {
       if (isFrontDeskStaff(authResult.profile.titles)) {
         if (!filters.memberId || filters.trainerId) {
           return createErrorResponse('Forbidden', 403)

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resetServerAuthMocks } from '@/tests/support/server-auth'
+import { mockAuthenticatedProfile, resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const {
   getSupabaseAdminClientMock,
@@ -27,6 +27,7 @@ vi.mock('@/lib/server-auth', async () => {
   return {
     requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
     requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -931,6 +932,190 @@ describe('PT assignment routes', () => {
       assignmentId: 'assignment-1',
       status: 'scheduled',
       scheduledAfter: expect.any(String),
+    })
+  })
+
+  it('POST returns 403 for staff without PT assignment permission', async () => {
+    mockAuthenticatedProfile({
+      profile: { id: 'assistant-1', role: 'staff', titles: ['Assistant'] },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/assignments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          trainerId: '11111111-1111-1111-1111-111111111111',
+          memberId: '22222222-2222-2222-2222-222222222222',
+          sessionsPerWeek: 3,
+          scheduledSessions: [
+            { day: 'Monday', sessionTime: '07:00' },
+            { day: 'Wednesday', sessionTime: '07:00' },
+            { day: 'Friday', sessionTime: '07:00' },
+          ],
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('POST creates assignments for administrative assistants', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+    const { client, insertValues } = createPostClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readStaffProfileMock.mockResolvedValue({
+      id: '11111111-1111-1111-1111-111111111111',
+      titles: ['Trainer'],
+    })
+    hasStaffTitleMock.mockReturnValue(true)
+    readTrainerClientByIdMock.mockResolvedValue(buildAssignment())
+
+    const response = await POST(
+      new Request('http://localhost/api/pt/assignments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          trainerId: '11111111-1111-1111-1111-111111111111',
+          memberId: '22222222-2222-2222-2222-222222222222',
+          sessionsPerWeek: 3,
+          scheduledSessions: [
+            { day: 'Monday', sessionTime: '07:00' },
+            { day: 'Wednesday', sessionTime: '07:00' },
+            { day: 'Friday', sessionTime: '07:00' },
+          ],
+        }),
+      }),
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(201)
+    expect(payload.ok).toBe(true)
+    expect(insertValues).toHaveLength(1)
+  })
+
+  it('PATCH returns 403 for staff without PT assignment permission', async () => {
+    mockAuthenticatedProfile({
+      profile: { id: 'trainer-1', role: 'staff', titles: ['Trainer'] },
+    })
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ notes: 'Updated notes' }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('PATCH updates assignments for administrative assistants', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+    const { client } = createPatchClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow())
+    readTrainerClientByIdMock.mockResolvedValue(
+      buildAssignment({ notes: 'Updated notes' }),
+    )
+
+    const response = await PATCH(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ notes: '  Updated notes  ' }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.ok).toBe(true)
+  })
+
+  it('DELETE returns 403 for staff without PT assignment permission', async () => {
+    mockAuthenticatedProfile({
+      profile: { id: 'assistant-1', role: 'staff', titles: ['Assistant'] },
+    })
+
+    const response = await DELETE(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cancelFutureSessions: false }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('DELETE removes assignments for administrative assistants', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+    const { client } = createDeleteClient()
+    getSupabaseAdminClientMock.mockReturnValue(client)
+    readTrainerClientRowByIdMock.mockResolvedValue(buildAssignmentRow())
+
+    const response = await DELETE(
+      new Request('http://localhost/api/pt/assignments/assignment-1', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cancelFutureSessions: false }),
+      }),
+      { params: Promise.resolve({ id: 'assignment-1' }) },
+    )
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload).toEqual({
+      ok: true,
+      cancelledSessions: 0,
     })
   })
 })

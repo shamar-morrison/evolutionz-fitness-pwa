@@ -54,6 +54,7 @@ describe('EmailPage', () => {
     root = createRoot(container)
     authState.loading = false
     authState.role = 'admin'
+    authState.profile.titles = ['Owner']
     permissionsState.can.mockReturnValue(true)
     delete process.env.NEXT_PUBLIC_RESEND_DAILY_EMAIL_LIMIT
     delete process.env.RESEND_DAILY_EMAIL_LIMIT
@@ -90,8 +91,22 @@ describe('EmailPage', () => {
     expect(container.querySelector('[data-limit]')?.getAttribute('data-limit')).toBe('125')
   })
 
-  it('renders the authenticated-home redirect fallback for non-admin users', async () => {
+  it('renders the email client for administrative assistants', async () => {
     authState.role = 'staff'
+    authState.profile.titles = ['Administrative Assistant']
+
+    await act(async () => {
+      root.render(<EmailPage />)
+    })
+
+    expect(container.textContent).toContain('Email Client')
+    expect(container.textContent).not.toContain('Redirected Home')
+  })
+
+  it('renders the authenticated-home redirect fallback for staff without email access', async () => {
+    authState.role = 'staff'
+    authState.profile.titles = ['Trainer']
+    permissionsState.can.mockReturnValue(false)
 
     await act(async () => {
       root.render(<EmailPage />)

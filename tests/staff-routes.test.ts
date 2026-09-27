@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   mockAdminUser,
+  mockAuthenticatedProfile,
   mockForbidden,
   mockUnauthorized,
   resetServerAuthMocks,
@@ -25,6 +26,7 @@ vi.mock('@/lib/server-auth', async () => {
   return {
     requireAuthenticatedUser: mod.requireAuthenticatedUserMock,
     requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -534,6 +536,83 @@ describe('staff API routes', () => {
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toEqual({
       error: 'Forbidden',
+    })
+  })
+
+  it('returns 403 when a trainer requests the staff list', async () => {
+    mockAuthenticatedProfile({
+      profile: { id: 'trainer-1', role: 'staff', titles: ['Trainer'] },
+    })
+
+    const response = await getStaff(new Request('http://localhost/api/staff'))
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(createClientMock).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 when an assistant requests the staff list', async () => {
+    mockAuthenticatedProfile({
+      profile: { id: 'assistant-1', role: 'staff', titles: ['Assistant'] },
+    })
+
+    const response = await getStaff(new Request('http://localhost/api/staff'))
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Forbidden',
+    })
+    expect(createClientMock).not.toHaveBeenCalled()
+  })
+
+  it('returns the staff list for administrative assistants', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+    createClientMock.mockResolvedValue(
+      createStaffServerClient({
+        listRows: [
+          buildProfileRow({
+            id: 'trainer-1',
+            name: 'Trainer One',
+            role: 'staff',
+            titles: ['Trainer'],
+            created_at: '2026-04-02T00:00:00.000Z',
+          }),
+        ],
+      }),
+    )
+    getSupabaseAdminClientMock.mockReturnValue(createStaffAdminClient().client)
+
+    const response = await getStaff(new Request('http://localhost/api/staff'))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      staff: [
+        {
+          id: 'trainer-1',
+          name: 'Trainer One',
+          email: 'admin@evolutionzfitness.com',
+          role: 'staff',
+          titles: ['Trainer'],
+          isSuspended: false,
+          phone: null,
+          gender: null,
+          remark: null,
+          specialties: [],
+          photoUrl: null,
+          archivedAt: null,
+          created_at: '2026-04-02T00:00:00.000Z',
+        },
+      ],
     })
   })
 

@@ -11,7 +11,8 @@ import {
 } from '@/lib/admin-email-server'
 import { GYM_NAME } from '@/lib/business-constants'
 import { getJamaicaDateInputValue } from '@/lib/member-access-time'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAuthenticatedProfile } from '@/lib/server-auth'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import type {
   MemberPaymentMethod,
@@ -202,10 +203,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string; paymentId: string }> },
 ) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
+    }
+
+    if (!resolvePermissionsForProfile(authResult.profile).can('payments.viewHistory')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const { id, paymentId } = await params
@@ -250,10 +255,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string; paymentId: string }> },
 ) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
+    }
+
+    if (!resolvePermissionsForProfile(authResult.profile).can('payments.viewHistory')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const { id, paymentId } = await params

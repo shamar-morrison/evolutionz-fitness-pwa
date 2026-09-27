@@ -487,7 +487,7 @@ function DoorHistoryPageContent() {
 
 export default function DoorHistoryPage() {
   return (
-    <RoleGuard role="admin" fallback={<AuthenticatedHomeRedirect />}>
+    <RoleGuard permission="door.viewHistory" fallback={<AuthenticatedHomeRedirect />}>
       <Suspense>
         <DoorHistoryPageContent />
       </Suspense>

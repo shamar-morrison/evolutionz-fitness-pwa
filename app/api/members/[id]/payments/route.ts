@@ -10,7 +10,8 @@ import { MEMBER_PAYMENTS_PAGE_SIZE } from '@/lib/member-payments'
 import { getCardlessMemberTypeChangeError } from '@/lib/member-type-utils'
 import { buildMemberTypeUpdateValues } from '@/lib/member-type-sync'
 import { readMemberTypeById, type MemberTypesReadClient } from '@/lib/member-types-server'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAdminUser, requireAuthenticatedProfile } from '@/lib/server-auth'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 import { paymentMethodSchema } from '@/lib/validation-schemas'
 import type {
@@ -190,10 +191,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
+    }
+
+    if (!resolvePermissionsForProfile(authResult.profile).can('payments.viewHistory')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const { id } = await params

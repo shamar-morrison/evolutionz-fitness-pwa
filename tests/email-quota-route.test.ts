@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mockUnauthorized, resetServerAuthMocks } from '@/tests/support/server-auth'
+import { mockAuthenticatedProfile, mockUnauthorized, resetServerAuthMocks } from '@/tests/support/server-auth'
 
 const { getSupabaseAdminClientMock } = vi.hoisted(() => ({
   getSupabaseAdminClientMock: vi.fn(),
@@ -14,6 +14,7 @@ vi.mock('@/lib/server-auth', async () => {
 
   return {
     requireAdminUser: mod.requireAdminUserMock,
+    requireAuthenticatedProfile: mod.requireAuthenticatedProfileMock,
   }
 })
 
@@ -211,6 +212,41 @@ describe('GET /api/email/quota', () => {
     expect(response.status).toBe(500)
     await expect(response.json()).resolves.toEqual({
       error: 'Failed to read admin email quota: query exploded',
+    })
+  })
+
+  it('returns 403 for staff without email send permission', async () => {
+    mockAuthenticatedProfile({
+      profile: { id: 'assistant-1', role: 'staff', titles: ['Assistant'] },
+    })
+
+    const response = await GET()
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({ error: 'Forbidden' })
+    expect(getSupabaseAdminClientMock).not.toHaveBeenCalled()
+  })
+
+  it('returns quota for administrative assistants', async () => {
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-11T17:00:00.000Z'))
+    process.env.RESEND_DAILY_EMAIL_LIMIT = '100'
+    getSupabaseAdminClientMock.mockReturnValue(createQuotaAdminClient())
+
+    const response = await GET()
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      sent: 0,
+      limit: 100,
+      remaining: 100,
     })
   })
 })

@@ -16,7 +16,8 @@ import {
   readTrainerClientRowById,
   updatePtAssignmentWithSchedule,
 } from '@/lib/pt-scheduling-server'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAdminUser, requireAuthenticatedProfile } from '@/lib/server-auth'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 const updateAssignmentSchema = z
@@ -149,10 +150,14 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
+    }
+
+    if (!resolvePermissionsForProfile(authResult.profile).can('pt.assign')) {
+      return createErrorResponse('Forbidden', 403)
     }
 
     const { id } = await params
@@ -319,10 +324,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
+    }
+
+    if (!resolvePermissionsForProfile(authResult.profile).can('pt.assign')) {
+      return createErrorResponse('Forbidden', 403)
     }
 
     const { id } = await params

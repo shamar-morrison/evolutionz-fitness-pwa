@@ -28,6 +28,7 @@ import { usePermissions } from '@/hooks/use-permissions'
 import { useProgressRouter } from '@/hooks/use-progress-router'
 import { toast } from '@/hooks/use-toast'
 import { getAuthenticatedHomePath } from '@/lib/auth-redirect'
+import type { Permission } from '@/lib/permissions'
 import { createClient } from '@/lib/supabase/client'
 import { isRouteAllowed } from '@/lib/route-config'
 import { formatStaffTitles, hasStaffTitle, isFrontDeskStaff } from '@/lib/staff'
@@ -73,6 +74,7 @@ type NavItem = {
   href: string
   label: string
   icon: LucideIcon
+  permission?: Permission
 }
 
 async function unlockDoor() {
@@ -166,6 +168,9 @@ const medicalNavItems: NavItem[] = [{ href: '/medical', label: 'My Clients', ico
 const frontDeskNavItems: NavItem[] = [
   { href: '/members', label: 'Members', icon: Users },
   { href: '/classes', label: 'Classes', icon: GraduationCap },
+  { href: '/email', label: 'Send Email', icon: Mail, permission: 'email.send' },
+  { href: '/door-history', label: 'Door History', icon: History, permission: 'door.viewHistory' },
+  { href: '/schedule', label: 'Schedule', icon: CalendarDays, permission: 'pt.assign' },
 ]
 
 const trainerClassesNavItems: NavItem[] = [{ href: '/classes', label: 'Classes', icon: GraduationCap }]
@@ -209,8 +214,10 @@ export function AppSidebar() {
   const medicalPrimaryNavItems = medicalNavItems.filter((item) =>
     isRouteAllowed(item.href, 'staff', staffTitles),
   )
-  const frontDeskPrimaryNavItems = frontDeskNavItems.filter((item) =>
-    isRouteAllowed(item.href, 'staff', staffTitles),
+  const frontDeskPrimaryNavItems = frontDeskNavItems.filter(
+    (item) =>
+      isRouteAllowed(item.href, 'staff', staffTitles) &&
+      (!item.permission || can(item.permission)),
   )
   const trainerSecondaryNavItems = trainerClassesNavItems.filter((item) =>
     isRouteAllowed(item.href, 'staff', staffTitles),

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getServerResendDailyEmailLimit } from '@/lib/admin-email'
 import { getJamaicaDayWindow } from '@/lib/member-access-time'
-import { requireAdminUser } from '@/lib/server-auth'
+import { requireAuthenticatedProfile } from '@/lib/server-auth'
+import { resolvePermissionsForProfile } from '@/lib/server-permissions'
 import { getSupabaseAdminClient } from '@/lib/supabase-admin'
 
 type CountRowsResult = {
@@ -28,10 +29,14 @@ async function countSentEmailsInWindow(
 
 export async function GET() {
   try {
-    const authResult = await requireAdminUser()
+    const authResult = await requireAuthenticatedProfile()
 
     if ('response' in authResult) {
       return authResult.response
+    }
+
+    if (!resolvePermissionsForProfile(authResult.profile).can('email.send')) {
+      return createErrorResponse('Forbidden', 403)
     }
 
     const { startInclusive, endExclusive } = getJamaicaDayWindow(new Date())

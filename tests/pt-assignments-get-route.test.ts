@@ -143,7 +143,7 @@ describe('GET /api/pt/assignments', () => {
       profile: {
         id: 'assistant-1',
         role: 'staff',
-        titles: ['Administrative Assistant'],
+        titles: ['Assistant'],
       },
     })
 
@@ -154,5 +154,27 @@ describe('GET /api/pt/assignments', () => {
       ok: false,
       error: 'Forbidden',
     })
+  })
+
+  it('returns the unscoped assignment list for administrative assistants', async () => {
+    const supabase = { from: vi.fn() }
+
+    getSupabaseAdminClientMock.mockReturnValue(supabase)
+    readTrainerClientsMock.mockResolvedValue([])
+    mockAuthenticatedProfile({
+      profile: {
+        id: 'admin-assistant-1',
+        role: 'staff',
+        titles: ['Administrative Assistant'],
+      },
+    })
+
+    const response = await GET(new Request('http://localhost/api/pt/assignments?status=active'))
+
+    expect(response.status).toBe(200)
+    expect(readTrainerClientsMock).toHaveBeenCalledWith(supabase, {
+      status: 'active',
+    })
+    await expect(response.json()).resolves.toEqual({ assignments: [] })
   })
 })
